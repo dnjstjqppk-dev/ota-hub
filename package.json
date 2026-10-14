@@ -1,0 +1,12 @@
+{
+  "name": "ota-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Trip.com Full-Scale Production Clone (Nuxt 3 SSR + Vue 3 Admin + Go API)",
+  "scripts": {
+    "build": "npm --prefix frontend-user install && npm --prefix frontend-user run build",
+    "build:user": "npm --prefix frontend-user install && npm --prefix frontend-user run build",
+    "build:admin": "npm --prefix frontend-admin install && npm --prefix frontend-admin run build",
+    "deploy": "npx wrangler deploy"
+  }
+}
