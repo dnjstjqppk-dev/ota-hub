@@ -5,3 +5,4 @@ export const apiUrl = (path: string = ''): string => {
   const cleanPath = path.startsWith('/') ? path : `/${path}`
   return `${API_BASE_URL}${cleanPath}`
 }
+

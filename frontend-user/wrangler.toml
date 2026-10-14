@@ -5,3 +5,4 @@ pages_build_output_dir = ".output/public"
 
 [vars]
 NUXT_PUBLIC_API_BASE = "https://api.yourdomain.com/api/v1"
+
