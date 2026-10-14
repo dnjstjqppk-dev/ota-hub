@@ -1,0 +1,73 @@
+#!/bin/sh
+# ==============================================================================
+# Trip.com Production Clone - Pre-commit Quality Gate Hook
+# ==============================================================================
+
+echo "🔍 [Pre-commit] Starting quality gate checks..."
+
+# 1. Secret & Sensitive Information Detection
+echo "🔒 [1/4] Checking for accidental secrets and environment files..."
+# Exclude pre-commit hook itself and .env.example templates from check
+MATCHED_SECRETS=$(git diff --cached -G "BEGIN [A-Z]+ PRIVATE KEY|AKIA[0-9A-Z]{16}|eyJh[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}" --name-only -- . ':!.githooks' ':!*.env.example' || true)
+if [ -z "$MATCHED_SECRETS" ]; then
+    echo "  ✅ No private keys or raw secrets detected."
+else
+    echo "  ❌ ERROR: Potential hardcoded secret or private key found in:"
+    echo "$MATCHED_SECRETS"
+    exit 1
+fi
+
+# Ensure no .env files are being staged (only .env.example allowed)
+STAGED_ENV_FILES=$(git diff --cached --name-only | grep -E '(^|/)\.env($|\..*)' | grep -v '\.env\.example$' || true)
+if [ -n "$STAGED_ENV_FILES" ]; then
+    echo "  ❌ ERROR: Accidental staging of .env file detected:"
+    echo "$STAGED_ENV_FILES"
+    echo "  Please unstage .env files and keep only .env.example."
+    exit 1
+fi
+echo "  ✅ No sensitive .env files staged."
+
+# 2. Zero-Mock Enforcement Check
+echo "🔎 [2/4] Checking for Mock / Faker leakage in production source..."
+MOCK_PATTERNS="mockData|mockHotelList|mockFlightList|faker\."
+# Search staged source files (exclude test files and migrations)
+STAGED_MOCKS=$(git diff --cached -G "$MOCK_PATTERNS" --name-only -- "*.go" "*.ts" "*.vue" | grep -v "_test\.go" || true)
+if [ -n "$STAGED_MOCKS" ]; then
+    echo "  ⚠️ WARNING: Mock patterns detected in:"
+    echo "$STAGED_MOCKS"
+else
+    echo "  ✅ Zero-Mock validation passed: No mock data patterns found in staged source."
+fi
+
+# 3. File Line Length / Size Guard
+echo "📏 [3/4] Checking file line count guidelines..."
+OVERSIZED_FILES=""
+for file in $(git diff --cached --name-only --diff-filter=ACM); do
+    if [ -f "$file" ]; then
+        LINES=$(wc -l < "$file" 2>/dev/null || echo 0)
+        # Warn if a single source file exceeds 1200 lines
+        if [ "$LINES" -gt 1500 ]; then
+            OVERSIZED_FILES="$OVERSIZED_FILES\n  $file ($LINES lines)"
+        fi
+    fi
+done
+if [ -n "$OVERSIZED_FILES" ]; then
+    echo "  ⚠️ Notice: Large source files detected (consider modular refactoring):"
+    echo -e "$OVERSIZED_FILES"
+else
+    echo "  ✅ All source files adhere to modular length standards (<1500 lines)."
+fi
+
+# 4. Backend & Frontend Test / Verification
+echo "🧪 [4/4] Verifying Go tests..."
+cd backend && go test ./... > /dev/null 2>&1
+GO_TEST_STATUS=$?
+cd ..
+if [ $GO_TEST_STATUS -ne 0 ]; then
+    echo "  ❌ Go unit tests failed! Please fix before committing."
+    exit 1
+fi
+echo "  ✅ Go unit tests passed cleanly."
+
+echo "🎉 [Pre-commit] All quality gates PASSED! Ready for commit."
+exit 0

@@ -1,0 +1,20 @@
+{
+  "name": "frontend-admin",
+  "version": "1.0.0",
+  "description": "Trip.com Admin Console",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "^5.1.4",
+    "autoprefixer": "^10.4.20",
+    "pinia": "^2.2.4",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "vite": "^5.4.8",
+    "vue": "^3.5.11",
+    "vue-router": "^4.4.5"
+  }
+}
