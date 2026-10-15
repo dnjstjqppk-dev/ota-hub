@@ -68,7 +68,8 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// 1. Catalog routes
+	// 1. Catalog & Search routes
+	mux.HandleFunc("GET /api/v1/search/suggest", h.SearchSuggest)
 	mux.HandleFunc("GET /api/v1/hotels", h.GetHotels)
 	mux.HandleFunc("GET /api/v1/hotels/{id}", h.GetHotelDetail)
 	mux.HandleFunc("GET /api/v1/flights", h.GetFlights)

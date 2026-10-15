@@ -3,19 +3,28 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import SearchAutocomplete from '~/components/SearchAutocomplete.vue'
 
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
-const origin = ref(route.query.origin as string || 'ICN')
-const dest = ref(route.query.dest as string || 'NRT')
+const origin = ref(route.query.origin as string || '인천국제공항 (ICN)')
+const dest = ref(route.query.dest as string || '도쿄 나리타 (NRT)')
 const flights = ref<any[]>([])
 const loading = ref(false)
 
 const fetchFlights = async () => {
   loading.value = true
   try {
-    const res = await fetch(`${useApiUrl('/flights')}?origin=${origin.value}&dest=${dest.value}`)
+    // Extract 3-letter IATA code if in parentheses e.g. "인천 (ICN)" -> "ICN"
+    const parseCode = (val: string) => {
+      const match = val.match(/\b([A-Z]{3})\b/)
+      return match ? match[1] : val
+    }
+    const o = parseCode(origin.value)
+    const d = parseCode(dest.value)
+
+    const res = await fetch(`${useApiUrl('/flights')}?origin=${encodeURIComponent(o)}&dest=${encodeURIComponent(d)}`)
     const json = await res.json()
     flights.value = json.data || []
   } catch (e) {
@@ -32,15 +41,43 @@ onMounted(() => {
 
 <template>
   <div class="max-w-6xl mx-auto px-4 py-8 space-y-6">
-    <!-- 검색 상단 바 -->
-    <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
-      <div class="flex items-center gap-4 text-trip-navy">
-        <span class="text-xl font-black font-mono">{{ origin }}</span>
-        <span class="text-slate-400">✈️</span>
-        <span class="text-xl font-black font-mono">{{ dest }}</span>
-        <span class="text-xs text-slate-400 font-semibold">• 2026년 11월 1일 · 1명 · 이코노미</span>
+    <!-- 검색 상단 바 (Trip.com 스타일 인터랙티브 바) -->
+    <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+        <div class="w-full sm:w-64">
+          <label class="text-[10px] font-bold text-slate-400 block mb-1">출발지 (공항/도시)</label>
+          <SearchAutocomplete
+            v-model="origin"
+            domain="flights"
+            placeholder="출발 공항 / 도시"
+            icon="plane"
+            inputClass="w-full pl-9 pr-6 py-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+          />
+        </div>
+
+        <span class="text-slate-400 hidden sm:inline text-lg mt-4">✈️</span>
+
+        <div class="w-full sm:w-64">
+          <label class="text-[10px] font-bold text-slate-400 block mb-1">도착지 (공항/도시)</label>
+          <SearchAutocomplete
+            v-model="dest"
+            domain="flights"
+            placeholder="도착 공항 / 도시"
+            icon="plane"
+            inputClass="w-full pl-9 pr-6 py-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+          />
+        </div>
+
+        <button
+          @click="fetchFlights"
+          type="button"
+          class="w-full sm:w-auto px-5 py-2 mt-0 sm:mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors whitespace-nowrap"
+        >
+          항공편 재검색
+        </button>
       </div>
-      <span class="text-xs font-bold text-trip-blue">조회된 항공편 {{ flights.length }}개</span>
+
+      <span class="text-xs font-bold text-blue-600 flex-shrink-0">조회된 항공편 {{ flights.length }}개</span>
     </div>
 
     <!-- 7일 전후 최저가 캘린더 바 -->

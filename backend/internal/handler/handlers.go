@@ -346,3 +346,12 @@ func (h *APIHandler) SSEStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// --- AUTOCOMPLETE / SUGGEST HANDLER (Trip.com & Agoda specification) ---
+
+func (h *APIHandler) SearchSuggest(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	domain := strings.TrimSpace(r.URL.Query().Get("domain"))
+	results := h.store.SearchSuggest(q, domain)
+	writeJSON(w, http.StatusOK, results)
+}
+

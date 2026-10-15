@@ -655,3 +655,125 @@ func (s *Store) GetDashboardStats() map[string]any {
 	}
 }
 
+// SearchSuggest provides Trip.com & Agoda style multi-domain autocomplete suggestions
+func (s *Store) SearchSuggest(query string, domainFilter string) []domain.SuggestItem {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	q := strings.ToLower(strings.TrimSpace(query))
+	df := strings.ToLower(strings.TrimSpace(domainFilter))
+
+	// Base curated catalog
+	catalog := []domain.SuggestItem{
+		// [Hotels - Cities]
+		{ID: "c-tyo", Domain: "hotels", Type: "city", Title: "도쿄 (Tokyo)", Subtitle: "일본 간토 지방, 도쿄도", Code: "TYO", Badge: "인기 도시", Icon: "city", TargetURL: "/hotels/list?city=도쿄", CountInfo: "숙소 2,450개"},
+		{ID: "c-osa", Domain: "hotels", Type: "city", Title: "오사카 (Osaka)", Subtitle: "일본 간사이 지방, 오사카부", Code: "OSA", Badge: "인기 도시", Icon: "city", TargetURL: "/hotels/list?city=오사카", CountInfo: "숙소 1,820개"},
+		{ID: "c-fuk", Domain: "hotels", Type: "city", Title: "후쿠오카 (Fukuoka)", Subtitle: "일본 규슈 지방", Code: "FUK", Badge: "인기 도시", Icon: "city", TargetURL: "/hotels/list?city=후쿠오카", CountInfo: "숙소 980개"},
+		{ID: "c-sel", Domain: "hotels", Type: "city", Title: "서울 (Seoul)", Subtitle: "대한민국 수도권", Code: "SEL", Badge: "인기 도시", Icon: "city", TargetURL: "/hotels/list?city=서울", CountInfo: "숙소 3,120개"},
+		{ID: "c-cju", Domain: "hotels", Type: "city", Title: "제주 (Jeju)", Subtitle: "대한민국 제주특별자치도", Code: "CJU", Badge: "휴양지", Icon: "city", TargetURL: "/hotels/list?city=제주", CountInfo: "숙소 1,450개"},
+		{ID: "c-pus", Domain: "hotels", Type: "city", Title: "부산 (Busan)", Subtitle: "대한민국 영남권 해양도시", Code: "PUS", Badge: "해변 도시", Icon: "city", TargetURL: "/hotels/list?city=부산", CountInfo: "숙소 1,150개"},
+		{ID: "c-bkk", Domain: "hotels", Type: "city", Title: "방콕 (Bangkok)", Subtitle: "태국 수도", Code: "BKK", Badge: "인기 도시", Icon: "city", TargetURL: "/hotels/list?city=방콕", CountInfo: "숙소 3,400개"},
+		{ID: "c-dad", Domain: "hotels", Type: "city", Title: "다낭 (Da Nang)", Subtitle: "베트남 중부 해양 휴양지", Code: "DAD", Badge: "리조트 추천", Icon: "city", TargetURL: "/hotels/list?city=다낭", CountInfo: "숙소 1,210개"},
+		{ID: "c-sin", Domain: "hotels", Type: "city", Title: "싱가포르 (Singapore)", Subtitle: "싱가포르", Code: "SIN", Badge: "글로벌 허브", Icon: "city", TargetURL: "/hotels/list?city=싱가포르", CountInfo: "숙소 1,600개"},
+		{ID: "c-tpe", Domain: "hotels", Type: "city", Title: "타이베이 (Taipei)", Subtitle: "대만", Code: "TPE", Badge: "미식 여행", Icon: "city", TargetURL: "/hotels/list?city=타이베이", CountInfo: "숙소 1,350개"},
+		{ID: "c-par", Domain: "hotels", Type: "city", Title: "파리 (Paris)", Subtitle: "프랑스 일드프랑스", Code: "PAR", Badge: "유럽 인기", Icon: "city", TargetURL: "/hotels/list?city=파리", CountInfo: "숙소 2,890개"},
+		{ID: "c-lon", Domain: "hotels", Type: "city", Title: "런던 (London)", Subtitle: "영국 그레이터런던", Code: "LON", Badge: "유럽 인기", Icon: "city", TargetURL: "/hotels/list?city=런던", CountInfo: "숙소 2,750개"},
+		{ID: "c-nyc", Domain: "hotels", Type: "city", Title: "뉴욕 (New York)", Subtitle: "미국 뉴욕주", Code: "NYC", Badge: "미주 인기", Icon: "city", TargetURL: "/hotels/list?city=뉴욕", CountInfo: "숙소 1,980개"},
+
+		// [Flights - Airports with IATA Codes]
+		{ID: "a-icn", Domain: "flights", Type: "airport", Title: "인천국제공항 (Incheon Int'l)", Subtitle: "대한민국 서울/인천 (ICN)", Code: "ICN", Badge: "공항 · IATA", Icon: "plane", TargetURL: "/flights/search?dest=ICN", CountInfo: "일일 320편"},
+		{ID: "a-gmp", Domain: "flights", Type: "airport", Title: "김포국제공항 (Gimpo Int'l)", Subtitle: "대한민국 서울 (GMP)", Code: "GMP", Badge: "공항 · IATA", Icon: "plane", TargetURL: "/flights/search?dest=GMP", CountInfo: "일일 140편"},
+		{ID: "a-hnd", Domain: "flights", Type: "airport", Title: "도쿄 하네다 국제공항 (Haneda)", Subtitle: "일본 도쿄 (HND)", Code: "HND", Badge: "공항 · IATA", Icon: "plane", TargetURL: "/flights/search?dest=HND", CountInfo: "일일 125편"},
+		{ID: "a-nrt", Domain: "flights", Type: "airport", Title: "도쿄 나리타 국제공항 (Narita)", Subtitle: "일본 지바/도쿄 (NRT)", Code: "NRT", Badge: "공항 · IATA", Icon: "plane", TargetURL: "/flights/search?dest=NRT", CountInfo: "일일 98편"},
+		{ID: "a-kix", Domain: "flights", Type: "airport", Title: "오사카 간사이 국제공항 (Kansai)", Subtitle: "일본 오사카 (KIX)", Code: "KIX", Badge: "공항 · IATA", Icon: "plane", TargetURL: "/flights/search?dest=KIX", CountInfo: "일일 110편"},
+		{ID: "a-fuk", Domain: "flights", Type: "airport", Title: "후쿠오카 국제공항 (Fukuoka)", Subtitle: "일본 후쿠오카 (FUK)", Code: "FUK", Badge: "공항 · IATA", Icon: "plane", TargetURL: "/flights/search?dest=FUK", CountInfo: "일일 75편"},
+		{ID: "a-bkk", Domain: "flights", Type: "airport", Title: "방콕 수완나품 국제공항 (Suvarnabhumi)", Subtitle: "태국 방콕 (BKK)", Code: "BKK", Badge: "공항 · IATA", Icon: "plane", TargetURL: "/flights/search?dest=BKK", CountInfo: "일일 160편"},
+		{ID: "a-dad", Domain: "flights", Type: "airport", Title: "다낭 국제공항 (Da Nang Int'l)", Subtitle: "베트남 다낭 (DAD)", Code: "DAD", Badge: "공항 · IATA", Icon: "plane", TargetURL: "/flights/search?dest=DAD", CountInfo: "일일 65편"},
+		{ID: "a-cdg", Domain: "flights", Type: "airport", Title: "파리 샤를 드골 공항 (Charles de Gaulle)", Subtitle: "프랑스 파리 (CDG)", Code: "CDG", Badge: "공항 · IATA", Icon: "plane", TargetURL: "/flights/search?dest=CDG", CountInfo: "일일 210편"},
+		{ID: "a-lhr", Domain: "flights", Type: "airport", Title: "런던 히드로 공항 (Heathrow)", Subtitle: "영국 런던 (LHR)", Code: "LHR", Badge: "공항 · IATA", Icon: "plane", TargetURL: "/flights/search?dest=LHR", CountInfo: "일일 240편"},
+		{ID: "a-jfk", Domain: "flights", Type: "airport", Title: "뉴욕 존 F. 케네디 국제공항 (JFK)", Subtitle: "미국 뉴욕 (JFK)", Code: "JFK", Badge: "공항 · IATA", Icon: "plane", TargetURL: "/flights/search?dest=JFK", CountInfo: "일일 230편"},
+
+		// [Trains - High-speed Railway Stations]
+		{ID: "t-seoul", Domain: "trains", Type: "station", Title: "서울역 (Seoul Station)", Subtitle: "대한민국 수도권 (KTX/경부선/공항철도)", Code: "KTX", Badge: "KTX 역", Icon: "train", TargetURL: "/trains?dep=서울역", CountInfo: "환승 허브"},
+		{ID: "t-busan", Domain: "trains", Type: "station", Title: "부산역 (Busan Station)", Subtitle: "대한민국 부산 (KTX 종착역)", Code: "KTX", Badge: "KTX 역", Icon: "train", TargetURL: "/trains?arr=부산역", CountInfo: "KTX 종착역"},
+		{ID: "t-dongdaegu", Domain: "trains", Type: "station", Title: "동대구역 (Dongdaegu Station)", Subtitle: "대한민국 대구 (KTX/SRT)", Code: "KTX", Badge: "고속철도", Icon: "train", TargetURL: "/trains?arr=동대구역", CountInfo: "KTX 환승"},
+		{ID: "t-tokyo", Domain: "trains", Type: "station", Title: "도쿄역 (Tokyo Station)", Subtitle: "일본 도쿄 (도카이도 신칸센/JR)", Code: "Shinkansen", Badge: "신칸센 역", Icon: "train", TargetURL: "/trains?dep=도쿄역", CountInfo: "신칸센 출발"},
+		{ID: "t-shinosaka", Domain: "trains", Type: "station", Title: "신오사카역 (Shin-Osaka Station)", Subtitle: "일본 오사카 (산요/도카이도 신칸센)", Code: "Shinkansen", Badge: "신칸센 역", Icon: "train", TargetURL: "/trains?arr=신오사카역", CountInfo: "간사이 중심"},
+		{ID: "t-kyoto", Domain: "trains", Type: "station", Title: "교토역 (Kyoto Station)", Subtitle: "일본 교토 (신칸센/JR 서일본)", Code: "JR", Badge: "기차역", Icon: "train", TargetURL: "/trains?arr=교토역", CountInfo: "관광 거점"},
+		{ID: "t-lyon", Domain: "trains", Type: "station", Title: "파리 리옹역 (Paris Gare de Lyon)", Subtitle: "프랑스 파리 (TGV/남부선)", Code: "TGV", Badge: "초고속열차", Icon: "train", TargetURL: "/trains?dep=ParisLyon", CountInfo: "TGV 출발"},
+
+		// [Cars & Airport Transfers]
+		{ID: "car-icn", Domain: "cars", Type: "car", Title: "인천국제공항 T1/T2 렌터카", Subtitle: "대한민국 인천공항 여객터미널 1/2 지점", Code: "ICN", Badge: "공항 지점", Icon: "car", TargetURL: "/cars?loc=인천공항", CountInfo: "차량 120대+"},
+		{ID: "car-cju", Domain: "cars", Type: "car", Title: "제주공항 렌터카 셔틀 스테이션", Subtitle: "대한민국 제주도 제주시 공항로", Code: "CJU", Badge: "완전자차 보장", Icon: "car", TargetURL: "/cars?loc=제주공항", CountInfo: "차량 250대+"},
+		{ID: "car-nrt", Domain: "cars", Type: "car", Title: "나리타공항 렌터카 카운터", Subtitle: "일본 나리타공항 제1/제2터미널", Code: "NRT", Badge: "공항 지점", Icon: "car", TargetURL: "/cars?loc=나리타공항", CountInfo: "ETC 카드 포함"},
+		{ID: "car-fuk", Domain: "cars", Type: "car", Title: "후쿠오카공항 국제선 렌터카", Subtitle: "일본 후쿠오카시 하카타구", Code: "FUK", Badge: "공항 지점", Icon: "car", TargetURL: "/cars?loc=후쿠오카공항", CountInfo: "한국어 네비 지원"},
+		{ID: "trans-icn", Domain: "cars", Type: "car", Title: "인천공항 프라이빗 픽업 & 샌딩", Subtitle: "서울 전 지역 호텔 픽업 / 벤츠·카니발 리무진", Code: "ICN", Badge: "공항 픽업", Icon: "car", TargetURL: "/cars?tab=transfers", CountInfo: "항공편 지연 대기"},
+
+		// [Things to do / Activities / eSIM]
+		{ID: "act-usj", Domain: "things-to-do", Type: "activity", Title: "유니버설 스튜디오 재팬 (USJ) 입장권", Subtitle: "일본 오사카 코노하나구 · 익스프레스 패스", Code: "USJ", Badge: "인기 테마파크", Icon: "ticket", TargetURL: "/things-to-do?q=유니버설", CountInfo: "즉시 확정 · QR입장"},
+		{ID: "act-tdl", Domain: "things-to-do", Type: "activity", Title: "도쿄 디즈니랜드 / 디즈니씨 1일권", Subtitle: "일본 지바현 우라야스시 디즈니 리조트", Code: "Disney", Badge: "인기 테마파크", Icon: "ticket", TargetURL: "/things-to-do?q=디즈니랜드", CountInfo: "날짜 지정 e-티켓"},
+		{ID: "act-shibuya", Domain: "things-to-do", Type: "landmark", Title: "시부야 스카이 (SHIBUYA SKY) 전망대", Subtitle: "일본 도쿄 시부야 스크램블 스퀘어 최상층", Code: "Tokyo", Badge: "명소 랜드마크", Icon: "landmark", TargetURL: "/things-to-do?q=시부야스카이", CountInfo: "일몰 시간대 인기"},
+		{ID: "act-tower", Domain: "things-to-do", Type: "landmark", Title: "도쿄 타워 메인 데크 입장권", Subtitle: "일본 도쿄 미나토구 시바코엔", Code: "Tokyo", Badge: "랜드마크", Icon: "landmark", TargetURL: "/things-to-do?q=도쿄타워", CountInfo: "즉시 예약"},
+		{ID: "act-esim-jp", Domain: "things-to-do", Type: "activity", Title: "일본 무제한 매일 2GB+ LTE eSIM", Subtitle: "로컬 통신사(Softbank/Docomo) 고속 무제한", Code: "eSIM", Badge: "베스트셀러", Icon: "ticket", TargetURL: "/things-to-do?category=esim", CountInfo: "이메일 3분 즉시발송"},
+		{ID: "act-esim-sea", Domain: "things-to-do", Type: "activity", Title: "동남아 5개국 통합 데이터 eSIM", Subtitle: "태국, 베트남, 싱가포르, 말레이시아, 인도네시아", Code: "eSIM", Badge: "다국가 지원", Icon: "ticket", TargetURL: "/things-to-do?category=esim", CountInfo: "QR 간편 등록"},
+		{ID: "act-danang", Domain: "things-to-do", Type: "activity", Title: "다낭 썬월드 바나힐 케이블카 & 입장권", Subtitle: "베트남 다낭 골든 브릿지 일일 투어", Code: "DaNang", Badge: "투어&입장권", Icon: "ticket", TargetURL: "/things-to-do?q=바나힐", CountInfo: "왕복 픽업 옵션"},
+
+		// [Packages - Flight + Hotel Bundles]
+		{ID: "pkg-tyo", Domain: "packages", Type: "package", Title: "[항공+호텔] 도쿄 3박 4일 자유여행 에어텔", Subtitle: "왕복 항공권 + 신주쿠/시부야 인기 호텔 묶음 할인", Code: "TYO", Badge: "다이내믹 패키지", Icon: "hotel", TargetURL: "/packages/builder?dest=도쿄", CountInfo: "최대 25% 추가 할인"},
+		{ID: "pkg-osa", Domain: "packages", Type: "package", Title: "[항공+호텔] 오사카 2박 3일 미식&쇼핑 에어텔", Subtitle: "왕복 항공권 + 난바/도톤보리 4성급 호텔 결합", Code: "OSA", Badge: "다이내믹 패키지", Icon: "hotel", TargetURL: "/packages/builder?dest=오사카", CountInfo: "최대 30% 추가 할인"},
+		{ID: "pkg-dad", Domain: "packages", Type: "package", Title: "[항공+호텔] 다낭 4박 5일 오션뷰 리조트 패키지", Subtitle: "국적기 직항 + 미케비치 5성급 럭셔리 풀빌라", Code: "DAD", Badge: "휴양 패키지", Icon: "hotel", TargetURL: "/packages/builder?dest=다낭", CountInfo: "최대 35% 특가"},
+	}
+
+	// Dynamic store hotels integration
+	for _, h := range s.Hotels {
+		catalog = append(catalog, domain.SuggestItem{
+			ID:        "hotel-" + h.ID,
+			Domain:    "hotels",
+			Type:      "hotel",
+			Title:     h.NameKO,
+			Subtitle:  fmt.Sprintf("%s %s · %s", h.Country, h.City, h.Address),
+			Code:      "",
+			Badge:     fmt.Sprintf("%d성급 호텔", h.StarRating),
+			Icon:      "hotel",
+			TargetURL: fmt.Sprintf("/hotels/%s", h.ID),
+			CountInfo: fmt.Sprintf("평점 %.1f", h.ReviewScore),
+		})
+	}
+
+	// Filter and match
+	var matched []domain.SuggestItem
+	for _, item := range catalog {
+		// Domain filter check
+		if df != "" && df != "all" {
+			if !strings.EqualFold(item.Domain, df) {
+				continue
+			}
+		}
+
+		// Empty query -> Popular top picks
+		if q == "" {
+			matched = append(matched, item)
+			if len(matched) >= 10 {
+				break
+			}
+			continue
+		}
+
+		// Search match: Title, Subtitle, Code
+		titleLower := strings.ToLower(item.Title)
+		subtitleLower := strings.ToLower(item.Subtitle)
+		codeLower := strings.ToLower(item.Code)
+
+		if strings.Contains(titleLower, q) ||
+			strings.Contains(subtitleLower, q) ||
+			strings.Contains(codeLower, q) {
+			matched = append(matched, item)
+			if len(matched) >= 15 {
+				break
+			}
+		}
+	}
+
+	return matched
+}
+

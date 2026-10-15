@@ -3,6 +3,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import SearchAutocomplete from '~/components/SearchAutocomplete.vue'
 
 const route = useRoute()
 const currencyStore = useCurrencyStore()
@@ -51,12 +52,15 @@ onMounted(() => {
     <!-- 검색 상단 바 & 지도 뷰 토글 -->
     <div class="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm mb-6">
       <div class="flex items-center gap-3 w-full md:w-auto">
-        <input
-          v-model="city"
-          type="text"
-          class="p-2.5 border border-slate-300 rounded-xl text-sm font-bold text-trip-navy outline-none w-64"
-          placeholder="목적지 검색 (예: 서울, 도쿄...)"
-        />
+        <div class="w-72">
+          <SearchAutocomplete
+            v-model="city"
+            domain="hotels"
+            placeholder="목적지 / 호텔명 검색"
+            icon="search"
+            inputClass="w-full pl-10 pr-8 py-2.5 text-sm font-bold text-slate-900 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+          />
+        </div>
         <span class="text-xs text-slate-500 font-medium">검색 결과: <strong class="text-trip-blue">{{ hotels.length }}</strong>개 호텔</span>
       </div>
 

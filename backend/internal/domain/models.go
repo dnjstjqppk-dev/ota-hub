@@ -338,3 +338,17 @@ type CSTicket struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+// Autocomplete & Suggest Model (Trip.com & Agoda specification)
+type SuggestItem struct {
+	ID        string `json:"id"`
+	Domain    string `json:"domain"`     // hotels, flights, trains, cars, attractions, packages
+	Type      string `json:"type"`       // city, airport, hotel, station, landmark, activity, package
+	Title     string `json:"title"`      // e.g. "도쿄 (Tokyo)"
+	Subtitle  string `json:"subtitle"`   // e.g. "일본 간토 지방, 도쿄도"
+	Code      string `json:"code"`       // e.g. "TYO", "HND", "ICN"
+	Badge     string `json:"badge"`      // e.g. "도시", "공항", "5성급 호텔", "KTX 역"
+	Icon      string `json:"icon"`       // e.g. "city", "plane", "hotel", "train", "car", "ticket", "landmark"
+	TargetURL string `json:"target_url"` // e.g. "/hotels/list?city=도쿄"
+	CountInfo string `json:"count_info"` // e.g. "숙소 2,450개"
+}
+
