@@ -303,6 +303,35 @@ func (h *APIHandler) CancelBooking(w http.ResponseWriter, r *http.Request) {
 
 // --- ADMIN HANDLERS ---
 
+func (h *APIHandler) AdminLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid login request")
+		return
+	}
+
+	email := strings.TrimSpace(strings.ToLower(req.Email))
+	if (email == "admin@getfortrip.com" || email == "admin") && req.Password == "admin1234!" {
+		token := "gft_adm_token_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success": true,
+			"token":   token,
+			"admin": map[string]string{
+				"id":    "adm_001",
+				"name":  "총괄 관리자",
+				"email": "admin@getfortrip.com",
+				"role":  "SUPER_ADMIN",
+			},
+		})
+		return
+	}
+
+	writeError(w, http.StatusUnauthorized, "아이디 또는 비밀번호가 올바르지 않습니다.")
+}
+
 func (h *APIHandler) GetAdminDashboard(w http.ResponseWriter, r *http.Request) {
 	stats := h.store.GetDashboardStats()
 	writeJSON(w, http.StatusOK, stats)

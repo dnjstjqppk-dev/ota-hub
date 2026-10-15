@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { apiUrl } from './config/api'
 
 const route = useRoute()
+const router = useRouter()
 const sseActive = ref(false)
 const sseTime = ref('')
+let eventSource: EventSource | null = null
 
 const navItems = [
   { path: '/dashboard', label: '통합 대시보드', icon: '📊' },
@@ -18,32 +20,74 @@ const navItems = [
   { path: '/settlements', label: '정산/감사로그', icon: '📑' }
 ]
 
-onMounted(() => {
-  // Connect to Go backend SSE stream
-  const eventSource = new EventSource(apiUrl('/sse/events'))
-  eventSource.onopen = () => {
-    sseActive.value = true
-  }
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data)
-      sseTime.value = data.time
-    } catch (e) {}
-  }
-  eventSource.onerror = () => {
+const currentUser = computed(() => {
+  try {
+    const raw = localStorage.getItem('getfortrip_admin_user')
+    if (raw) return JSON.parse(raw)
+  } catch (e) {}
+  return { name: '총괄 관리자', email: 'admin@getfortrip.com', role: 'SUPER_ADMIN' }
+})
+
+const isLoginPage = computed(() => route.path === '/login')
+
+const connectSSE = () => {
+  if (isLoginPage.value || eventSource) return
+  try {
+    eventSource = new EventSource(apiUrl('/sse/events'))
+    eventSource.onopen = () => {
+      sseActive.value = true
+    }
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        sseTime.value = data.time
+      } catch (e) {}
+    }
+    eventSource.onerror = () => {
+      sseActive.value = false
+    }
+  } catch (e) {
     sseActive.value = false
+  }
+}
+
+const handleLogout = () => {
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
+  }
+  localStorage.removeItem('getfortrip_admin_token')
+  localStorage.removeItem('getfortrip_admin_user')
+  router.push('/login')
+}
+
+watch(
+  () => route.path,
+  (newPath) => {
+    if (newPath !== '/login' && !eventSource) {
+      connectSSE()
+    }
+  }
+)
+
+onMounted(() => {
+  if (!isLoginPage.value) {
+    connectSSE()
   }
 })
 </script>
 
 <template>
-  <div class="flex h-screen bg-slate-100 font-sans antialiased text-slate-800">
-    <!-- 사이드바 (getfortrip Deep Navy) -->
-    <aside class="w-64 bg-trip-navy text-slate-200 flex flex-col justify-between shadow-xl flex-shrink-0 z-30">
-      <div>
+  <div class="h-screen bg-slate-100 font-sans antialiased text-slate-800 flex overflow-hidden">
+    <!-- 사이드바 (로그인 페이지에서는 숨김) -->
+    <aside
+      v-if="!isLoginPage"
+      class="w-64 bg-trip-navy text-slate-200 flex flex-col justify-between shadow-xl flex-shrink-0 z-30 select-none"
+    >
+      <div class="overflow-y-auto">
         <!-- 로고 -->
-        <div class="p-6 border-b border-slate-700/60 flex items-center gap-3">
-          <img src="/symbol.svg" alt="getfortrip" class="w-10 h-10 object-contain rounded-xl shadow-lg shadow-blue-500/30" />
+        <div class="p-5 border-b border-slate-700/60 flex items-center gap-3">
+          <img src="/symbol.svg" alt="getfortrip" class="w-9 h-9 object-contain rounded-xl shadow-lg shadow-blue-500/30" />
           <div>
             <div class="text-base font-black tracking-tight text-white flex items-center gap-1.5">
               <span>getfor<span class="text-cyan-400">trip</span></span>
@@ -54,7 +98,7 @@ onMounted(() => {
         </div>
 
         <!-- 메뉴 목록 -->
-        <nav class="p-4 space-y-1">
+        <nav class="p-3 space-y-1">
           <router-link
             v-for="item in navItems"
             :key="item.path"
@@ -72,31 +116,46 @@ onMounted(() => {
         </nav>
       </div>
 
-      <!-- 하단 상태 및 관리자 프로필 -->
-      <div class="p-4 border-t border-slate-800 space-y-3">
+      <!-- 하단 상태 및 관리자 프로필 & 로그아웃 -->
+      <div class="p-4 border-t border-slate-800 space-y-3 bg-slate-950/40">
         <!-- 실시간 SSE 상태 뱃지 -->
-        <div class="flex items-center justify-between px-3 py-2 bg-slate-900/60 rounded-lg text-xs">
+        <div class="flex items-center justify-between px-3 py-2 bg-slate-900/80 rounded-lg text-xs">
           <span class="text-slate-400 font-medium flex items-center gap-1.5">
             <span :class="['w-2 h-2 rounded-full animate-pulse', sseActive ? 'bg-emerald-400' : 'bg-rose-500']"></span>
             SSE 스트림
           </span>
-          <span class="text-emerald-400 font-bold font-mono">{{ sseActive ? 'ONLINE' : 'OFFLINE' }}</span>
+          <span :class="['font-bold font-mono', sseActive ? 'text-emerald-400' : 'text-slate-400']">
+            {{ sseActive ? 'ONLINE' : 'STANDBY' }}
+          </span>
         </div>
 
-        <div class="flex items-center gap-3 px-2">
-          <div class="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center font-bold text-white text-sm">
-            AD
+        <!-- 관리자 계정 정보 -->
+        <div class="flex items-center justify-between px-1">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center font-bold text-white text-xs shadow flex-shrink-0">
+              AD
+            </div>
+            <div class="overflow-hidden">
+              <div class="text-xs font-bold text-white truncate">{{ currentUser.name }}</div>
+              <div class="text-[10px] text-slate-400 truncate">{{ currentUser.email }}</div>
+            </div>
           </div>
-          <div class="overflow-hidden">
-            <div class="text-xs font-bold text-white truncate">admin_super (총괄)</div>
-            <div class="text-[11px] text-slate-400 truncate">Go Backend v1.23</div>
-          </div>
+          <!-- 로그아웃 버튼 -->
+          <button
+            @click="handleLogout"
+            title="관리자 로그아웃"
+            class="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors flex-shrink-0"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
         </div>
       </div>
     </aside>
 
     <!-- 메인 콘텐츠 영역 -->
-    <main class="flex-1 overflow-y-auto flex flex-col">
+    <main class="flex-1 overflow-y-auto flex flex-col min-w-0">
       <router-view />
     </main>
   </div>

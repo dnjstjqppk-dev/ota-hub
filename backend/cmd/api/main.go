@@ -93,6 +93,7 @@ func main() {
 	mux.HandleFunc("POST /api/v1/bookings/{id}/cancel", h.CancelBooking)
 
 	// 3. Admin routes
+	mux.HandleFunc("POST /api/v1/admin/login", h.AdminLogin)
 	mux.HandleFunc("GET /api/v1/admin/dashboard", h.GetAdminDashboard)
 	mux.HandleFunc("GET /api/v1/admin/bookings", h.GetAdminBookings)
 	mux.HandleFunc("POST /api/v1/admin/bookings/{id}/transition", h.AdminTransitionBooking)

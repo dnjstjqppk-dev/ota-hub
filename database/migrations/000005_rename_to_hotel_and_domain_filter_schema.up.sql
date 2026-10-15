@@ -125,3 +125,4 @@ INSERT INTO dynamic_packages (
   'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800',
   920000, 750000, 20
 ) ON CONFLICT (id) DO NOTHING;
+
