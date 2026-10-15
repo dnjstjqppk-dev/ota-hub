@@ -10,6 +10,9 @@ const currencyStore = useCurrencyStore()
 const city = ref(route.query.city as string || '도쿄')
 const origin = ref(route.query.origin as string || '서울/인천 (ICN)')
 
+const packages = ref<any[]>([])
+const loading = ref(false)
+
 const fallbackPackages = [
   {
     id: 'pkg_tokyo_4d3n',
@@ -60,9 +63,6 @@ const fallbackPackages = [
     features: ['오션뷰 풀빌라 룸 업그레이드', '매일 전 일정 조식 뷔페 포함', '공항 왕복 픽업 무료 제공', '스파 60분 1회 무료']
   }
 ]
-
-const packages = ref<any[]>(fallbackPackages)
-const loading = ref(false)
 
 const fetchPackages = async () => {
   loading.value = true
@@ -188,3 +188,4 @@ onMounted(() => {
     </div>
   </div>
 </template>
+

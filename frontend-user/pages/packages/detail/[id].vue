@@ -7,6 +7,9 @@ import { useApiUrl } from '~/composables/useApi'
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
+const pkg = ref<any>(null)
+const loading = ref(true)
+
 const fallbackPackage = {
   id: 'pkg_tokyo_4d3n',
   title: '[항공+호텔 결합] 도쿄 롯폰기 하얏트 럭셔리 에어텔 4일 (대한항공 직항 왕복 + 5성급 3박)',
@@ -38,9 +41,6 @@ const fallbackPackage = {
     { day: 'Day 4', title: '호텔 체크아웃 → 나리타 공항 이동 → 인천 귀국', desc: '여유로운 조식 후 12:00 레이트 체크아웃. 공항 이동 후 KE704 탑승하여 인천 도착.' }
   ]
 }
-
-const pkg = ref<any>(fallbackPackage)
-const loading = ref(false)
 
 onMounted(async () => {
   try {
@@ -202,3 +202,4 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+

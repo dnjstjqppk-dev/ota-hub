@@ -7,6 +7,9 @@ import { useApiUrl } from '~/composables/useApi'
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
+const hotel = ref<any>(null)
+const loading = ref(true)
+
 const fallbackHotelDetail = {
   id: 'htl_tokyo_01',
   name_ko: '그랜드 하얏트 도쿄 롯폰기 힐스',
@@ -58,9 +61,6 @@ const fallbackHotelDetail = {
     { id: 'rev_2', author: 'Park S.H.', rating: 4.8, date: '2026-09-28', comment: '도쿄 타워 뷰가 환상적이고 조식 뷔페 퀄리티가 대단히 높습니다. 재방문 의사 100%입니다.' }
   ]
 }
-
-const hotel = ref<any>(fallbackHotelDetail)
-const loading = ref(false)
 
 onMounted(async () => {
   try {

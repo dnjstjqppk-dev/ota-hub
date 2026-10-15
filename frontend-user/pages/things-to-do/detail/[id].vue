@@ -8,6 +8,15 @@ const route = useRoute()
 const router = useRouter()
 const currencyStore = useCurrencyStore()
 
+const activity = ref<any>(null)
+const loading = ref(true)
+
+// Booking Options State
+const selectedPackageId = ref<string>('')
+const selectedDate = ref<string>(new Date(Date.now() + 86400000).toISOString().split('T')[0])
+const adultCount = ref(1)
+const childCount = ref(0)
+
 const fallbackActivity = {
   id: 'act_disney_tokyo',
   title: '도쿄 디즈니랜드 1일 e-티켓 (즉시 확정 / 모바일 QR 바로 입장)',
@@ -64,15 +73,6 @@ const fallbackActivity = {
     }
   ]
 }
-
-const activity = ref<any>(fallbackActivity)
-const loading = ref(false)
-
-// Booking Options State
-const selectedPackageId = ref<string>('pkg_adult')
-const selectedDate = ref<string>(new Date(Date.now() + 86400000).toISOString().split('T')[0])
-const adultCount = ref(1)
-const childCount = ref(0)
 
 const fetchActivityDetail = async () => {
   loading.value = true

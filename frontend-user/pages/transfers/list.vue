@@ -17,6 +17,9 @@ const selectedTier = ref<string>('ALL') // ALL, ECONOMY_SEDAN, COMFORT_SEDAN, BU
 const minBags = ref(0)
 const sortBy = ref<'recommended' | 'price_asc' | 'capacity_desc'>('recommended')
 
+const vehicles = ref<any[]>([])
+const loading = ref(false)
+
 const fallbackTransfers = [
   {
     id: 'tf_icn_van_01',
@@ -70,9 +73,6 @@ const fallbackTransfers = [
     image_url: 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800'
   }
 ]
-
-const vehicles = ref<any[]>(fallbackTransfers)
-const loading = ref(false)
 
 const fetchTransfers = async () => {
   loading.value = true
@@ -280,3 +280,4 @@ onMounted(() => {
     </div>
   </div>
 </template>
+

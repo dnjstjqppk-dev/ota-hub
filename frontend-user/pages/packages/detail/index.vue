@@ -16,3 +16,4 @@ onMounted(() => {
     패키지 상세 페이지로 이동 중...
   </div>
 </template>
+

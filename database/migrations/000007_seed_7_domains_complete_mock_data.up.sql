@@ -170,3 +170,4 @@ INSERT INTO dynamic_package_bundles (
   '["대한항공 직항 왕복 (위탁수하물 23kg 무료)", "그랜드 하얏트 도쿄 롯폰기 3박 (조식 포함)", "공항 왕복 리무진 버스 할인 쿠폰 제공", "24시간 안심 케어 서비스"]'::jsonb
 )
 ON CONFLICT (id) DO NOTHING;
+

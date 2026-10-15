@@ -16,58 +16,7 @@ const selectedLanguage = ref('')
 const maxPrice = ref(200000)
 const sortBy = ref<'recommended' | 'price_asc' | 'rating_desc'>('recommended')
 
-const fallbackActivities = [
-  {
-    id: 'act_disney_tokyo',
-    title: '도쿄 디즈니랜드 1일 e-티켓 (모바일 QR 즉시 입장)',
-    city: '도쿄',
-    category: 'THEME_PARK',
-    duration_type: 'FULL_DAY',
-    duration_text: '자유 이용',
-    price_krw: 89000,
-    original_price_krw: 98000,
-    review_score: 4.9,
-    review_count: 8740,
-    free_cancellation: true,
-    instant_confirmation: true,
-    badge: '글로벌 베스트셀러',
-    image_url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800'
-  },
-  {
-    id: 'act_fuji_tour',
-    title: '[한국어 가이드] 후지산 & 하코네 당일 럭셔리 버스 투어 (케이블카 포함)',
-    city: '도쿄',
-    category: 'DAY_TOUR',
-    duration_type: 'FULL_DAY',
-    duration_text: '약 9시간',
-    price_krw: 78000,
-    original_price_krw: 89000,
-    review_score: 4.8,
-    review_count: 2430,
-    free_cancellation: true,
-    instant_confirmation: true,
-    badge: '인기 1일 버스투어',
-    image_url: 'https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=800'
-  },
-  {
-    id: 'act_japan_esim',
-    title: '[eSIM] 일본 매일 무제한 초고속 데이터 4G/5G 로밍 (QR 즉시 발송)',
-    city: '도쿄',
-    category: 'ESIM',
-    duration_type: 'HOURS',
-    duration_text: '즉시 개통',
-    price_krw: 6900,
-    original_price_krw: 9900,
-    review_score: 4.9,
-    review_count: 14200,
-    free_cancellation: true,
-    instant_confirmation: true,
-    badge: '필수 여행템',
-    image_url: 'https://images.unsplash.com/photo-1512499617640-c74ae3a79d37?w=800'
-  }
-]
-
-const activities = ref<any[]>(fallbackActivities)
+const activities = ref<any[]>([])
 const loading = ref(false)
 
 const categories = [
@@ -81,6 +30,7 @@ const categories = [
 ]
 
 const fetchActivities = async () => {
+  loading.value = true
   try {
     const params = new URLSearchParams()
     if (city.value) params.append('city', city.value)
@@ -103,14 +53,80 @@ const fetchActivities = async () => {
       data.sort((a, b) => b.review_score - a.review_score)
     }
 
-    if (data.length > 0) {
-      activities.value = data
-    } else {
-      activities.value = fallbackActivities
+    if (!data.length) {
+      data = [
+        {
+          id: 'act_disney_tokyo',
+          title: '도쿄 디즈니랜드 1일 e-티켓 (모바일 QR 즉시 입장)',
+          city: '도쿄',
+          category: 'THEME_PARK',
+          duration_type: 'FULL_DAY',
+          duration_text: '자유 이용',
+          price_krw: 89000,
+          original_price_krw: 98000,
+          review_score: 4.9,
+          review_count: 8740,
+          free_cancellation: true,
+          instant_confirmation: true,
+          badge: '글로벌 베스트셀러',
+          image_url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800'
+        },
+        {
+          id: 'act_fuji_tour',
+          title: '[한국어 가이드] 후지산 & 하코네 당일 럭셔리 버스 투어 (케이블카 포함)',
+          city: '도쿄',
+          category: 'DAY_TOUR',
+          duration_type: 'FULL_DAY',
+          duration_text: '약 9시간',
+          price_krw: 78000,
+          original_price_krw: 89000,
+          review_score: 4.8,
+          review_count: 2430,
+          free_cancellation: true,
+          instant_confirmation: true,
+          badge: '인기 1일 버스투어',
+          image_url: 'https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=800'
+        },
+        {
+          id: 'act_japan_esim',
+          title: '[eSIM] 일본 매일 무제한 초고속 데이터 4G/5G 로밍 (QR 즉시 발송)',
+          city: '도쿄',
+          category: 'ESIM',
+          duration_type: 'HOURS',
+          duration_text: '즉시 개통',
+          price_krw: 6900,
+          original_price_krw: 9900,
+          review_score: 4.9,
+          review_count: 14200,
+          free_cancellation: true,
+          instant_confirmation: true,
+          badge: '필수 여행템',
+          image_url: 'https://images.unsplash.com/photo-1512499617640-c74ae3a79d37?w=800'
+        }
+      ]
     }
+
+    activities.value = data
   } catch (e) {
     console.error(e)
-    activities.value = fallbackActivities
+    activities.value = [
+      {
+        id: 'act_disney_tokyo',
+        title: '도쿄 디즈니랜드 1일 e-티켓 (모바일 QR 즉시 입장)',
+        city: '도쿄',
+        category: 'THEME_PARK',
+        duration_type: 'FULL_DAY',
+        duration_text: '자유 이용',
+        price_krw: 89000,
+        original_price_krw: 98000,
+        review_score: 4.9,
+        review_count: 8740,
+        free_cancellation: true,
+        instant_confirmation: true,
+        badge: '글로벌 베스트셀러',
+        image_url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800'
+      }
+    ]
   } finally {
     loading.value = false
   }

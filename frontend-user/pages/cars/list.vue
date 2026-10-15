@@ -19,6 +19,9 @@ const superCdwOnly = ref(false)
 const freeCancelOnly = ref(false)
 const sortBy = ref<'recommended' | 'price_asc' | 'seats_desc'>('recommended')
 
+const cars = ref<any[]>([])
+const loading = ref(false)
+
 const fallbackCars = [
   {
     id: 'car_avante_01',
@@ -97,9 +100,6 @@ const fallbackCars = [
     image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800'
   }
 ]
-
-const cars = ref<any[]>(fallbackCars)
-const loading = ref(false)
 
 const fetchCars = async () => {
   loading.value = true
@@ -339,3 +339,4 @@ onMounted(() => {
     </div>
   </div>
 </template>
+

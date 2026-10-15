@@ -203,3 +203,4 @@ CREATE INDEX IF NOT EXISTS idx_train_journeys_facets ON train_journeys (departur
 CREATE INDEX IF NOT EXISTS idx_car_rentals_facets ON car_rental_catalog (pickup_city, vehicle_category, transmission, insurance_super_cdw);
 CREATE INDEX IF NOT EXISTS idx_airport_transfers_facets ON airport_transfer_catalog (airport_code, vehicle_tier);
 CREATE INDEX IF NOT EXISTS idx_activity_catalog_facets ON activity_catalog (city, main_category, instant_confirmation, free_cancellation);
+

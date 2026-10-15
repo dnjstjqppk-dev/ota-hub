@@ -7,6 +7,10 @@ import { useApiUrl } from '~/composables/useApi'
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
+const flight = ref<any>(null)
+const selectedFare = ref<'standard' | 'flex' | 'business'>('standard')
+const loading = ref(true)
+
 // High-fidelity fallback flight data
 const fallbackFlight = {
   id: 'flt_ke703',
@@ -70,10 +74,6 @@ const fallbackFlight = {
     }
   ]
 }
-
-const flight = ref<any>(fallbackFlight)
-const selectedFare = ref<'standard' | 'flex' | 'business'>('standard')
-const loading = ref(false)
 
 onMounted(async () => {
   try {
@@ -263,3 +263,4 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+

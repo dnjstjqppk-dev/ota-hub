@@ -6,3 +6,4 @@ DELETE FROM train_journeys WHERE id IN ('trn_ktx_01', 'trn_shinkansen_01');
 DELETE FROM flight_schedules WHERE id IN ('flt_ke703', 'flt_oz102');
 DELETE FROM hotel_room_options WHERE hotel_id IN ('htl_tokyo_01', 'htl_seoul_01');
 DELETE FROM hotel_properties WHERE id IN ('htl_tokyo_01', 'htl_seoul_01');
+

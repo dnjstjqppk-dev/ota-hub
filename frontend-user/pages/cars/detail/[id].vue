@@ -7,6 +7,10 @@ import { useApiUrl } from '~/composables/useApi'
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
+const car = ref<any>(null)
+const selectedInsurance = ref<'super' | 'standard'>('super')
+const loading = ref(true)
+
 const fallbackCar = {
   id: 'car_avante_01',
   company_name: '롯데렌터카 (Lotte Rent-a-Car)',
@@ -48,10 +52,6 @@ const fallbackCar = {
     }
   ]
 }
-
-const car = ref<any>(fallbackCar)
-const selectedInsurance = ref<'super' | 'standard'>('super')
-const loading = ref(false)
 
 onMounted(async () => {
   try {
@@ -213,3 +213,4 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+

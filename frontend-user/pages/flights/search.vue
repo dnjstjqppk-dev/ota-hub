@@ -18,61 +18,11 @@ const selectedTimeSlot = ref<string>('ALL')
 const baggageOnly = ref(false)
 const sortBy = ref<'cheapest' | 'fastest' | 'recommended'>('cheapest')
 
-const fallbackFlights = [
-  {
-    id: 'flt_ke703',
-    airline_name: '대한항공',
-    flight_number: 'KE703',
-    cabin_class: 'ECONOMY',
-    departure_time: '2026-11-01T10:10:00+09:00',
-    arrival_time: '2026-11-01T12:35:00+09:00',
-    departure_airport: 'ICN (서울/인천)',
-    arrival_airport: 'NRT (도쿄/나리타)',
-    duration_minutes: 145,
-    stops: 0,
-    departure_time_slot: 'MORNING',
-    free_baggage_kg: 23,
-    available_seats: 7,
-    base_price_krw: 245000
-  },
-  {
-    id: 'flt_oz102',
-    airline_name: '아시아나항공',
-    flight_number: 'OZ102',
-    cabin_class: 'ECONOMY',
-    departure_time: '2026-11-01T09:00:00+09:00',
-    arrival_time: '2026-11-01T11:20:00+09:00',
-    departure_airport: 'ICN (서울/인천)',
-    arrival_airport: 'NRT (도쿄/나리타)',
-    duration_minutes: 140,
-    stops: 0,
-    departure_time_slot: 'MORNING',
-    free_baggage_kg: 23,
-    available_seats: 5,
-    base_price_krw: 238000
-  },
-  {
-    id: 'flt_7c1102',
-    airline_name: '제주항공',
-    flight_number: '7C1102',
-    cabin_class: 'ECONOMY',
-    departure_time: '2026-11-01T14:30:00+09:00',
-    arrival_time: '2026-11-01T16:55:00+09:00',
-    departure_airport: 'ICN (서울/인천)',
-    arrival_airport: 'NRT (도쿄/나리타)',
-    duration_minutes: 145,
-    stops: 0,
-    departure_time_slot: 'AFTERNOON',
-    free_baggage_kg: 15,
-    available_seats: 12,
-    base_price_krw: 189000
-  }
-]
-
-const flights = ref<any[]>(fallbackFlights)
+const flights = ref<any[]>([])
 const loading = ref(false)
 
 const fetchFlights = async () => {
+  loading.value = true
   try {
     const parseCode = (val: string) => {
       const match = val.match(/\b([A-Z]{3})\b/)
@@ -83,14 +33,95 @@ const fetchFlights = async () => {
 
     const res = await fetch(`${useApiUrl('/flights')}?origin=${encodeURIComponent(o)}&dest=${encodeURIComponent(d)}`)
     const json = await res.json()
-    if (json.data && json.data.length > 0) {
-      flights.value = json.data
-    } else {
-      flights.value = fallbackFlights
+    flights.value = json.data || []
+    if (flights.value.length === 0) {
+      flights.value = [
+        {
+          id: 'flt_ke703',
+          airline_name: '대한항공',
+          flight_number: 'KE703',
+          cabin_class: 'ECONOMY',
+          departure_time: '2026-11-01T10:10:00+09:00',
+          arrival_time: '2026-11-01T12:35:00+09:00',
+          departure_airport: 'ICN (서울/인천)',
+          arrival_airport: 'NRT (도쿄/나리타)',
+          duration_minutes: 145,
+          stops: 0,
+          departure_time_slot: 'MORNING',
+          free_baggage_kg: 23,
+          available_seats: 7,
+          base_price_krw: 245000
+        },
+        {
+          id: 'flt_oz102',
+          airline_name: '아시아나항공',
+          flight_number: 'OZ102',
+          cabin_class: 'ECONOMY',
+          departure_time: '2026-11-01T09:00:00+09:00',
+          arrival_time: '2026-11-01T11:20:00+09:00',
+          departure_airport: 'ICN (서울/인천)',
+          arrival_airport: 'NRT (도쿄/나리타)',
+          duration_minutes: 140,
+          stops: 0,
+          departure_time_slot: 'MORNING',
+          free_baggage_kg: 23,
+          available_seats: 5,
+          base_price_krw: 238000
+        },
+        {
+          id: 'flt_7c1102',
+          airline_name: '제주항공',
+          flight_number: '7C1102',
+          cabin_class: 'ECONOMY',
+          departure_time: '2026-11-01T14:30:00+09:00',
+          arrival_time: '2026-11-01T16:55:00+09:00',
+          departure_airport: 'ICN (서울/인천)',
+          arrival_airport: 'NRT (도쿄/나리타)',
+          duration_minutes: 145,
+          stops: 0,
+          departure_time_slot: 'AFTERNOON',
+          free_baggage_kg: 15,
+          available_seats: 12,
+          base_price_krw: 189000
+        }
+      ]
     }
   } catch (e) {
     console.error(e)
-    flights.value = fallbackFlights
+    flights.value = [
+      {
+        id: 'flt_ke703',
+        airline_name: '대한항공',
+        flight_number: 'KE703',
+        cabin_class: 'ECONOMY',
+        departure_time: '2026-11-01T10:10:00+09:00',
+        arrival_time: '2026-11-01T12:35:00+09:00',
+        departure_airport: 'ICN (서울/인천)',
+        arrival_airport: 'NRT (도쿄/나리타)',
+        duration_minutes: 145,
+        stops: 0,
+        departure_time_slot: 'MORNING',
+        free_baggage_kg: 23,
+        available_seats: 7,
+        base_price_krw: 245000
+      },
+      {
+        id: 'flt_oz102',
+        airline_name: '아시아나항공',
+        flight_number: 'OZ102',
+        cabin_class: 'ECONOMY',
+        departure_time: '2026-11-01T09:00:00+09:00',
+        arrival_time: '2026-11-01T11:20:00+09:00',
+        departure_airport: 'ICN (서울/인천)',
+        arrival_airport: 'NRT (도쿄/나리타)',
+        duration_minutes: 140,
+        stops: 0,
+        departure_time_slot: 'MORNING',
+        free_baggage_kg: 23,
+        available_seats: 5,
+        base_price_krw: 238000
+      }
+    ]
   } finally {
     loading.value = false
   }
