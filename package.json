@@ -3,9 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "description": "getfortrip Global OTA Platform (Nuxt 3 SPA + Vue 3 Admin + Go API)",
+  "workspaces": [
+    "frontend-user",
+    "frontend-admin"
+  ],
   "scripts": {
-    "build": "npm --prefix frontend-user run generate",
-    "build:user": "npm --prefix frontend-user run generate",
+    "build": "npm --prefix frontend-user install && npm --prefix frontend-user run generate",
+    "build:user": "npm --prefix frontend-user install && npm --prefix frontend-user run generate",
     "build:admin": "cd frontend-admin && npm install && npm run build",
     "check:branding": "node scripts/check-branding.js",
     "deploy": "npx wrangler deploy"

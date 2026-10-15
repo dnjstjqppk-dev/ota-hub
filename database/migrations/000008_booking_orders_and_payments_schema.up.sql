@@ -107,3 +107,4 @@ CREATE TABLE IF NOT EXISTS customer_vouchers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_customer_vouchers_order ON customer_vouchers (order_id, voucher_code);
+

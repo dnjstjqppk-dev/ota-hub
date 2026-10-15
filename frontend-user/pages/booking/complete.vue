@@ -5,3 +5,4 @@ import BookingSuccess from './success.vue'
 <template>
   <BookingSuccess />
 </template>
+
