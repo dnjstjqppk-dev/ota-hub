@@ -396,3 +396,33 @@ type SuggestItem struct {
 	CountInfo string `json:"count_info"` // e.g. "숙소 2,450개"
 }
 
+// Faceted Filter Models (getfortrip specification)
+type DomainFilterOption struct {
+	ID        string  `json:"id"`
+	LabelKO   string  `json:"label_ko"`
+	LabelEN   string  `json:"label_en"`
+	Value     any     `json:"value,omitempty"`
+	Min       float64 `json:"min,omitempty"`
+	Max       float64 `json:"max,omitempty"`
+	CountHint int     `json:"count_hint,omitempty"`
+	Icon      string  `json:"icon,omitempty"`
+	Alliance  string  `json:"alliance,omitempty"`
+}
+
+type DomainFilterDefinition struct {
+	ID                    string               `json:"id"`
+	DomainType            DomainType           `json:"domain_type"` // HOTEL, FLIGHT, TRAIN, CAR, TRANSFER, ACTIVITY, PACKAGE
+	FilterGroup           string               `json:"filter_group"`
+	FilterKey             string               `json:"filter_key"`
+	DisplayNameKO         string               `json:"display_name_ko"`
+	DisplayNameEN         string               `json:"display_name_en"`
+	UIControlType         string               `json:"ui_control_type"` // CHECKBOX_LIST, RADIO_GROUP, RANGE_SLIDER, BOOLEAN_SWITCH
+	Icon                  string               `json:"icon"`
+	SortOrder             int                  `json:"sort_order"`
+	IsCollapsedByDefault  bool                 `json:"is_collapsed_by_default"`
+	IsSearchable          bool                 `json:"is_searchable"`
+	Options               []DomainFilterOption `json:"options"`
+	IsActive              bool                 `json:"is_active"`
+}
+
+

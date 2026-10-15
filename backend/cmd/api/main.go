@@ -84,6 +84,8 @@ func main() {
 	mux.HandleFunc("GET /api/v1/activities/{id}", h.GetActivityDetail)
 	mux.HandleFunc("GET /api/v1/packages", h.GetPackages)
 	mux.HandleFunc("GET /api/v1/packages/{id}", h.GetPackageDetail)
+	mux.HandleFunc("GET /api/v1/filters/{domain}", h.GetDomainFilters)
+	mux.HandleFunc("GET /api/v1/filters", h.GetAllFilters)
 	mux.HandleFunc("GET /api/v1/promotions", h.GetPromotions)
 	mux.HandleFunc("GET /api/v1/fx-rates", h.GetFXRates)
 	mux.HandleFunc("GET /api/v1/moments", h.GetMoments)

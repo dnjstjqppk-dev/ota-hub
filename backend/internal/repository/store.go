@@ -29,6 +29,7 @@ type Store struct {
 	AuditLogs    []domain.AdminAuditLog
 	Notices      []domain.Notice
 	CSTickets    map[string]domain.CSTicket
+	FilterDefinitions map[string][]domain.DomainFilterDefinition
 
 	// Curation & Multi-Platform Webhook Ingestion Store
 	UniversalProducts  map[string]*domain.UniversalProduct
@@ -58,6 +59,7 @@ func NewStore() *Store {
 		AuditLogs:          make([]domain.AdminAuditLog, 0),
 		Notices:            make([]domain.Notice, 0),
 		CSTickets:          make(map[string]domain.CSTicket),
+		FilterDefinitions:  make(map[string][]domain.DomainFilterDefinition),
 		UniversalProducts:  make(map[string]*domain.UniversalProduct),
 		CuratedContents:    make(map[string]*domain.CuratedContent),
 		AffiliateReferrals: make(map[string]*domain.AffiliateReferral),
@@ -65,6 +67,7 @@ func NewStore() *Store {
 		WebhookLogs:        make([]domain.TravelCheckinWebhookLog, 0),
 	}
 	s.seedDefaultData()
+	s.seedFilterDefinitions()
 	return s
 }
 
@@ -1109,4 +1112,266 @@ func (s *Store) GetUniversalProduct(id string) *domain.UniversalProduct {
 	}
 	return p
 }
+
+// GetDomainFilters retrieves filter taxonomy for a specific domain
+func (s *Store) GetDomainFilters(domainType string) []domain.DomainFilterDefinition {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	key := strings.ToUpper(strings.TrimSpace(domainType))
+	if strings.HasSuffix(key, "S") && key != "CARS" && key != "TRANSFERS" && key != "TRAINS" {
+		key = strings.TrimSuffix(key, "S")
+	}
+	if key == "HOTELS" {
+		key = "HOTEL"
+	} else if key == "FLIGHTS" {
+		key = "FLIGHT"
+	} else if key == "ACTIVITIES" || key == "THINGS-TO-DO" {
+		key = "ACTIVITY"
+	} else if key == "PACKAGES" {
+		key = "PACKAGE"
+	} else if key == "CARS" {
+		key = "CAR"
+	} else if key == "TRANSFERS" {
+		key = "TRANSFER"
+	} else if key == "TRAINS" {
+		key = "TRAIN"
+	}
+
+	filters, exists := s.FilterDefinitions[key]
+	if !exists {
+		return []domain.DomainFilterDefinition{}
+	}
+	return filters
+}
+
+// GetAllFilters returns all filter taxonomies
+func (s *Store) GetAllFilters() map[string][]domain.DomainFilterDefinition {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	res := make(map[string][]domain.DomainFilterDefinition)
+	for k, v := range s.FilterDefinitions {
+		res[k] = v
+	}
+	return res
+}
+
+func (s *Store) seedFilterDefinitions() {
+	// 1. HOTEL Filters
+	s.FilterDefinitions["HOTEL"] = []domain.DomainFilterDefinition{
+		{
+			ID: "flt_hotel_star", DomainType: domain.DomainHotel, FilterGroup: "POPULAR", FilterKey: "star_rating",
+			DisplayNameKO: "호텔 성급", DisplayNameEN: "Star Rating", UIControlType: "CHECKBOX_LIST", Icon: "⭐", SortOrder: 1,
+			Options: []domain.DomainFilterOption{
+				{ID: "5", LabelKO: "5성급 럭셔리", LabelEN: "5 Stars Luxury", Value: 5, CountHint: 320},
+				{ID: "4", LabelKO: "4성급 고급", LabelEN: "4 Stars High-end", Value: 4, CountHint: 580},
+				{ID: "3", LabelKO: "3성급 가성비", LabelEN: "3 Stars Comfort", Value: 3, CountHint: 740},
+				{ID: "2", LabelKO: "2성급 이하 실속", LabelEN: "2 Stars or below", Value: 2, CountHint: 190},
+			},
+			IsActive: true,
+		},
+		{
+			ID: "flt_hotel_guest_score", DomainType: domain.DomainHotel, FilterGroup: "RATING", FilterKey: "review_score",
+			DisplayNameKO: "고객 평점", DisplayNameEN: "Guest Rating", UIControlType: "RADIO_GROUP", Icon: "❤️", SortOrder: 2,
+			Options: []domain.DomainFilterOption{
+				{ID: "score_4_8", LabelKO: "4.8점 이상 (최고예요)", LabelEN: "4.8+ Exceptional", Value: 4.8},
+				{ID: "score_4_5", LabelKO: "4.5점 이상 (아주 좋아요)", LabelEN: "4.5+ Wonderful", Value: 4.5},
+				{ID: "score_4_0", LabelKO: "4.0점 이상 (좋아요)", LabelEN: "4.0+ Very Good", Value: 4.0},
+			},
+			IsActive: true,
+		},
+		{
+			ID: "flt_hotel_property_type", DomainType: domain.DomainHotel, FilterGroup: "PROPERTY", FilterKey: "property_type",
+			DisplayNameKO: "숙소 유형", DisplayNameEN: "Property Type", UIControlType: "CHECKBOX_LIST", Icon: "🏨", SortOrder: 3,
+			Options: []domain.DomainFilterOption{
+				{ID: "HOTEL", LabelKO: "호텔", LabelEN: "Hotel", Value: "HOTEL", CountHint: 1420},
+				{ID: "RESORT", LabelKO: "리조트", LabelEN: "Resort", Value: "RESORT", CountHint: 310},
+				{ID: "APARTMENT", LabelKO: "아파트 / 레지던스", LabelEN: "Apartment / Residence", Value: "APARTMENT", CountHint: 240},
+				{ID: "RYOKAN", LabelKO: "전통 료칸", LabelEN: "Ryokan", Value: "RYOKAN", CountHint: 85},
+				{ID: "VILLA", LabelKO: "풀빌라", LabelEN: "Pool Villa", Value: "VILLA", CountHint: 65},
+			},
+			IsActive: true,
+		},
+		{
+			ID: "flt_hotel_policies", DomainType: domain.DomainHotel, FilterGroup: "POLICY", FilterKey: "policies",
+			DisplayNameKO: "예약 및 취소 규정", DisplayNameEN: "Reservation Policies", UIControlType: "CHECKBOX_LIST", Icon: "🛡️", SortOrder: 4,
+			Options: []domain.DomainFilterOption{
+				{ID: "free_cancel", LabelKO: "무료 취소 가능 (위약금 0원)", LabelEN: "Free Cancellation", Value: true},
+				{ID: "free_breakfast", LabelKO: "무료 조식 포함 플랜", LabelEN: "Breakfast Included", Value: true},
+				{ID: "pay_at_hotel", LabelKO: "현장 결제 가능 (사전결제 불필요)", LabelEN: "Pay at Hotel", Value: true},
+			},
+			IsActive: true,
+		},
+		{
+			ID: "flt_hotel_amenities", DomainType: domain.DomainHotel, FilterGroup: "FACILITIES", FilterKey: "amenities",
+			DisplayNameKO: "호텔 편의시설", DisplayNameEN: "Hotel Facilities", UIControlType: "CHECKBOX_LIST", Icon: "🏊", SortOrder: 5,
+			Options: []domain.DomainFilterOption{
+				{ID: "swimming_pool", LabelKO: "수영장 / 인피니티풀", LabelEN: "Swimming Pool", Icon: "🏊"},
+				{ID: "fitness", LabelKO: "피트니스 센터", LabelEN: "Fitness Gym", Icon: "🏋️"},
+				{ID: "spa", LabelKO: "사우나 & 스파", LabelEN: "Spa & Sauna", Icon: "🧖"},
+				{ID: "free_parking", LabelKO: "무료 주차장", LabelEN: "Free Parking", Icon: "🅿️"},
+				{ID: "ev_charge", LabelKO: "전기차 충전소", LabelEN: "EV Charging Station", Icon: "🔌"},
+			},
+			IsActive: true,
+		},
+	}
+
+	// 2. FLIGHT Filters
+	s.FilterDefinitions["FLIGHT"] = []domain.DomainFilterDefinition{
+		{
+			ID: "flt_flight_stops", DomainType: domain.DomainFlight, FilterGroup: "POPULAR", FilterKey: "stops",
+			DisplayNameKO: "경유 횟수", DisplayNameEN: "Stops", UIControlType: "CHECKBOX_LIST", Icon: "✈️", SortOrder: 1,
+			Options: []domain.DomainFilterOption{
+				{ID: "0", LabelKO: "직항만 보기", LabelEN: "Non-stop only", Value: 0, CountHint: 42},
+				{ID: "1", LabelKO: "1회 경유", LabelEN: "1 Stop", Value: 1, CountHint: 86},
+				{ID: "2", LabelKO: "2회 이상 경유", LabelEN: "2+ Stops", Value: 2, CountHint: 18},
+			},
+			IsActive: true,
+		},
+		{
+			ID: "flt_flight_time", DomainType: domain.DomainFlight, FilterGroup: "TIME", FilterKey: "departure_time_slot",
+			DisplayNameKO: "출발 시간대", DisplayNameEN: "Departure Time", UIControlType: "CHECKBOX_LIST", Icon: "⏰", SortOrder: 2,
+			Options: []domain.DomainFilterOption{
+				{ID: "EARLY_MORNING", LabelKO: "새벽 (00:00 ~ 06:00)", LabelEN: "Early Morning", Value: "EARLY_MORNING"},
+				{ID: "MORNING", LabelKO: "오전 (06:00 ~ 12:00)", LabelEN: "Morning", Value: "MORNING"},
+				{ID: "AFTERNOON", LabelKO: "오후 (12:00 ~ 18:00)", LabelEN: "Afternoon", Value: "AFTERNOON"},
+				{ID: "EVENING", LabelKO: "저녁/야간 (18:00 ~ 24:00)", LabelEN: "Evening", Value: "EVENING"},
+			},
+			IsActive: true,
+		},
+		{
+			ID: "flt_flight_airlines", DomainType: domain.DomainFlight, FilterGroup: "AIRLINE", FilterKey: "airline_code",
+			DisplayNameKO: "항공사 & 항공동맹체", DisplayNameEN: "Airlines & Alliances", UIControlType: "CHECKBOX_LIST", Icon: "🛫", SortOrder: 3,
+			Options: []domain.DomainFilterOption{
+				{ID: "KE", LabelKO: "대한항공 (Korean Air)", LabelEN: "Korean Air", Alliance: "SKYTEAM", CountHint: 28},
+				{ID: "OZ", LabelKO: "아시아나항공 (Asiana Airlines)", LabelEN: "Asiana Airlines", Alliance: "STAR_ALLIANCE", CountHint: 22},
+				{ID: "7C", LabelKO: "제주항공 (Jeju Air)", LabelEN: "Jeju Air", Alliance: "LCC", CountHint: 19},
+				{ID: "TW", LabelKO: "티웨이항공 (Tway Air)", LabelEN: "Tway Air", Alliance: "LCC", CountHint: 15},
+			},
+			IsActive: true,
+		},
+		{
+			ID: "flt_flight_cabin", DomainType: domain.DomainFlight, FilterGroup: "CABIN", FilterKey: "cabin_class",
+			DisplayNameKO: "좌석 등급", DisplayNameEN: "Cabin Class", UIControlType: "RADIO_GROUP", Icon: "💺", SortOrder: 4,
+			Options: []domain.DomainFilterOption{
+				{ID: "ECONOMY", LabelKO: "일반석 (이코노미)", LabelEN: "Economy", Value: "ECONOMY"},
+				{ID: "PREMIUM_ECONOMY", LabelKO: "프리미엄 이코노미", LabelEN: "Premium Economy", Value: "PREMIUM_ECONOMY"},
+				{ID: "BUSINESS", LabelKO: "비즈니스석 (프레스티지)", LabelEN: "Business Class", Value: "BUSINESS"},
+				{ID: "FIRST", LabelKO: "일등석 (퍼스트)", LabelEN: "First Class", Value: "FIRST"},
+			},
+			IsActive: true,
+		},
+	}
+
+	// 3. TRAIN Filters
+	s.FilterDefinitions["TRAIN"] = []domain.DomainFilterDefinition{
+		{
+			ID: "flt_train_network", DomainType: domain.DomainTrain, FilterGroup: "POPULAR", FilterKey: "rail_network",
+			DisplayNameKO: "고속철도망 / 국가별 노선", DisplayNameEN: "Rail Network", UIControlType: "CHECKBOX_LIST", Icon: "🚅", SortOrder: 1,
+			Options: []domain.DomainFilterOption{
+				{ID: "KTX_SRT", LabelKO: "한국 코레일 KTX / SRT", LabelEN: "Korea KTX / SRT", Value: "KTX_SRT"},
+				{ID: "SHINKANSEN", LabelKO: "일본 JR 신칸센 (노조미/히카리)", LabelEN: "Japan JR Shinkansen", Value: "SHINKANSEN"},
+				{ID: "EUROSTAR", LabelKO: "유럽 유로스타 (런던-파리-브뤼셀)", LabelEN: "Eurostar Europe", Value: "EUROSTAR"},
+				{ID: "CHINA_HSR", LabelKO: "중국 고속철도 (CRH 푸싱호)", LabelEN: "China High Speed Rail", Value: "CHINA_HSR"},
+			},
+			IsActive: true,
+		},
+		{
+			ID: "flt_train_seat_class", DomainType: domain.DomainTrain, FilterGroup: "CABIN", FilterKey: "seat_class",
+			DisplayNameKO: "좌석 등급", DisplayNameEN: "Seat Class", UIControlType: "RADIO_GROUP", Icon: "💺", SortOrder: 2,
+			Options: []domain.DomainFilterOption{
+				{ID: "STANDARD", LabelKO: "일반실 (Standard)", LabelEN: "Standard Class", Value: "STANDARD"},
+				{ID: "FIRST", LabelKO: "특실 / 그린샤 (First Class)", LabelEN: "First Class", Value: "FIRST"},
+			},
+			IsActive: true,
+		},
+	}
+
+	// 4. CAR Filters
+	s.FilterDefinitions["CAR"] = []domain.DomainFilterDefinition{
+		{
+			ID: "flt_car_category", DomainType: domain.DomainCar, FilterGroup: "POPULAR", FilterKey: "vehicle_category",
+			DisplayNameKO: "차종 및 크기", DisplayNameEN: "Vehicle Category", UIControlType: "CHECKBOX_LIST", Icon: "🚗", SortOrder: 1,
+			Options: []domain.DomainFilterOption{
+				{ID: "COMPACT", LabelKO: "경형 / 소형", LabelEN: "Compact", Value: "COMPACT"},
+				{ID: "SEDAN", LabelKO: "중형 세단", LabelEN: "Sedan", Value: "SEDAN"},
+				{ID: "SUV", LabelKO: "SUV", LabelEN: "SUV", Value: "SUV"},
+				{ID: "VAN", LabelKO: "승합 / 패밀리 밴", LabelEN: "Minivan", Value: "VAN"},
+				{ID: "LUXURY", LabelKO: "수입 / 럭셔리", LabelEN: "Luxury", Value: "LUXURY"},
+			},
+			IsActive: true,
+		},
+		{
+			ID: "flt_car_insurance", DomainType: domain.DomainCar, FilterGroup: "INSURANCE", FilterKey: "insurance_super_cdw",
+			DisplayNameKO: "보험 플랜", DisplayNameEN: "Insurance Plan", UIControlType: "CHECKBOX_LIST", Icon: "🛡️", SortOrder: 2,
+			Options: []domain.DomainFilterOption{
+				{ID: "super_cdw", LabelKO: "완전자차 안심 플랜 (고객 면책금 0원)", LabelEN: "Super CDW (Zero Deductible)", Value: true},
+			},
+			IsActive: true,
+		},
+		{
+			ID: "flt_car_transmission", DomainType: domain.DomainCar, FilterGroup: "SPEC", FilterKey: "transmission",
+			DisplayNameKO: "변속기", DisplayNameEN: "Transmission", UIControlType: "RADIO_GROUP", Icon: "⚙️", SortOrder: 3,
+			Options: []domain.DomainFilterOption{
+				{ID: "AUTO", LabelKO: "자동 (오토)", LabelEN: "Automatic", Value: "AUTO"},
+				{ID: "MANUAL", LabelKO: "수동 (스틱)", LabelEN: "Manual", Value: "MANUAL"},
+			},
+			IsActive: true,
+		},
+	}
+
+	// 5. TRANSFER Filters
+	s.FilterDefinitions["TRANSFER"] = []domain.DomainFilterDefinition{
+		{
+			ID: "flt_transfer_tier", DomainType: domain.DomainTransfer, FilterGroup: "POPULAR", FilterKey: "vehicle_tier",
+			DisplayNameKO: "차량 등급", DisplayNameEN: "Vehicle Tier", UIControlType: "CHECKBOX_LIST", Icon: "🚖", SortOrder: 1,
+			Options: []domain.DomainFilterOption{
+				{ID: "COMFORT_SEDAN", LabelKO: "컴포트 세단 (최대 3인, 가방 2개)", LabelEN: "Comfort Sedan", Value: "COMFORT_SEDAN"},
+				{ID: "BUSINESS_VAN", LabelKO: "비즈니스 밴 (최대 6인, 가방 6개)", LabelEN: "Business Van", Value: "BUSINESS_VAN"},
+				{ID: "LUXURY_FIRST", LabelKO: "럭셔리 VIP 리무진", LabelEN: "First-Class Luxury", Value: "LUXURY_FIRST"},
+			},
+			IsActive: true,
+		},
+	}
+
+	// 6. ACTIVITY Filters
+	s.FilterDefinitions["ACTIVITY"] = []domain.DomainFilterDefinition{
+		{
+			ID: "flt_activity_category", DomainType: domain.DomainActivity, FilterGroup: "POPULAR", FilterKey: "category",
+			DisplayNameKO: "카테고리 분류", DisplayNameEN: "Category", UIControlType: "CHECKBOX_LIST", Icon: "🎟️", SortOrder: 1,
+			Options: []domain.DomainFilterOption{
+				{ID: "THEME_PARK", LabelKO: "테마파크 / 놀이공원", LabelEN: "Theme Parks", Value: "THEME_PARK"},
+				{ID: "TICKET", LabelKO: "전망대 & 랜드마크 입장권", LabelEN: "Attraction Tickets", Value: "TICKET"},
+				{ID: "DAY_TOUR", LabelKO: "1일 버스 투어 / 근교 여행", LabelEN: "Day Tours", Value: "DAY_TOUR"},
+				{ID: "ESIM", LabelKO: "해외 데이터 eSIM / 유심", LabelEN: "eSIM", Value: "ESIM"},
+			},
+			IsActive: true,
+		},
+		{
+			ID: "flt_activity_policy", DomainType: domain.DomainActivity, FilterGroup: "POLICY", FilterKey: "booking_policy",
+			DisplayNameKO: "예약 및 취소", DisplayNameEN: "Booking Policy", UIControlType: "CHECKBOX_LIST", Icon: "⚡", SortOrder: 2,
+			Options: []domain.DomainFilterOption{
+				{ID: "instant_confirmation", LabelKO: "예약 즉시 확정 발권", LabelEN: "Instant Confirmation", Value: true},
+				{ID: "free_cancellation", LabelKO: "사용 전 100% 무료 취소 가능", LabelEN: "Free Cancellation", Value: true},
+			},
+			IsActive: true,
+		},
+	}
+
+	// 7. PACKAGE Filters
+	s.FilterDefinitions["PACKAGE"] = []domain.DomainFilterDefinition{
+		{
+			ID: "flt_package_savings", DomainType: domain.DomainPackage, FilterGroup: "SAVINGS", FilterKey: "savings_rate",
+			DisplayNameKO: "결합 특별 할인율", DisplayNameEN: "Bundle Savings", UIControlType: "CHECKBOX_LIST", Icon: "💸", SortOrder: 1,
+			Options: []domain.DomainFilterOption{
+				{ID: "save_20", LabelKO: "20% 이상 결합 할인", LabelEN: "20%+ Savings", Value: 20},
+				{ID: "save_15", LabelKO: "15% 이상 결합 할인", LabelEN: "15%+ Savings", Value: 15},
+				{ID: "save_10", LabelKO: "10% 이상 결합 할인", LabelEN: "10%+ Savings", Value: 10},
+			},
+			IsActive: true,
+		},
+	}
+}
+
 

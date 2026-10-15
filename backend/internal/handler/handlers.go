@@ -45,6 +45,22 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	})
 }
 
+// --- FILTER HANDLERS ---
+
+func (h *APIHandler) GetDomainFilters(w http.ResponseWriter, r *http.Request) {
+	domainType := r.PathValue("domain")
+	if domainType == "" {
+		domainType = r.URL.Query().Get("domain")
+	}
+	filters := h.store.GetDomainFilters(domainType)
+	writeJSON(w, http.StatusOK, filters)
+}
+
+func (h *APIHandler) GetAllFilters(w http.ResponseWriter, r *http.Request) {
+	filters := h.store.GetAllFilters()
+	writeJSON(w, http.StatusOK, filters)
+}
+
 // --- CATALOG HANDLERS ---
 
 func (h *APIHandler) GetHotels(w http.ResponseWriter, r *http.Request) {
@@ -74,6 +90,10 @@ func (h *APIHandler) GetFlights(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	origin := q.Get("origin")
 	dest := q.Get("dest")
+	stopsStr := q.Get("stops")
+	timeSlot := q.Get("timeSlot")
+	cabin := q.Get("cabin")
+	airline := q.Get("airline")
 
 	var results []domain.Flight
 	for _, f := range h.store.Flights {
@@ -83,30 +103,87 @@ func (h *APIHandler) GetFlights(w http.ResponseWriter, r *http.Request) {
 		if dest != "" && !strings.EqualFold(f.ArrivalAirport, dest) && !strings.Contains(f.ArrivalCity, dest) {
 			continue
 		}
+		if stopsStr != "" {
+			stops, err := strconv.Atoi(stopsStr)
+			if err == nil && f.Stops != stops {
+				continue
+			}
+		}
+		if timeSlot != "" && timeSlot != "ALL" && !strings.EqualFold(f.DepartureTimeSlot, timeSlot) {
+			continue
+		}
+		if cabin != "" && cabin != "ALL" && !strings.EqualFold(f.CabinClass, cabin) {
+			continue
+		}
+		if airline != "" && !strings.EqualFold(f.AirlineCode, airline) && !strings.Contains(f.AirlineName, airline) {
+			continue
+		}
 		results = append(results, f)
 	}
 	writeJSON(w, http.StatusOK, results)
 }
 
 func (h *APIHandler) GetTrains(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	dep := q.Get("dep")
+	arr := q.Get("arr")
+	network := q.Get("network")
+	seatClass := q.Get("seatClass")
+
 	var results []domain.Train
 	for _, tr := range h.store.Trains {
+		if dep != "" && !strings.Contains(tr.DepartureStation, dep) {
+			continue
+		}
+		if arr != "" && !strings.Contains(tr.ArrivalStation, arr) {
+			continue
+		}
+		if network != "" && network != "ALL" && !strings.Contains(tr.TrainType, network) && !strings.Contains(tr.TrainNumber, network) {
+			continue
+		}
+		if seatClass != "" && seatClass != "ALL" && !strings.EqualFold(tr.SeatClass, seatClass) {
+			continue
+		}
 		results = append(results, tr)
 	}
 	writeJSON(w, http.StatusOK, results)
 }
 
 func (h *APIHandler) GetCars(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	category := q.Get("category")
+	transmission := q.Get("transmission")
+	superCdw := q.Get("superCdw") == "true"
+
 	var results []domain.CarRental
 	for _, c := range h.store.Cars {
+		if category != "" && category != "ALL" && !strings.EqualFold(c.VehicleType, category) {
+			continue
+		}
+		if transmission != "" && transmission != "ALL" && !strings.EqualFold(c.Transmission, transmission) {
+			continue
+		}
+		if superCdw && !c.InsuranceIncluded {
+			continue
+		}
 		results = append(results, c)
 	}
 	writeJSON(w, http.StatusOK, results)
 }
 
 func (h *APIHandler) GetTransfers(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	tier := q.Get("tier")
+	airport := q.Get("airport")
+
 	var results []domain.AirportTransfer
 	for _, t := range h.store.Transfers {
+		if airport != "" && !strings.EqualFold(t.AirportCode, airport) {
+			continue
+		}
+		if tier != "" && tier != "ALL" && !strings.EqualFold(t.VehicleClass, tier) {
+			continue
+		}
 		results = append(results, t)
 	}
 	writeJSON(w, http.StatusOK, results)
