@@ -18,11 +18,56 @@ const pickupTime = ref('14:30')
 const passengers = ref(2)
 const luggage = ref(2)
 
-const transferVehicles = ref<any[]>([])
+const fallbackTransfers = [
+  {
+    id: 'tf_icn_van_01',
+    vehicle_class: '비즈니스 대형 밴 (Business MPV)',
+    model_name: '현대 스타리아 라운지 / 기아 카니발 하이리무진',
+    capacity: 6,
+    luggage: 6,
+    price_krw: 120000,
+    image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=600',
+    features: ['항공편 지연 자동 추적', '입국장 60분 무료 대기', '기사 네임보드 피켓 영접', '고속도로 통행료/유류비 포함']
+  },
+  {
+    id: 'tf_icn_sedan_01',
+    vehicle_class: '이코노미 세단 (Economy Sedan)',
+    model_name: '현대 그랜저 GN7 / 기아 K8 동급',
+    capacity: 3,
+    luggage: 3,
+    price_krw: 85000,
+    image_url: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600',
+    features: ['안락한 4도어 고급 세단', '생수 무료 제공', '무료 60분 대기']
+  },
+  {
+    id: 'tf_icn_luxury_01',
+    vehicle_class: '럭셔리 VIP 세단 (Luxury First)',
+    model_name: '제네시스 G90 / 벤츠 S-Class 동급',
+    capacity: 3,
+    luggage: 3,
+    price_krw: 220000,
+    image_url: 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=600',
+    features: ['정장 의전 전담 기사', 'VIP 영접 서비스', '고속도로 톨게이트 전액 포함']
+  }
+]
+
+const transferVehicles = ref<any[]>(fallbackTransfers)
 const loading = ref(false)
 
 const handleSearch = () => {
-  // Filters or scrolls to vehicles
+  router.push({
+    path: '/transfers/list',
+    query: {
+      airport: airport.value,
+      destination: destination.value,
+      date: pickupDate.value,
+      time: pickupTime.value,
+      passengers: passengers.value,
+      luggage: luggage.value,
+      flight: flightNumber.value,
+      mode: mode.value
+    }
+  })
 }
 
 const bookVehicle = (vehicle: any) => {
@@ -43,50 +88,16 @@ const bookVehicle = (vehicle: any) => {
 }
 
 onMounted(async () => {
-  loading.value = true
   try {
     const res = await fetch(useApiUrl('/transfers'))
-    const json = await res.json()
-    transferVehicles.value = json.data || []
-    if (transferVehicles.value.length === 0) {
-      // High-quality defaults
-      transferVehicles.value = [
-        {
-          id: 'tf-sedan',
-          vehicle_class: '이코노미 세단 (Economy Sedan)',
-          model_name: '현대 쏘나타 / 도요타 캠리 동급',
-          capacity: 4,
-          luggage: 2,
-          price_krw: 75000,
-          image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=600',
-          features: ['에어컨 완비', '생수 무료 제공', '무료 60분 대기']
-        },
-        {
-          id: 'tf-van',
-          vehicle_class: '비즈니스 대형 밴 (Business MPV)',
-          model_name: '현대 스타리아 / 도요타 알파드 동급',
-          capacity: 7,
-          luggage: 5,
-          price_krw: 120000,
-          image_url: 'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?w=600',
-          features: ['대형 수하물 넉넉한 수납', '가족/소그룹 최적', '기사 네임보드 영접']
-        },
-        {
-          id: 'tf-luxury',
-          vehicle_class: '럭셔리 VIP 세단 (Luxury First)',
-          model_name: '제네시스 G80 / 벤츠 E-Class 동급',
-          capacity: 3,
-          luggage: 3,
-          price_krw: 165000,
-          image_url: 'https://images.unsplash.com/photo-1555353540-64580b51c258?w=600',
-          features: ['정장 의전 기사', 'VIP 영접 서비스', '고속도로 톨게이트 전액 포함']
-        }
-      ]
+    if (res.ok) {
+      const json = await res.json()
+      if (json.data && json.data.length > 0) {
+        transferVehicles.value = json.data
+      }
     }
   } catch (e) {
-    console.error(e)
-  } finally {
-    loading.value = false
+    // Keep fallback
   }
 })
 </script>
@@ -236,12 +247,20 @@ onMounted(async () => {
                   {{ currencyStore.formatKRW(v.price_krw) }}
                 </div>
               </div>
-              <button
-                @click="bookVehicle(v)"
-                class="px-5 py-2.5 bg-trip-blue hover:bg-blue-600 text-white font-black text-xs rounded-xl shadow-md transition"
-              >
-                예약하기
-              </button>
+              <div class="flex items-center gap-1.5">
+                <NuxtLink
+                  :to="`/transfers/detail/${v.id}`"
+                  class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition"
+                >
+                  상세
+                </NuxtLink>
+                <button
+                  @click="bookVehicle(v)"
+                  class="px-4 py-2 bg-trip-blue hover:bg-blue-600 text-white font-black text-xs rounded-xl shadow-md transition"
+                >
+                  예약하기
+                </button>
+              </div>
             </div>
           </div>
         </div>

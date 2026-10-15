@@ -32,6 +32,7 @@ export default defineNuxtConfig({
         '/transfers/detail/tf-001',
         '/transfers/detail/tf-002',
         '/things-to-do',
+        '/things-to-do/list',
         '/things-to-do/detail',
         '/things-to-do/detail/act-001',
         '/things-to-do/detail/act-002',
@@ -44,7 +45,18 @@ export default defineNuxtConfig({
         '/rewards',
         '/help',
         '/moments',
-        '/trip-best'
+        '/trip-best',
+        '/booking/success',
+        '/booking/complete',
+        '/hotels/booking',
+        '/flights/booking',
+        '/trains/booking',
+        '/cars/booking',
+        '/transfers/booking',
+        '/things-to-do/booking',
+        '/packages/booking',
+        '/my/bookings',
+        '/my/bookings/GF-HT-98214'
       ]
     }
   },

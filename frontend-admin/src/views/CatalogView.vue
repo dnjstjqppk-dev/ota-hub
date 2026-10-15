@@ -12,7 +12,7 @@ const selectedItem = ref<any | null>(null)
 const isDetailOpen = ref(false)
 
 const domains: { id: DomainKey; label: string; countBadge?: number }[] = [
-  { id: 'hotels', label: '숙소 (Hotels)' },
+  { id: 'hotels', label: '호텔 (Hotels)' },
   { id: 'flights', label: '항공권 (Flights)' },
   { id: 'trains', label: '기차표 (Trains)' },
   { id: 'cars', label: '렌터카 (Cars)' },
@@ -21,6 +21,250 @@ const domains: { id: DomainKey; label: string; countBadge?: number }[] = [
   { id: 'packages', label: '동적 패키지' },
   { id: 'curated', label: '5대 OTA AI 큐레이션 마스터' }
 ]
+
+const fallbackDomainCatalogs: Record<DomainKey, any[]> = {
+  hotels: [
+    {
+      id: 'h-001',
+      name_ko: '파크 하얏트 서울 (Park Hyatt Seoul)',
+      name_en: 'Park Hyatt Seoul',
+      city: '서울',
+      country: '대한민국',
+      address: '서울특별시 강남구 테헤란로 606',
+      star_rating: 5,
+      review_score: 4.9,
+      review_count: 1420,
+      property_type: 'HOTEL',
+      distance_to_center_km: 0.2,
+      cleanliness_score: 4.9,
+      location_score: 5.0,
+      service_score: 4.9,
+      rooms: [
+        { id: 'r-01', name: '파크 킹 (Park King)', base_price_krw: 320000 },
+        { id: 'r-02', name: '디럭스 스위트 (Deluxe Suite)', base_price_krw: 580000 }
+      ]
+    },
+    {
+      id: 'h-002',
+      name_ko: '시그니엘 서울 (SIGNIEL Seoul)',
+      name_en: 'SIGNIEL Seoul',
+      city: '서울',
+      country: '대한민국',
+      address: '서울특별시 송파구 올림픽로 300 롯데월드타워 76-101층',
+      star_rating: 5,
+      review_score: 4.8,
+      review_count: 2850,
+      property_type: 'HOTEL',
+      distance_to_center_km: 1.5,
+      cleanliness_score: 4.9,
+      location_score: 4.8,
+      service_score: 4.9,
+      rooms: [
+        { id: 'r-03', name: '그랜드 디럭스 룸', base_price_krw: 420000 }
+      ]
+    },
+    {
+      id: 'h-003',
+      name_ko: '신라호텔 제주 (The Shilla Jeju)',
+      name_en: 'The Shilla Jeju',
+      city: '제주',
+      country: '대한민국',
+      address: '제주특별자치도 서귀포시 중문관광로72번길 75',
+      star_rating: 5,
+      review_score: 4.9,
+      review_count: 3100,
+      property_type: 'RESORT',
+      distance_to_center_km: 2.1,
+      cleanliness_score: 4.9,
+      location_score: 4.9,
+      service_score: 5.0,
+      rooms: [
+        { id: 'r-04', name: '스탠다드 테라스 더블', base_price_krw: 290000 }
+      ]
+    }
+  ],
+  flights: [
+    {
+      id: 'fl-001',
+      flight_number: 'KE703',
+      airline_name: '대한항공',
+      airline_code: 'KE',
+      departure_airport: 'ICN',
+      departure_city: '서울/인천',
+      arrival_airport: 'NRT',
+      arrival_city: '도쿄/나리타',
+      departure_time: '2026-11-01T10:10:00Z',
+      arrival_time: '2026-11-01T12:40:00Z',
+      duration_minutes: 150,
+      stops: 0,
+      departure_time_slot: 'MORNING',
+      cabin_class: '일반석 (Economy)',
+      free_baggage_kg: 23,
+      base_price_krw: 245000,
+      available_seats: 9
+    },
+    {
+      id: 'fl-002',
+      flight_number: 'OZ102',
+      airline_name: '아시아나항공',
+      airline_code: 'OZ',
+      departure_airport: 'ICN',
+      departure_city: '서울/인천',
+      arrival_airport: 'NRT',
+      arrival_city: '도쿄/나리타',
+      departure_time: '2026-11-01T09:00:00Z',
+      arrival_time: '2026-11-01T11:25:00Z',
+      duration_minutes: 145,
+      stops: 0,
+      departure_time_slot: 'MORNING',
+      cabin_class: '비즈니스석 (Business)',
+      free_baggage_kg: 32,
+      base_price_krw: 680000,
+      available_seats: 4
+    }
+  ],
+  trains: [
+    {
+      id: 'tr-001',
+      train_number: 'KTX 021',
+      train_type: 'KTX',
+      departure_station: '서울역',
+      arrival_station: '부산역',
+      departure_time: '2026-11-01T08:30:00Z',
+      arrival_time: '2026-11-01T11:05:00Z',
+      duration_minutes: 155,
+      seat_class: '일반실 (Standard)',
+      price_krw: 59800
+    },
+    {
+      id: 'tr-002',
+      train_number: 'SRT 305',
+      train_type: 'SRT',
+      departure_station: '수서역',
+      arrival_station: '동대구역',
+      departure_time: '2026-11-01T09:15:00Z',
+      arrival_time: '2026-11-01T10:55:00Z',
+      duration_minutes: 100,
+      seat_class: '특실 (First Class)',
+      price_krw: 52400
+    }
+  ],
+  cars: [
+    {
+      id: 'car-001',
+      vehicle_model: '현대 더 뉴 아반떼 CN7',
+      company_name: '롯데렌터카',
+      vehicle_type: '준중형 세단',
+      transmission: '오토 (Auto)',
+      seats: 5,
+      pickup_location: '제주공항 셔틀 1구역',
+      daily_price_krw: 58000
+    },
+    {
+      id: 'car-002',
+      vehicle_model: '기아 디 올 뉴 스포티지',
+      company_name: 'SK렌터카',
+      vehicle_type: '중형 SUV',
+      transmission: '오토 (Auto)',
+      seats: 5,
+      pickup_location: '김해공항 국내선 1층 2번 게이트',
+      daily_price_krw: 74000
+    }
+  ],
+  transfers: [
+    {
+      id: 'tf-001',
+      service_title: '인천공항 T1/T2 ↔ 서울 도심 프리미엄 밴 리무진',
+      airport_code: 'ICN',
+      destination_area: '서울 전지역',
+      vehicle_class: '비즈니스 밴 (스타리아 라운지)',
+      max_passengers: 5,
+      max_luggage: 5,
+      price_krw: 95000
+    },
+    {
+      id: 'tf-002',
+      service_title: '김포공항 ↔ 강남 코엑스 의전 세단 픽업',
+      airport_code: 'GMP',
+      destination_area: '강남구/서초구/송파구',
+      vehicle_class: 'VIP 세단 (제네시스 G90)',
+      max_passengers: 3,
+      max_luggage: 3,
+      price_krw: 80000
+    }
+  ],
+  activities: [
+    {
+      id: 'act-001',
+      title: '도쿄 디즈니랜드 1일 e-티켓 (즉시 확정 & e-바우처 QR)',
+      category: 'THEME_PARK',
+      city: '도쿄',
+      country: '일본',
+      duration_type: 'FULL_DAY',
+      guide_language: 'KO',
+      voucher_type: 'QR_CODE',
+      instant_confirmation: true,
+      review_score: 4.9,
+      review_count: 5820,
+      price_krw: 85000,
+      highlights: ['즉시 모바일 QR 발권', '대기열 우선 입장', '시즌 한정 퍼레이드 포함']
+    },
+    {
+      id: 'act-002',
+      title: '오사카 유니버설 스튜디오 재팬 (USJ) 1일 스튜디오 패스',
+      category: 'THEME_PARK',
+      city: '오사카',
+      country: '일본',
+      duration_type: 'FULL_DAY',
+      guide_language: 'KO',
+      voucher_type: 'QR_CODE',
+      instant_confirmation: true,
+      review_score: 4.8,
+      review_count: 8940,
+      price_krw: 89000,
+      highlights: ['슈퍼 닌텐도 월드 확정권', 'QR 직접 스캔 입장']
+    }
+  ],
+  packages: [
+    {
+      id: 'pkg-001',
+      title: '도쿄 4박 5일 항공+특급호텔 힐링 패키지',
+      destination_city: '도쿄 (Tokyo)',
+      hotel_id: 'h-001 (파크 하얏트)',
+      flight_id: 'fl-001 (대한항공 왕복)',
+      package_discount_rate: 20,
+      total_original_krw: 920000,
+      total_package_krw: 750000
+    },
+    {
+      id: 'pkg-002',
+      title: '제주 3박 4일 신라호텔+왕복 항공권 프리미엄 패키지',
+      destination_city: '제주 (Jeju)',
+      hotel_id: 'h-003 (제주 신라호텔)',
+      flight_id: 'fl-003 (아시아나 왕복)',
+      package_discount_rate: 18,
+      total_original_krw: 880000,
+      total_package_krw: 720000
+    }
+  ],
+  curated: [
+    {
+      id: 'cur-001',
+      platform: 'AGODA',
+      source_product_id: 'AGO-89412',
+      original_title: 'Grand Hyatt Seoul Namsan Suite',
+      base_price_krw: 395000,
+      curation_status: 'PUBLISHED',
+      curated_content: {
+        b2c_title: '남산 뷰와 야외 수영장의 끝판왕: 그랜드 하얏트 서울 스위트 룸',
+        one_line_summary: '서울 중심에서 즐기는 파노라마 뷰 호캉스'
+      },
+      affiliate_referral: {
+        final_referral_url: 'https://www.agoda.com/partners/partnersearch.aspx?cid=1234&hotel=89412'
+      }
+    }
+  ]
+}
 
 const fetchDomainItems = async () => {
   loading.value = true
@@ -31,13 +275,17 @@ const fetchDomainItems = async () => {
     }
     const res = await fetch(apiUrl(endpoint))
     const json = await res.json()
-    items.value = json.data || []
+    if (json.data && Array.isArray(json.data) && json.data.length > 0) {
+      items.value = json.data
+      loading.value = false
+      return
+    }
   } catch (e) {
-    console.error(e)
-    items.value = []
+    console.warn('Admin catalog API fallback to 1:1 mapped mock data:', e)
   } finally {
     loading.value = false
   }
+  items.value = fallbackDomainCatalogs[activeDomain.value] || []
 }
 
 const switchDomain = (dom: DomainKey) => {
