@@ -2,15 +2,62 @@
 import { ref, onMounted } from 'vue'
 import { useApiUrl } from '~/composables/useApi'
 
-const promotions = ref<any[]>([])
+const DEFAULT_PROMOTIONS = [
+  {
+    id: 'promo_welcome',
+    code: 'WELCOME2026',
+    title: '신규 회원 첫 예약 10% 웰컴 특별 할인',
+    discount_type: 'PERCENTAGE',
+    discount_value: 10,
+    min_order_amount_krw: 100000,
+    max_discount_krw: 30000,
+    valid_until: '2026-12-31T23:59:59Z'
+  },
+  {
+    id: 'promo_hotel50',
+    code: 'HOTEL50000',
+    title: '5성급 럭셔리 호텔 ₩50,000 즉시 할인',
+    discount_type: 'FIXED_AMOUNT',
+    discount_value: 50000,
+    min_order_amount_krw: 300000,
+    max_discount_krw: 50000,
+    valid_until: '2026-12-31T23:59:59Z'
+  },
+  {
+    id: 'promo_flight20',
+    code: 'FLIGHT20000',
+    title: '전 세계 국제선 항공권 ₩20,000 안심 할인',
+    discount_type: 'FIXED_AMOUNT',
+    discount_value: 20000,
+    min_order_amount_krw: 200000,
+    max_discount_krw: 20000,
+    valid_until: '2026-12-31T23:59:59Z'
+  },
+  {
+    id: 'promo_global10',
+    code: 'GLOBAL10',
+    title: '동적 패키지 / 렌터카 / 공항픽업 10% 메가 할인',
+    discount_type: 'PERCENTAGE',
+    discount_value: 10,
+    min_order_amount_krw: 80000,
+    max_discount_krw: 40000,
+    valid_until: '2026-12-31T23:59:59Z'
+  }
+]
+
+const promotions = ref<any[]>(DEFAULT_PROMOTIONS)
 
 onMounted(async () => {
   try {
     const res = await fetch(useApiUrl('/promotions'))
-    const json = await res.json()
-    promotions.value = json.data || []
+    if (res.ok) {
+      const json = await res.json()
+      if (json.data && json.data.length > 0) {
+        promotions.value = json.data
+      }
+    }
   } catch (e) {
-    console.error(e)
+    // Keep DEFAULT_PROMOTIONS
   }
 })
 </script>

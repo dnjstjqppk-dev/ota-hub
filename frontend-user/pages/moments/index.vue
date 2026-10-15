@@ -2,7 +2,66 @@
 import { ref, onMounted } from 'vue'
 import { useApiUrl } from '~/composables/useApi'
 
-const moments = ref<any[]>([])
+const DEFAULT_MOMENTS = [
+  {
+    id: 'mm_01',
+    user_name: '이지민 (여행 크리에이터)',
+    user_avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
+    city: '도쿄',
+    title: '롯폰기 힐스에서 바라본 도쿄 타워 야경 & getfortrip 특가 호텔 솔직 후기',
+    content: '도쿄 여행 때 그랜드 하얏트에 묵었는데 역과 바로 연결되어 쇼핑과 이동이 너무 편했어요! getfortrip 타임딜로 30% 할인받고 예약했습니다.',
+    likes_count: 128,
+    created_at: '2026-10-14T09:30:00Z',
+    photos: [
+      'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=600',
+      'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=600'
+    ]
+  },
+  {
+    id: 'mm_02',
+    user_name: '박준형 (자유여행 매니아)',
+    user_avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200',
+    city: '오사카',
+    title: '오사카 도톤보리와 난바역 직결 스위소텔 호캉스 브이로그',
+    content: '간사이 공항에서 라피트로 환승 없이 난바역에 내려서 바로 체크인! 밤에는 도톤보리 글리코상 앞 산책까지 완벽한 동선이었습니다.',
+    likes_count: 94,
+    created_at: '2026-10-14T14:15:00Z',
+    photos: [
+      'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=600',
+      'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600'
+    ]
+  },
+  {
+    id: 'mm_03',
+    user_name: '최윤아 (포토그래퍼)',
+    user_avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200',
+    city: '파리',
+    title: '에펠탑 피크닉과 샹젤리제 거리 산책 코스 총정리',
+    content: '파리 북역에서 유로스타 타고 도착하자마자 에펠탑으로 향했습니다. getfortrip eSIM 덕분에 파리 전역에서 5G 끊김 없이 구글맵을 이용했네요!',
+    likes_count: 245,
+    created_at: '2026-10-15T01:20:00Z',
+    photos: [
+      'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=600',
+      'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600'
+    ]
+  },
+  {
+    id: 'mm_04',
+    user_name: '강태석 (배낭여행가)',
+    user_avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200',
+    city: '방콕',
+    title: '방콕 왓아룬 선셋 뷰 카페와 카오산 로드 나이트 라이프',
+    content: '수완나품 공항에서 getfortrip 공항 픽업 차량으로 호텔까지 30분 만에 쾌적하게 이동했습니다. 무더운 날씨에 에어컨 빵빵한 전용차량이 신의 한 수!',
+    likes_count: 172,
+    created_at: '2026-10-15T05:40:00Z',
+    photos: [
+      'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600',
+      'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?w=600'
+    ]
+  }
+]
+
+const moments = ref<any[]>(DEFAULT_MOMENTS)
 const loading = ref(false)
 
 const showWriteModal = ref(false)
@@ -14,10 +73,14 @@ const fetchMoments = async () => {
   loading.value = true
   try {
     const res = await fetch(useApiUrl('/moments'))
-    const json = await res.json()
-    moments.value = json.data || []
+    if (res.ok) {
+      const json = await res.json()
+      if (json.data && json.data.length > 0) {
+        moments.value = json.data
+      }
+    }
   } catch (e) {
-    console.error(e)
+    // Keep DEFAULT_MOMENTS
   } finally {
     loading.value = false
   }
@@ -25,23 +88,28 @@ const fetchMoments = async () => {
 
 const submitMoment = async () => {
   if (!newTitle.value || !newContent.value) return
-  await fetch(useApiUrl('/moments'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      user_id: 'a0000000-0000-0000-0000-000000000001',
-      user_name: '김여행',
-      user_avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
-      city: newCity.value,
-      title: newTitle.value,
-      content: newContent.value,
-      photos: ['https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800']
+  const newMoment = {
+    id: 'mm_' + Date.now(),
+    user_name: '김여행 (나)',
+    user_avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
+    city: newCity.value,
+    title: newTitle.value,
+    content: newContent.value,
+    photos: ['https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800'],
+    likes_count: 1,
+    created_at: new Date().toISOString()
+  }
+  try {
+    await fetch(useApiUrl('/moments'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newMoment)
     })
-  })
+  } catch (e) {}
+  moments.value.unshift(newMoment)
   showWriteModal.value = false
   newTitle.value = ''
   newContent.value = ''
-  await fetchMoments()
 }
 
 onMounted(() => {

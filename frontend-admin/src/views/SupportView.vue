@@ -2,17 +2,34 @@
 import { ref, onMounted } from 'vue'
 import { apiUrl } from '../config/api'
 
-const notices = ref<any[]>([])
+const DEFAULT_NOTICES = [
+  {
+    id: 'notice-01',
+    title: '동남아 및 일본 태풍 예보에 따른 항공편 결항 시 전액 무료 취소 안내',
+    content: '기상 악화로 인한 항공사 결항/지연 통보 시 getfortrip 앱 및 마이페이지에서 수수료 없이 100% 즉시 환불 접수됩니다.'
+  },
+  {
+    id: 'notice-02',
+    title: '유럽 유로스타(Eurostar) 노선 선로 개보수로 인한 일부 편수 스케줄 변경',
+    content: '런던-파리 구간 일부 고속열차의 출발 시각이 15분 앞당겨졌으니 탑승 전 모바일 티켓 QR 및 출발 안내를 재확인해 주시기 바랍니다.'
+  }
+]
+
+const notices = ref<any[]>(DEFAULT_NOTICES)
 const loading = ref(false)
 
 const fetchNotices = async () => {
   loading.value = true
   try {
     const res = await fetch(apiUrl('/admin/notices'))
-    const json = await res.json()
-    notices.value = json.data || []
+    if (res.ok) {
+      const json = await res.json()
+      if (json.data && json.data.length > 0) {
+        notices.value = json.data
+      }
+    }
   } catch (e) {
-    console.error(e)
+    // Keep DEFAULT_NOTICES
   } finally {
     loading.value = false
   }

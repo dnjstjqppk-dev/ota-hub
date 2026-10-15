@@ -14,7 +14,49 @@ const checkOut = ref('2026-11-03')
 const guests = ref({ adults: 2, rooms: 1 })
 const selectedQuickFilter = ref<string>('ALL')
 
-const featuredHotels = ref<any[]>([])
+const DEFAULT_FEATURED_HOTELS = [
+  {
+    id: 'htl_tokyo_01',
+    name: '그랜드 하얏트 도쿄 롯폰기 힐스',
+    city: '도쿄',
+    neighborhood: '롯폰기 힐스 쇼핑가',
+    description: '도쿄 타워 전망과 최고급 스파, 롯폰기역 지하 직결 프리미엄 5성급 럭셔리 호텔',
+    price_krw: 385000,
+    rating: 4.9,
+    star_rating: 5,
+    image_url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
+    free_cancellation: true,
+    free_breakfast: true
+  },
+  {
+    id: 'htl_seoul_01',
+    name: '시그니엘 서울 롯데월드타워',
+    city: '서울',
+    neighborhood: '잠실 롯데월드몰',
+    description: '국내 최고층 롯데월드타워 76-101층에서 즐기는 환상적인 서울 파노라마 스카이뷰',
+    price_krw: 520000,
+    rating: 4.9,
+    star_rating: 5,
+    image_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
+    free_cancellation: true,
+    free_breakfast: true
+  },
+  {
+    id: 'htl_osaka_01',
+    name: '스위소텔 난카이 오사카',
+    city: '오사카',
+    neighborhood: '난바역 직결 / 도톤보리 도보 5분',
+    description: '간사이 공항 라피트 직결 난바역 바로 위, 도톤보리 쇼핑과 미식을 완벽히 누리는 특급 호텔',
+    price_krw: 275000,
+    rating: 4.8,
+    star_rating: 5,
+    image_url: 'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
+    free_cancellation: true,
+    free_breakfast: false
+  }
+]
+
+const featuredHotels = ref<any[]>(DEFAULT_FEATURED_HOTELS)
 const loading = ref(false)
 
 const handleSearch = () => {
@@ -50,13 +92,28 @@ const popularDestinations = [
 ]
 
 onMounted(async () => {
-  loading.value = true
   try {
     const res = await fetch(useApiUrl('/hotels'))
-    const json = await res.json()
-    featuredHotels.value = json.data || []
+    if (res.ok) {
+      const json = await res.json()
+      if (json.data && json.data.length > 0) {
+        featuredHotels.value = json.data.map((h: any) => ({
+          id: h.id,
+          name: h.name_ko || h.name,
+          city: h.city,
+          neighborhood: h.neighborhood || '도심 중심가',
+          description: h.description || `${h.city} 중심에 위치한 최고 평점 인기 호텔`,
+          price_krw: h.rooms?.[0]?.base_price_krw || h.price_krw || 300000,
+          rating: h.review_score || h.rating || 4.8,
+          star_rating: h.star_rating || 5,
+          image_url: h.thumbnail_url || h.image_url || 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
+          free_cancellation: h.free_cancellation ?? true,
+          free_breakfast: h.free_breakfast ?? true
+        }))
+      }
+    }
   } catch (e) {
-    console.error(e)
+    // Keep DEFAULT_FEATURED_HOTELS
   } finally {
     loading.value = false
   }

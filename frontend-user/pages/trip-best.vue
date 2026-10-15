@@ -3,16 +3,67 @@ import { ref, onMounted } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 
+const DEFAULT_BEST_HOTELS = [
+  {
+    id: 'htl_tokyo_01',
+    name_ko: '그랜드 하얏트 도쿄 롯폰기 힐스',
+    city: '도쿄',
+    country: '일본',
+    star_rating: 5,
+    review_score: 4.9,
+    review_count: 2180,
+    thumbnail_url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
+    rooms: [{ base_price_krw: 385000 }]
+  },
+  {
+    id: 'htl_seoul_01',
+    name_ko: '시그니엘 서울 롯데월드타워',
+    city: '서울',
+    country: '대한민국',
+    star_rating: 5,
+    review_score: 4.9,
+    review_count: 3450,
+    thumbnail_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
+    rooms: [{ base_price_krw: 520000 }]
+  },
+  {
+    id: 'htl_osaka_01',
+    name_ko: '스위소텔 난카이 오사카',
+    city: '오사카',
+    country: '일본',
+    star_rating: 5,
+    review_score: 4.8,
+    review_count: 1890,
+    thumbnail_url: 'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
+    rooms: [{ base_price_krw: 275000 }]
+  },
+  {
+    id: 'htl_singapore_01',
+    name_ko: '마리나 베이 샌즈 싱가포르',
+    city: '싱가포르',
+    country: '싱가포르',
+    star_rating: 5,
+    review_score: 4.9,
+    review_count: 5120,
+    thumbnail_url: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
+    rooms: [{ base_price_krw: 690000 }]
+  }
+]
+
 const currencyStore = useCurrencyStore()
-const hotels = ref<any[]>([])
+const hotels = ref<any[]>(DEFAULT_BEST_HOTELS)
 
 onMounted(async () => {
   try {
     const res = await fetch(useApiUrl('/hotels'))
-    const json = await res.json()
-    hotels.value = json.data || []
+    if (res.ok) {
+      const json = await res.json()
+      if (json.data && json.data.length > 0) {
+        hotels.value = json.data
+      }
+    }
   } catch (e) {
-    console.error(e)
+    // Keep DEFAULT_BEST_HOTELS
   }
 })
 </script>

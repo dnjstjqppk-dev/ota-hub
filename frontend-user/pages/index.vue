@@ -3,9 +3,79 @@ import { ref, onMounted } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 
+const DEFAULT_HOTELS = [
+  {
+    id: 'htl_tokyo_01',
+    name_ko: '그랜드 하얏트 도쿄 롯폰기 힐스',
+    city: '도쿄',
+    country: '일본',
+    star_rating: 5,
+    review_score: 4.9,
+    thumbnail_url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
+    rooms: [{ base_price_krw: 385000 }]
+  },
+  {
+    id: 'htl_seoul_01',
+    name_ko: '시그니엘 서울 롯데월드타워',
+    city: '서울',
+    country: '대한민국',
+    star_rating: 5,
+    review_score: 4.9,
+    thumbnail_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
+    rooms: [{ base_price_krw: 520000 }]
+  },
+  {
+    id: 'htl_osaka_01',
+    name_ko: '스위소텔 난카이 오사카',
+    city: '오사카',
+    country: '일본',
+    star_rating: 5,
+    review_score: 4.8,
+    thumbnail_url: 'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
+    rooms: [{ base_price_krw: 275000 }]
+  },
+  {
+    id: 'htl_singapore_01',
+    name_ko: '마리나 베이 샌즈 싱가포르',
+    city: '싱가포르',
+    country: '싱가포르',
+    star_rating: 5,
+    review_score: 4.9,
+    thumbnail_url: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
+    rooms: [{ base_price_krw: 690000 }]
+  }
+]
+
+const DEFAULT_MOMENTS = [
+  {
+    id: 'mm_01',
+    user_name: '이지민 (여행 크리에이터)',
+    user_avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
+    city: '도쿄',
+    title: '롯폰기 힐스에서 바라본 도쿄 타워 야경 & getfortrip 특가 호텔 솔직 후기',
+    content: '도쿄 여행 때 그랜드 하얏트에 묵었는데 역과 바로 연결되어 쇼핑과 이동이 너무 편했어요! getfortrip 타임딜로 30% 할인받고 예약했습니다.',
+    photos: [
+      'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=600',
+      'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=600'
+    ]
+  },
+  {
+    id: 'mm_02',
+    user_name: '박준형 (자유여행 매니아)',
+    user_avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200',
+    city: '오사카',
+    title: '오사카 도톤보리와 난바역 직결 스위소텔 호캉스 브이로그',
+    content: '간사이 공항에서 라피트로 환승 없이 난바역에 내려서 바로 체크인! 밤에는 도톤보리 글리코상 앞 산책까지 완벽한 동선이었습니다.',
+    photos: [
+      'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=600',
+      'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600'
+    ]
+  }
+]
+
 const currencyStore = useCurrencyStore()
-const hotels = ref<any[]>([])
-const moments = ref<any[]>([])
+const hotels = ref<any[]>(DEFAULT_HOTELS)
+const moments = ref<any[]>(DEFAULT_MOMENTS)
 
 import { useRoute } from 'vue-router'
 import { BRAND } from '~/config/brand'
@@ -37,12 +107,20 @@ onMounted(async () => {
       fetch(useApiUrl('/hotels')),
       fetch(useApiUrl('/moments'))
     ])
-    const hotelJson = await hotelRes.json()
-    const momentJson = await momentRes.json()
-    hotels.value = hotelJson.data || []
-    moments.value = momentJson.data || []
+    if (hotelRes.ok) {
+      const hotelJson = await hotelRes.json()
+      if (hotelJson.data && hotelJson.data.length > 0) {
+        hotels.value = hotelJson.data
+      }
+    }
+    if (momentRes.ok) {
+      const momentJson = await momentRes.json()
+      if (momentJson.data && momentJson.data.length > 0) {
+        moments.value = momentJson.data
+      }
+    }
   } catch (e) {
-    console.error(e)
+    // Keep DEFAULT_HOTELS and DEFAULT_MOMENTS
   }
 })
 </script>

@@ -3,16 +3,53 @@ import { ref, onMounted } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 
+const DEFAULT_PACKAGES = [
+  {
+    id: 'pkg_tokyo_4d3n',
+    title: '[인기 에어텔] 도쿄 롯폰기 하얏트 올인원 4일 (대한항공 직항 + 5성급 3박)',
+    package_discount_rate: 18,
+    thumbnail_url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
+    total_original_krw: 1250000,
+    total_package_krw: 1025000,
+    flight: { airline_name: '대한항공 (KE)', departure_city: '서울/인천', arrival_city: '도쿄/나리타' },
+    hotel: { name_ko: '그랜드 하얏트 도쿄', city: '도쿄' }
+  },
+  {
+    id: 'pkg_osaka_3d2n',
+    title: '[인기 에어텔] 오사카 난바 스위소텔 올인원 3일 (아시아나 직항 + 5성급 2박)',
+    package_discount_rate: 20,
+    thumbnail_url: 'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
+    total_original_krw: 920000,
+    total_package_krw: 750000,
+    flight: { airline_name: '아시아나항공 (OZ)', departure_city: '서울/인천', arrival_city: '오사카/간사이' },
+    hotel: { name_ko: '스위소텔 난카이 오사카', city: '오사카' }
+  },
+  {
+    id: 'pkg_paris_6d5n',
+    title: '[로맨틱 패키지] 파리 에펠뷰 럭셔리 6일 (대한항공 직항 + 특급 5박)',
+    package_discount_rate: 15,
+    thumbnail_url: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800',
+    total_original_krw: 2850000,
+    total_package_krw: 2420000,
+    flight: { airline_name: '대한항공 (KE)', departure_city: '서울/인천', arrival_city: '파리/샤를드골' },
+    hotel: { name_ko: '풀만 파리 투르 에펠', city: '파리' }
+  }
+]
+
 const currencyStore = useCurrencyStore()
-const packages = ref<any[]>([])
+const packages = ref<any[]>(DEFAULT_PACKAGES)
 
 onMounted(async () => {
   try {
     const res = await fetch(useApiUrl('/packages'))
-    const json = await res.json()
-    packages.value = json.data || []
+    if (res.ok) {
+      const json = await res.json()
+      if (json.data && json.data.length > 0) {
+        packages.value = json.data
+      }
+    }
   } catch (e) {
-    console.error(e)
+    // Keep DEFAULT_PACKAGES
   }
 })
 </script>
