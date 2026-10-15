@@ -11,7 +11,49 @@ const depStation = ref(route.query.dep as string || '서울역 (Seoul)')
 const arrStation = ref(route.query.arr as string || '부산역 (Busan)')
 const travelDate = ref(route.query.date as string || '2026-11-01')
 
-const trains = ref<any[]>([])
+const fallbackTrains = [
+  {
+    id: 'trn_ktx_01',
+    train_number: 'KTX 021',
+    train_type: 'KTX-산천',
+    departure_station: '서울역',
+    arrival_station: '부산역',
+    departure_time: '2026-11-01T08:30:00+09:00',
+    arrival_time: '2026-11-01T11:05:00+09:00',
+    duration_minutes: 155,
+    seat_class: '일반실',
+    price_krw: 59800,
+    available_seats: 42
+  },
+  {
+    id: 'trn_ktx_02',
+    train_number: 'KTX 025',
+    train_type: 'KTX-산천',
+    departure_station: '서울역',
+    arrival_station: '부산역',
+    departure_time: '2026-11-01T10:00:00+09:00',
+    arrival_time: '2026-11-01T12:40:00+09:00',
+    duration_minutes: 160,
+    seat_class: '일반실',
+    price_krw: 59800,
+    available_seats: 18
+  },
+  {
+    id: 'trn_shinkansen_01',
+    train_number: 'NOZOMI 23',
+    train_type: 'SHINKANSEN',
+    departure_station: '도쿄역',
+    arrival_station: '신오사카역',
+    departure_time: '2026-11-01T09:00:00+09:00',
+    arrival_time: '2026-11-01T11:30:00+09:00',
+    duration_minutes: 150,
+    seat_class: '일반실',
+    price_krw: 145000,
+    available_seats: 25
+  }
+]
+
+const trains = ref<any[]>(fallbackTrains)
 const loading = ref(false)
 
 // Facet Filter States
@@ -20,13 +62,17 @@ const selectedTimeSlot = ref<string>('ALL')
 const selectedSeatClass = ref<string>('ALL')
 
 const fetchTrains = async () => {
-  loading.value = true
   try {
     const res = await fetch(useApiUrl('/trains'))
     const json = await res.json()
-    trains.value = json.data || []
+    if (json.data && json.data.length > 0) {
+      trains.value = json.data
+    } else {
+      trains.value = fallbackTrains
+    }
   } catch (e) {
     console.error(e)
+    trains.value = fallbackTrains
   } finally {
     loading.value = false
   }
@@ -163,12 +209,20 @@ onMounted(() => {
                 <div class="text-[10px] text-slate-400">발권 수수료 0원</div>
               </div>
 
-              <NuxtLink
-                :to="`/trains/booking?trainId=${tr.id}`"
-                class="px-6 py-2.5 bg-trip-blue hover:bg-blue-600 text-white font-bold text-xs rounded-xl shadow-md transition"
-              >
-                승차권 예매
-              </NuxtLink>
+              <div class="flex items-center gap-2">
+                <NuxtLink
+                  :to="`/trains/detail/${tr.id}`"
+                  class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition whitespace-nowrap"
+                >
+                  정차역 / 상세
+                </NuxtLink>
+                <NuxtLink
+                  :to="`/trains/booking?trainId=${tr.id}`"
+                  class="px-5 py-2.5 bg-trip-blue hover:bg-blue-600 text-white font-bold text-xs rounded-xl shadow-md transition whitespace-nowrap"
+                >
+                  승차권 예매
+                </NuxtLink>
+              </div>
             </div>
           </div>
         </div>

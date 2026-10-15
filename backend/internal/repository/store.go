@@ -744,6 +744,66 @@ func (s *Store) GetActivityDetail(id string) (*domain.Activity, error) {
 	return &act, nil
 }
 
+// GetFlightDetail returns flight by ID
+func (s *Store) GetFlightDetail(id string) (*domain.Flight, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	flt, exists := s.Flights[id]
+	if !exists {
+		return nil, fmt.Errorf("flight with id %s not found", id)
+	}
+	return &flt, nil
+}
+
+// GetTrainDetail returns train by ID
+func (s *Store) GetTrainDetail(id string) (*domain.Train, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	trn, exists := s.Trains[id]
+	if !exists {
+		return nil, fmt.Errorf("train with id %s not found", id)
+	}
+	return &trn, nil
+}
+
+// GetCarDetail returns car rental by ID
+func (s *Store) GetCarDetail(id string) (*domain.CarRental, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	car, exists := s.Cars[id]
+	if !exists {
+		return nil, fmt.Errorf("car with id %s not found", id)
+	}
+	return &car, nil
+}
+
+// GetTransferDetail returns airport transfer by ID
+func (s *Store) GetTransferDetail(id string) (*domain.AirportTransfer, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	tf, exists := s.Transfers[id]
+	if !exists {
+		return nil, fmt.Errorf("transfer with id %s not found", id)
+	}
+	return &tf, nil
+}
+
+// GetPackageDetail returns dynamic package by ID
+func (s *Store) GetPackageDetail(id string) (*domain.DynamicPackage, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	pkg, exists := s.Packages[id]
+	if !exists {
+		return nil, fmt.Errorf("package with id %s not found", id)
+	}
+	return &pkg, nil
+}
+
 // CreateDraftBooking creates draft booking with 15min inventory lock
 func (s *Store) CreateDraftBooking(b domain.Booking) (*domain.Booking, error) {
 	s.mu.Lock()

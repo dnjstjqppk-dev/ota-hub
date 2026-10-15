@@ -160,12 +160,62 @@ func (h *APIHandler) GetActivityDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, act)
 }
 
+func (h *APIHandler) GetFlightDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	flt, err := h.store.GetFlightDetail(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, flt)
+}
+
+func (h *APIHandler) GetTrainDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	trn, err := h.store.GetTrainDetail(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, trn)
+}
+
+func (h *APIHandler) GetCarDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	car, err := h.store.GetCarDetail(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, car)
+}
+
+func (h *APIHandler) GetTransferDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	tf, err := h.store.GetTransferDetail(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, tf)
+}
+
 func (h *APIHandler) GetPackages(w http.ResponseWriter, r *http.Request) {
 	var results []domain.DynamicPackage
 	for _, p := range h.store.Packages {
 		results = append(results, p)
 	}
 	writeJSON(w, http.StatusOK, results)
+}
+
+func (h *APIHandler) GetPackageDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	pkg, err := h.store.GetPackageDetail(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, pkg)
 }
 
 func (h *APIHandler) GetPromotions(w http.ResponseWriter, r *http.Request) {

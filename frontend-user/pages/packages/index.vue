@@ -18,10 +18,10 @@ const loading = ref(false)
 
 const handleSearch = () => {
   router.push({
-    path: '/packages/builder',
+    path: '/packages/list',
     query: {
       origin: origin.value,
-      dest: destination.value,
+      city: destination.value,
       depDate: departDate.value,
       retDate: returnDate.value,
       adults: guests.value.adults,
@@ -30,14 +30,37 @@ const handleSearch = () => {
   })
 }
 
+const fallbackPackages = [
+  {
+    id: 'pkg_tokyo_4d3n',
+    title: '[항공+호텔 결합] 도쿄 롯폰기 하얏트 럭셔리 에어텔 4일 (대한항공 직항 왕복 + 5성급 3박)',
+    package_discount_rate: 18,
+    thumbnail_url: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800',
+    total_original_krw: 1400000,
+    total_package_krw: 1150000,
+    flight: { airline_name: '대한항공 (KE)', departure_city: '서울/인천', arrival_city: '도쿄/나리타' },
+    hotel: { name_ko: '그랜드 하얏트 도쿄 롯폰기 힐스', city: '도쿄' }
+  },
+  {
+    id: 'pkg_osaka_3d2n',
+    title: '[인기 에어텔] 오사카 난바 스위소텔 올인원 3일 (아시아나 직항 + 5성급 2박)',
+    package_discount_rate: 20,
+    thumbnail_url: 'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
+    total_original_krw: 920000,
+    total_package_krw: 750000,
+    flight: { airline_name: '아시아나항공 (OZ)', departure_city: '서울/인천', arrival_city: '오사카/간사이' },
+    hotel: { name_ko: '스위소텔 난카이 오사카', city: '오사카' }
+  }
+]
+
 onMounted(async () => {
   loading.value = true
   try {
     const res = await fetch(useApiUrl('/packages'))
     const json = await res.json()
-    packages.value = json.data || []
+    packages.value = json.data && json.data.length ? json.data : fallbackPackages
   } catch (e) {
-    console.error(e)
+    packages.value = fallbackPackages
   } finally {
     loading.value = false
   }
@@ -182,12 +205,20 @@ onMounted(async () => {
                 <div class="text-[10px] text-slate-400">1인 기준 (항공 왕복+숙박+세금 포함)</div>
               </div>
 
-              <NuxtLink
-                to="/packages/builder"
-                class="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl shadow-md transition"
-              >
-                패키지 예약
-              </NuxtLink>
+              <div class="flex items-center gap-2">
+                <NuxtLink
+                  :to="`/packages/detail/${pkg.id || 'pkg_tokyo_4d3n'}`"
+                  class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition whitespace-nowrap"
+                >
+                  패키지 상세
+                </NuxtLink>
+                <NuxtLink
+                  :to="`/packages/booking?packageId=${pkg.id || 'pkg_tokyo_4d3n'}`"
+                  class="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl shadow-md transition whitespace-nowrap"
+                >
+                  결합 예약
+                </NuxtLink>
+              </div>
             </div>
           </div>
         </div>

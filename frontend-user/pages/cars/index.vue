@@ -50,12 +50,20 @@ onMounted(async () => {
                 <span class="text-[11px] text-slate-400">1일 대여료</span>
                 <div class="text-xl font-black text-trip-blue">{{ currencyStore.formatKRW(c.daily_price_krw) }}</div>
               </div>
-              <NuxtLink
-                :to="`/cars/booking?carId=${c.id}`"
-                class="px-4 py-2 bg-trip-blue hover:bg-blue-600 text-white text-xs font-bold rounded-xl shadow-md transition"
-              >
-                대여 예약
-              </NuxtLink>
+              <div class="flex items-center gap-1.5">
+                <NuxtLink
+                  :to="`/cars/detail/${c.id}`"
+                  class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition"
+                >
+                  상세
+                </NuxtLink>
+                <NuxtLink
+                  :to="`/cars/booking?carId=${c.id}`"
+                  class="px-4 py-2 bg-trip-blue hover:bg-blue-600 text-white text-xs font-bold rounded-xl shadow-md transition"
+                >
+                  대여 예약
+                </NuxtLink>
+              </div>
             </div>
           </div>
         </div>
