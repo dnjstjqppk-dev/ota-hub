@@ -81,6 +81,12 @@ onMounted(() => {
           고객센터
         </NuxtLink>
 
+        <!-- 파트너 센터 -->
+        <NuxtLink to="/partner/login" class="hidden lg:inline-flex items-center gap-1 text-slate-600 hover:text-trip-blue whitespace-nowrap flex-shrink-0 font-bold" title="공급사 및 파트너사 비즈니스 센터">
+          <span>🏢</span>
+          <span>파트너 센터</span>
+        </NuxtLink>
+
         <!-- getfortrip 코인 및 등급 배지 -->
         <NuxtLink to="/rewards" class="flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-700 font-bold whitespace-nowrap flex-shrink-0" title="getfortrip 멤버십 리워드">
           <span class="w-2 h-2 rounded-full bg-amber-500"></span>
@@ -88,16 +94,16 @@ onMounted(() => {
           <span class="text-amber-800 font-mono">{{ authStore.user.tripCoins.toLocaleString() }}G</span>
         </NuxtLink>
 
-        <!-- 내 예약 -->
-        <NuxtLink to="/my/bookings" class="font-bold text-trip-navy hover:text-trip-blue whitespace-nowrap flex-shrink-0">
-          내 예약
+        <!-- 사용자 콘솔 / 내 예약 -->
+        <NuxtLink to="/my" class="font-bold text-trip-navy hover:text-trip-blue whitespace-nowrap flex-shrink-0 flex items-center gap-1">
+          <span>마이 콘솔</span>
         </NuxtLink>
 
-        <!-- 프로필 -->
-        <div class="flex items-center gap-2 pl-2 border-l border-slate-200 flex-shrink-0 whitespace-nowrap">
-          <img :src="authStore.user.avatarUrl" class="w-8 h-8 rounded-full border border-slate-200 object-cover flex-shrink-0" />
-          <span class="hidden md:inline font-bold text-trip-navy text-xs whitespace-nowrap">{{ authStore.user.fullName }}</span>
-        </div>
+        <!-- 프로필 (사용자 콘솔 링크) -->
+        <NuxtLink to="/my" class="flex items-center gap-2 pl-2 border-l border-slate-200 flex-shrink-0 whitespace-nowrap hover:opacity-80 transition group" title="사용자 콘솔 (마이페이지)">
+          <img :src="authStore.user.avatarUrl" class="w-8 h-8 rounded-full border border-slate-200 object-cover flex-shrink-0 group-hover:border-trip-blue transition" />
+          <span class="hidden md:inline font-bold text-trip-navy text-xs whitespace-nowrap group-hover:text-trip-blue transition">{{ authStore.user.fullName }}</span>
+        </NuxtLink>
       </div>
     </div>
   </header>

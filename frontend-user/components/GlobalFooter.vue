@@ -44,10 +44,10 @@ import { BRAND } from '~/config/brand'
           <div class="space-y-3">
             <h4 class="text-white font-bold text-sm">파트너십</h4>
             <ul class="space-y-2 text-slate-400">
-              <li><a href="#" class="hover:text-white">호텔 파트너 등록</a></li>
-              <li><a href="#" class="hover:text-white">항공사 연동 API</a></li>
-              <li><a href="#" class="hover:text-white">제휴 마케팅 프로그램</a></li>
-              <li><a href="#" class="hover:text-white">기업 출장 솔루션</a></li>
+              <li><NuxtLink to="/partner/login" class="hover:text-white font-bold text-blue-400">파트너 센터 로그인 (B2B)</NuxtLink></li>
+              <li><NuxtLink to="/partner" class="hover:text-white">호텔·공급사 입점 관리</NuxtLink></li>
+              <li><NuxtLink to="/partner/settings" class="hover:text-white">파트너 OpenAPI 연동</NuxtLink></li>
+              <li><a href="mailto:partner@getfortrip.com" class="hover:text-white">제휴 및 공급 문의</a></li>
             </ul>
           </div>
 

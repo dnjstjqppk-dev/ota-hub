@@ -116,6 +116,13 @@ func main() {
 	mux.HandleFunc("GET /api/v1/curated/products/{id}", h.GetCuratedProductDetail)
 	mux.HandleFunc("POST /api/v1/curated/products/{id}/sync-webhook", h.ResyncWebhook)
 
+	// 6. Partner B2B routes
+	mux.HandleFunc("POST /api/v1/partner/login", h.PartnerLogin)
+	mux.HandleFunc("GET /api/v1/partner/dashboard", h.GetPartnerDashboard)
+	mux.HandleFunc("GET /api/v1/partner/bookings", h.GetPartnerBookings)
+	mux.HandleFunc("POST /api/v1/partner/bookings/{id}/action", h.PartnerActionBooking)
+	mux.HandleFunc("GET /api/v1/partner/settlements", h.GetPartnerSettlements)
+
 	// Healthcheck
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		clientIP := r.Header.Get("CF-Connecting-IP")

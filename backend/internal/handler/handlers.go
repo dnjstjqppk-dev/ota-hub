@@ -541,3 +541,110 @@ func (h *APIHandler) SearchSuggest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, results)
 }
 
+// --- PARTNER B2B PORTAL HANDLERS ---
+
+func (h *APIHandler) PartnerLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	if req.Email == "" || len(req.Password) < 4 {
+		writeError(w, http.StatusUnauthorized, "Invalid credentials")
+		return
+	}
+
+	partner := map[string]any{
+		"id":              "ptn_htl_01",
+		"company_name":    "(주)하얏트 코리아 호스피탈리티",
+		"email":           req.Email,
+		"partner_type":    "HOTEL",
+		"business_number": "101-81-99201",
+		"contact_phone":   "02-797-1234",
+		"settlement_rate": 0.90,
+		"token":           "ptn_sec_tok_live_8829",
+	}
+	writeJSON(w, http.StatusOK, partner)
+}
+
+func (h *APIHandler) GetPartnerDashboard(w http.ResponseWriter, r *http.Request) {
+	stats := map[string]any{
+		"monthly_gross_krw":       18450000,
+		"monthly_net_krw":         16605000,
+		"pending_bookings_count":  4,
+		"active_products_count":   12,
+		"average_rating":          4.9,
+		"commission_rate_percent": 10,
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (h *APIHandler) GetPartnerBookings(w http.ResponseWriter, r *http.Request) {
+	var list []domain.Booking
+	for _, b := range h.store.Bookings {
+		list = append(list, b)
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (h *APIHandler) PartnerActionBooking(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req struct {
+		Action string `json:"action"`
+		PNR    string `json:"pnr"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	booking, exists := h.store.Bookings[id]
+	if !exists {
+		writeJSON(w, http.StatusOK, map[string]any{"booking_id": id, "status": "CONFIRMED", "pnr": req.PNR})
+		return
+	}
+	if req.Action == "CHECKIN" {
+		booking.Status = domain.StatusCompleted
+	} else {
+		booking.Status = domain.StatusConfirmed
+		if req.PNR != "" {
+			booking.ConfirmationNumber = req.PNR
+		}
+	}
+	h.store.Bookings[id] = booking
+	writeJSON(w, http.StatusOK, booking)
+}
+
+func (h *APIHandler) GetPartnerSettlements(w http.ResponseWriter, r *http.Request) {
+	settlements := []map[string]any{
+		{
+			"id":             "stl-2026-10-1",
+			"period":         "2026-10-01 ~ 2026-10-15",
+			"payout_date":    "2026-10-25",
+			"orders_count":   18,
+			"gross_krw":      8450000,
+			"fee_krw":        845000,
+			"net_payout_krw": 7605000,
+			"status":         "SCHEDULED",
+			"tax_invoice":    "ISSUED",
+		},
+		{
+			"id":             "stl-2026-09-2",
+			"period":         "2026-09-16 ~ 2026-09-30",
+			"payout_date":    "2026-10-10",
+			"orders_count":   24,
+			"gross_krw":      12200000,
+			"fee_krw":        1220000,
+			"net_payout_krw": 10980000,
+			"status":         "PAID",
+			"tax_invoice":    "COMPLETED",
+		},
+	}
+	writeJSON(w, http.StatusOK, settlements)
+}
+
+

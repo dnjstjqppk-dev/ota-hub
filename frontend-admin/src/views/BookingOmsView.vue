@@ -69,7 +69,7 @@ const fallbackBookings: BookingRow[] = [
   {
     id: 'b-005',
     booking_code: 'GF-TF-77218',
-    domain_type: 'CAR',
+    domain_type: 'TRANSFER',
     primary_contact_name: '최지우 (010-4455-6677)',
     status: 'CONFIRMED',
     final_amount_krw: 95000,

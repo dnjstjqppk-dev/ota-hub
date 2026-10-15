@@ -63,7 +63,7 @@ const fetchBooking = async () => {
   booking.value = {
     id: targetId || 'GF-HT-98214',
     booking_code: targetId || 'GF-HT-98214',
-    domain_type: targetId.includes('FL') ? 'FLIGHT' : targetId.includes('TR') ? 'TRAIN' : targetId.includes('CAR') ? 'CAR' : targetId.includes('ACT') ? 'ACTIVITY' : targetId.includes('TF') ? 'CAR' : 'HOTEL',
+    domain_type: targetId.includes('FL') ? 'FLIGHT' : targetId.includes('TR') ? 'TRAIN' : targetId.includes('CAR') ? 'CAR' : targetId.includes('TF') ? 'TRANSFER' : targetId.includes('ACT') ? 'ACTIVITY' : targetId.includes('PKG') ? 'PACKAGE' : 'HOTEL',
     created_at: new Date().toISOString(),
     status: 'CONFIRMED',
     confirmation_number: 'PNR-' + (targetId || 'CONFIRM88').replace(/[^A-Za-z0-9]/g, '').slice(-6).toUpperCase(),
