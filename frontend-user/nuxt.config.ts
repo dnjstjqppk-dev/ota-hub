@@ -1,6 +1,27 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  ssr: false,
+  ssr: true,
+  nitro: {
+    prerender: {
+      crawlLinks: true,
+      routes: [
+        '/',
+        '/hotels',
+        '/hotels/list',
+        '/flights',
+        '/trains',
+        '/cars',
+        '/transfers',
+        '/things-to-do',
+        '/packages',
+        '/deals',
+        '/rewards',
+        '/help',
+        '/moments',
+        '/trip-best'
+      ]
+    }
+  },
   srcDir: '.',
   compatibilityDate: '2025-07-15',
   devtools: { enabled: false },

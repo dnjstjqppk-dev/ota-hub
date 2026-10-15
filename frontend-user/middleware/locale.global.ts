@@ -1,6 +1,11 @@
 import { defineNuxtRouteMiddleware, navigateTo, useCookie } from '#app'
 
 export default defineNuxtRouteMiddleware((to) => {
+  // Prerendering / SSR 중에는 리디렉션하지 않고 100% 완전한 HTML이 생성되도록 보장
+  if (import.meta.server) {
+    return
+  }
+
   const SUPPORTED_LOCALES = ['ko-kr', 'en-us', 'ja-jp', 'zh-cn', 'zh-tw']
   const DEFAULT_LOCALE = 'ko-kr'
 
@@ -12,7 +17,7 @@ export default defineNuxtRouteMiddleware((to) => {
 
   const currentLocaleQuery = to.query.locale as string | undefined
 
-  // URL에 locale 쿼리가 없으면 기본 ko-kr 주입하여 리디렉션 (?locale=ko-kr)
+  // 클라이언트 브라우저 로딩 시 URL에 locale 쿼리가 없으면 기본 ko-kr 주입 (?locale=ko-kr)
   if (!currentLocaleQuery) {
     const targetLocale = localeCookie.value && SUPPORTED_LOCALES.includes(localeCookie.value)
       ? localeCookie.value
@@ -37,4 +42,3 @@ export default defineNuxtRouteMiddleware((to) => {
     }
   }
 })
-
