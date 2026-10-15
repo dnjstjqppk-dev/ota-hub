@@ -94,3 +94,4 @@
 2. **백엔드 단위 테스트**: `cd backend && go test -v ./...` 실행 → 100% 통과.
 3. **프론트엔드 컴파일**: `npm --prefix frontend-user run generate` → 162개 라우트 정적 사전 렌더링 확인.
 4. **Cloudflare 배포**: `npx wrangler deploy` → 라이브 워커 배포 및 HTTP 200 OK 응답 확인.
+
