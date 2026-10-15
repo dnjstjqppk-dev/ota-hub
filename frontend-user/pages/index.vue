@@ -7,6 +7,30 @@ const currencyStore = useCurrencyStore()
 const hotels = ref<any[]>([])
 const moments = ref<any[]>([])
 
+import { useRoute } from 'vue-router'
+import { BRAND } from '~/config/brand'
+
+const route = useRoute()
+const currentLocale = (route.query.locale as string) || 'ko-kr'
+
+useHead({
+  title: 'getfortrip | 호텔, 항공권, 기차표, 투어 티켓 최저가 예약',
+  htmlAttrs: {
+    lang: currentLocale === 'ko-kr' ? 'ko-KR' : 'en-US'
+  },
+  meta: [
+    { name: 'description', content: '전 세계 호텔, 최저가 항공권, KTX/신칸센 기차표, 공항 픽업 및 액티비티를 getfortrip에서 실시간 예약하세요.' },
+    { property: 'og:site_name', content: 'getfortrip' },
+    { property: 'og:url', content: `https://kr.getfortrip.com/?locale=${currentLocale}` }
+  ],
+  link: [
+    { rel: 'canonical', href: `https://kr.getfortrip.com/?locale=${currentLocale}` },
+    { rel: 'alternate', hreflang: 'ko-kr', href: 'https://kr.getfortrip.com/?locale=ko-kr' },
+    { rel: 'alternate', hreflang: 'en-us', href: 'https://www.getfortrip.com/?locale=en-us' },
+    { rel: 'alternate', hreflang: 'x-default', href: 'https://kr.getfortrip.com/?locale=ko-kr' }
+  ]
+})
+
 onMounted(async () => {
   try {
     const [hotelRes, momentRes] = await Promise.all([

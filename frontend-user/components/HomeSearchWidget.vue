@@ -111,7 +111,7 @@ const handleSearch = () => {
       <div class="flex border-b border-slate-100 bg-slate-50/80 overflow-x-auto scrollbar-none rounded-t-3xl">
         <button
           v-for="t in [
-            { id: 'hotels', label: '숙소', icon: '🏨' },
+            { id: 'hotels', label: '호텔', icon: '🏨' },
             { id: 'flights', label: '항공권', icon: '✈️' },
             { id: 'trains', label: '기차표', icon: '🚄' },
             { id: 'cars', label: '렌터카', icon: '🚗' },
@@ -135,10 +135,10 @@ const handleSearch = () => {
 
       <!-- 동적 검색 폼 영역 -->
       <div class="p-6">
-        <!-- 1. 숙소 (Hotels) 검색 폼 -->
+        <!-- 1. 호텔 (Hotels) 검색 폼 -->
         <div v-if="activeTab === 'hotels'" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
           <div class="border border-slate-200 rounded-2xl p-2.5 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-1">목적지 / 숙소명</label>
+            <label class="text-[11px] font-bold text-slate-400 block mb-1">목적지 / 호텔명</label>
             <SearchAutocomplete
               v-model="hotelCity"
               domain="hotels"

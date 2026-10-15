@@ -10,8 +10,12 @@ export const BRAND = {
   
   // Domain configurations (prepared for getfortrip.com transition)
   plannedDomain: 'getfortrip.com',
+  plannedKoreanDomain: 'kr.getfortrip.com',
+  subdomain: 'kr',
+  defaultLocale: 'ko-kr',
   currentDeployUrl: 'https://ota-hub.dnjstjqppk.workers.dev',
   productionDomain: 'https://getfortrip.com',
+  koreanLandingUrl: 'https://kr.getfortrip.com/?locale=ko-kr',
   
   // Marketing & SEO Copy
   tagline: '전 세계 항공권, 호텔, 기차표, 렌터카 최저가 예약',
