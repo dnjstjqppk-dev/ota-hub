@@ -62,7 +62,7 @@ const handleSearch = () => {
     })
   } else if (activeTab.value === 'trains') {
     router.push({
-      path: '/trains',
+      path: '/trains/search',
       query: {
         dep: trainDepart.value,
         arr: trainArrival.value,
@@ -80,9 +80,8 @@ const handleSearch = () => {
     })
   } else if (activeTab.value === 'transfers') {
     router.push({
-      path: '/cars',
+      path: '/transfers',
       query: {
-        tab: 'transfers',
         airport: transferAirport.value,
         destination: transferHotel.value
       }

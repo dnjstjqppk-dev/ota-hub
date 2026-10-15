@@ -43,3 +43,4 @@ export const BRAND = {
 } as const
 
 export type BrandConfig = typeof BRAND
+

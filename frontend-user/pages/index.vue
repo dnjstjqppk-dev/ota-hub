@@ -112,7 +112,7 @@ onMounted(async () => {
         <NuxtLink
           v-for="h in hotels.slice(0, 4)"
           :key="h.id"
-          :to="`/hotels/${h.id}`"
+          :to="`/hotels/detail/${h.id}`"
           class="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm hover:shadow-xl transition group"
         >
           <div class="h-44 relative overflow-hidden">

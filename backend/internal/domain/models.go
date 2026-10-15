@@ -94,57 +94,91 @@ type SavedTraveler struct {
 
 // Hotel & Room
 type Hotel struct {
-	ID           string      `json:"id"`
-	NameKO       string      `json:"name_ko"`
-	NameEN       string      `json:"name_en"`
-	City         string      `json:"city"`
-	Country      string      `json:"country"`
-	Address      string      `json:"address"`
-	Latitude     float64     `json:"latitude"`
-	Longitude    float64     `json:"longitude"`
-	StarRating   int         `json:"star_rating"`
-	ReviewScore  float64     `json:"review_score"`
-	ReviewCount  int         `json:"review_count"`
-	ThumbnailURL string      `json:"thumbnail_url"`
-	Images       []string    `json:"images"`
-	Amenities    []string    `json:"amenities"`
-	Description  string      `json:"description"`
-	Tags         []string    `json:"tags"`
-	Rooms        []HotelRoom `json:"rooms,omitempty"`
+	ID                 string            `json:"id"`
+	NameKO             string            `json:"name_ko"`
+	NameEN             string            `json:"name_en"`
+	City               string            `json:"city"`
+	Country            string            `json:"country"`
+	Address            string            `json:"address"`
+	Latitude           float64           `json:"latitude"`
+	Longitude          float64           `json:"longitude"`
+	StarRating         int               `json:"star_rating"`
+	PropertyType       string            `json:"property_type"` // HOTEL, RESORT, APARTMENT, VILLA, HOSTEL
+	ReviewScore        float64           `json:"review_score"`
+	ReviewCount        int               `json:"review_count"`
+	CleanlinessScore   float64           `json:"cleanliness_score"`
+	LocationScore      float64           `json:"location_score"`
+	ServiceScore       float64           `json:"service_score"`
+	FacilitiesScore    float64           `json:"facilities_score"`
+	Neighborhood       string            `json:"neighborhood"`
+	SubwayNearby       string            `json:"subway_nearby"`
+	DistanceToCenterKM float64           `json:"distance_to_center_km"`
+	CheckInTime        string            `json:"check_in_time"`
+	CheckOutTime       string            `json:"check_out_time"`
+	Policies           map[string]string `json:"policies"`
+	ThumbnailURL       string            `json:"thumbnail_url"`
+	Images             []string          `json:"images"`
+	Amenities          []string          `json:"amenities"`
+	Description        string            `json:"description"`
+	Tags               []string          `json:"tags"`
+	Rooms              []HotelRoom       `json:"rooms,omitempty"`
+}
+
+type HotelRatePlan struct {
+	ID                   string  `json:"id"`
+	RoomID               string  `json:"room_id"`
+	Name                 string  `json:"name"`
+	MealPlan             string  `json:"meal_plan"`             // ROOM_ONLY, BREAKFAST_FOR_1, BREAKFAST_FOR_2
+	CancellationType     string  `json:"cancellation_type"`     // FREE, CONDITIONAL, NON_REFUNDABLE
+	CancellationDeadline string  `json:"cancellation_deadline"` // e.g. "2026-10-28 18:00"
+	PaymentType          string  `json:"payment_type"`          // PAY_NOW, PAY_AT_HOTEL
+	BasePriceKRW         float64 `json:"base_price_krw"`
+	TaxAndFeesKRW        float64 `json:"tax_and_fees_krw"`
+	OriginalPriceKRW     float64 `json:"original_price_krw"`
 }
 
 type HotelRoom struct {
-	ID                 string   `json:"id"`
-	HotelID            string   `json:"hotel_id"`
-	Name               string   `json:"name"`
-	BedType            string   `json:"bed_type"`
-	MaxGuests          int      `json:"max_guests"`
-	RoomSizeSqm        float64  `json:"room_size_sqm"`
-	BasePriceKRW       float64  `json:"base_price_krw"`
-	IsFreeCancellation bool     `json:"is_free_cancellation"`
-	IncludesBreakfast  bool     `json:"includes_breakfast"`
-	AvailableStock     int      `json:"available_stock"`
-	Images             []string `json:"images"`
+	ID                 string          `json:"id"`
+	HotelID            string          `json:"hotel_id"`
+	Name               string          `json:"name"`
+	BedType            string          `json:"bed_type"`
+	MaxGuests          int             `json:"max_guests"`
+	RoomSizeSqm        float64         `json:"room_size_sqm"`
+	ViewType           string          `json:"view_type"`
+	HasBathtub         bool            `json:"has_bathtub"`
+	HasWindow          bool            `json:"has_window"`
+	IsSmoking          bool            `json:"is_smoking"`
+	BasePriceKRW       float64         `json:"base_price_krw"`
+	IsFreeCancellation bool            `json:"is_free_cancellation"`
+	IncludesBreakfast  bool            `json:"includes_breakfast"`
+	AvailableStock     int             `json:"available_stock"`
+	Images             []string        `json:"images"`
+	RatePlans          []HotelRatePlan `json:"rate_plans,omitempty"`
 }
 
 // Flight
 type Flight struct {
-	ID               string    `json:"id"`
-	FlightNumber     string    `json:"flight_number"`
-	AirlineName      string    `json:"airline_name"`
-	AirlineCode      string    `json:"airline_code"`
-	AirlineLogo      string    `json:"airline_logo"`
-	DepartureAirport string    `json:"departure_airport"`
-	ArrivalAirport   string    `json:"arrival_airport"`
-	DepartureCity    string    `json:"departure_city"`
-	ArrivalCity      string    `json:"arrival_city"`
-	DepartureTime    time.Time `json:"departure_time"`
-	ArrivalTime      time.Time `json:"arrival_time"`
-	DurationMinutes  int       `json:"duration_minutes"`
-	CabinClass       string    `json:"cabin_class"`
-	BasePriceKRW     float64   `json:"base_price_krw"`
-	FreeBaggageKG    int       `json:"free_baggage_kg"`
-	AvailableSeats   int       `json:"available_seats"`
+	ID                string    `json:"id"`
+	FlightNumber      string    `json:"flight_number"`
+	AirlineName       string    `json:"airline_name"`
+	AirlineCode       string    `json:"airline_code"`
+	AirlineLogo       string    `json:"airline_logo"`
+	DepartureAirport  string    `json:"departure_airport"`
+	ArrivalAirport    string    `json:"arrival_airport"`
+	DepartureCity     string    `json:"departure_city"`
+	ArrivalCity       string    `json:"arrival_city"`
+	DepartureTime     time.Time `json:"departure_time"`
+	ArrivalTime       time.Time `json:"arrival_time"`
+	DurationMinutes   int       `json:"duration_minutes"`
+	CabinClass        string    `json:"cabin_class"`
+	Stops             int       `json:"stops"`               // 0: 직항, 1: 1회 경유, 2: 2회 경유
+	DepartureTimeSlot string    `json:"departure_time_slot"` // EARLY_MORNING, MORNING, AFTERNOON, EVENING
+	BasePriceKRW      float64   `json:"base_price_krw"`
+	FreeBaggageKG     int       `json:"free_baggage_kg"`
+	AvailableSeats    int       `json:"available_seats"`
+	IsRefundable      bool      `json:"is_refundable"`
+	IsChangeable      bool      `json:"is_changeable"`
+	RefundFeeKRW      float64   `json:"refund_fee_krw"`
 }
 
 // Train
@@ -193,18 +227,28 @@ type AirportTransfer struct {
 
 // Activity & eSIM
 type Activity struct {
-	ID                  string   `json:"id"`
-	Title               string   `json:"title"`
-	Category            string   `json:"category"`
-	City                string   `json:"city"`
-	Country             string   `json:"country"`
-	PriceKRW            float64  `json:"price_krw"`
-	ReviewScore         float64  `json:"review_score"`
-	ReviewCount         int      `json:"review_count"`
-	InstantConfirmation bool     `json:"instant_confirmation"`
-	ThumbnailURL        string   `json:"thumbnail_url"`
-	Description         string   `json:"description"`
-	Details             any      `json:"details"`
+	ID                  string                   `json:"id"`
+	Title               string                   `json:"title"`
+	Category            string                   `json:"category"`
+	City                string                   `json:"city"`
+	Country             string                   `json:"country"`
+	PriceKRW            float64                  `json:"price_krw"`
+	ReviewScore         float64                  `json:"review_score"`
+	ReviewCount         int                      `json:"review_count"`
+	InstantConfirmation bool                     `json:"instant_confirmation"`
+	FreeCancellation    bool                     `json:"free_cancellation"`
+	DurationType        string                   `json:"duration_type"` // UNDER_2H, HALF_DAY, FULL_DAY, MULTI_DAY
+	GuideLanguage       string                   `json:"guide_language"` // KO, EN, JA, ZH
+	VoucherType         string                   `json:"voucher_type"`   // QR_CODE, BARCODE, PHYSICAL_EXCHANGE
+	ThumbnailURL        string                   `json:"thumbnail_url"`
+	Description         string                   `json:"description"`
+	Highlights          []string                 `json:"highlights"`
+	Itinerary           []map[string]interface{} `json:"itinerary"`
+	Inclusions          []string                 `json:"inclusions"`
+	Exclusions          []string                 `json:"exclusions"`
+	HowToUse            string                   `json:"how_to_use"`
+	Packages            []map[string]interface{} `json:"packages"`
+	Details             any                      `json:"details"`
 }
 
 // Package

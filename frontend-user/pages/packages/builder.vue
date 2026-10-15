@@ -60,7 +60,7 @@ onMounted(async () => {
               </div>
             </div>
 
-            <NuxtLink :to="`/hotels/booking?packageId=${pkg.id}`" class="px-6 py-3 bg-trip-blue hover:bg-trip-hover text-white text-xs font-black rounded-xl shadow-md">
+            <NuxtLink :to="`/packages/booking?packageId=${pkg.id}`" class="px-6 py-3 bg-trip-blue hover:bg-trip-hover text-white text-xs font-black rounded-xl shadow-md">
               패키지 일괄 예약
             </NuxtLink>
           </div>

@@ -116,18 +116,48 @@ func (h *APIHandler) GetActivities(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	city := q.Get("city")
 	category := q.Get("category")
+	freeCancel := q.Get("freeCancel") == "true"
+	instant := q.Get("instant") == "true"
+	duration := q.Get("duration")
+	maxPrice, _ := strconv.ParseFloat(q.Get("maxPrice"), 64)
 
 	var results []domain.Activity
 	for _, a := range h.store.Activities {
-		if city != "" && !strings.Contains(a.City, city) {
+		if city != "" && !strings.Contains(a.City, city) && !strings.Contains(a.Title, city) {
 			continue
 		}
-		if category != "" && !strings.EqualFold(a.Category, category) {
+		if category != "" && category != "ALL" && !strings.EqualFold(a.Category, category) {
+			continue
+		}
+		if freeCancel && !a.FreeCancellation {
+			continue
+		}
+		if instant && !a.InstantConfirmation {
+			continue
+		}
+		if duration != "" && !strings.EqualFold(a.DurationType, duration) {
+			continue
+		}
+		if maxPrice > 0 && a.PriceKRW > maxPrice {
 			continue
 		}
 		results = append(results, a)
 	}
 	writeJSON(w, http.StatusOK, results)
+}
+
+func (h *APIHandler) GetActivityDetail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "Missing activity id in path")
+		return
+	}
+	act, err := h.store.GetActivityDetail(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, act)
 }
 
 func (h *APIHandler) GetPackages(w http.ResponseWriter, r *http.Request) {

@@ -14,3 +14,4 @@ export const BRAND = {
   symbolUrl: '/symbol.svg',
   copyright: 'Copyright © 2026 getfortrip Inc. All rights reserved.'
 } as const
+

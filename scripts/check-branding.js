@@ -118,3 +118,4 @@ if (violations.length > 0) {
   console.log('✅ PASS: Brand integrity verified! All references strictly adhere to "getfortrip".\n')
   process.exit(0)
 }
+

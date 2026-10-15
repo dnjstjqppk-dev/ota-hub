@@ -49,7 +49,7 @@ onMounted(async () => {
             <div class="text-xs text-slate-400">1박 최저가</div>
             <div class="text-2xl font-black text-trip-blue">{{ currencyStore.formatKRW(h.rooms?.[0]?.base_price_krw || 300000) }}</div>
           </div>
-          <NuxtLink :to="`/hotels/${h.id}`" class="px-5 py-2.5 bg-trip-blue text-white text-xs font-bold rounded-xl shadow-md">
+          <NuxtLink :to="`/hotels/detail/${h.id}`" class="px-5 py-2.5 bg-trip-blue text-white text-xs font-bold rounded-xl shadow-md">
             상세 보기
           </NuxtLink>
         </div>

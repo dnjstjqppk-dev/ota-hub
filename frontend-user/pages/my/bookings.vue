@@ -102,13 +102,12 @@ onMounted(() => {
             </div>
 
             <div class="flex flex-col gap-2">
-              <button
-                v-if="b.voucher_url"
-                @click="alert(`[바우처 출력 프리뷰]\n예약 번호: ${b.booking_code}\n확정 번호: ${b.confirmation_number}\n고객명: ${b.primary_contact_name}`)"
-                class="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-md"
+              <NuxtLink
+                :to="`/my/bookings/${b.id}`"
+                class="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-md text-center transition"
               >
                 바우처 보기
-              </button>
+              </NuxtLink>
               <button
                 v-if="b.status === 'CONFIRMED'"
                 @click="cancelBooking(b.id)"

@@ -77,6 +77,7 @@ func main() {
 	mux.HandleFunc("GET /api/v1/cars", h.GetCars)
 	mux.HandleFunc("GET /api/v1/transfers", h.GetTransfers)
 	mux.HandleFunc("GET /api/v1/activities", h.GetActivities)
+	mux.HandleFunc("GET /api/v1/activities/{id}", h.GetActivityDetail)
 	mux.HandleFunc("GET /api/v1/packages", h.GetPackages)
 	mux.HandleFunc("GET /api/v1/promotions", h.GetPromotions)
 	mux.HandleFunc("GET /api/v1/fx-rates", h.GetFXRates)
@@ -100,6 +101,12 @@ func main() {
 
 	// 4. Real-time SSE route
 	mux.HandleFunc("GET /api/v1/sse/events", h.SSEStream)
+
+	// 5. Multi-Platform Webhook Ingestion & Curation Pipeline (Agoda, TripCom, Klook, KKday, MyRealTrip)
+	mux.HandleFunc("POST /api/v1/webhook/ingest", h.IngestWebhook)
+	mux.HandleFunc("GET /api/v1/curated/products", h.GetCuratedProducts)
+	mux.HandleFunc("GET /api/v1/curated/products/{id}", h.GetCuratedProductDetail)
+	mux.HandleFunc("POST /api/v1/curated/products/{id}/sync-webhook", h.ResyncWebhook)
 
 	// Healthcheck
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {

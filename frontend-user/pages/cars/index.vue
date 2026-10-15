@@ -50,9 +50,12 @@ onMounted(async () => {
                 <span class="text-[11px] text-slate-400">1일 대여료</span>
                 <div class="text-xl font-black text-trip-blue">{{ currencyStore.formatKRW(c.daily_price_krw) }}</div>
               </div>
-              <button class="px-4 py-2 bg-trip-blue text-white text-xs font-bold rounded-xl shadow-md">
+              <NuxtLink
+                :to="`/cars/booking?carId=${c.id}`"
+                class="px-4 py-2 bg-trip-blue hover:bg-blue-600 text-white text-xs font-bold rounded-xl shadow-md transition"
+              >
                 대여 예약
-              </button>
+              </NuxtLink>
             </div>
           </div>
         </div>
@@ -75,9 +78,12 @@ onMounted(async () => {
           </div>
           <div class="text-right flex items-center gap-4">
             <div class="text-2xl font-black text-trip-blue">{{ currencyStore.formatKRW(t.price_krw) }}</div>
-            <button class="px-5 py-2.5 bg-trip-blue text-white text-xs font-bold rounded-xl shadow-md">
+            <NuxtLink
+              to="/transfers"
+              class="px-5 py-2.5 bg-trip-blue hover:bg-blue-600 text-white text-xs font-bold rounded-xl shadow-md transition"
+            >
               픽업 예약
-            </button>
+            </NuxtLink>
           </div>
         </div>
       </div>

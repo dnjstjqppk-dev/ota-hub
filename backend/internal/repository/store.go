@@ -29,28 +29,40 @@ type Store struct {
 	AuditLogs    []domain.AdminAuditLog
 	Notices      []domain.Notice
 	CSTickets    map[string]domain.CSTicket
+
+	// Curation & Multi-Platform Webhook Ingestion Store
+	UniversalProducts  map[string]*domain.UniversalProduct
+	CuratedContents    map[string]*domain.CuratedContent
+	AffiliateReferrals map[string]*domain.AffiliateReferral
+	RawScrapes         map[string]domain.IngestRawRequest
+	WebhookLogs        []domain.TravelCheckinWebhookLog
 }
 
 func NewStore() *Store {
 	s := &Store{
-		Users:        make(map[string]domain.User),
-		Travelers:    make(map[string][]domain.SavedTraveler),
-		ExchangeRate: make(map[domain.Currency]domain.ExchangeRate),
-		Hotels:       make(map[string]domain.Hotel),
-		HotelRooms:   make(map[string]domain.HotelRoom),
-		Flights:      make(map[string]domain.Flight),
-		Trains:       make(map[string]domain.Train),
-		Cars:         make(map[string]domain.CarRental),
-		Transfers:    make(map[string]domain.AirportTransfer),
-		Activities:   make(map[string]domain.Activity),
-		Packages:     make(map[string]domain.DynamicPackage),
-		Promotions:   make(map[string]domain.Promotion),
-		Bookings:     make(map[string]domain.Booking),
-		TripMoments:  make(map[string]domain.TripMoment),
-		Reviews:      make(map[string][]domain.Review),
-		AuditLogs:    make([]domain.AdminAuditLog, 0),
-		Notices:      make([]domain.Notice, 0),
-		CSTickets:    make(map[string]domain.CSTicket),
+		Users:              make(map[string]domain.User),
+		Travelers:          make(map[string][]domain.SavedTraveler),
+		ExchangeRate:       make(map[domain.Currency]domain.ExchangeRate),
+		Hotels:             make(map[string]domain.Hotel),
+		HotelRooms:         make(map[string]domain.HotelRoom),
+		Flights:            make(map[string]domain.Flight),
+		Trains:             make(map[string]domain.Train),
+		Cars:               make(map[string]domain.CarRental),
+		Transfers:          make(map[string]domain.AirportTransfer),
+		Activities:         make(map[string]domain.Activity),
+		Packages:           make(map[string]domain.DynamicPackage),
+		Promotions:         make(map[string]domain.Promotion),
+		Bookings:           make(map[string]domain.Booking),
+		TripMoments:        make(map[string]domain.TripMoment),
+		Reviews:            make(map[string][]domain.Review),
+		AuditLogs:          make([]domain.AdminAuditLog, 0),
+		Notices:            make([]domain.Notice, 0),
+		CSTickets:          make(map[string]domain.CSTicket),
+		UniversalProducts:  make(map[string]*domain.UniversalProduct),
+		CuratedContents:    make(map[string]*domain.CuratedContent),
+		AffiliateReferrals: make(map[string]*domain.AffiliateReferral),
+		RawScrapes:         make(map[string]domain.IngestRawRequest),
+		WebhookLogs:        make([]domain.TravelCheckinWebhookLog, 0),
 	}
 	s.seedDefaultData()
 	return s
@@ -345,21 +357,73 @@ func (s *Store) seedDefaultData() {
 	}
 	s.Transfers[tf1.ID] = tf1
 
-	// Activities & eSIM
+	// Activities & eSIM (Trip-style UX/UI Seeds)
 	act1 := domain.Activity{
 		ID:                  "80000000-0000-0000-0000-000000000001",
-		Title:               "도쿄 디즈니랜드 / 디즈니씨 1일 전자 여권 (QR코드 직입장)",
-		Category:            "TICKET",
+		Title:               "도쿄 디즈니랜드 / 디즈니씨 1일 전자 여권 (공식 모바일 QR 직입장)",
+		Category:            "THEME_PARK",
 		City:                "도쿄",
 		Country:             "일본",
 		PriceKRW:            89000,
 		ReviewScore:         4.9,
 		ReviewCount:         8740,
 		InstantConfirmation: true,
+		FreeCancellation:    false,
+		DurationType:        "FULL_DAY",
+		GuideLanguage:       "KO",
+		VoucherType:         "QR_CODE",
 		ThumbnailURL:        "https://images.unsplash.com/photo-1546707012-c46675f12716?w=800",
-		Description:         "현장 티켓 교환 없이 스마트폰 QR코드로 직입장 가능한 공식 1일 여권.",
+		Description:         "현장 매표소 대기 없이 스마트폰 공식 QR코드로 게이트에서 바로 스캔하여 입장하는 1일 자유이용권.",
+		Highlights: []string{
+			"공식 라이선스 QR 코드로 매표소 대기 없이 즉시 게이트 통과",
+			"디즈니랜드 또는 디즈니씨 중 원하는 테마파크 1곳 종일 무제한 이용",
+			"도쿄 디즈니 리조트 공식 앱 연동으로 대기시간 실시간 확인 및 DPA 구매 가능",
+		},
+		Itinerary: []map[string]interface{}{
+			{"step": 1, "time": "08:30", "title": "도쿄 디즈니 리조트 도착 및 전용 게이트 대기", "desc": "JR 마이하마역에서 도보 5분"},
+			{"step": 2, "time": "09:00", "title": "공식 모바일 QR코드 스캔 및 파크 입장", "desc": "스마트폰 화면 바우처를 리더기에 태그"},
+			{"step": 3, "time": "14:00", "title": "주간 퍼레이드 및 어트랙션 자유 이용", "desc": "미녀와 야수, 베이맥스 등 인기 어트랙션 탑승"},
+			{"step": 4, "time": "20:30", "title": "나이트 일렉트리컬 퍼레이드 & 불꽃놀이", "desc": "신데렐라 성 앞 명당 관람 후 자유 퇴장"},
+		},
+		Inclusions: []string{"도쿄 디즈니랜드 또는 디즈니씨 1일 자유이용권", "파크 내 모든 무료 어트랙션 탑승", "소비세 및 발권 수수료"},
+		Exclusions: []string{"디즈니 프리미어 액세스(DPA) 유료 패스", "식음료 및 기념품", "파크 내 유료 렌탈 서비스"},
+		HowToUse:   "예약 즉시 발송되는 바우처 속 QR코드를 캡처하거나 출력하여 입장 게이트 스캐너에 직접 태그하세요. 실물 티켓으로 교환할 필요가 없습니다.",
+		Packages: []map[string]interface{}{
+			{"id": "pkg-disney-adult", "name": "성인 1일 이용권 (만 18세 이상)", "price_krw": 89000, "market_price_krw": 99000, "desc": "성인 전용 1일 종일 자유이용권"},
+			{"id": "pkg-disney-teen", "name": "청소년 1일 이용권 (만 12~17세)", "price_krw": 75000, "market_price_krw": 83000, "desc": "중고등학생 전용 할인권"},
+			{"id": "pkg-disney-child", "name": "어린이 1일 이용권 (만 4~11세)", "price_krw": 53000, "market_price_krw": 60000, "desc": "만 4세 이상 유아 및 초등학생"},
+		},
 	}
 	act2 := domain.Activity{
+		ID:                  "80000000-0000-0000-0000-000000000002",
+		Title:               "유니버설 스튜디오 재팬 (USJ) 1일 스튜디오 패스 + 슈퍼 닌텐도 월드 확약권",
+		Category:            "THEME_PARK",
+		City:                "오사카",
+		Country:             "일본",
+		PriceKRW:            86500,
+		ReviewScore:         4.9,
+		ReviewCount:         12400,
+		InstantConfirmation: true,
+		FreeCancellation:    false,
+		DurationType:        "FULL_DAY",
+		GuideLanguage:       "KO",
+		VoucherType:         "QR_CODE",
+		ThumbnailURL:        "https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800",
+		Description:         "오사카 여행 필수 코스! 슈퍼 닌텐도 월드와 위저딩 월드 오브 해리포터를 즐기는 공식 USJ 입장권.",
+		Highlights: []string{
+			"공식 모바일 QR 즉시 발권으로 현장 매표소 대기 생략",
+			"마리오 카트, 요시 어드벤처가 있는 슈퍼 닌텐도 월드 입장 확약 옵션",
+			"귀멸의 칼날, 주술회전 등 한정 어트랙션 시즌 체험",
+		},
+		Inclusions: []string{"유니버설 스튜디오 재팬 1일 파크 입장 및 일반 어트랙션 이용권", "소비세"},
+		Exclusions: []string{"익스프레스 패스(Express Pass 별도 구매)", "파워업 밴드(현장 구매)", "식음료"},
+		HowToUse:   "스마트폰에 바우처 QR코드를 띄워 입장 게이트 리더기에 직접 스캔하세요.",
+		Packages: []map[string]interface{}{
+			{"id": "pkg-usj-1day", "name": "1일 스튜디오 패스 (성인 만 12세 이상)", "price_krw": 86500, "market_price_krw": 95000, "desc": "종일 자유 이용권"},
+			{"id": "pkg-usj-child", "name": "1일 스튜디오 패스 (아동 만 4~11세)", "price_krw": 56000, "market_price_krw": 62000, "desc": "아동 전용 이용권"},
+		},
+	}
+	act3 := domain.Activity{
 		ID:                  "80000000-0000-0000-0000-000000000003",
 		Title:               "일본 무제한 5G 매일 2GB+속도제어 로밍 eSIM (3일~10일)",
 		Category:            "ESIM",
@@ -369,11 +433,104 @@ func (s *Store) seedDefaultData() {
 		ReviewScore:         4.8,
 		ReviewCount:         15400,
 		InstantConfirmation: true,
+		FreeCancellation:    true,
+		DurationType:        "MULTI_DAY",
+		GuideLanguage:       "KO",
+		VoucherType:         "QR_CODE",
 		ThumbnailURL:        "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?w=800",
-		Description:         "이메일로 받은 QR코드 스캔 즉시 개통되는 고속 Docomo 5G eSIM.",
+		Description:         "실물 유심 교체 없이 이메일로 받은 QR코드 스캔 즉시 개통되는 고속 Docomo/SoftBank 5G eSIM.",
+		Highlights: []string{
+			"유심 교체 없이 QR코드 스캔으로 1분 만에 설치 완료",
+			"일본 1위 통신사 Docomo/SoftBank 정규 5G망 무제한 데이터",
+			"기존 한국 번호(전화/문자) 그대로 유지 수신 가능",
+		},
+		Inclusions: []string{"지정 기간 고속 데이터", "QR코드 설치 안내서(한국어)", "24시간 실시간 카카오톡 기술지원"},
+		Exclusions: []string{"현지 음성통화 및 SMS(데이터 전용)"},
+		HowToUse:   "스마트폰 [설정] > [셀룰러] > [eSIM 추가]를 누르고 바우처의 QR코드를 스캔하여 활성화하세요.",
+		Packages: []map[string]interface{}{
+			{"id": "pkg-esim-3d", "name": "3일권 매일 2GB 이후 무제한", "price_krw": 6500, "market_price_krw": 8900, "desc": "3일 동안 매일 고속 2GB"},
+			{"id": "pkg-esim-5d", "name": "5일권 매일 2GB 이후 무제한", "price_krw": 9900, "market_price_krw": 13900, "desc": "가장 인기 있는 5일 플랜"},
+			{"id": "pkg-esim-7d", "name": "7일권 완전 무제한 무감속", "price_krw": 18500, "market_price_krw": 23000, "desc": "데이터 속도 저하 없는 프리미엄"},
+		},
+	}
+	act4 := domain.Activity{
+		ID:                  "80000000-0000-0000-0000-000000000004",
+		Title:               "타이베이 예스진지 1일 버스투어 (한국어 가이드 & 전용 셔틀버스)",
+		Category:            "DAY_TOUR",
+		City:                "타이베이",
+		Country:             "대만",
+		PriceKRW:            35000,
+		ReviewScore:         4.9,
+		ReviewCount:         4320,
+		InstantConfirmation: true,
+		FreeCancellation:    true,
+		DurationType:        "FULL_DAY",
+		GuideLanguage:       "KO",
+		VoucherType:         "QR_CODE",
+		ThumbnailURL:        "https://images.unsplash.com/photo-1508248467877-aec1b08de376?w=800",
+		Description:         "타이베이 필수 근교 명소 예류, 스펀 천등, 진과스 황금폭포, 지우펀 홍등 거리를 한국어 가이드와 전용 버스로 안전하고 쾌적하게 여행하는 1일 투어.",
+		Highlights: []string{
+			"전문 한국어 가이드의 재치 넘치는 역사 해설과 인생샷 스팟 안내",
+			"대중교통으로 가기 힘든 예류-스펀-진과스-지우펀을 전용 버스로 한 번에 정복",
+			"스펀 천등 날리기 및 지우펀 명물 땅콩아이스크림 할인 혜택",
+		},
+		Itinerary: []map[string]interface{}{
+			{"step": 1, "time": "09:30", "title": "타이베이 메인역 동3문 집결", "desc": "한국어 가이드 미팅 및 출석 체크"},
+			{"step": 2, "time": "10:30", "title": "예류 지질공원 탐방 (70분 체류)", "desc": "여왕머리 바위 관람 및 해안 지질 지형 감상"},
+			{"step": 3, "time": "12:30", "title": "스펀 옛길 천등 날리기 (60분 체류)", "desc": "기찻길에서 소원 천등 날리기 및 닭날개볶음밥 시식"},
+			{"step": 4, "time": "14:30", "title": "진과스 황금박물관 & 광부도시락 (60분 체류)", "desc": "순금 220kg 황금 만지기"},
+			{"step": 5, "time": "16:30", "title": "지우펀 홍등거리 감성 투어 (120분 체류)", "desc": "아메이차루 홍등 골목 및 지우펀 야경 감상"},
+			{"step": 6, "time": "19:30", "title": "타이베이 시내(시먼딩 또는 라오허제 야시장) 하차", "desc": "원하는 장소에서 자유 해산"},
+		},
+		Inclusions: []string{"타이베이 시내 왕복 전용 투어 버스", "공인 한국어 가이드 해설비", "차량 승객 보험"},
+		Exclusions: []string{"예류 지질공원 입장료(NT$120)", "스펀 천등 날리기 비용(NT$200~250)", "광부도시락 및 개인 식사비"},
+		HowToUse:   "지정된 미팅 시간 10분 전까지 타이베이 메인역 동3문 앞으로 오셔서 'getfortrip' 깃발을 든 가이드에게 모바일 바우처를 제시하세요.",
+		Packages: []map[string]interface{}{
+			{"id": "pkg-ye-standard", "name": "기본 1인 투어 참가권", "price_krw": 35000, "market_price_krw": 45000, "desc": "한국어 가이드 + 전용 버스 포함"},
+			{"id": "pkg-ye-combo", "name": "1인 투어 + 스펀 천등(단색) 포함 패키지", "price_krw": 44000, "market_price_krw": 55000, "desc": "천등 날리기 사전 포함 상품"},
+		},
+	}
+	act5 := domain.Activity{
+		ID:                  "80000000-0000-0000-0000-000000000005",
+		Title:               "파리 루브르 박물관 공인 한국어 도슨트 집중 투어 (최대 10인)",
+		Category:            "DOCENT_TOUR",
+		City:                "파리",
+		Country:             "프랑스",
+		PriceKRW:            79000,
+		ReviewScore:         5.0,
+		ReviewCount:         2850,
+		InstantConfirmation: true,
+		FreeCancellation:    true,
+		DurationType:        "HALF_DAY",
+		GuideLanguage:       "KO",
+		VoucherType:         "QR_CODE",
+		ThumbnailURL:        "https://images.unsplash.com/photo-1543349689-9a4d426bee8e?w=800",
+		Description:         "프랑스 국가공인 한국인 가이드와 함께 모나리자, 사모트라케의 니케, 밀로의 비너스 등 루브르의 핵심 걸작을 3시간 동안 생생하고 재미있게 감상하는 소수정예 프리미엄 도슨트 투어.",
+		Highlights: []string{
+			"프랑스 문화부 공인 한국인 전문 가이드의 심도 있는 예술사 해설",
+			"최대 10인 한정 소수정예 진행으로 쾌적한 질의응답 및 감상",
+			"최신 무선 수신기 무료 대여로 가이드의 목소리를 또렷하게 청취",
+		},
+		Itinerary: []map[string]interface{}{
+			{"step": 1, "time": "09:30", "title": "루브르 박물관 피라미드 카루젤 아케이드 집결", "desc": "무선 수신기 배부 및 사전 브리핑"},
+			{"step": 2, "time": "10:00", "title": "고대 그리스 & 로마 조각관", "desc": "밀로의 비너스, 사모트라케의 니케 입체 감상"},
+			{"step": 3, "time": "11:00", "title": "이탈리아 르네상스 회화관", "desc": "레오나르도 다빈치의 모나리자, 라파엘로 명작"},
+			{"step": 4, "time": "12:00", "title": "프랑스 대형 낭만주의 회화관", "desc": "민중을 이끄는 자유의 여신, 나폴레옹 1세의 대관식"},
+			{"step": 5, "time": "12:30", "title": "투어 종료 및 질의응답", "desc": "투어 종료 후 루브르 박물관 내 자유 관람 지속 가능"},
+		},
+		Inclusions: []string{"프랑스 국가공인 한국어 가이드 해설비", "개인용 고음질 무선 수신기 대여"},
+		Exclusions: []string{"루브르 박물관 공식 입장권(성인 22유로 사전 예약 필수)", "개인 이어폰(3.5mm 유선 권장)"},
+		HowToUse:   "루브르 박물관 카루젤 개선문 앞 동상 아래에서 'getfortrip 도슨트' 피켓을 든 가이드와 미팅합니다.",
+		Packages: []map[string]interface{}{
+			{"id": "pkg-louvre-docent", "name": "오전 09:30 도슨트 집중 투어", "price_krw": 79000, "market_price_krw": 95000, "desc": "가장 관람이 여유로운 오전 타임"},
+			{"id": "pkg-louvre-afternoon", "name": "오후 14:00 도슨트 집중 투어", "price_krw": 79000, "market_price_krw": 95000, "desc": "여유로운 오후 일정"},
+		},
 	}
 	s.Activities[act1.ID] = act1
 	s.Activities[act2.ID] = act2
+	s.Activities[act3.ID] = act3
+	s.Activities[act4.ID] = act4
+	s.Activities[act5.ID] = act5
 
 	// Packages
 	pkg1 := domain.DynamicPackage{
@@ -573,6 +730,18 @@ func (s *Store) GetHotelDetail(id string) (*domain.Hotel, error) {
 	}
 	h.Rooms = rooms
 	return &h, nil
+}
+
+// GetActivityDetail returns activity with its full packages and details
+func (s *Store) GetActivityDetail(id string) (*domain.Activity, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	act, exists := s.Activities[id]
+	if !exists {
+		return nil, fmt.Errorf("activity with id %s not found", id)
+	}
+	return &act, nil
 }
 
 // CreateDraftBooking creates draft booking with 15min inventory lock
@@ -775,5 +944,109 @@ func (s *Store) SearchSuggest(query string, domainFilter string) []domain.Sugges
 	}
 
 	return matched
+}
+
+// ==============================================================================
+// Curation & Multi-Platform Ingestion Storage Methods
+// ==============================================================================
+
+func (s *Store) SaveRawScrape(req domain.IngestRawRequest) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id := fmt.Sprintf("raw-%s-%s-%d", req.Platform, req.SourceProductID, time.Now().UnixNano())
+	s.RawScrapes[id] = req
+	return id
+}
+
+func (s *Store) UpsertUniversalProduct(p *domain.UniversalProduct) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	p.UpdatedAt = time.Now()
+	s.UniversalProducts[p.ID] = p
+}
+
+func (s *Store) SaveCuratedContent(c *domain.CuratedContent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	c.UpdatedAt = time.Now()
+	s.CuratedContents[c.ProductID] = c
+
+	if prod, exists := s.UniversalProducts[c.ProductID]; exists {
+		prod.CuratedContent = c
+		prod.CurationStatus = domain.CurationStatusAIProcessed
+	}
+}
+
+func (s *Store) SaveAffiliateReferral(a *domain.AffiliateReferral) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	a.UpdatedAt = time.Now()
+	s.AffiliateReferrals[a.ProductID] = a
+
+	if prod, exists := s.UniversalProducts[a.ProductID]; exists {
+		prod.AffiliateReferral = a
+	}
+}
+
+func (s *Store) LogWebhookDispatch(logEntry *domain.TravelCheckinWebhookLog) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if logEntry.ID == "" {
+		logEntry.ID = fmt.Sprintf("tc-log-%d", time.Now().UnixNano())
+	}
+	s.WebhookLogs = append(s.WebhookLogs, *logEntry)
+
+	if prod, exists := s.UniversalProducts[logEntry.ProductID]; exists {
+		if logEntry.SyncStatus == domain.SyncStatusSuccess {
+			prod.CurationStatus = domain.CurationStatusPublished
+		}
+	}
+}
+
+func (s *Store) GetCuratedProducts(platform domain.OTAPlatform, limit int) []*domain.UniversalProduct {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var result []*domain.UniversalProduct
+	for _, p := range s.UniversalProducts {
+		if platform != "" && p.Platform != platform {
+			continue
+		}
+		// Attach relations
+		if cur, ok := s.CuratedContents[p.ID]; ok {
+			p.CuratedContent = cur
+		}
+		if aff, ok := s.AffiliateReferrals[p.ID]; ok {
+			p.AffiliateReferral = aff
+		}
+		result = append(result, p)
+		if limit > 0 && len(result) >= limit {
+			break
+		}
+	}
+	return result
+}
+
+func (s *Store) GetUniversalProduct(id string) *domain.UniversalProduct {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	p, exists := s.UniversalProducts[id]
+	if !exists {
+		return nil
+	}
+
+	if cur, ok := s.CuratedContents[p.ID]; ok {
+		p.CuratedContent = cur
+	}
+	if aff, ok := s.AffiliateReferrals[p.ID]; ok {
+		p.AffiliateReferral = aff
+	}
+	return p
 }
 

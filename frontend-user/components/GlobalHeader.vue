@@ -24,10 +24,11 @@ onMounted(() => {
         </NuxtLink>
 
         <nav class="hidden md:flex items-center gap-6 text-sm font-bold text-trip-navy">
-          <NuxtLink to="/hotels/list" class="hover:text-trip-blue transition">숙소</NuxtLink>
-          <NuxtLink to="/flights/search" class="hover:text-trip-blue transition">항공권</NuxtLink>
+          <NuxtLink to="/hotels" class="hover:text-trip-blue transition">숙소</NuxtLink>
+          <NuxtLink to="/flights" class="hover:text-trip-blue transition">항공권</NuxtLink>
           <NuxtLink to="/trains" class="hover:text-trip-blue transition">기차표</NuxtLink>
           <NuxtLink to="/cars" class="hover:text-trip-blue transition">렌터카</NuxtLink>
+          <NuxtLink to="/transfers" class="hover:text-trip-blue transition">공항픽업</NuxtLink>
           <NuxtLink to="/things-to-do" class="hover:text-trip-blue transition">투어·티켓</NuxtLink>
           <NuxtLink to="/packages" class="hover:text-trip-blue transition flex items-center gap-1">
             <span>항공+호텔</span>
