@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ✈️ Trip.com Full-Scale Production Clone - Migration 000001 (DOWN)
+-- ✈️ getfortrip Full-Scale Production Platform - Migration 000001 (DOWN)
 -- ==============================================================================
 
 DROP TABLE IF EXISTS admin_audit_logs CASCADE;

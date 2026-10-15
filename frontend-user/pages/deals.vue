@@ -19,7 +19,7 @@ onMounted(async () => {
   <div class="max-w-6xl mx-auto px-4 py-8 space-y-6">
     <div class="bg-gradient-to-r from-orange-500 to-amber-500 rounded-3xl p-8 text-white space-y-2 shadow-xl">
       <span class="px-3 py-1 bg-black/20 rounded-full text-xs font-black uppercase tracking-wider">
-        🎁 트립닷컴 글로벌 프로모션 센터
+        🎁 getfortrip 글로벌 프로모션 센터
       </span>
       <h1 class="text-3xl font-black">진행 중인 모든 할인 쿠폰을 다운로드하세요!</h1>
       <p class="text-xs text-orange-100 font-medium">결제 시 쿠폰 코드를 입력하면 즉시 할인이 적용됩니다.</p>

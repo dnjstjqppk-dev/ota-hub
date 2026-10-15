@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 	"time"
-	"tripclone/backend/internal/handler"
-	"tripclone/backend/internal/repository"
+	"getfortrip/backend/internal/handler"
+	"getfortrip/backend/internal/repository"
 )
 
 // Cloudflare & CORS Middleware
@@ -112,7 +112,7 @@ func main() {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"UP","service":"trip.com-clone-engine","client_ip":"` + clientIP + `","timestamp":"` + time.Now().Format(time.RFC3339) + `"}`))
+		w.Write([]byte(`{"status":"UP","service":"getfortrip-core-engine","client_ip":"` + clientIP + `","timestamp":"` + time.Now().Format(time.RFC3339) + `"}`))
 	})
 
 	server := &http.Server{
@@ -123,7 +123,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Printf("🚀 [Trip.com Go Core Engine] Server starting on http://localhost:%s", port)
+	log.Printf("🚀 [getfortrip Go Core Engine] Server starting on http://localhost:%s", port)
 	log.Printf("🛡️ Cloudflare Security & CORS Enabled (Allowed: %s)", allowedOriginsEnv)
 	log.Printf("📊 Live REST API endpoints & SSE Real-time Streaming active (Zero-Mock Verified)")
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

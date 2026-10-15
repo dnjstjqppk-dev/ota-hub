@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"tripclone/backend/internal/domain"
-	"tripclone/backend/internal/engine"
-	"tripclone/backend/internal/repository"
+	"getfortrip/backend/internal/domain"
+	"getfortrip/backend/internal/engine"
+	"getfortrip/backend/internal/repository"
 )
 
 type APIHandler struct {
@@ -346,7 +346,7 @@ func (h *APIHandler) SSEStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// --- AUTOCOMPLETE / SUGGEST HANDLER (Trip.com & Agoda specification) ---
+// --- AUTOCOMPLETE / SUGGEST HANDLER (getfortrip specification) ---
 
 func (h *APIHandler) SearchSuggest(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))

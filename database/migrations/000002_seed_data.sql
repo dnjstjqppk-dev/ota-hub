@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ✈️ Trip.com Full-Scale Production Clone - Migration 000002 (SEED DATA)
+-- ✈️ getfortrip Full-Scale Production Platform - Migration 000002 (SEED DATA)
 -- Zero-Mock Realistic Global Travel Catalog & User Data
 -- ==============================================================================
 
@@ -13,15 +13,15 @@ INSERT INTO exchange_rates (currency, rate_to_krw, symbol) VALUES
 ('GBP', 1720.0000, '£')
 ON CONFLICT (currency) DO UPDATE SET rate_to_krw = EXCLUDED.rate_to_krw;
 
--- 2. 사용자 & 상용 여행자 & 트립코인
+-- 2. 사용자 & 상용 여행자 & getfortrip 코인
 INSERT INTO users (id, email, password_hash, full_name, phone_number, preferred_currency, preferred_language, tier, trip_coins, avatar_url) VALUES
-('a0000000-0000-0000-0000-000000000001', 'vip@tripclone.com', '$2a$10$wN8WJmZt/ZJ8oK5rQ4a0EuK5G2.L0dZzI1M4Nqf7.7n4QxY6uE8y6', '김트립 (VIP 다이아몬드)', '+82-10-1234-5678', 'KRW', 'ko', 'DIAMOND', 28500, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'),
-('a0000000-0000-0000-0000-000000000002', 'traveler@tripclone.com', '$2a$10$wN8WJmZt/ZJ8oK5rQ4a0EuK5G2.L0dZzI1M4Nqf7.7n4QxY6uE8y6', '박세계', '+82-10-9876-5432', 'KRW', 'ko', 'PLATINUM', 8400, 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200'),
-('a0000000-0000-0000-0000-000000000003', 'globetrotter@tripclone.com', '$2a$10$wN8WJmZt/ZJ8oK5rQ4a0EuK5G2.L0dZzI1M4Nqf7.7n4QxY6uE8y6', '이지구', '+82-10-5555-7777', 'USD', 'en', 'GOLD', 2100, 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200')
+('a0000000-0000-0000-0000-000000000001', 'vip@getfortrip.com', '$2a$10$wN8WJmZt/ZJ8oK5rQ4a0EuK5G2.L0dZzI1M4Nqf7.7n4QxY6uE8y6', '김여행 (VIP 다이아몬드)', '+82-10-1234-5678', 'KRW', 'ko', 'DIAMOND', 28500, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'),
+('a0000000-0000-0000-0000-000000000002', 'traveler@getfortrip.com', '$2a$10$wN8WJmZt/ZJ8oK5rQ4a0EuK5G2.L0dZzI1M4Nqf7.7n4QxY6uE8y6', '박세계', '+82-10-9876-5432', 'KRW', 'ko', 'PLATINUM', 8400, 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200'),
+('a0000000-0000-0000-0000-000000000003', 'globetrotter@getfortrip.com', '$2a$10$wN8WJmZt/ZJ8oK5rQ4a0EuK5G2.L0dZzI1M4Nqf7.7n4QxY6uE8y6', '이지구', '+82-10-5555-7777', 'USD', 'en', 'GOLD', 2100, 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO saved_travelers (id, user_id, last_name_en, first_name_en, birth_date, gender, passport_number, passport_expiry, nationality) VALUES
-('a1000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'KIM', 'TRIP', '1990-05-15', 'M', 'M12345678', '2032-12-31', 'KOR'),
+('a1000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'KIM', 'TRAVEL', '1990-05-15', 'M', 'M12345678', '2032-12-31', 'KOR'),
 ('a1000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', 'LEE', 'MINA', '1993-08-20', 'F', 'M87654321', '2033-06-30', 'KOR')
 ON CONFLICT (id) DO NOTHING;
 
@@ -37,7 +37,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- 4. 호텔 마스터 및 객실 (서울, 도쿄, 오사카, 방콕, 파리, 다낭)
 INSERT INTO hotels (id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, review_score, review_count, thumbnail_url, images, amenities, tags) VALUES
-('c0000000-0000-0000-0000-000000000001', '시그니엘 서울', 'SIGNIEL SEOUL', '서울', '대한민국', '서울특별시 송파구 올림픽로 300 롯데월드타워 76-101층', 37.5125, 127.1025, 5, 4.9, 1540, 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800', '["https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800", "https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800"]', '["WIFI", "POOL", "GYM", "BREAKFAST", "SPA", "VALET"]', '["Trip.Best 2026", "초고층 시티뷰", "럭셔리 호캉스"]'),
+('c0000000-0000-0000-0000-000000000001', '시그니엘 서울', 'SIGNIEL SEOUL', '서울', '대한민국', '서울특별시 송파구 올림픽로 300 롯데월드타워 76-101층', 37.5125, 127.1025, 5, 4.9, 1540, 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800', '["https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800", "https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800"]', '["WIFI", "POOL", "GYM", "BREAKFAST", "SPA", "VALET"]', '["getfortrip Best 2026", "초고층 시티뷰", "럭셔리 호캉스"]'),
 ('c0000000-0000-0000-0000-000000000002', '도쿄 그랜드 하얏트', 'Grand Hyatt Tokyo', '도쿄', '일본', '6-10-3 Roppongi, Minato-ku, Tokyo', 35.6596, 139.7289, 5, 4.8, 1120, 'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800', '["https://images.unsplash.com/photo-1578683010236-d716f9a3f461?w=800"]', '["WIFI", "POOL", "BREAKFAST", "METRO_ACCESS"]', '["롯폰기 힐즈 직결", "미슐랭 다이닝"]'),
 ('c0000000-0000-0000-0000-000000000003', '스위소텔 난카이 오사카', 'Swissotel Nankai Osaka', '오사카', '일본', '5-1-60 Namba, Chuo-ku, Osaka', 34.6644, 135.5015, 5, 4.7, 2400, 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800', '["https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"]', '["WIFI", "METRO_DIRECT", "BREAKFAST", "SPA"]', '["난바역 바로 위", "도톤보리 도보 5분"]'),
 ('c0000000-0000-0000-0000-000000000004', '방콕 샹그릴라 호텔', 'Shangri-La Bangkok', '방콕', '태국', '89 Soi Wat Suan Phlu, Bang Rak, Bangkok', 13.7212, 100.5143, 5, 4.7, 2800, 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=800', '["https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=800"]', '["WIFI", "RIVER_VIEW", "POOL", "BREAKFAST"]', '["차오프라야 리버뷰", "BTS 사판탁신역"]'),
@@ -112,10 +112,10 @@ ON CONFLICT (id) DO NOTHING;
 
 -- 11. 실제 예약 내역 (OMS 테스트용 다양한 상태: CONFIRMED, ISSUE_FAILED, CANCEL_REQUESTED)
 INSERT INTO bookings (id, booking_code, user_id, domain_type, status, base_amount_krw, tax_amount_krw, service_fee_krw, discount_amount_krw, trip_coins_used, final_amount_krw, paid_currency, paid_currency_amount, primary_contact_name, primary_contact_email, primary_contact_phone, traveler_details, confirmation_number, voucher_url) VALUES
-('30000000-0000-0000-0000-000000000001', 'TRIP-20261101-7781', 'a0000000-0000-0000-0000-000000000001', 'HOTEL', 'CONFIRMED', 580000, 58000, 17400, 50000, 500, 600400, 'KRW', 600400, '김트립', 'vip@tripclone.com', '+82-10-1234-5678', '[{"name": "KIM TRIP", "passport": "M12345678"}]', 'VOUCH-SG-88219', 'https://voucher.tripclone.com/v/TRIP-20261101-7781'),
-('30000000-0000-0000-0000-000000000002', 'TRIP-20261102-1209', 'a0000000-0000-0000-0000-000000000002', 'FLIGHT', 'CONFIRMED', 345000, 34500, 10350, 24150, 0, 365700, 'KRW', 365700, '박세계', 'traveler@tripclone.com', '+82-10-9876-5432', '[{"name": "PARK SEGYE", "passport": "M9928172"}]', 'PNR-KE-79482X', 'https://voucher.tripclone.com/v/TRIP-20261102-1209'),
-('30000000-0000-0000-0000-000000000003', 'TRIP-20261103-9941', 'a0000000-0000-0000-0000-000000000003', 'FLIGHT', 'ISSUE_FAILED', 489000, 48900, 14670, 0, 0, 552570, 'USD', 409.31, '이지구', 'globetrotter@tripclone.com', '+82-10-5555-7777', '[{"name": "LEE EARTH", "passport": "US991823"}]', NULL, NULL),
-('30000000-0000-0000-0000-000000000004', 'TRIP-20261104-5512', 'a0000000-0000-0000-0000-000000000001', 'ACTIVITY', 'CONFIRMED', 89000, 8900, 2670, 0, 0, 100570, 'KRW', 100570, '김트립', 'vip@tripclone.com', '+82-10-1234-5678', '[{"name": "KIM TRIP"}]', 'QR-TICKET-DISNEY-8891', 'https://voucher.tripclone.com/v/TRIP-20261104-5512')
+('30000000-0000-0000-0000-000000000001', 'GFT-20261101-7781', 'a0000000-0000-0000-0000-000000000001', 'HOTEL', 'CONFIRMED', 580000, 58000, 17400, 50000, 500, 600400, 'KRW', 600400, '김여행', 'vip@getfortrip.com', '+82-10-1234-5678', '[{"name": "KIM TRAVEL", "passport": "M12345678"}]', 'VOUCH-SG-88219', 'https://voucher.getfortrip.com/v/GFT-20261101-7781'),
+('30000000-0000-0000-0000-000000000002', 'GFT-20261102-1209', 'a0000000-0000-0000-0000-000000000002', 'FLIGHT', 'CONFIRMED', 345000, 34500, 10350, 24150, 0, 365700, 'KRW', 365700, '박세계', 'traveler@getfortrip.com', '+82-10-9876-5432', '[{"name": "PARK SEGYE", "passport": "M9928172"}]', 'PNR-KE-79482X', 'https://voucher.getfortrip.com/v/GFT-20261102-1209'),
+('30000000-0000-0000-0000-000000000003', 'GFT-20261103-9941', 'a0000000-0000-0000-0000-000000000003', 'FLIGHT', 'ISSUE_FAILED', 489000, 48900, 14670, 0, 0, 552570, 'USD', 409.31, '이지구', 'globetrotter@getfortrip.com', '+82-10-5555-7777', '[{"name": "LEE EARTH", "passport": "US991823"}]', NULL, NULL),
+('30000000-0000-0000-0000-000000000004', 'GFT-20261104-5512', 'a0000000-0000-0000-0000-000000000001', 'ACTIVITY', 'CONFIRMED', 89000, 8900, 2670, 0, 0, 100570, 'KRW', 100570, '김여행', 'vip@getfortrip.com', '+82-10-1234-5678', '[{"name": "KIM TRAVEL"}]', 'QR-TICKET-DISNEY-8891', 'https://voucher.getfortrip.com/v/GFT-20261104-5512')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO booking_items (id, booking_id, item_reference_id, item_name, quantity, start_date, end_date) VALUES
@@ -123,10 +123,10 @@ INSERT INTO booking_items (id, booking_id, item_reference_id, item_name, quantit
 ('31000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000001', '대한항공 KE703 (서울/인천 -> 도쿄/나리타)', 1, '2026-11-01 10:10:00+09', '2026-11-01 12:35:00+09')
 ON CONFLICT (id) DO NOTHING;
 
--- 12. 트립 모먼트 & 리뷰
+-- 12. getfortrip 모먼트 & 리뷰
 INSERT INTO trip_moments (id, user_id, city, title, content, photos, linked_product_type, linked_product_id, likes_count, is_featured) VALUES
-('40000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', '서울', '시그니엘 서울 85층 한강 일몰 뷰는 정말 환상적입니다!', '기념일을 맞아 다녀온 시그니엘 서울! 살롱 드 시그니엘 라운지에서 즐기는 샴페인과 롯데월드타워 초고층에서 내려다보는 서울의 일몰과 야경은 잊을 수 없네요. 트립닷컴 특가 쿠폰으로 조식까지 알차게 다녀왔어요.', '["https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800", "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"]', 'HOTEL', 'c0000000-0000-0000-0000-000000000001', 342, true),
-('40000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', '도쿄', '도쿄 디즈니랜드 오픈런 꿀팁 및 미녀와 야수 후기!', '트립닷컴에서 전자 티켓 구매하고 QR코드로 기다림 없이 0초 만에 통과했습니다. DPA 구매 팁과 인기 어트랙션 순서 공유합니다. 5G eSIM도 도쿄 전역에서 끊김 없이 빵빵 터져서 편리했어요!', '["https://images.unsplash.com/photo-1546707012-c46675f12716?w=800"]', 'ACTIVITY', '80000000-0000-0000-0000-000000000001', 520, true)
+('40000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', '서울', '시그니엘 서울 85층 한강 일몰 뷰는 정말 환상적입니다!', '기념일을 맞아 다녀온 시그니엘 서울! 살롱 드 시그니엘 라운지에서 즐기는 샴페인과 롯데월드타워 초고층에서 내려다보는 서울의 일몰과 야경은 잊을 수 없네요. getfortrip 특가 쿠폰으로 조식까지 알차게 다녀왔어요.', '["https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800", "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"]', 'HOTEL', 'c0000000-0000-0000-0000-000000000001', 342, true),
+('40000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', '도쿄', '도쿄 디즈니랜드 오픈런 꿀팁 및 미녀와 야수 후기!', 'getfortrip에서 전자 티켓 구매하고 QR코드로 기다림 없이 0초 만에 통과했습니다. DPA 구매 팁과 인기 어트랙션 순서 공유합니다. 5G eSIM도 도쿄 전역에서 끊김 없이 빵빵 터져서 편리했어요!', '["https://images.unsplash.com/photo-1546707012-c46675f12716?w=800"]', 'ACTIVITY', '80000000-0000-0000-0000-000000000001', 520, true)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO reviews (id, user_id, domain_type, target_id, rating, content) VALUES
@@ -136,7 +136,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- 13. 공지사항 및 CS 티켓
 INSERT INTO notices (id, title, content, is_emergency, banner_active) VALUES
-('60000000-0000-0000-0000-000000000001', '[안내] 2026 트립닷컴 글로벌 메가세일 시즌 오픈', '전 세계 호텔 최대 50% 할인 및 항공권 즉시할인 쿠폰이 지급됩니다.', false, true),
+('60000000-0000-0000-0000-000000000001', '[안내] 2026 getfortrip 글로벌 메가세일 시즌 오픈', '전 세계 호텔 최대 50% 할인 및 항공권 즉시할인 쿠폰이 지급됩니다.', false, true),
 ('60000000-0000-0000-0000-000000000002', '[긴급] 동남아 태풍 기상악화에 따른 일부 항공편 결항 수수료 면제 안내', '해당 항공편 탑승 고객님께서는 고객센터 또는 셀프서비스를 통해 위약금 없이 100% 무료 환불 및 일정 변경이 가능합니다.', true, true)
 ON CONFLICT (id) DO NOTHING;
 

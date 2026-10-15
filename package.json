@@ -1,13 +1,13 @@
 {
-  "name": "ota-hub",
+  "name": "getfortrip-platform",
   "version": "1.0.0",
   "private": true,
-  "description": "Trip.com Full-Scale Production Clone (Nuxt 3 SSR + Vue 3 Admin + Go API)",
+  "description": "getfortrip Global OTA Platform (Nuxt 3 SPA + Vue 3 Admin + Go API)",
   "scripts": {
     "build": "cd frontend-user && npm install && npm run generate",
     "build:user": "cd frontend-user && npm install && npm run generate",
     "build:admin": "cd frontend-admin && npm install && npm run build",
+    "check:branding": "node scripts/check-branding.js",
     "deploy": "npx wrangler deploy"
   }
 }
-

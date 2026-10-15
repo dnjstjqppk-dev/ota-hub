@@ -18,14 +18,14 @@ const authStore = useAuthStore()
                 👑 {{ authStore.user.tier }} 등급
               </span>
             </div>
-            <p class="text-xs text-slate-400 mt-1">트립닷컴 최상위 VIP 멤버십 혜택 적용 중</p>
+            <p class="text-xs text-slate-400 mt-1">getfortrip 최상위 VIP 멤버십 혜택 적용 중</p>
           </div>
         </div>
 
         <div class="bg-white/10 backdrop-blur-md px-6 py-4 rounded-2xl border border-white/20 text-right">
-          <div class="text-xs text-amber-300 font-bold">보유 Trip Coins</div>
+          <div class="text-xs text-amber-300 font-bold">보유 getfortrip Coins</div>
           <div class="text-3xl font-black text-amber-400 font-mono">
-            {{ authStore.user.tripCoins.toLocaleString() }} <span class="text-base">C</span>
+            {{ authStore.user.tripCoins.toLocaleString() }} <span class="text-base">G</span>
           </div>
           <div class="text-[11px] text-slate-300 mt-0.5">₩{{ (authStore.user.tripCoins * 10).toLocaleString() }}원 상당 결제 할인 가능</div>
         </div>
@@ -63,8 +63,8 @@ const authStore = useAuthStore()
 
       <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
         <div class="text-2xl">💰</div>
-        <h3 class="font-bold text-slate-900 text-base">Trip Coins 적립률 3배 보너스</h3>
-        <p class="text-xs text-slate-500 leading-relaxed">숙박 및 탑승 완료 시 일반 회원 대비 3배 많은 트립코인이 확정 적립됩니다.</p>
+        <h3 class="font-bold text-slate-900 text-base">getfortrip Coins 적립률 3배 보너스</h3>
+        <p class="text-xs text-slate-500 leading-relaxed">숙박 및 탑승 완료 시 일반 회원 대비 3배 많은 getfortrip 코인이 확정 적립됩니다.</p>
       </div>
     </div>
   </div>

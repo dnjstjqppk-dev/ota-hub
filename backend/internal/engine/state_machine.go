@@ -2,7 +2,7 @@ package engine
 
 import (
 	"fmt"
-	"tripclone/backend/internal/domain"
+	"getfortrip/backend/internal/domain"
 )
 
 // AllowedTransitions map defines all valid state machine paths

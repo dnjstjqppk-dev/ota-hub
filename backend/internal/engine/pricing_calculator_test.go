@@ -2,7 +2,7 @@ package engine
 
 import (
 	"testing"
-	"tripclone/backend/internal/domain"
+	"getfortrip/backend/internal/domain"
 )
 
 func TestCalculateExactPrice(t *testing.T) {

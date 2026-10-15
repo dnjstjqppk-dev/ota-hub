@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 44" fill="none" width="200" height="44">
+  <defs>
+    <linearGradient id="gft-grad-symbol-w" x1="4" y1="4" x2="38" y2="38" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00D2FF"/>
+      <stop offset="60%" stop-color="#1A6BFF"/>
+      <stop offset="100%" stop-color="#0B3BE0"/>
+    </linearGradient>
+    <linearGradient id="gft-grad-accent-w" x1="22" y1="12" x2="34" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF7A00"/>
+      <stop offset="100%" stop-color="#FF4000"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Emblem Symbol -->
+  <g>
+    <!-- Base Rounded Square with Gradient -->
+    <rect x="3" y="4" width="36" height="36" rx="10" fill="url(#gft-grad-symbol-w)"/>
+    
+    <!-- Stylized Journey 'g' & Exploration Loop -->
+    <path d="M25 15C22 13 18 13.5 15.5 15.5C12.5 18 12.5 23 15.5 25.5C18.5 28 23 27 25 24V18H19.5" 
+          stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Supersonic Flight Accent Trail -->
+    <path d="M25 24V28C25 31 22 32 19 32" 
+          stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+    
+    <!-- Coral Compass / Takeoff Dot -->
+    <circle cx="28" cy="14" r="3.2" fill="url(#gft-grad-accent-w)"/>
+  </g>
+
+  <!-- Wordmark: getfortrip (Light/White Mode) -->
+  <g id="wordmark-white">
+    <!-- "getfor" in Pure White -->
+    <text x="49" y="28" font-family="'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="22" font-weight="800" letter-spacing="-0.04em" fill="#FFFFFF">
+      getfor
+    </text>
+    <!-- "trip" in Bright Electric Cyan -->
+    <text x="120" y="28" font-family="'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="22" font-weight="900" letter-spacing="-0.04em" fill="#00D2FF">
+      trip
+    </text>
+    <!-- Coral Dot Accent above 'i' -->
+    <circle cx="148.6" cy="14.8" r="2.2" fill="#FF7A00"/>
+  </g>
+</svg>

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"tripclone/backend/internal/domain"
-	"tripclone/backend/internal/engine"
+	"getfortrip/backend/internal/domain"
+	"getfortrip/backend/internal/engine"
 )
 
 type Store struct {
@@ -68,8 +68,8 @@ func (s *Store) seedDefaultData() {
 	// Users
 	u1 := domain.User{
 		ID:                "a0000000-0000-0000-0000-000000000001",
-		Email:             "vip@tripclone.com",
-		FullName:          "김트립 (VIP 다이아몬드)",
+		Email:             "vip@getfortrip.com",
+		FullName:          "김여행 (VIP 다이아몬드)",
 		PhoneNumber:       "+82-10-1234-5678",
 		PreferredCurrency: domain.CurrencyKRW,
 		PreferredLanguage: "ko",
@@ -80,7 +80,7 @@ func (s *Store) seedDefaultData() {
 	}
 	s.Users[u1.ID] = u1
 	s.Travelers[u1.ID] = []domain.SavedTraveler{
-		{ID: "t1", UserID: u1.ID, LastNameEN: "KIM", FirstNameEN: "TRIP", BirthDate: "1990-05-15", Gender: "M", PassportNumber: "M12345678", Nationality: "KOR"},
+		{ID: "t1", UserID: u1.ID, LastNameEN: "KIM", FirstNameEN: "TRAVEL", BirthDate: "1990-05-15", Gender: "M", PassportNumber: "M12345678", Nationality: "KOR"},
 		{ID: "t2", UserID: u1.ID, LastNameEN: "LEE", FirstNameEN: "MINA", BirthDate: "1993-08-20", Gender: "F", PassportNumber: "M87654321", Nationality: "KOR"},
 	}
 
@@ -101,7 +101,7 @@ func (s *Store) seedDefaultData() {
 		Images:       []string{"https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800", "https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800"},
 		Amenities:    []string{"WIFI", "POOL", "GYM", "BREAKFAST", "SPA", "VALET"},
 		Description:  "초고층 롯데월드타워에서 서울의 파노라믹 한강 뷰를 감상할 수 있는 럭셔리 랜드마크 호텔.",
-		Tags:         []string{"Trip.Best 2026", "초고층 시티뷰", "럭셔리 호캉스"},
+		Tags:         []string{"getfortrip Best 2026", "초고층 시티뷰", "럭셔리 호캉스"},
 	}
 	s.Hotels[h1.ID] = h1
 	r1 := domain.HotelRoom{
@@ -422,7 +422,7 @@ func (s *Store) seedDefaultData() {
 	// Bookings
 	b1 := domain.Booking{
 		ID:                  "30000000-0000-0000-0000-000000000001",
-		BookingCode:         "TRIP-20261101-7781",
+		BookingCode:         "GFT-20261101-7781",
 		UserID:              u1.ID,
 		DomainType:          domain.DomainHotel,
 		Status:              domain.StatusConfirmed,
@@ -434,17 +434,17 @@ func (s *Store) seedDefaultData() {
 		FinalAmountKRW:      600400,
 		PaidCurrency:        domain.CurrencyKRW,
 		PaidCurrencyAmount:  600400,
-		PrimaryContactName:  "김트립",
-		PrimaryContactEmail: "vip@tripclone.com",
+		PrimaryContactName:  "김여행",
+		PrimaryContactEmail: "vip@getfortrip.com",
 		PrimaryContactPhone: "+82-10-1234-5678",
 		ConfirmationNumber:  "VOUCH-SG-88219",
-		VoucherURL:          "https://voucher.tripclone.com/v/TRIP-20261101-7781",
+		VoucherURL:          "https://voucher.getfortrip.com/v/GFT-20261101-7781",
 		CreatedAt:           time.Now().Add(-48 * time.Hour),
 		UpdatedAt:           time.Now().Add(-48 * time.Hour),
 	}
 	b2 := domain.Booking{
 		ID:                  "30000000-0000-0000-0000-000000000002",
-		BookingCode:         "TRIP-20261102-1209",
+		BookingCode:         "GFT-20261102-1209",
 		UserID:              u1.ID,
 		DomainType:          domain.DomainFlight,
 		Status:              domain.StatusConfirmed,
@@ -456,8 +456,8 @@ func (s *Store) seedDefaultData() {
 		FinalAmountKRW:      365700,
 		PaidCurrency:        domain.CurrencyKRW,
 		PaidCurrencyAmount:  365700,
-		PrimaryContactName:  "김트립",
-		PrimaryContactEmail: "vip@tripclone.com",
+		PrimaryContactName:  "김여행",
+		PrimaryContactEmail: "vip@getfortrip.com",
 		PrimaryContactPhone: "+82-10-1234-5678",
 		ConfirmationNumber:  "PNR-KE-79482X",
 		CreatedAt:           time.Now().Add(-24 * time.Hour),
@@ -465,7 +465,7 @@ func (s *Store) seedDefaultData() {
 	}
 	b3 := domain.Booking{
 		ID:                  "30000000-0000-0000-0000-000000000003",
-		BookingCode:         "TRIP-20261103-9941",
+		BookingCode:         "GFT-20261103-9941",
 		UserID:              u1.ID,
 		DomainType:          domain.DomainFlight,
 		Status:              domain.StatusIssueFailed,
@@ -477,8 +477,8 @@ func (s *Store) seedDefaultData() {
 		FinalAmountKRW:      552570,
 		PaidCurrency:        domain.CurrencyUSD,
 		PaidCurrencyAmount:  409.31,
-		PrimaryContactName:  "김트립",
-		PrimaryContactEmail: "vip@tripclone.com",
+		PrimaryContactName:  "김여행",
+		PrimaryContactEmail: "vip@getfortrip.com",
 		PrimaryContactPhone: "+82-10-1234-5678",
 		CreatedAt:           time.Now().Add(-2 * time.Hour),
 		UpdatedAt:           time.Now().Add(-2 * time.Hour),
@@ -495,7 +495,7 @@ func (s *Store) seedDefaultData() {
 		UserAvatar: u1.AvatarURL,
 		City:       "서울",
 		Title:      "시그니엘 서울 85층 한강 일몰 뷰는 정말 환상적입니다!",
-		Content:    "기념일을 맞아 다녀온 시그니엘 서울! 살롱 드 시그니엘 라운지에서 즐기는 샴페인과 초고층 야경은 잊을 수 없네요. 트립닷컴 특가 쿠폰으로 조식까지 알차게 다녀왔어요.",
+		Content:    "기념일을 맞아 다녀온 시그니엘 서울! 살롱 드 시그니엘 라운지에서 즐기는 샴페인과 초고층 야경은 잊을 수 없네요. getfortrip 특가 쿠폰으로 조식까지 알차게 다녀왔어요.",
 		Photos:     []string{"https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800", "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"},
 		LikesCount: 342,
 		IsFeatured: true,
@@ -581,7 +581,7 @@ func (s *Store) CreateDraftBooking(b domain.Booking) (*domain.Booking, error) {
 	defer s.mu.Unlock()
 
 	b.ID = fmt.Sprintf("b-%d", time.Now().UnixNano())
-	b.BookingCode = fmt.Sprintf("TRIP-%s-%04d", time.Now().Format("20060102"), time.Now().Unix()%10000)
+	b.BookingCode = fmt.Sprintf("GFT-%s-%04d", time.Now().Format("20060102"), time.Now().Unix()%10000)
 	b.Status = domain.StatusDraft
 	b.InventoryLockExpireAt = time.Now().Add(15 * time.Minute)
 	b.CreatedAt = time.Now()
@@ -611,7 +611,7 @@ func (s *Store) TransitionBookingStatus(bookingID string, targetStatus domain.Bo
 
 	if targetStatus == domain.StatusConfirmed && b.ConfirmationNumber == "" {
 		b.ConfirmationNumber = fmt.Sprintf("CONF-%s-%d", b.DomainType, time.Now().Unix()%100000)
-		b.VoucherURL = fmt.Sprintf("https://voucher.tripclone.com/v/%s", b.BookingCode)
+		b.VoucherURL = fmt.Sprintf("https://voucher.getfortrip.com/v/%s", b.BookingCode)
 	}
 
 	s.Bookings[bookingID] = b
@@ -655,7 +655,7 @@ func (s *Store) GetDashboardStats() map[string]any {
 	}
 }
 
-// SearchSuggest provides Trip.com & Agoda style multi-domain autocomplete suggestions
+// SearchSuggest provides getfortrip multi-domain autocomplete suggestions
 func (s *Store) SearchSuggest(query string, domainFilter string) []domain.SuggestItem {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

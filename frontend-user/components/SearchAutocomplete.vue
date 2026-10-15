@@ -52,7 +52,7 @@
       </button>
     </div>
 
-    <!-- Autocomplete Popup Dropdown (Trip.com & Agoda Style) -->
+    <!-- Autocomplete Popup Dropdown (getfortrip Style) -->
     <div
       v-if="isOpen"
       class="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden transition-all max-h-[460px] overflow-y-auto"
@@ -92,7 +92,7 @@
           </div>
         </div>
 
-        <!-- 인기 추천 목적지 섹션 (Agoda / Trip.com Trending) -->
+        <!-- 인기 추천 목적지 섹션 (getfortrip Trending) -->
         <div>
           <div class="flex items-center gap-1.5 text-xs font-bold text-slate-400 mb-2.5">
             <span>🔥</span>
@@ -265,7 +265,7 @@ const domainLabel = computed(() => {
   }
 })
 
-// 도메인별 큐레이션 인기 목적지 목록 (Trip.com & Agoda 인기 지점)
+// 도메인별 큐레이션 인기 목적지 목록 (getfortrip 인기 지점)
 const domainPopularList = computed(() => {
   switch (props.domain) {
     case 'flights':
@@ -315,7 +315,7 @@ const domainPopularList = computed(() => {
 
 // 최근 검색어 로컬스토리지 관리
 const recentSearches = ref<any[]>([])
-const recentStorageKey = `trip_recent_${props.domain || 'all'}`
+const recentStorageKey = `gft_recent_${props.domain || 'all'}`
 
 onMounted(() => {
   try {
@@ -369,7 +369,7 @@ const handleItemSelect = (item: any) => {
   }
 }
 
-// 매칭 문자열 하이라이트 (Trip.com / Agoda UX)
+// 매칭 문자열 하이라이트 (getfortrip UX)
 const highlightMatch = (text: string) => {
   if (!internalValue.value || !text) return text
   const cleanQ = internalValue.value.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

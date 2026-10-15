@@ -26,7 +26,7 @@ onMounted(() => {
 <template>
   <div class="p-8 space-y-6">
     <div>
-      <h1 class="text-2xl font-black text-slate-900 tracking-tight">커뮤니티 & 트립 모먼트 CMS</h1>
+      <h1 class="text-2xl font-black text-slate-900 tracking-tight">커뮤니티 & getfortrip 모먼트 CMS</h1>
       <p class="text-sm text-slate-500 mt-1">사용자 작성 포토 리뷰, 숏폼 모먼트 피드 검수 및 피처드(Featured) 큐레이션</p>
     </div>
 

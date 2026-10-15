@@ -1,8 +1,10 @@
-# ✈️ [Project: Trip.com Full-Scale Clone] Master Architecture & IA Specification
+# ✈️ [Project: getfortrip Global OTA Platform] Master Architecture & IA Specification
 
-> **프로젝트 공식 명칭**: Trip.com Full-Scale Production Clone  
-> **아키텍처 버전**: v1.0.0 (Production Master)  
-> **엔지니어링 원칙**: Zero-Mock (100% 실데이터 DB 연동), Domain-Driven Modularization, High-Concurrency Parallel Search
+> **프로젝트 공식 명칭**: getfortrip Global OTA Platform  
+> **공식 서비스명**: getfortrip  
+> **예정 도메인**: getfortrip.com  
+> **아키텍처 버전**: v1.1.0 (Production Master)  
+> **엔지니어링 원칙**: Zero-Mock (100% 실데이터 DB 연동), Domain-Driven Modularization, High-Concurrency Parallel Search, Strict Brand Governance
 
 ---
 
@@ -10,10 +12,10 @@
 
 | 계층 | 기술 스택 | 버전 / 도구 | 선정 근거 및 핵심 역할 |
 | :--- | :--- | :--- | :--- |
-| **User Web Frontend** | TypeScript, Vue 3, Nuxt 3, Tailwind CSS, Pinia | Nuxt 3.13+, Vue 3.5+, Tailwind v3.4+ | SSR을 통한 글로벌 OTA SEO 최적화, 다통화/다국어 실시간 반응형 UI, URL 동기화 검색 필터 |
-| **Admin Console** | TypeScript, Vue 3, Vite, Tailwind CSS, Pinia | Vite 5+, Vue 3.5+ | 고속 SPA 로딩, 8대 OMS/CMS/정산/카탈로그 관제 대시보드 |
+| **User Web Frontend** | TypeScript, Vue 3, Nuxt 3, Tailwind CSS, Pinia | Nuxt 4/3.13+, Vue 3.5+, Tailwind v3.4+ | getfortrip 사용자 웹, 다통화/다국어 실시간 반응형 UI, URL 동기화 검색 필터, Cloudflare Workers 배포 |
+| **Admin Console** | TypeScript, Vue 3, Vite, Tailwind CSS, Pinia | Vite 5+, Vue 3.5+ | 고속 SPA 로딩, getfortrip 8대 OMS/CMS/정산/카탈로그 관제 대시보드 |
 | **Mobile App (대비)** | Dart, Flutter | Flutter 3.24+ | 크로스플랫폼(iOS/Android) 단일 코드베이스 확장성 |
-| **Backend & API Server** | Go (Golang) | Go 1.23+ (1.27 호환) | 고루틴(Goroutine) 기반 멀티 공급사 병렬 조회, 고성능 가격/세금 계산, 무오차 상태 머신 |
+| **Backend & API Server** | Go (Golang) | Go 1.23+ (1.27 호환) | getfortrip 코어 엔진 (`getfortrip/backend`), 멀티 공급사 병렬 조회, 고성능 가격/세금 계산, 무오차 상태 머신 |
 | **API 아키텍처** | RESTful API, SSE (Server-Sent Events) | OpenAPI 3.1 규격 | 표준화된 엔드포인트 + 좌석/가격 실시간 스트리밍 알림 |
 | **Database & Cache** | PostgreSQL 16 (PostGIS, JSONB), Redis 7 | PG 16, Redis 7 (or Pure Go SQL Engine Fallback) | 지리 정보(위경도), 정규화된 7대 도메인 카탈로그, 15분 재고 홀딩 락(Lock) |
 
@@ -27,19 +29,19 @@
 User Web Frontend (/)
 │
 ├── 1. 글로벌 메인 홈 (/)
-│   ├── GNB (통합 검색창, 통화 전환기, 언어 선택기, 앱 다운로드, 고객센터, 트립코인/등급 배지, 내 예약, 인증)
+│   ├── GNB (getfortrip 로고, 통합 검색창, 통화 전환기, 고객센터, G-Coins/등급 배지, 내 예약, 프로필)
 │   ├── 7대 도메인 통합 탭 검색 위젯 (숙소 / 항공권 / 기차표 / 렌터카 / 공항픽업 / 투어·티켓 / 항공+호텔)
 │   ├── 메가세일 / 타임딜 프로모션 배너 캐러셀
 │   ├── 인기 추천 도시 카드 (서울, 도쿄, 오사카, 방콕, 다낭, 파리 등)
-│   ├── Trip.Best 랭킹 (호텔 TOP 10, 관광명소 TOP 10)
-│   ├── 트립 모먼트 (숏폼/포토 여행기) 프리뷰
-│   └── 글로벌 푸터 (파트너십, 이용약관, 결제 보안 인증 IATA/PCI-DSS)
+│   ├── getfortrip Best 랭킹 (호텔 TOP 10, 관광명소 TOP 10)
+│   ├── 여행 모먼트 (getfortrip Moments 포토 여행기) 프리뷰
+│   └── 글로벌 푸터 (getfortrip 소개, 파트너십, 이용약관, 결제 보안 인증 IATA/PCI-DSS)
 │
 ├── 2. 숙소 도메인 (/hotels/*)
 │   ├── /hotels (숙소 검색 전용 홈)
 │   ├── /hotels/list (숙소 검색 결과 리스트: 12개 필터, 지도 분할 Map View)
 │   ├── /hotels/:id (숙소 상세: 고해상도 갤러리, AI 리뷰 요약, 객실 타입/요금/취소규정 비교 매트릭스)
-│   └── /hotels/booking (체크아웃: 투숙객 정보, 특별 요청사항, 쿠폰/트립코인 적용, 바우처 즉시 발급)
+│   └── /hotels/booking (체크아웃: 투숙객 정보, 특별 요청사항, 쿠폰/G-Coins 적용, 바우처 즉시 발급)
 │
 ├── 3. 항공권 도메인 (/flights/*)
 │   ├── /flights (편도/왕복/다구간 검색 홈)
@@ -64,16 +66,16 @@ User Web Frontend (/)
 │   ├── /packages (패키지 홈)
 │   └── /packages/builder (왕복 항공편 + 호텔 동시 선택, 결합 할인 자동 적용 일괄 예약)
 │
-├── 8. 여행 가이드 & Trip.Best & 트립 모먼트 (/guide/*, /trip-best, /moments/*)
+├── 8. 여행 가이드 & getfortrip Best & 여행 모먼트 (/guide/*, /trip-best, /moments/*)
 │   ├── /guide/:city (도시별 여행 백과사전, 필수 코스)
-│   ├── /trip-best (Trip.Best 호텔/맛집/명소 연간 랭킹)
-│   ├── /moments (여행자 포토 & 숏폼 커뮤니티 피드)
+│   ├── /trip-best (getfortrip Best 호텔/맛집/명소 연간 랭킹)
+│   ├── /moments (getfortrip Moments 여행자 포토 & 숏폼 커뮤니티 피드)
 │   ├── /moments/:id (모먼트 상세 및 본문 내 숙소/투어 상품 원클릭 예약 링크)
 │   └── /moments/write (모먼트 작성, 사진 업로드, 상품 태그, 리워드 적립)
 │
 ├── 9. 프로모션 & 리워드 멤버십 (/deals, /rewards)
 │   ├── /deals (글로벌 프로모션 코드 센터, 타임딜 쿠폰 다운로드)
-│   └── /rewards (회원 5단계 등급 Silver~Diamond+ 진행률, Trip Coins 적립/사용 내역 원장)
+│   └── /rewards (회원 5단계 등급 Silver~Diamond+ 진행률, getfortrip Coins 적립/사용 내역 원장)
 │
 └── 10. 마이페이지 & 고객센터 (/my/*, /help)
     ├── /my/bookings (전 도메인 통합 예약 내역, 셀프 취소/환불 신청)
@@ -113,11 +115,11 @@ Admin Console (/admin)
 │
 ├── 5. 마케팅·쿠폰·리워드 관리 (/admin/promotions, /admin/rewards)
 │   ├── /admin/promotions (쿠폰 코드 생성, 정률/정액 할인, 적용 조건)
-│   └── /admin/rewards (회원 등급별 코인 적립 배율, 수동 코인 지급/차감)
+│   └── /admin/rewards (회원 등급별 getfortrip 코인 적립 배율, 수동 코인 지급/차감)
 │
 ├── 6. 커뮤니티 & 리뷰 CMS (/admin/reviews, /admin/moments)
 │   ├── /admin/reviews (사용자 리뷰 검수, 부적절한 게시글 블라인드)
-│   └── /admin/moments (트립 모먼트 신고 처리, 메인 피처드 선정)
+│   └── /admin/moments (getfortrip 모먼트 신고 처리, 메인 피처드 선정)
 │
 ├── 7. 고객센터 & 공지 관리 (/admin/support, /admin/notices)
 │   ├── /admin/support (1:1 고객 문의 티켓 할당 및 답변 작성)
@@ -140,7 +142,7 @@ stateDiagram-v2
     DRAFT --> PENDING_PAYMENT : 2. 승객/투숙객 정보 입력 완료
     DRAFT --> CANCELLED : 15분 만료 또는 사용자 이탈 (재고 자동 복구)
     
-    PENDING_PAYMENT --> PAID : 3. 결제 승인 완료 (신용카드/간편결제/트립코인)
+    PENDING_PAYMENT --> PAID : 3. 결제 승인 완료 (신용카드/간편결제/G-Coins)
     PENDING_PAYMENT --> CANCELLED : 결제 실패 또는 사용자 취소
     
     PAID --> ISSUING : 4. 공급사 발권 API 비동기 고루틴 호출
@@ -150,7 +152,7 @@ stateDiagram-v2
     ISSUE_FAILED --> CONFIRMED : 관리자 OMS 수동 발권 완료
     ISSUE_FAILED --> REFUNDED : 자동 전액 환불 처리
     
-    CONFIRMED --> COMPLETED : 6. 숙박/탑승/이용 완료 (트립코인 확정 적립)
+    CONFIRMED --> COMPLETED : 6. 숙박/탑승/이용 완료 (getfortrip 코인 확정 적립)
     CONFIRMED --> CANCEL_REQUESTED : 사용자 취소/환불 접수
     
     CANCEL_REQUESTED --> REFUNDED : 취소 규정 엔진 위약금 공제 후 환불
@@ -168,9 +170,8 @@ stateDiagram-v2
 1. **원화 기준 총액 계산**:
    $$\text{GrossAmountKRW} = \text{BasePrice} + \text{Tax}(10\%) + \text{ServiceFee}(3\%)$$
 2. **할인 적용**:
-   $$\text{FinalAmountKRW} = \max(0, \text{GrossAmountKRW} - \text{CouponDiscount} - (\text{TripCoins} \times 10))$$
+   $$\text{FinalAmountKRW} = \max(0, \text{GrossAmountKRW} - \text{CouponDiscount} - (\text{GCoins} \times 10))$$
 3. **목표 통화 환산 (다통화 환율 적용)**:
    $$\text{TargetCurrencyAmount} = \frac{\text{FinalAmountKRW}}{\text{ExchangeRateToKRW}}$$
    - KRW / JPY: 소수점 이하 반올림 (정수형)
    - USD / EUR / GBP / CNY: 소수점 둘째 자리 반올림 (`0.01` 단위)
-

@@ -28,7 +28,7 @@ onMounted(() => {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-black text-slate-900 tracking-tight">마케팅 & 쿠폰 & 리워드 관리</h1>
-        <p class="text-sm text-slate-500 mt-1">글로벌 프로모션 코드 발급, 트립코인 적립 배율 및 멤버십 혜택 관리</p>
+        <p class="text-sm text-slate-500 mt-1">글로벌 프로모션 코드 발급, getfortrip 코인 적립 배율 및 멤버십 혜택 관리</p>
       </div>
     </div>
 

@@ -38,18 +38,16 @@ onMounted(() => {
 
 <template>
   <div class="flex h-screen bg-slate-100 font-sans antialiased text-slate-800">
-    <!-- 사이드바 (Trip.com Deep Navy) -->
+    <!-- 사이드바 (getfortrip Deep Navy) -->
     <aside class="w-64 bg-trip-navy text-slate-200 flex flex-col justify-between shadow-xl flex-shrink-0 z-30">
       <div>
         <!-- 로고 -->
         <div class="p-6 border-b border-slate-700/60 flex items-center gap-3">
-          <div class="w-10 h-10 bg-trip-blue rounded-xl flex items-center justify-center text-white text-xl font-black shadow-lg shadow-blue-500/40">
-            T
-          </div>
+          <img src="/symbol.svg" alt="getfortrip" class="w-10 h-10 object-contain rounded-xl shadow-lg shadow-blue-500/30" />
           <div>
             <div class="text-base font-black tracking-tight text-white flex items-center gap-1.5">
-              Trip<span class="text-trip-blue">.com</span>
-              <span class="text-[10px] uppercase font-bold bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">Admin</span>
+              <span>getfor<span class="text-cyan-400">trip</span></span>
+              <span class="text-[10px] uppercase font-bold bg-blue-500/20 text-cyan-300 px-1.5 py-0.5 rounded">Admin</span>
             </div>
             <div class="text-[11px] text-slate-400 font-medium">Global OMS & Backoffice</div>
           </div>

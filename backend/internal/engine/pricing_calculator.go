@@ -3,7 +3,7 @@ package engine
 import (
 	"errors"
 	"math"
-	"tripclone/backend/internal/domain"
+	"getfortrip/backend/internal/domain"
 )
 
 type PricingInput struct {

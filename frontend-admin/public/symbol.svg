@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" width="64" height="64">
+  <defs>
+    <linearGradient id="gft-sym-grad" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00D2FF"/>
+      <stop offset="50%" stop-color="#1A6BFF"/>
+      <stop offset="100%" stop-color="#0B3BE0"/>
+    </linearGradient>
+    <linearGradient id="gft-sym-accent" x1="36" y1="20" x2="52" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF7A00"/>
+      <stop offset="100%" stop-color="#FF3B00"/>
+    </linearGradient>
+    <filter id="gft-sym-shadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#1A6BFF" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <rect width="64" height="64" rx="18" fill="url(#gft-sym-grad)" filter="url(#gft-sym-shadow)"/>
+  
+  <!-- Stylized Journey 'g' Loop -->
+  <path d="M40 24C35 21 28 21.5 24 25C19 29 19 37 24 41C29 45 36 43 40 38V28H31" 
+        stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Flight Trajectory Tail -->
+  <path d="M40 38V44C40 48.5 35 50 30 50" 
+        stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+  
+  <!-- Sun/Compass Dot -->
+  <circle cx="44.5" cy="22" r="5" fill="url(#gft-sym-accent)"/>
+</svg>

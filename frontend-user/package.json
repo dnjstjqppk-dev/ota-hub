@@ -1,5 +1,7 @@
 {
-  "name": "frontend-user",
+  "name": "getfortrip-user-web",
+  "version": "1.0.0",
+  "description": "getfortrip Global Travel Web Client (Nuxt 3)",
   "type": "module",
   "private": true,
   "scripts": {

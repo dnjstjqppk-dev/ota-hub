@@ -34,7 +34,7 @@ onMounted(async () => {
           ✈️ 2026 Global Mega Travel Season
         </span>
         <h1 class="text-4xl md:text-5xl font-black tracking-tight">
-          전 세계 어디든, 트립닷컴과 함께
+          전 세계 어디든, getfortrip과 함께
         </h1>
         <p class="text-base text-blue-100 font-medium">
           최저가 항공권, 특가 호텔, 기차표부터 현지 eSIM까지 한 번에 예약하세요.
@@ -93,12 +93,12 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 특가 호텔 리스트 (Trip.Best) -->
+    <!-- 특가 호텔 리스트 (getfortrip Best) -->
     <div class="max-w-6xl mx-auto px-4 mt-16 space-y-6">
       <div class="flex items-end justify-between">
         <div>
           <div class="flex items-center gap-2">
-            <span class="text-amber-500 font-black text-sm">Trip.Best 2026</span>
+            <span class="text-amber-500 font-black text-sm">getfortrip Best 2026</span>
             <span class="px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] font-bold">인기 호텔 TOP</span>
           </div>
           <h2 class="text-2xl font-black text-trip-navy tracking-tight mt-0.5">최고 평점 럭셔리 호텔 특가</h2>
@@ -141,11 +141,11 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 트립 모먼트 커뮤니티 피드 프리뷰 -->
+    <!-- 여행 모먼트 커뮤니티 피드 프리뷰 -->
     <div class="max-w-6xl mx-auto px-4 mt-16 space-y-6">
       <div class="flex items-end justify-between">
         <div>
-          <h2 class="text-2xl font-black text-trip-navy tracking-tight">여행자들의 생생한 트립 모먼트</h2>
+          <h2 class="text-2xl font-black text-trip-navy tracking-tight">여행자들의 생생한 getfortrip 모먼트</h2>
           <p class="text-xs text-slate-500 mt-1">실제 여행자들이 공유하는 여행 사진과 필수 팁</p>
         </div>
         <NuxtLink to="/moments" class="text-xs font-bold text-trip-blue hover:underline">

@@ -30,7 +30,7 @@ const submitMoment = async () => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       user_id: 'a0000000-0000-0000-0000-000000000001',
-      user_name: '김트립',
+      user_name: '김여행',
       user_avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
       city: newCity.value,
       title: newTitle.value,
@@ -53,7 +53,7 @@ onMounted(() => {
   <div class="max-w-6xl mx-auto px-4 py-8 space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-3xl font-black text-slate-900 tracking-tight">트립 모먼트 (Trip Moments)</h1>
+        <h1 class="text-3xl font-black text-slate-900 tracking-tight">여행 모먼트 (getfortrip Moments)</h1>
         <p class="text-sm text-slate-500 mt-1">전 세계 여행자들의 생생한 여행 기록, 꿀팁 및 포토 커뮤니티</p>
       </div>
 
@@ -95,7 +95,7 @@ onMounted(() => {
     <!-- 작성 모달 -->
     <div v-if="showWriteModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-        <h3 class="text-lg font-black text-slate-900">새 트립 모먼트 작성</h3>
+        <h3 class="text-lg font-black text-slate-900">새 여행 모먼트 작성</h3>
         
         <div class="space-y-3">
           <div>

@@ -1,7 +1,7 @@
 {
-  "name": "frontend-admin",
+  "name": "getfortrip-admin",
   "version": "1.0.0",
-  "description": "Trip.com Admin Console",
+  "description": "getfortrip Global Admin Console & Backoffice",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

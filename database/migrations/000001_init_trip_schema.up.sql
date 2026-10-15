@@ -1,5 +1,5 @@
 -- ==============================================================================
--- ✈️ Trip.com Full-Scale Production Clone - Migration 000001 (UP)
+-- ✈️ getfortrip Full-Scale Production Platform - Migration 000001 (UP)
 -- Target Database: PostgreSQL 16
 -- Extensions: uuid-ossp, pg_trgm
 -- ==============================================================================

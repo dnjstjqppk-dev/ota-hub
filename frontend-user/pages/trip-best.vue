@@ -21,7 +21,7 @@ onMounted(async () => {
   <div class="max-w-6xl mx-auto px-4 py-8 space-y-8">
     <div class="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 rounded-3xl p-8 text-white space-y-2 shadow-xl">
       <span class="px-3 py-1 bg-black/20 rounded-full text-xs font-black uppercase tracking-wider">
-        🏆 Trip.Best 2026 연간 랭킹
+        🏆 getfortrip Best 2026 연간 랭킹
       </span>
       <h1 class="text-3xl font-black">수백만 실제 여행자 리뷰 기반 최고의 호텔 랭킹</h1>
       <p class="text-xs text-amber-100 font-medium">검증된 평점, 룸 퀄리티 및 가성비를 종합 평가한 글로벌 어워드 수상 숙소</p>

@@ -338,7 +338,7 @@ type CSTicket struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-// Autocomplete & Suggest Model (Trip.com & Agoda specification)
+// Autocomplete & Suggest Model (getfortrip specification)
 type SuggestItem struct {
 	ID        string `json:"id"`
 	Domain    string `json:"domain"`     // hotels, flights, trains, cars, attractions, packages

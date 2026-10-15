@@ -90,7 +90,7 @@ onMounted(() => {
             <input v-model="testDiscount" @input="runCalculation" type="number" class="w-full p-2.5 border border-slate-300 rounded-xl text-sm font-bold" />
           </div>
           <div>
-            <label class="text-xs font-bold text-slate-600 block mb-1">트립코인 사용량</label>
+            <label class="text-xs font-bold text-slate-600 block mb-1">getfortrip 코인(G-Coins) 사용량</label>
             <input v-model="testCoins" @input="runCalculation" type="number" class="w-full p-2.5 border border-slate-300 rounded-xl text-sm font-bold" />
           </div>
         </div>

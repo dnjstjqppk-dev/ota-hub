@@ -200,9 +200,9 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- 3. 프로모션 쿠폰 및 트립코인 적용 -->
+        <!-- 3. 프로모션 쿠폰 및 getfortrip 코인 적용 -->
         <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <h3 class="font-bold text-base text-slate-900">3. 할인 쿠폰 및 Trip Coins 사용</h3>
+          <h3 class="font-bold text-base text-slate-900">3. 할인 쿠폰 및 getfortrip Coins (G-Coins) 사용</h3>
           
           <div class="flex gap-2">
             <input v-model="couponCode" type="text" class="p-2.5 border border-slate-300 rounded-xl text-xs font-mono font-bold uppercase w-48" placeholder="쿠폰 코드" />
@@ -216,13 +216,13 @@ onMounted(async () => {
 
           <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
             <div>
-              <span class="font-bold text-slate-800">Trip Coins 보유 잔여:</span>
-              <span class="font-mono font-bold text-amber-600 ml-1">{{ authStore.user.tripCoins.toLocaleString() }}C</span>
-              <span class="text-slate-400 text-[11px] ml-1">(100C = ₩1,000 할인)</span>
+              <span class="font-bold text-slate-800">getfortrip Coins 보유 잔여:</span>
+              <span class="font-mono font-bold text-amber-600 ml-1">{{ authStore.user.tripCoins.toLocaleString() }}G</span>
+              <span class="text-slate-400 text-[11px] ml-1">(100G = ₩1,000 할인)</span>
             </div>
             <div class="flex items-center gap-2">
               <input v-model="tripCoinsToUse" @input="calculatePrice" type="number" min="0" :max="authStore.user.tripCoins" class="w-24 p-1.5 border border-slate-300 rounded-lg text-xs font-mono font-bold text-right" />
-              <span>C 차감</span>
+              <span>G 차감</span>
             </div>
           </div>
         </div>
@@ -273,7 +273,7 @@ onMounted(async () => {
               <span>+₩{{ priceDetail.tax_amount_krw.toLocaleString() }}</span>
             </div>
             <div class="flex justify-between text-slate-600">
-              <span>트립 서비스 수수료 (3%)</span>
+              <span>플랫폼 서비스 수수료 (3%)</span>
               <span>+₩{{ priceDetail.service_fee_krw.toLocaleString() }}</span>
             </div>
             <div v-if="priceDetail.coupon_discount_krw > 0" class="flex justify-between text-emerald-600 font-bold">
@@ -281,7 +281,7 @@ onMounted(async () => {
               <span>-₩{{ priceDetail.coupon_discount_krw.toLocaleString() }}</span>
             </div>
             <div v-if="priceDetail.trip_coins_discount_krw > 0" class="flex justify-between text-amber-600 font-bold">
-              <span>트립코인 사용 할인</span>
+              <span>getfortrip 코인 사용 할인</span>
               <span>-₩{{ priceDetail.trip_coins_discount_krw.toLocaleString() }}</span>
             </div>
 

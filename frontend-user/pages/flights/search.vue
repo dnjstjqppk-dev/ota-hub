@@ -41,7 +41,7 @@ onMounted(() => {
 
 <template>
   <div class="max-w-6xl mx-auto px-4 py-8 space-y-6">
-    <!-- 검색 상단 바 (Trip.com 스타일 인터랙티브 바) -->
+    <!-- 검색 상단 바 (getfortrip 인터랙티브 바) -->
     <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
       <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
         <div class="w-full sm:w-64">

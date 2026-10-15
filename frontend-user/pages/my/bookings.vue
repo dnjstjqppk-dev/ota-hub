@@ -55,7 +55,7 @@ onMounted(() => {
     <div v-else-if="bookings.length === 0" class="bg-white p-12 text-center rounded-3xl border border-slate-200">
       <div class="text-4xl mb-2">📋</div>
       <h3 class="font-bold text-slate-700">예약 내역이 없습니다.</h3>
-      <p class="text-xs text-slate-400 mt-1">트립닷컴의 최저가 항공권과 호텔을 지금 예약해보세요!</p>
+      <p class="text-xs text-slate-400 mt-1">getfortrip의 최저가 항공권과 호텔을 지금 예약해보세요!</p>
     </div>
 
     <!-- 예약 카드 목록 -->

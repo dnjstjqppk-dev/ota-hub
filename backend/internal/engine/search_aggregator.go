@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 	"time"
-	"tripclone/backend/internal/domain"
+	"getfortrip/backend/internal/domain"
 )
 
 type SupplierResult struct {
