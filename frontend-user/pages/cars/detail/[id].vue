@@ -7,66 +7,26 @@ import { useApiUrl } from '~/composables/useApi'
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
-const car = ref<any>(null)
-const selectedInsurance = ref<'super' | 'standard'>('super')
-const loading = ref(true)
+import { getCarById } from '~/data/carCatalog'
 
-const fallbackCar = {
-  id: 'car_avante_01',
-  company_name: '롯데렌터카 (Lotte Rent-a-Car)',
-  vehicle_model: '현대 더 뉴 아반떼 (2025/2026 신차급)',
-  vehicle_category: '준중형 세단 (Sedan)',
-  seats: 5,
-  luggage_large: 2,
-  luggage_small: 2,
-  transmission: '오토 (자동변속기)',
-  fuel_type: '가솔린 (휘발유)',
-  pickup_city: '제주',
-  pickup_location_name: '제주국제공항 렌터카하우스 셔틀 1구역 (도보 3분)',
-  daily_price_krw: 48000,
-  insurance_super_cdw: true,
-  unlimited_mileage: true,
-  free_cancellation_hours: 48,
-  min_driver_age: 21,
-  min_driving_experience_years: 1,
-  image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800',
-  gallery: [
-    'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800',
-    'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800',
-    'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800'
-  ],
-  insurance_plans: [
-    {
-      id: 'super',
-      name: '완전자차 보장 (Super CDW)',
-      badge: '추천 안심 플랜',
-      deductible_krw: 0,
-      description: '사고 시 고객 부담 면책금 0원, 휴차보상료 100% 면제, 타이어/휠 파손 보장'
-    },
-    {
-      id: 'standard',
-      name: '일반자차 보장 (Standard CDW)',
-      badge: '기본형 플랜',
-      deductible_krw: 300000,
-      description: '사고 시 건당 최대 30만원 자기부담금 발생, 휴차보상료 50% 고객 부담'
-    }
-  ]
-}
+const carId = (route.params.id || route.query.id || 'car_avante_01') as string
+const car = ref<any>(getCarById(carId) || getCarById('car_avante_01'))
+const selectedInsurance = ref<'super' | 'standard'>('super')
+const loading = ref(false)
 
 onMounted(async () => {
+  const currentId = (route.params.id || route.query.id || 'car_avante_01') as string
+  const catalogCar = getCarById(currentId) || getCarById('car_avante_01')
+  car.value = catalogCar
+
   try {
-    const carId = route.params.id || route.query.id || 'car_avante_01'
-    const res = await fetch(useApiUrl(`/cars/${carId}`))
+    const res = await fetch(useApiUrl(`/cars/${currentId}`), { signal: AbortSignal.timeout(1500) })
     if (res.ok) {
       const json = await res.json()
-      car.value = json.data ? { ...fallbackCar, ...json.data } : fallbackCar
-    } else {
-      car.value = fallbackCar
+      if (json.data) car.value = { ...catalogCar, ...json.data }
     }
   } catch (e) {
-    car.value = fallbackCar
-  } finally {
-    loading.value = false
+    // Keep verified catalog data
   }
 })
 </script>

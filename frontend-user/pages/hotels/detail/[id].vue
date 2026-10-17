@@ -7,79 +7,27 @@ import { useApiUrl } from '~/composables/useApi'
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
-const hotel = ref<any>(null)
-const loading = ref(true)
-
-const fallbackHotelDetail = {
-  id: 'htl_tokyo_01',
-  name_ko: '그랜드 하얏트 도쿄 롯폰기 힐스',
-  name_en: 'Grand Hyatt Tokyo Roppongi Hills',
-  city: '도쿄',
-  country: '일본',
-  address: '도쿄도 미나토구 롯폰기 6-10-3',
-  star_rating: 5,
-  review_score: 4.9,
-  review_count: 2180,
-  neighborhood: '롯폰기 힐스 쇼핑가',
-  subway_nearby: '지하철 롯폰기역 도보 3분',
-  property_type: 'HOTEL',
-  free_cancellation: true,
-  free_breakfast: true,
-  thumbnail_url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-  images: [
-    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800',
-    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800'
-  ],
-  amenities: ['실내 수영장', '무료 초고속 Wi-Fi', '24시간 피트니스 센터', '에비앙 럭셔리 스파', '미쉐린 스타 다이닝', '발레파킹 서비스'],
-  rooms: [
-    {
-      id: 'rm_01',
-      name_ko: '디럭스 킹 룸 (시티뷰)',
-      bed_type: '킹베드 1개',
-      max_occupancy: 2,
-      room_size_sqm: 42,
-      base_price_krw: 385000,
-      breakfast_included: true,
-      free_cancellation: true,
-      available_inventory: 4
-    },
-    {
-      id: 'rm_02',
-      name_ko: '그랜드 클럽 이그제큐티브 스위트',
-      bed_type: '슈퍼킹베드 1개 + 소파베드',
-      max_occupancy: 3,
-      room_size_sqm: 75,
-      base_price_krw: 680000,
-      breakfast_included: true,
-      free_cancellation: true,
-      available_inventory: 2
-    }
-  ],
-  reviews: [
-    { id: 'rev_1', author: '이** 여행자', rating: 5.0, date: '2026-10-10', comment: '위치, 룸 컨디션, 서비스 모두 최고였습니다. 롯폰기 힐스와 직결되어 쇼핑과 식사가 정말 편했습니다.' },
-    { id: 'rev_2', author: 'Park S.H.', rating: 4.8, date: '2026-09-28', comment: '도쿄 타워 뷰가 환상적이고 조식 뷔페 퀄리티가 대단히 높습니다. 재방문 의사 100%입니다.' }
-  ]
-}
-
 import { getHotelById } from '~/data/hotelCatalog'
 
+const hotelId = (route.params.id || route.query.hotelId || route.query.id || 'htl_tokyo_01') as string
+const hotel = ref<any>(getHotelById(hotelId) || getHotelById('htl_tokyo_01'))
+const loading = ref(false)
+
 onMounted(async () => {
-  const hotelId = (route.params.id || route.query.hotelId || route.query.id || 'htl_tokyo_01') as string
-  const catalogHotel = getHotelById(hotelId) || fallbackHotelDetail
+  const currentId = (route.params.id || route.query.hotelId || route.query.id || 'htl_tokyo_01') as string
+  const catalogHotel = getHotelById(currentId) || getHotelById('htl_tokyo_01')
+  hotel.value = catalogHotel
 
   try {
-    const res = await fetch(useApiUrl(`/hotels/${hotelId}`), { signal: AbortSignal.timeout(1500) })
+    const res = await fetch(useApiUrl(`/hotels/${currentId}`), { signal: AbortSignal.timeout(1500) })
     if (res.ok) {
       const json = await res.json()
-      hotel.value = json.data ? { ...catalogHotel, ...json.data } : catalogHotel
-    } else {
-      hotel.value = catalogHotel
+      if (json.data) {
+        hotel.value = { ...catalogHotel, ...json.data }
+      }
     }
   } catch (e) {
-    hotel.value = catalogHotel
-  } finally {
-    loading.value = false
+    // Keep verified catalog data
   }
 })
 </script>

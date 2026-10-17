@@ -10,72 +10,37 @@ const currencyStore = useCurrencyStore()
 const city = ref(route.query.city as string || '도쿄')
 const origin = ref(route.query.origin as string || '서울/인천 (ICN)')
 
-const packages = ref<any[]>([])
-const loading = ref(false)
+import { searchPackageCatalog, type PackageBundle } from '~/data/packageCatalog'
 
-const fallbackPackages = [
-  {
-    id: 'pkg_tokyo_4d3n',
-    title: '[항공+호텔 결합] 도쿄 롯폰기 하얏트 럭셔리 에어텔 4일 (대한항공 직항 왕복 + 5성급 3박)',
-    city: '도쿄',
-    country: '일본',
-    duration_nights: 3,
-    duration_days: 4,
-    airline_name: '대한항공 (직항 왕복)',
-    hotel_name: '그랜드 하얏트 도쿄 롯폰기 힐스 (5성급)',
-    original_price_krw: 1400000,
-    bundle_price_krw: 1150000,
-    savings_percentage: 18,
-    badge: '베스트셀러 에어텔',
-    hero_image_url: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800',
-    features: ['대한항공 직항 왕복 (위탁수하물 23kg)', '5성급 럭셔리 호텔 3박 (조식 포함)', '도쿄 시티뷰 디럭스 룸 확정', '24시간 안심 케어 서비스']
-  },
-  {
-    id: 'pkg_osaka_3d2n',
-    title: '[인기 에어텔] 오사카 난바 스위소텔 올인원 3일 (아시아나 직항 + 5성급 2박)',
-    city: '오사카',
-    country: '일본',
-    duration_nights: 2,
-    duration_days: 3,
-    airline_name: '아시아나항공 (직항 왕복)',
-    hotel_name: '스위소텔 난카이 오사카 (5성급)',
-    original_price_krw: 920000,
-    bundle_price_krw: 750000,
-    savings_percentage: 20,
-    badge: '난바역 직결 호텔',
-    hero_image_url: 'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
-    features: ['아시아나항공 직항 왕복', '난바역 직결 5성급 호텔', '간사이공항 라피트 급행권 증정', '무료 취소 가능']
-  },
-  {
-    id: 'pkg_danang_4d3n',
-    title: '[휴양 리조트 특가] 다낭 하얏트 리젠시 풀빌라 4일 (직항 왕복 + 오션뷰 3박)',
-    city: '다낭',
-    country: '베트남',
-    duration_nights: 3,
-    duration_days: 4,
-    airline_name: '베트남항공 (직항 왕복)',
-    hotel_name: '하얏트 리젠시 다낭 리조트 & 스파 (5성급)',
-    original_price_krw: 1100000,
-    bundle_price_krw: 860000,
-    savings_percentage: 22,
-    badge: '풀빌라 리조트',
-    hero_image_url: 'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?w=800',
-    features: ['오션뷰 풀빌라 룸 업그레이드', '매일 전 일정 조식 뷔페 포함', '공항 왕복 픽업 무료 제공', '스파 60분 1회 무료']
-  }
-]
+const packages = ref<PackageBundle[]>(searchPackageCatalog({ city: city.value }))
+const loading = ref(false)
 
 const fetchPackages = async () => {
   loading.value = true
   try {
-    const res = await fetch(useApiUrl('/packages'))
-    const json = await res.json()
-    packages.value = json.data && json.data.length ? json.data : fallbackPackages
+    const res = await fetch(`${useApiUrl('/packages')}?city=${encodeURIComponent(city.value)}`, { signal: AbortSignal.timeout(1500) })
+    if (res.ok) {
+      const json = await res.json()
+      if (Array.isArray(json.data) && json.data.length > 0) {
+        packages.value = json.data
+        loading.value = false
+        return
+      }
+    }
   } catch (e) {
-    packages.value = fallbackPackages
-  } finally {
-    loading.value = false
+    // Keep verified package catalog
   }
+
+  packages.value = searchPackageCatalog({ city: city.value })
+  loading.value = false
 }
+
+watch(() => route.query.city, (newCity) => {
+  if (newCity !== undefined) {
+    city.value = (newCity as string) || ''
+    fetchPackages()
+  }
+})
 
 onMounted(() => {
   fetchPackages()

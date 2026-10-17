@@ -5,24 +5,27 @@ import { useCurrencyStore } from '~/stores/currency'
 import { useAuthStore } from '~/stores/auth'
 import { useApiUrl } from '~/composables/useApi'
 
+import { getCarById } from '~/data/carCatalog'
+
 const route = useRoute()
 const router = useRouter()
 const currencyStore = useCurrencyStore()
 const authStore = useAuthStore()
 
-const car = ref<any>(null)
-const loading = ref(true)
+const carId = (route.query.carId as string) || 'car_avante_01'
+const car = ref<any>(getCarById(carId) || getCarById('car_avante_01'))
+const loading = ref(false)
 
 const pickupLocation = ref(route.query.loc as string || '제주국제공항 렌터카 셔틀 스테이션')
 const returnLocation = ref(route.query.returnLoc as string || '제주국제공항 렌터카 셔틀 스테이션')
 const pickupDate = ref(route.query.pickup as string || '2026-11-01')
 const returnDate = ref(route.query.return as string || '2026-11-04')
-const insuranceType = ref('SUPER_CDW') // BASIC vs SUPER_CDW
+const insuranceType = ref(route.query.insurance === 'standard' ? 'BASIC' : 'SUPER_CDW')
 
 // Driver information
-const driverName = ref(authStore.user.fullName)
+const driverName = ref(authStore.user?.fullName || '김여행')
 const driverPhone = ref('+82-10-1234-5678')
-const driverEmail = ref(authStore.user.email)
+const driverEmail = ref(authStore.user?.email || 'traveler@getfortrip.com')
 const driverBirth = ref('1990-03-15')
 const licenseType = ref('DOMESTIC_CLASS_2') // DOMESTIC_CLASS_1, DOMESTIC_CLASS_2, IDP_INTERNATIONAL
 
@@ -94,7 +97,7 @@ const handlePayment = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_id: authStore.user.id,
+        user_id: authStore.user?.id || 'usr_guest',
         domain_type: 'CAR',
         base_amount_krw: priceDetail.value?.base_amount_krw || 195000,
         tax_amount_krw: priceDetail.value?.tax_amount_krw || 0,
@@ -156,25 +159,7 @@ const handlePayment = async () => {
 }
 
 onMounted(async () => {
-  loading.value = true
-  try {
-    const res = await fetch(useApiUrl('/cars'))
-    const json = await res.json()
-    const carsList = json.data || []
-    car.value = carsList[0] || {
-      company_name: '롯데렌터카 (LOTTE Rent-a-Car)',
-      vehicle_model: '현대 아반떼 CN7',
-      seats: 5,
-      transmission: '오토 (Auto)',
-      daily_price_krw: 58000,
-      image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=600'
-    }
-    await calculatePrice()
-  } catch (e) {
-    console.error(e)
-  } finally {
-    loading.value = false
-  }
+  await calculatePrice()
 })
 </script>
 
@@ -334,14 +319,14 @@ onMounted(async () => {
 
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-slate-600 block">
-                getfortrip 코인 사용 (보유: {{ authStore.user.tripCoins }}G)
+                getfortrip 코인 사용 (보유: {{ authStore.user?.tripCoins || 0 }}G)
               </label>
               <div class="flex gap-2">
                 <input
                   v-model="tripCoinsToUse"
                   type="number"
                   min="0"
-                  :max="authStore.user.tripCoins"
+                  :max="authStore.user?.tripCoins || 0"
                   class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold"
                   @change="calculatePrice"
                 />

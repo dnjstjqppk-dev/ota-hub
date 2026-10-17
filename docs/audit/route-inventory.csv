@@ -1,0 +1,66 @@
+System,Category,Path,Method,AuthRequired,SSR_Prerender,Description
+User,Home,/,GET,No,Yes,getforTrip 소비자 공식 메인 홈페이지 (글로벌 통합 검색)
+User,Hotel,/hotels/,GET,No,Yes,호텔 메인 랜딩 및 인기 여행지 큐레이션
+User,Hotel,/hotels/list/,GET,No,Yes,호텔 다이나믹 검색 결과 목록 및 패싯 필터
+User,Hotel,/hotels/detail/htl_tokyo_01/,GET,No,Yes,도쿄 신주쿠 그랑벨 호텔 상세 정보 및 객실 목록
+User,Hotel,/hotels/detail/htl_seoul_01/,GET,No,Yes,서울 시그니엘 호텔 상세 정보 및 객실 목록
+User,Hotel,/hotels/detail/htl_osaka_01/,GET,No,Yes,오사카 난바 오리엔탈 호텔 상세 정보 및 객실 목록
+User,Hotel,/hotels/booking/,GET,Optional,Yes,호텔 객실 예약 및 15분 재고 락 결제창
+User,Flight,/flights/,GET,No,Yes,항공권 메인 랜딩 (인기 노선 및 얼리버드 프로모션)
+User,Flight,/flights/search/,GET,No,Yes,항공권 실시간 다이나믹 최저가 캘린더 및 왕복 2단계 스케줄 선택기
+User,Flight,/flights/booking/,GET,Optional,Yes,항공 탑승객 정보 입력 및 결제 승인창
+User,Train,/trains/,GET,No,Yes,기차 메인 랜딩 (KTX/SRT 한국 및 신칸센 일본 승차권)
+User,Train,/trains/search/,GET,No,Yes,기차 노선별 출발/도착역 엄격 필터링 승차권 검색
+User,Train,/trains/booking/,GET,Optional,Yes,기차 승차권 좌석 선택 및 결제
+User,Car,/cars/,GET,No,Yes,렌터카 메인 랜딩 (글로벌 공항/시내 렌터카 안내)
+User,Car,/cars/search/,GET,No,Yes,렌터카 차량 등급 및 완전자차(CDW) 옵션 검색
+User,Car,/cars/detail/car_avante_01/,GET,No,Yes,현대 올 뉴 아반떼 CN7 렌터카 상세 및 보험 선택
+User,Car,/cars/detail/car_yaris_01/,GET,No,Yes,토요타 야리스 렌터카 상세 및 현지 수령 가이드
+User,Car,/cars/booking/,GET,Optional,Yes,렌터카 운전자 정보 입력 및 예약 완료
+User,Package,/packages/,GET,No,Yes,항공+호텔 번들 패키지 메인 랜딩
+User,Package,/packages/list/,GET,No,Yes,도시별 결합 할인 패키지 목록 및 테마별 필터
+User,Package,/packages/detail/pkg_tokyo_4d3n/,GET,No,Yes,도쿄 4박 5일 항공+호텔 결합 패키지 상세
+User,Package,/packages/booking/,GET,Optional,Yes,패키지 탑승객/투숙객 정보 입력 및 복합 결제창
+User,Activity,/things-to-do/,GET,No,Yes,투어&티켓 메인 큐레이션 및 명소 목록
+User,Activity,/things-to-do/detail/act_disney_tokyo/,GET,No,Yes,도쿄 디즈니랜드 1일 e-티켓 QR 상세
+User,Activity,/things-to-do/booking/,GET,Optional,Yes,액티비티 옵션 선택 및 모바일 바우처 결제창
+User,Transfer,/transfers/,GET,No,Yes,공항 픽업/샌딩 리무진 서비스 메인 랜딩
+User,Transfer,/transfers/list/,GET,No,Yes,공항별 차량 등급(밴, 세단, 럭셔리) 픽업 검색 목록
+User,Transfer,/transfers/detail/tf_icn_van_01/,GET,No,Yes,인천공항 프리미엄 비즈니스 밴 리무진 상세
+User,Transfer,/transfers/booking/,GET,Optional,Yes,항공편명 추적 및 픽업 예약 결제창
+User,MyPage,/my/,GET,Yes,Yes,마이페이지 통합 대시보드 (비로그인 게이트 보호)
+User,MyPage,/my/bookings/,GET,Yes,Yes,나의 예약 내역 목록 및 모바일 바우처 확인
+User,MyPage,/my/profile/,GET,Yes,Yes,회원 개인정보 및 비밀번호/연락처 설정
+User,MyPage,/my/coins/,GET,Yes,Yes,getforTrip 리워드 코인 적립/사용 원장 내역
+User,Order,/booking/success/,GET,No,Yes,전 도메인 통합 결제 승인 완료 바우처 화면
+User,Info,/about/,GET,No,Yes,getforTrip 회사 소개 및 공식 신뢰성 명세
+User,Info,/help/,GET,No,Yes,고객센터 FAQ 및 24/365 글로벌 지원 안내
+User,Info,/terms/,GET,No,Yes,이용약관 및 전자상거래 표준약관
+User,Info,/privacy/,GET,No,Yes,개인정보처리방침 및 안전성 확보 조치
+Admin,Auth,/admin/login/,GET,No,Yes,관리자 전용 보안 로그인 (MFA 지원)
+Admin,Dashboard,/admin/,GET,Yes,Yes,운영 총괄 KPI 대시보드 (총매출, 예약수, 실시간 트래픽)
+Admin,Bookings,/admin/bookings/,GET,Yes,Yes,전체 도메인 예약 내역 조회 및 상태 강제 변경 OMS
+Admin,Hotels,/admin/hotels/,GET,Yes,Yes,호텔 등록, 공급사 승인 및 객실 재고 할당 관리
+Admin,Flights,/admin/flights/,GET,Yes,Yes,항공 노선 및 운임 베이시스(Fare Basis) 관리
+Admin,Settlement,/admin/settlement/,GET,Yes,Yes,파트너사별 월별 정산 및 수수료 원장
+Admin,Coupons,/admin/coupons/,GET,Yes,Yes,프로모션 쿠폰 발행 및 할인율 설정
+Admin,Users,/admin/users/,GET,Yes,Yes,회원 관리 및 비정상 거래(FDS) 모니터링
+Admin,Audit,/admin/audit-logs/,GET,Yes,Yes,관리자 작업 감사 로그 (불변 추적)
+Partner,Auth,/partner/login/,GET,No,Yes,B2B 파트너 포털 로그인
+Partner,Dashboard,/partner/,GET,Yes,Yes,파트너사 전용 예약 현황 및 매출 정산 요약
+Partner,Bookings,/partner/bookings/,GET,Yes,Yes,자사 상품 예약 접수 목록 및 바우처 승인 처리
+Partner,Products,/partner/products/,GET,Yes,Yes,객실/차량/티켓 ARI(Availability, Rate, Inventory) 동기화
+Partner,Settings,/partner/settings/,GET,Yes,Yes,파트너 법인 정보 및 정산 계좌 관리
+Partner,Docs,/partner/api-docs/,GET,No,Yes,B2B OpenAPI v1.4 REST 개발자 명세서
+API,Auth,/api/v1/auth/login,POST,No,No,사용자 JWT 로그인 및 리프레시 토큰 발급
+API,Catalog,/api/v1/hotels,GET,No,No,호텔 목록 다이나믹 검색 API
+API,Catalog,/api/v1/hotels/:id,GET,No,No,호텔 단건 상세 및 객실 잔여석 API
+API,Catalog,/api/v1/flights,GET,No,No,항공편 노선 및 최저가 운임 검색 API
+API,Catalog,/api/v1/trains,GET,No,No,기차 승차권 잔여석 조회 API
+API,Catalog,/api/v1/cars,GET,No,No,렌터카 차량 재고 및 대여 요금 조회 API
+API,Catalog,/api/v1/packages,GET,No,No,항공+호텔 결합 패키지 검색 API
+API,Booking,/api/v1/bookings,POST,Optional,No,15분 소프트 락 예약 드래프트 생성 API
+API,Booking,/api/v1/bookings/calculate,POST,No,No,통화/쿠폰/코인 반영 실시간 결제액 산출 API
+API,Booking,/api/v1/bookings/:id/pay,POST,No,No,PG사 승인 후 예약 최종 확정 트랜잭션 API
+API,Booking,/api/v1/bookings/:id/cancel,POST,Yes,No,예약 취소 및 환불 수수료 계산 API
+API,Partner,/api/v1/partner/ari,POST,Yes(API_Key),No,B2B 실시간 재고/요금 일괄 업데이트 API

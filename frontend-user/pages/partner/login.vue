@@ -6,9 +6,9 @@ import { usePartnerStore } from '~/stores/partner'
 const router = useRouter()
 const partnerStore = usePartnerStore()
 
-const email = ref('hotel_partner@getfortrip.com')
-const password = ref('partner1234!')
-const rememberMe = ref(true)
+const email = ref('')
+const password = ref('')
+const rememberMe = ref(false)
 const errorMessage = ref('')
 const loading = ref(false)
 
@@ -25,19 +25,13 @@ const handleLogin = async () => {
     if (success) {
       router.push('/partner')
     } else {
-      errorMessage.value = '아이디 또는 비밀번호가 일치하지 않습니다. (비밀번호는 최소 4자리 이상이어야 합니다)'
+      errorMessage.value = '아이디 또는 비밀번호가 일치하지 않습니다. 인가된 파트너 계정으로 로그인해 주세요.'
     }
   } catch (err) {
     errorMessage.value = '로그인 처리 중 시스템 오류가 발생했습니다.'
   } finally {
     loading.value = false
   }
-}
-
-const fillDemo = (demoEmail: string) => {
-  email.value = demoEmail
-  password.value = 'partner1234!'
-  errorMessage.value = ''
 }
 </script>
 
@@ -118,33 +112,25 @@ const fillDemo = (demoEmail: string) => {
         </form>
 
         <!-- 데모 파트너 간편 계정 선택기 -->
-        <div class="mt-8 pt-6 border-t border-slate-700/80">
-          <p class="text-[11px] font-bold text-slate-400 mb-3 text-center">빠른 데모 파트너사 로그인 선택</p>
-          <div class="grid grid-cols-1 gap-2">
-            <button
-              type="button"
-              @click="fillDemo('hotel_partner@getfortrip.com')"
-              class="w-full px-3 py-2 text-left bg-slate-900/70 hover:bg-slate-700/60 border border-slate-700 rounded-xl text-[11px] text-slate-300 font-bold transition flex items-center justify-between"
-            >
-              <span>🏨 (주)하얏트 코리아 호스피탈리티</span>
-              <span class="text-blue-400 text-[10px]">호텔 파트너 ›</span>
-            </button>
-            <button
-              type="button"
-              @click="fillDemo('tour_partner@getfortrip.com')"
-              class="w-full px-3 py-2 text-left bg-slate-900/70 hover:bg-slate-700/60 border border-slate-700 rounded-xl text-[11px] text-slate-300 font-bold transition flex items-center justify-between"
-            >
-              <span>🎡 (주)도쿄 익스플로러 투어스</span>
-              <span class="text-emerald-400 text-[10px]">투어·티켓 파트너 ›</span>
-            </button>
-            <button
-              type="button"
-              @click="fillDemo('car_partner@getfortrip.com')"
-              class="w-full px-3 py-2 text-left bg-slate-900/70 hover:bg-slate-700/60 border border-slate-700 rounded-xl text-[11px] text-slate-300 font-bold transition flex items-center justify-between"
-            >
-              <span>🚗 글로벌 모빌리티 & 렌터카</span>
-              <span class="text-amber-400 text-[10px]">렌터카·픽업 파트너 ›</span>
-            </button>
+        <!-- B2B 공급사 입점 및 보안 안내 -->
+        <div class="mt-8 pt-6 border-t border-slate-700/80 space-y-3">
+          <div class="bg-slate-900/60 p-4 rounded-2xl border border-slate-700/60 text-left space-y-1.5">
+            <div class="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+              <span>🛡️</span>
+              <span>파트너 보안 및 인증 안내</span>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-relaxed">
+              getfortrip 파트너 콘솔은 사업자등록 및 공급 계약이 승인된 파트너사 전용 시스템입니다. 미인가 접근은 관련 법령에 의해 엄격히 제한됩니다.
+            </p>
+          </div>
+
+          <div class="flex items-center justify-between text-xs pt-1">
+            <NuxtLink to="/partner/api-docs" class="text-blue-400 hover:text-blue-300 font-bold transition">
+              OpenAPI 명세서 보기 →
+            </NuxtLink>
+            <a href="mailto:partner@getfortrip.com" class="text-slate-400 hover:text-white transition">
+              입점 신청 문의
+            </a>
           </div>
         </div>
 

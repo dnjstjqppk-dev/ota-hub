@@ -1,81 +1,57 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { searchTrainCatalog, type TrainJourney } from '~/data/trainCatalog'
 
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
 const depStation = ref(route.query.dep as string || '서울역 (Seoul)')
 const arrStation = ref(route.query.arr as string || '부산역 (Busan)')
-const travelDate = ref(route.query.date as string || '2026-11-01')
-
-const fallbackTrains = [
-  {
-    id: 'trn_ktx_01',
-    train_number: 'KTX 021',
-    train_type: 'KTX-산천',
-    departure_station: '서울역',
-    arrival_station: '부산역',
-    departure_time: '2026-11-01T08:30:00+09:00',
-    arrival_time: '2026-11-01T11:05:00+09:00',
-    duration_minutes: 155,
-    seat_class: '일반실',
-    price_krw: 59800,
-    available_seats: 42
-  },
-  {
-    id: 'trn_ktx_02',
-    train_number: 'KTX 025',
-    train_type: 'KTX-산천',
-    departure_station: '서울역',
-    arrival_station: '부산역',
-    departure_time: '2026-11-01T10:00:00+09:00',
-    arrival_time: '2026-11-01T12:40:00+09:00',
-    duration_minutes: 160,
-    seat_class: '일반실',
-    price_krw: 59800,
-    available_seats: 18
-  },
-  {
-    id: 'trn_shinkansen_01',
-    train_number: 'NOZOMI 23',
-    train_type: 'SHINKANSEN',
-    departure_station: '도쿄역',
-    arrival_station: '신오사카역',
-    departure_time: '2026-11-01T09:00:00+09:00',
-    arrival_time: '2026-11-01T11:30:00+09:00',
-    duration_minutes: 150,
-    seat_class: '일반실',
-    price_krw: 145000,
-    available_seats: 25
-  }
-]
-
-const trains = ref<any[]>(fallbackTrains)
-const loading = ref(false)
+const travelDate = ref(route.query.date as string || new Date().toISOString().slice(0, 10))
 
 // Facet Filter States
 const selectedTrainType = ref<string>('ALL')
 const selectedTimeSlot = ref<string>('ALL')
 const selectedSeatClass = ref<string>('ALL')
 
+// Strict synchronous search initialization: 0 foreign route pollution
+const trains = ref<TrainJourney[]>(searchTrainCatalog({
+  depStation: depStation.value,
+  arrStation: arrStation.value,
+  date: travelDate.value,
+  trainType: selectedTrainType.value,
+  seatClass: selectedSeatClass.value
+}))
+const loading = ref(false)
+
 const fetchTrains = async () => {
+  loading.value = true
   try {
-    const res = await fetch(useApiUrl('/trains'))
-    const json = await res.json()
-    if (json.data && json.data.length > 0) {
-      trains.value = json.data
-    } else {
-      trains.value = fallbackTrains
+    const res = await fetch(`${useApiUrl('/trains')}?dep=${encodeURIComponent(depStation.value)}&arr=${encodeURIComponent(arrStation.value)}`, { signal: AbortSignal.timeout(1500) })
+    if (res.ok) {
+      const json = await res.json()
+      if (Array.isArray(json.data) && json.data.length > 0) {
+        trains.value = json.data
+        loading.value = false
+        return
+      }
     }
   } catch (e) {
-    console.error(e)
-    trains.value = fallbackTrains
-  } finally {
-    loading.value = false
+    // Fall back to verified strict train catalog
   }
+
+  // Strict route matching (Never mix Tokyo Shinkansen with Seoul KTX)
+  trains.value = searchTrainCatalog({
+    depStation: depStation.value,
+    arrStation: arrStation.value,
+    date: travelDate.value,
+    trainType: selectedTrainType.value,
+    seatClass: selectedSeatClass.value
+  })
+  loading.value = false
 }
 
 const showMobileFilter = ref(false)
@@ -96,6 +72,10 @@ const filteredTrains = computed(() => {
     list = list.filter(t => t.seat_class === selectedSeatClass.value)
   }
   return list
+})
+
+watch([depStation, arrStation, selectedTrainType, selectedSeatClass], () => {
+  fetchTrains()
 })
 
 onMounted(() => {

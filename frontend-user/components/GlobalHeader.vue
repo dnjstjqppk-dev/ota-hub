@@ -120,7 +120,7 @@ const closeDrawer = () => {
         </NuxtLink>
 
         <!-- getfortrip 코인 및 등급 배지 (데스크톱) -->
-        <NuxtLink to="/rewards" class="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-700 font-bold whitespace-nowrap flex-shrink-0" title="getfortrip 멤버십 리워드">
+        <NuxtLink v-if="authStore.isLoggedIn && authStore.user" to="/rewards" class="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-700 font-bold whitespace-nowrap flex-shrink-0" title="getfortrip 멤버십 리워드">
           <span class="w-2 h-2 rounded-full bg-amber-500"></span>
           <span>{{ authStore.user.tier }}</span>
           <span class="text-amber-800 font-mono">{{ authStore.user.tripCoins.toLocaleString() }}G</span>
@@ -132,9 +132,12 @@ const closeDrawer = () => {
         </NuxtLink>
 
         <!-- 사용자 프로필 링크 -->
-        <NuxtLink to="/my" class="flex items-center gap-1.5 pl-1.5 sm:pl-2 sm:border-l sm:border-slate-200 flex-shrink-0 whitespace-nowrap hover:opacity-80 transition group" title="사용자 콘솔 (마이페이지)">
+        <NuxtLink v-if="authStore.isLoggedIn && authStore.user" to="/my" class="flex items-center gap-1.5 pl-1.5 sm:pl-2 sm:border-l sm:border-slate-200 flex-shrink-0 whitespace-nowrap hover:opacity-80 transition group" title="사용자 콘솔 (마이페이지)">
           <img :src="authStore.user.avatarUrl" class="w-8 h-8 rounded-full border border-slate-200 object-cover flex-shrink-0 group-hover:border-trip-blue transition" />
           <span class="hidden md:inline font-bold text-trip-navy text-xs whitespace-nowrap group-hover:text-trip-blue transition">{{ authStore.user.fullName }}</span>
+        </NuxtLink>
+        <NuxtLink v-else to="/my" class="flex items-center gap-1.5 pl-1.5 sm:pl-2 sm:border-l sm:border-slate-200 flex-shrink-0 whitespace-nowrap hover:opacity-80 transition group text-xs font-bold text-slate-700 hover:text-trip-blue" title="로그인 및 마이페이지">
+          <span>👤 로그인</span>
         </NuxtLink>
       </div>
     </div>
@@ -156,7 +159,7 @@ const closeDrawer = () => {
             <button @click="closeDrawer" class="text-slate-300 hover:text-white p-1 text-lg font-bold">✕</button>
           </div>
 
-          <NuxtLink to="/my" @click="closeDrawer" class="flex items-center gap-3 pt-2">
+          <NuxtLink v-if="authStore.isLoggedIn && authStore.user" to="/my" @click="closeDrawer" class="flex items-center gap-3 pt-2">
             <img :src="authStore.user.avatarUrl" class="w-12 h-12 rounded-full border-2 border-amber-400 object-cover" />
             <div class="space-y-0.5">
               <div class="font-black text-sm flex items-center gap-1.5">
@@ -170,6 +173,12 @@ const closeDrawer = () => {
               </div>
             </div>
           </NuxtLink>
+          <div v-else class="pt-2 flex items-center justify-between">
+            <div class="text-xs text-slate-300">로그인하고 회원 혜택을 확인하세요</div>
+            <NuxtLink to="/my" @click="closeDrawer" class="px-3 py-1.5 bg-trip-blue text-white text-xs font-bold rounded-xl hover:bg-blue-600 transition">
+              로그인
+            </NuxtLink>
+          </div>
         </div>
 
         <!-- 전체 카테고리 링크 목록 -->

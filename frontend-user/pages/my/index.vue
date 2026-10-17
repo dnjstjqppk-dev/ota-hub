@@ -89,50 +89,51 @@ const savedCards = ref([
 
 <template>
   <div class="max-w-7xl mx-auto px-4 py-8 space-y-8">
-    <!-- 1. 상단 프로필 및 VIP 멤버십 배너 (사용자 콘솔 헤더) -->
-    <div class="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-slate-800">
-      <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div v-if="authStore.isLoggedIn && authStore.user" class="space-y-8">
+      <!-- 1. 상단 프로필 및 VIP 멤버십 배너 (사용자 콘솔 헤더) -->
+      <div class="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-slate-800">
+        <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
-        <div class="flex items-center gap-5">
-          <div class="relative">
-            <img :src="authStore.user.avatarUrl" class="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-2 border-amber-400 shadow-md" />
-            <span class="absolute bottom-0 right-0 w-5 h-5 bg-amber-400 text-slate-900 rounded-full flex items-center justify-center text-xs font-black" title="VIP 다이아몬드">
-              ★
-            </span>
-          </div>
-
-          <div class="space-y-1">
-            <div class="flex items-center gap-2">
-              <h1 class="text-xl sm:text-2xl font-black">{{ authStore.user.fullName }} 님</h1>
-              <span class="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 text-[11px] font-black uppercase tracking-wider shadow-sm">
-                💎 {{ authStore.user.tier }} VIP
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+          <div class="flex items-center gap-5">
+            <div class="relative">
+              <img :src="authStore.user?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'" class="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-2 border-amber-400 shadow-md" />
+              <span class="absolute bottom-0 right-0 w-5 h-5 bg-amber-400 text-slate-900 rounded-full flex items-center justify-center text-xs font-black" title="VIP 다이아몬드">
+                ★
               </span>
             </div>
-            <p class="text-xs text-slate-300 font-mono">{{ authStore.user.email }}</p>
-            <div class="text-[11px] text-slate-400 pt-1">
-              getfortrip 회원 가입 2년차 · 누적 여행 14회 완료 · VIP 전용 고객센터 우선 지원
-            </div>
-          </div>
-        </div>
 
-        <div class="flex flex-wrap items-center gap-4 bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl border border-slate-700/80">
-          <div class="text-right">
-            <div class="text-[11px] text-slate-400 font-bold">보유 getfortrip 코인</div>
-            <div class="text-2xl font-black text-amber-400 font-mono">
-              {{ authStore.user.tripCoins.toLocaleString() }} <span class="text-xs font-bold text-slate-300">G</span>
+            <div class="space-y-1">
+              <div class="flex items-center gap-2">
+                <h1 class="text-xl sm:text-2xl font-black">{{ authStore.user?.fullName }} 님</h1>
+                <span class="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 text-[11px] font-black uppercase tracking-wider shadow-sm">
+                  💎 {{ authStore.user?.tier }} VIP
+                </span>
+              </div>
+              <p class="text-xs text-slate-300 font-mono">{{ authStore.user?.email }}</p>
+              <div class="text-[11px] text-slate-400 pt-1">
+                getfortrip 회원 가입 2년차 · 누적 여행 14회 완료 · VIP 전용 고객센터 우선 지원
+              </div>
             </div>
-            <div class="text-[10px] text-slate-400">(₩{{ authStore.user.tripCoins.toLocaleString() }} 상당 가치)</div>
           </div>
-          <NuxtLink
-            to="/rewards"
-            class="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl transition shadow"
-          >
-            코인 사용·교환
-          </NuxtLink>
+
+          <div class="flex flex-wrap items-center gap-4 bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl border border-slate-700/80">
+            <div class="text-right">
+              <div class="text-[11px] text-slate-400 font-bold">보유 getfortrip 코인</div>
+              <div class="text-2xl font-black text-amber-400 font-mono">
+                {{ (authStore.user?.tripCoins || 0).toLocaleString() }} <span class="text-xs font-bold text-slate-300">G</span>
+              </div>
+              <div class="text-[10px] text-slate-400">(₩{{ (authStore.user?.tripCoins || 0).toLocaleString() }} 상당 가치)</div>
+            </div>
+            <NuxtLink
+              to="/rewards"
+              class="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl transition shadow"
+            >
+              코인 사용·교환
+            </NuxtLink>
+          </div>
         </div>
       </div>
-    </div>
 
     <!-- 2. 콘솔 서브 네비게이션 탭 -->
     <div class="flex items-center gap-2 border-b border-slate-200 pb-3 text-xs font-bold overflow-x-auto">
@@ -356,5 +357,36 @@ const savedCards = ref([
       </div>
     </div>
   </div>
+
+  <!-- 비로그인 상태 안내 (개인정보 보호 및 보안 격리) -->
+  <div v-else class="max-w-xl mx-auto py-16 px-4 text-center">
+    <div class="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 shadow-sm space-y-6">
+      <div class="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-3xl mx-auto">
+        🔒
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-xl sm:text-2xl font-black text-slate-900">로그인이 필요한 서비스입니다</h2>
+        <p class="text-xs sm:text-sm text-slate-500 leading-relaxed">
+          고객님의 개인정보 및 예약 내역을 안전하게 보호하기 위해 인증이 필요합니다.<br>
+          getfortrip 계정으로 로그인하여 예약, 쿠폰, 트립코인을 관리하세요.
+        </p>
+      </div>
+      <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+        <button
+          @click="authStore.loginAsDemo()"
+          class="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition"
+        >
+          체험 계정으로 빠른 로그인 ⚡
+        </button>
+        <NuxtLink
+          to="/login"
+          class="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+        >
+          이메일 로그인
+        </NuxtLink>
+      </div>
+    </div>
+  </div>
+</div>
 </template>
 

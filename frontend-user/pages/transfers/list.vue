@@ -25,9 +25,6 @@ const activeFilterCount = computed(() => {
   return count
 })
 
-const vehicles = ref<any[]>([])
-const loading = ref(false)
-
 const fallbackTransfers = [
   {
     id: 'tf_icn_van_01',
@@ -81,6 +78,9 @@ const fallbackTransfers = [
     image_url: 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800'
   }
 ]
+
+const vehicles = ref<any[]>(fallbackTransfers)
+const loading = ref(false)
 
 const fetchTransfers = async () => {
   loading.value = true

@@ -18,9 +18,9 @@ const pickupTime = ref(route.query.time as string || '14:30')
 const priceKRW = ref(Number(route.query.price) || 85000)
 
 // Primary contact
-const contactName = ref(authStore.user.fullName)
-const contactEmail = ref(authStore.user.email)
-const contactPhone = ref('+82-10-1234-5678')
+const contactName = ref(authStore.user?.fullName || '')
+const contactEmail = ref(authStore.user?.email || '')
+const contactPhone = ref(authStore.user?.phone || '+82-10-1234-5678')
 const messengerId = ref('@hong_traveler')
 const specialRequests = ref('도착장 12번 게이트 피켓팅 요청')
 
@@ -87,7 +87,7 @@ const handlePayment = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_id: authStore.user.id,
+        user_id: authStore.user?.id || 'usr_guest',
         domain_type: 'CAR',
         base_amount_krw: priceDetail.value?.base_amount_krw || priceKRW.value,
         tax_amount_krw: priceDetail.value?.tax_amount_krw || 0,
@@ -259,14 +259,14 @@ onMounted(() => {
 
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-slate-600 block">
-                getfortrip 코인 사용 (보유: {{ authStore.user.tripCoins }}G)
+                getfortrip 코인 사용 (보유: {{ authStore.user?.tripCoins || 0 }}G)
               </label>
               <div class="flex gap-2">
                 <input
                   v-model="tripCoinsToUse"
                   type="number"
                   min="0"
-                  :max="authStore.user.tripCoins"
+                  :max="authStore.user?.tripCoins || 0"
                   class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold"
                   @change="calculatePrice"
                 />

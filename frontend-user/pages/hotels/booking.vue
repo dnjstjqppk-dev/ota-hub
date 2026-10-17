@@ -10,14 +10,20 @@ const router = useRouter()
 const currencyStore = useCurrencyStore()
 const authStore = useAuthStore()
 
-const hotel = ref<any>(null)
-const room = ref<any>(null)
-const loading = ref(true)
+import { getHotelById } from '~/data/hotelCatalog'
+
+const hotelId = (route.query.hotelId as string) || 'htl_seoul_01'
+const roomId = (route.query.roomId as string) || ''
+const initialHotel = getHotelById(hotelId) || getHotelById('htl_seoul_01')
+
+const hotel = ref<any>(initialHotel)
+const room = ref<any>(initialHotel?.rooms?.find(r => r.id === roomId) || initialHotel?.rooms?.[0] || null)
+const loading = ref(false)
 
 // 사용자 입력
-const contactName = ref(authStore.user.fullName)
-const contactEmail = ref(authStore.user.email)
-const contactPhone = ref('+82-10-1234-5678')
+const contactName = ref(authStore.user?.fullName || '')
+const contactEmail = ref(authStore.user?.email || '')
+const contactPhone = ref(authStore.user?.phone || '+82-10-1234-5678')
 const guestLastName = ref('KIM')
 const guestFirstName = ref('TRIP')
 const specialRequests = ref('고층 배정 부탁드립니다.')
@@ -86,8 +92,6 @@ const applyCoupon = () => {
   }
 }
 
-import { getHotelById } from '~/data/hotelCatalog'
-
 const handlePayment = async () => {
   isSubmitting.value = true
 
@@ -108,7 +112,7 @@ const handlePayment = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_id: authStore.user.id,
+        user_id: authStore.user?.id || 'usr_guest',
         domain_type: 'HOTEL',
         base_amount_krw: priceDetail.value?.base_amount_krw || 550000,
         tax_amount_krw: priceDetail.value?.tax_amount_krw || 55000,
@@ -278,11 +282,11 @@ onMounted(async () => {
           <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
             <div>
               <span class="font-bold text-slate-800">getfortrip Coins 보유 잔여:</span>
-              <span class="font-mono font-bold text-amber-600 ml-1">{{ authStore.user.tripCoins.toLocaleString() }}G</span>
+              <span class="font-mono font-bold text-amber-600 ml-1">{{ (authStore.user?.tripCoins || 0).toLocaleString() }}G</span>
               <span class="text-slate-400 text-[11px] ml-1">(100G = ₩1,000 할인)</span>
             </div>
             <div class="flex items-center gap-2">
-              <input v-model="tripCoinsToUse" @input="calculatePrice" type="number" min="0" :max="authStore.user.tripCoins" class="w-24 p-1.5 border border-slate-300 rounded-lg text-xs font-mono font-bold text-right" />
+              <input v-model="tripCoinsToUse" @input="calculatePrice" type="number" min="0" :max="authStore.user?.tripCoins || 0" class="w-24 p-1.5 border border-slate-300 rounded-lg text-xs font-mono font-bold text-right" />
               <span>G 차감</span>
             </div>
           </div>

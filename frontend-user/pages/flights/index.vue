@@ -51,7 +51,7 @@ const popularRoutes = [
       <div class="max-w-6xl mx-auto space-y-6 relative z-10">
         <div class="space-y-2">
           <span class="inline-block px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold text-sky-200 border border-white/20">
-            ✈️ 전 세계 500+ 항공사 실시간 운임 비교
+            ✈️ 국내외 주요 항공사 실시간 운임 비교
           </span>
           <h1 class="text-3xl md:text-5xl font-black tracking-tight">
             가장 스마트한 항공권 예약, getfortrip

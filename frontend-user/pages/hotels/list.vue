@@ -32,7 +32,16 @@ const activeFilterCount = computed(() => {
 
 import { searchHotelCatalog } from '~/data/hotelCatalog'
 
-const hotels = ref<any[]>([])
+const hotels = ref<any[]>(searchHotelCatalog({
+  city: city.value,
+  star: selectedStar.value,
+  minScore: selectedScore.value,
+  maxPrice: maxPrice.value,
+  freeCancel: freeCancel.value,
+  breakfast: breakfast.value,
+  propertyType: selectedPropertyType.value,
+  sortBy: sortBy.value
+}))
 const loading = ref(false)
 
 const fetchHotels = async () => {
@@ -85,6 +94,13 @@ const fetchHotels = async () => {
 
 watch([city, selectedStar, selectedScore, selectedPropertyType, maxPrice, freeCancel, breakfast, sortBy], () => {
   fetchHotels()
+})
+
+watch(() => route.query.city, (newCity) => {
+  if (newCity !== undefined) {
+    city.value = (newCity as string) || ''
+    fetchHotels()
+  }
 })
 
 onMounted(() => {

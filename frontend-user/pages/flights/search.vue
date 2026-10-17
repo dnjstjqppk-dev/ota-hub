@@ -1,15 +1,24 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import SearchAutocomplete from '~/components/SearchAutocomplete.vue'
+import { searchFlightCatalog, generateDynamicDateStrip, type FlightOffer } from '~/data/flightCatalog'
 
 const route = useRoute()
+const router = useRouter()
 const currencyStore = useCurrencyStore()
 
 const origin = ref(route.query.origin as string || '인천국제공항 (ICN)')
 const dest = ref(route.query.dest as string || '도쿄 나리타 (NRT)')
+const targetDate = ref(route.query.date as string || new Date().toISOString().slice(0, 10))
+const tripType = ref<'roundtrip' | 'oneway'>((route.query.tripType as any) || 'roundtrip')
+const currentStep = ref<'outbound' | 'inbound'>('outbound')
+const selectedOutboundFlight = ref<any>(null)
+
+// Dynamic 7-day strip based on active search date (Zero static hardcoding)
+const dynamicDateStrip = computed(() => generateDynamicDateStrip(targetDate.value))
 
 // Facet Filter States (Trip-style)
 const selectedStops = ref<number | null>(null) // null: 전체, 0: 직항, 1: 1회 경유
@@ -28,113 +37,58 @@ const activeFilterCount = computed(() => {
   return count
 })
 
-const flights = ref<any[]>([])
+// Synchronous initialization prevents empty SSR render
+const flights = ref<any[]>(searchFlightCatalog({
+  origin: origin.value,
+  dest: dest.value,
+  date: targetDate.value,
+  direction: 'OUTBOUND',
+  stops: selectedStops.value,
+  airlines: selectedAirlines.value,
+  timeSlot: selectedTimeSlot.value,
+  baggageOnly: baggageOnly.value,
+  sortBy: sortBy.value
+}))
 const loading = ref(false)
 
 const fetchFlights = async () => {
   loading.value = true
+  const o = currentStep.value === 'outbound' ? origin.value : dest.value
+  const d = currentStep.value === 'outbound' ? dest.value : origin.value
+
   try {
     const parseCode = (val: string) => {
       const match = val.match(/\b([A-Z]{3})\b/)
       return match ? match[1] : val
     }
-    const o = parseCode(origin.value)
-    const d = parseCode(dest.value)
+    const oCode = parseCode(o)
+    const dCode = parseCode(d)
 
-    const res = await fetch(`${useApiUrl('/flights')}?origin=${encodeURIComponent(o)}&dest=${encodeURIComponent(d)}`)
-    const json = await res.json()
-    flights.value = json.data || []
-    if (flights.value.length === 0) {
-      flights.value = [
-        {
-          id: 'flt_ke703',
-          airline_name: '대한항공',
-          flight_number: 'KE703',
-          cabin_class: 'ECONOMY',
-          departure_time: '2026-11-01T10:10:00+09:00',
-          arrival_time: '2026-11-01T12:35:00+09:00',
-          departure_airport: 'ICN (서울/인천)',
-          arrival_airport: 'NRT (도쿄/나리타)',
-          duration_minutes: 145,
-          stops: 0,
-          departure_time_slot: 'MORNING',
-          free_baggage_kg: 23,
-          available_seats: 7,
-          base_price_krw: 245000
-        },
-        {
-          id: 'flt_oz102',
-          airline_name: '아시아나항공',
-          flight_number: 'OZ102',
-          cabin_class: 'ECONOMY',
-          departure_time: '2026-11-01T09:00:00+09:00',
-          arrival_time: '2026-11-01T11:20:00+09:00',
-          departure_airport: 'ICN (서울/인천)',
-          arrival_airport: 'NRT (도쿄/나리타)',
-          duration_minutes: 140,
-          stops: 0,
-          departure_time_slot: 'MORNING',
-          free_baggage_kg: 23,
-          available_seats: 5,
-          base_price_krw: 238000
-        },
-        {
-          id: 'flt_7c1102',
-          airline_name: '제주항공',
-          flight_number: '7C1102',
-          cabin_class: 'ECONOMY',
-          departure_time: '2026-11-01T14:30:00+09:00',
-          arrival_time: '2026-11-01T16:55:00+09:00',
-          departure_airport: 'ICN (서울/인천)',
-          arrival_airport: 'NRT (도쿄/나리타)',
-          duration_minutes: 145,
-          stops: 0,
-          departure_time_slot: 'AFTERNOON',
-          free_baggage_kg: 15,
-          available_seats: 12,
-          base_price_krw: 189000
-        }
-      ]
+    const res = await fetch(`${useApiUrl('/flights')}?origin=${encodeURIComponent(oCode)}&dest=${encodeURIComponent(dCode)}`, { signal: AbortSignal.timeout(1500) })
+    if (res.ok) {
+      const json = await res.json()
+      if (Array.isArray(json.data) && json.data.length > 0) {
+        flights.value = json.data
+        loading.value = false
+        return
+      }
     }
   } catch (e) {
-    console.error(e)
-    flights.value = [
-      {
-        id: 'flt_ke703',
-        airline_name: '대한항공',
-        flight_number: 'KE703',
-        cabin_class: 'ECONOMY',
-        departure_time: '2026-11-01T10:10:00+09:00',
-        arrival_time: '2026-11-01T12:35:00+09:00',
-        departure_airport: 'ICN (서울/인천)',
-        arrival_airport: 'NRT (도쿄/나리타)',
-        duration_minutes: 145,
-        stops: 0,
-        departure_time_slot: 'MORNING',
-        free_baggage_kg: 23,
-        available_seats: 7,
-        base_price_krw: 245000
-      },
-      {
-        id: 'flt_oz102',
-        airline_name: '아시아나항공',
-        flight_number: 'OZ102',
-        cabin_class: 'ECONOMY',
-        departure_time: '2026-11-01T09:00:00+09:00',
-        arrival_time: '2026-11-01T11:20:00+09:00',
-        departure_airport: 'ICN (서울/인천)',
-        arrival_airport: 'NRT (도쿄/나리타)',
-        duration_minutes: 140,
-        stops: 0,
-        departure_time_slot: 'MORNING',
-        free_baggage_kg: 23,
-        available_seats: 5,
-        base_price_krw: 238000
-      }
-    ]
-  } finally {
-    loading.value = false
+    // Fall back to verified catalog
   }
+
+  flights.value = searchFlightCatalog({
+    origin: o,
+    dest: d,
+    date: targetDate.value,
+    direction: currentStep.value === 'outbound' ? 'OUTBOUND' : 'RETURN',
+    stops: selectedStops.value,
+    airlines: selectedAirlines.value,
+    timeSlot: selectedTimeSlot.value,
+    baggageOnly: baggageOnly.value,
+    sortBy: sortBy.value
+  })
+  loading.value = false
 }
 
 // Client-side faceted filtering & sorting
@@ -150,7 +104,7 @@ const filteredFlights = computed(() => {
   }
 
   if (selectedTimeSlot.value !== 'ALL') {
-    list = list.filter(f => (f.departure_time_slot || 'MORNING') === selectedTimeSlot.value)
+    list = list.filter(f => (f.departure_time_slot || f.time_slot || 'MORNING') === selectedTimeSlot.value)
   }
 
   if (baggageOnly.value) {
@@ -184,7 +138,20 @@ const toggleAirline = (name: string) => {
   }
 }
 
-watch([origin, dest], () => {
+const selectFlight = (f: any) => {
+  if (tripType.value === 'roundtrip' && currentStep.value === 'outbound') {
+    selectedOutboundFlight.value = f
+    currentStep.value = 'inbound'
+    fetchFlights()
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  } else {
+    const outId = selectedOutboundFlight.value?.id || f.id
+    const retId = selectedOutboundFlight.value ? f.id : ''
+    router.push(`/flights/booking?flightId=${outId}${retId ? `&returnId=${retId}` : ''}`)
+  }
+}
+
+watch([origin, dest, currentStep], () => {
   fetchFlights()
 })
 
@@ -234,15 +201,42 @@ onMounted(() => {
       <span class="text-xs font-bold text-blue-600 flex-shrink-0">조회된 항공편 {{ flights.length }}개</span>
     </div>
 
-    <!-- 2. 7일 전후 최저가 캘린더 바 (Trip-style) -->
+    <!-- 왕복 항공권 단계 표시 (가는 편 / 오는 편) -->
+    <div v-if="tripType === 'roundtrip'" class="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
+      <div class="flex items-center gap-3">
+        <span class="px-2.5 py-1 rounded-lg font-black text-white" :class="currentStep === 'outbound' ? 'bg-blue-600' : 'bg-emerald-600'">
+          {{ currentStep === 'outbound' ? '1단계: 가는 편 선택' : '2단계: 오는 편 선택' }}
+        </span>
+        <div v-if="selectedOutboundFlight" class="font-bold text-slate-800">
+          ✓ 선택된 가는 편: {{ selectedOutboundFlight.airline_name }} {{ selectedOutboundFlight.flight_number }}
+          ({{ new Date(selectedOutboundFlight.departure_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }})
+        </div>
+        <div v-else class="text-slate-600 font-medium">
+          원하시는 가는 편 항공권을 먼저 선택해주세요.
+        </div>
+      </div>
+      <button
+        v-if="currentStep === 'inbound'"
+        @click="currentStep = 'outbound'; selectedOutboundFlight = null; fetchFlights()"
+        class="text-blue-600 font-bold hover:underline whitespace-nowrap self-start sm:self-auto"
+      >
+        ← 가는 편 다시 선택
+      </button>
+    </div>
+
+    <!-- 2. 7일 전후 최저가 캘린더 바 (Trip-style: 동적 실시간 날짜) -->
     <div class="flex overflow-x-auto gap-2 bg-white p-3 rounded-2xl border border-slate-200 text-center text-xs scrollbar-none">
       <div
-        v-for="(day, i) in ['10/29', '10/30', '10/31', '11/01 (오늘)', '11/02', '11/03', '11/04']"
-        :key="day"
-        :class="['min-w-[76px] flex-1 p-2 rounded-xl transition cursor-pointer flex-shrink-0 sm:flex-shrink', i === 3 ? 'bg-blue-50 border border-blue-600 font-bold text-blue-600' : 'hover:bg-slate-50 text-slate-600']"
+        v-for="day in dynamicDateStrip"
+        :key="day.dateStr"
+        @click="targetDate = day.dateStr; fetchFlights()"
+        :class="['min-w-[80px] flex-1 p-2 rounded-xl transition cursor-pointer flex-shrink-0 sm:flex-shrink', day.isSelected ? 'bg-blue-50 border border-blue-600 font-bold text-blue-600' : 'hover:bg-slate-50 text-slate-600']"
       >
-        <div>{{ day }}</div>
-        <div class="font-mono mt-1 font-bold">{{ currencyStore.formatKRW(330000 + i * 5000) }}</div>
+        <div class="flex items-center justify-center gap-1">
+          <span>{{ day.label }} ({{ day.dayOfWeek }})</span>
+          <span v-if="day.isToday" class="text-[9px] px-1 bg-rose-500 text-white font-black rounded">오늘</span>
+        </div>
+        <div class="font-mono mt-1 font-bold">{{ currencyStore.formatKRW(day.priceKRW) }}</div>
       </div>
     </div>
 
@@ -479,12 +473,13 @@ onMounted(() => {
               >
                 상세 / 운임선택
               </NuxtLink>
-              <NuxtLink
-                :to="`/flights/booking?flightId=${f.id}`"
+              <button
+                @click="selectFlight(f)"
+                type="button"
                 class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition whitespace-nowrap"
               >
-                예약하기
-              </NuxtLink>
+                {{ tripType === 'roundtrip' && currentStep === 'outbound' ? '가는 편 선택 →' : '예약하기' }}
+              </button>
             </div>
           </div>
         </div>

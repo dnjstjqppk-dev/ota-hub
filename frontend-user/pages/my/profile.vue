@@ -1,18 +1,29 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watchEffect } from 'vue'
 import { useAuthStore } from '~/stores/auth'
 
 const authStore = useAuthStore()
 
-const fullName = ref(authStore.user.fullName)
-const email = ref(authStore.user.email)
-const phone = ref('010-1234-5678')
+const fullName = ref(authStore.user?.fullName || '')
+const email = ref(authStore.user?.email || '')
+const phone = ref(authStore.user?.phone || '010-1234-5678')
 const birth = ref('1990-05-15')
 const gender = ref('MALE')
 const marketingConsent = ref(true)
 
+watchEffect(() => {
+  if (authStore.user) {
+    fullName.value = authStore.user.fullName
+    email.value = authStore.user.email
+    phone.value = authStore.user.phone || '010-1234-5678'
+  }
+})
+
 const saveProfile = () => {
-  authStore.user.fullName = fullName.value
+  if (authStore.user) {
+    authStore.user.fullName = fullName.value
+    authStore.user.phone = phone.value
+  }
   alert('회원 프로필 정보가 성공적으로 수정되었습니다.')
 }
 </script>
@@ -24,7 +35,27 @@ const saveProfile = () => {
       <h1 class="text-xl font-black text-slate-900">회원 프로필 및 계정 설정</h1>
     </div>
 
-    <div class="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-sm space-y-6">
+    <!-- 비로그인 게이트 -->
+    <div v-if="!authStore.isLoggedIn || !authStore.user" class="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-4 shadow-sm">
+      <div class="w-16 h-16 rounded-full bg-blue-50 text-trip-blue flex items-center justify-center text-2xl mx-auto font-black">
+        👤
+      </div>
+      <h2 class="text-lg font-black text-slate-900">로그인이 필요한 서비스입니다</h2>
+      <p class="text-xs text-slate-500 max-w-md mx-auto">
+        개인정보 보호 정책에 따라 회원 프로필 및 계정 설정은 본인 인증 후 안전하게 접근 가능합니다.
+      </p>
+      <div class="pt-4 flex justify-center gap-3">
+        <button
+          @click="authStore.loginAsDemo()"
+          class="px-5 py-2.5 bg-trip-blue text-white text-xs font-black rounded-xl hover:bg-blue-600 shadow-sm transition"
+        >
+          데모 회원으로 즉시 체험
+        </button>
+      </div>
+    </div>
+
+    <!-- 로그인 회원 프로필 폼 -->
+    <div v-else class="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-sm space-y-6">
       <div class="flex items-center gap-4 border-b border-slate-100 pb-6">
         <img :src="authStore.user.avatarUrl" class="w-16 h-16 rounded-full border-2 border-slate-200 object-cover" />
         <div>

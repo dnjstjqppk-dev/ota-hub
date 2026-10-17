@@ -10,8 +10,13 @@ const router = useRouter()
 const currencyStore = useCurrencyStore()
 const authStore = useAuthStore()
 
-const activity = ref<any>(null)
-const loading = ref(true)
+import { getActivityById, searchActivityCatalog } from '~/data/activityCatalog'
+
+const actId = (route.query.activityId as string) || 'act_disney_tokyo'
+const initialActivity = getActivityById(actId) || searchActivityCatalog('')[0]
+
+const activity = ref<any>(initialActivity)
+const loading = ref(false)
 
 const selectedDate = ref(route.query.date as string || new Date().toISOString().split('T')[0])
 const adultCount = ref(Number(route.query.adults) || 1)
@@ -19,9 +24,9 @@ const childCount = ref(Number(route.query.children) || 0)
 const selectedPackageName = ref('기본 입장권 (General Admission)')
 
 // Primary contact
-const contactName = ref(authStore.user.fullName)
-const contactEmail = ref(authStore.user.email)
-const contactPhone = ref('+82-10-1234-5678')
+const contactName = ref(authStore.user?.fullName || '')
+const contactEmail = ref(authStore.user?.email || '')
+const contactPhone = ref(authStore.user?.phone || '+82-10-1234-5678')
 const leadTravelerName = ref('HONG GILDONG')
 const specialRequests = ref('현장 영문 모바일 바우처 발송 요청')
 
@@ -90,7 +95,7 @@ const handlePayment = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_id: authStore.user.id,
+        user_id: authStore.user?.id || 'usr_guest',
         domain_type: 'ACTIVITY',
         base_amount_krw: priceDetail.value?.base_amount_krw || 85000,
         tax_amount_krw: priceDetail.value?.tax_amount_krw || 0,
@@ -305,14 +310,14 @@ onMounted(async () => {
 
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-slate-600 block">
-                getfortrip 코인 사용 (보유: {{ authStore.user.tripCoins }}G)
+                getfortrip 코인 사용 (보유: {{ authStore.user?.tripCoins || 0 }}G)
               </label>
               <div class="flex gap-2">
                 <input
                   v-model="tripCoinsToUse"
                   type="number"
                   min="0"
-                  :max="authStore.user.tripCoins"
+                  :max="authStore.user?.tripCoins || 0"
                   class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold"
                   @change="calculatePrice"
                 />

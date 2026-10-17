@@ -11,10 +11,15 @@ const bookings = ref<BookingRecord[]>([])
 const loading = ref(false)
 
 const fetchMyBookings = async () => {
+  if (!authStore.isLoggedIn || !authStore.user) {
+    bookings.value = []
+    loading.value = false
+    return
+  }
   loading.value = true
   let apiList: any[] = []
   try {
-    const res = await fetch(useApiUrl(`/bookings/user/${authStore.user.id}`), { signal: AbortSignal.timeout(1500) })
+    const res = await fetch(useApiUrl(`/bookings/user/${authStore.user?.id}`), { signal: AbortSignal.timeout(1500) })
     if (res.ok) {
       const json = await res.json()
       if (json.data && Array.isArray(json.data) && json.data.length > 0) {
@@ -72,12 +77,42 @@ onMounted(() => {
         <p class="text-sm text-slate-500 mt-1">호텔, 항공권, 기차표, 투어 티켓 바우처 확인 및 셀프서비스 일정 변경/취소</p>
       </div>
 
-      <button @click="fetchMyBookings" class="px-4 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold hover:bg-slate-50 shadow-sm">
+      <button v-if="authStore.isLoggedIn" @click="fetchMyBookings" class="px-4 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold hover:bg-slate-50 shadow-sm">
         새로고침
       </button>
     </div>
 
-    <div v-if="loading" class="p-16 text-center text-slate-400 font-bold">예약 내역 조회 중...</div>
+    <!-- 비로그인 상태 안내 -->
+    <div v-if="!authStore.isLoggedIn" class="max-w-xl mx-auto py-12 px-4 text-center">
+      <div class="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 shadow-sm space-y-6">
+        <div class="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-3xl mx-auto">
+          🔒
+        </div>
+        <div class="space-y-2">
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900">로그인이 필요한 서비스입니다</h2>
+          <p class="text-xs sm:text-sm text-slate-500 leading-relaxed">
+            고객님의 예약 바우처와 개인정보를 안전하게 보호하기 위해 로그인이 필요합니다.<br>
+            getfortrip 계정으로 로그인하여 발권 내역을 확인하세요.
+          </p>
+        </div>
+        <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button
+            @click="authStore.loginAsDemo(); fetchMyBookings()"
+            class="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition"
+          >
+            체험 계정으로 빠른 로그인 ⚡
+          </button>
+          <NuxtLink
+            to="/login"
+            class="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+          >
+            이메일 로그인
+          </NuxtLink>
+        </div>
+      </div>
+    </div>
+
+    <div v-else-if="loading" class="p-16 text-center text-slate-400 font-bold">예약 내역 조회 중...</div>
 
     <div v-else-if="bookings.length === 0" class="bg-white p-12 text-center rounded-3xl border border-slate-200">
       <div class="text-4xl mb-2">📋</div>

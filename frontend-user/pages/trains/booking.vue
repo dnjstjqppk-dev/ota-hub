@@ -10,13 +10,25 @@ const router = useRouter()
 const currencyStore = useCurrencyStore()
 const authStore = useAuthStore()
 
-const train = ref<any>(null)
-const loading = ref(true)
+const defaultTrain = {
+  train_type: 'KTX',
+  train_number: 'KTX-103',
+  departure_station: '서울역 (Seoul)',
+  arrival_station: '부산역 (Busan)',
+  departure_time: '2026-11-01T08:00:00Z',
+  arrival_time: '2026-11-01T10:15:00Z',
+  duration_minutes: 135,
+  seat_class: '일반실 (Standard)',
+  price_krw: 59800
+}
+
+const train = ref<any>(defaultTrain)
+const loading = ref(false)
 
 // Passenger details
-const contactName = ref(authStore.user.fullName)
-const contactEmail = ref(authStore.user.email)
-const contactPhone = ref('+82-10-1234-5678')
+const contactName = ref(authStore.user?.fullName || '')
+const contactEmail = ref(authStore.user?.email || '')
+const contactPhone = ref(authStore.user?.phone || '+82-10-1234-5678')
 const passengerName = ref('KIM MINSU')
 const seatPreference = ref('WINDOW') // WINDOW, AISLE
 
@@ -85,7 +97,7 @@ const handlePayment = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_id: authStore.user.id,
+        user_id: authStore.user?.id || 'usr_guest',
         domain_type: 'TRAIN',
         base_amount_krw: priceDetail.value?.base_amount_krw || 59800,
         tax_amount_krw: priceDetail.value?.tax_amount_krw || 0,
@@ -300,14 +312,14 @@ onMounted(async () => {
 
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-slate-600 block">
-                getfortrip 코인 사용 (보유: {{ authStore.user.tripCoins }}G)
+                getfortrip 코인 사용 (보유: {{ authStore.user?.tripCoins || 0 }}G)
               </label>
               <div class="flex gap-2">
                 <input
                   v-model="tripCoinsToUse"
                   type="number"
                   min="0"
-                  :max="authStore.user.tripCoins"
+                  :max="authStore.user?.tripCoins || 0"
                   class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold"
                   @change="calculatePrice"
                 />

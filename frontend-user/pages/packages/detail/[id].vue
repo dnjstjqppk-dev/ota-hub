@@ -7,8 +7,6 @@ import { useApiUrl } from '~/composables/useApi'
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
-const pkg = ref<any>(null)
-const loading = ref(true)
 
 const fallbackPackage = {
   id: 'pkg_tokyo_4d3n',
@@ -42,20 +40,25 @@ const fallbackPackage = {
   ]
 }
 
+import { getPackageById } from '~/data/packageCatalog'
+
+const pkgId = (route.params.id || route.query.id || 'pkg_tokyo_4d3n') as string
+const pkg = ref<any>(getPackageById(pkgId) || fallbackPackage)
+const loading = ref(false)
+
 onMounted(async () => {
+  const currentId = (route.params.id || route.query.id || 'pkg_tokyo_4d3n') as string
+  const catalogPkg = getPackageById(currentId) || fallbackPackage
+  pkg.value = catalogPkg
+
   try {
-    const pkgId = route.params.id || route.query.id || 'pkg_tokyo_4d3n'
-    const res = await fetch(useApiUrl(`/packages/${pkgId}`))
+    const res = await fetch(useApiUrl(`/packages/${currentId}`), { signal: AbortSignal.timeout(1500) })
     if (res.ok) {
       const json = await res.json()
-      pkg.value = json.data ? { ...fallbackPackage, ...json.data } : fallbackPackage
-    } else {
-      pkg.value = fallbackPackage
+      if (json.data) pkg.value = { ...catalogPkg, ...json.data }
     }
   } catch (e) {
-    pkg.value = fallbackPackage
-  } finally {
-    loading.value = false
+    // Keep verified package data
   }
 })
 </script>

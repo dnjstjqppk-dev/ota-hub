@@ -46,7 +46,7 @@ import { BRAND } from '~/config/brand'
             <ul class="space-y-2 text-slate-400">
               <li><NuxtLink to="/partner/login" class="hover:text-white font-bold text-blue-400">파트너 센터 로그인 (B2B)</NuxtLink></li>
               <li><NuxtLink to="/partner" class="hover:text-white">호텔·공급사 입점 관리</NuxtLink></li>
-              <li><NuxtLink to="/partner/settings" class="hover:text-white">파트너 OpenAPI 연동</NuxtLink></li>
+              <li><NuxtLink to="/partner/api-docs" class="hover:text-white">파트너 OpenAPI 연동</NuxtLink></li>
               <li><a href="mailto:partner@getfortrip.com" class="hover:text-white">제휴 및 공급 문의</a></li>
             </ul>
           </div>

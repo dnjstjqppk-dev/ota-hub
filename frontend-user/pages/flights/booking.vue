@@ -10,13 +10,26 @@ const router = useRouter()
 const currencyStore = useCurrencyStore()
 const authStore = useAuthStore()
 
-const flight = ref<any>(null)
-const loading = ref(true)
+const defaultFlight = {
+  airline_name: '대한항공 (Korean Air)',
+  flight_number: 'KE703',
+  cabin_class: '일반석 (Economy)',
+  departure_airport: 'ICN (인천)',
+  arrival_airport: 'NRT (나리타)',
+  departure_time: '2026-11-01T10:10:00Z',
+  arrival_time: '2026-11-01T12:40:00Z',
+  duration_minutes: 150,
+  free_baggage_kg: 23,
+  base_price_krw: 245000
+}
+
+const flight = ref<any>(defaultFlight)
+const loading = ref(false)
 
 // Passenger details
-const contactName = ref(authStore.user.fullName)
-const contactEmail = ref(authStore.user.email)
-const contactPhone = ref('+82-10-1234-5678')
+const contactName = ref(authStore.user?.fullName || '')
+const contactEmail = ref(authStore.user?.email || '')
+const contactPhone = ref(authStore.user?.phone || '+82-10-1234-5678')
 const passengerTitle = ref('MR')
 const passengerLastName = ref('KIM')
 const passengerFirstName = ref('MINSU')
@@ -92,7 +105,7 @@ const handlePayment = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_id: authStore.user.id,
+        user_id: authStore.user?.id || 'usr_guest',
         domain_type: 'FLIGHT',
         base_amount_krw: priceDetail.value?.base_amount_krw || 250000,
         tax_amount_krw: priceDetail.value?.tax_amount_krw || 28000,
@@ -375,14 +388,14 @@ onMounted(async () => {
 
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-slate-600 block">
-                getfortrip 코인 사용 (보유: {{ authStore.user.tripCoins }}G)
+                getfortrip 코인 사용 (보유: {{ authStore.user?.tripCoins || 0 }}G)
               </label>
               <div class="flex gap-2">
                 <input
                   v-model="tripCoinsToUse"
                   type="number"
                   min="0"
-                  :max="authStore.user.tripCoins"
+                  :max="authStore.user?.tripCoins || 0"
                   class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold"
                   @change="calculatePrice"
                 />

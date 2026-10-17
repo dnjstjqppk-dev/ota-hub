@@ -10,13 +10,18 @@ const router = useRouter()
 const currencyStore = useCurrencyStore()
 const authStore = useAuthStore()
 
-const pkg = ref<any>(null)
-const loading = ref(true)
+import { getPackageById, searchPackageCatalog } from '~/data/packageCatalog'
+
+const pkgId = (route.query.packageId as string) || 'pkg_tokyo_4d3n'
+const initialPkg = getPackageById(pkgId) || searchPackageCatalog('')[0]
+
+const pkg = ref<any>(initialPkg)
+const loading = ref(false)
 
 // Guest & Passenger info
-const contactName = ref(authStore.user.fullName)
-const contactEmail = ref(authStore.user.email)
-const contactPhone = ref('+82-10-1234-5678')
+const contactName = ref(authStore.user?.fullName || '')
+const contactEmail = ref(authStore.user?.email || '')
+const contactPhone = ref(authStore.user?.phone || '+82-10-1234-5678')
 const leadTravelerName = ref('KIM MINSU')
 const passportNumber = ref('M98765432')
 const specialRequests = ref('고층 배정 및 창가 좌석 배정 요청')
@@ -86,7 +91,7 @@ const handlePayment = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_id: authStore.user.id,
+        user_id: authStore.user?.id || 'usr_guest',
         domain_type: 'PACKAGE',
         base_amount_krw: priceDetail.value?.base_amount_krw || 750000,
         tax_amount_krw: priceDetail.value?.tax_amount_krw || 0,
@@ -321,14 +326,14 @@ onMounted(async () => {
 
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-slate-600 block">
-                getfortrip 코인 사용 (보유: {{ authStore.user.tripCoins }}G)
+                getfortrip 코인 사용 (보유: {{ authStore.user?.tripCoins || 0 }}G)
               </label>
               <div class="flex gap-2">
                 <input
                   v-model="tripCoinsToUse"
                   type="number"
                   min="0"
-                  :max="authStore.user.tripCoins"
+                  :max="authStore.user?.tripCoins || 0"
                   class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold"
                   @change="calculatePrice"
                 />

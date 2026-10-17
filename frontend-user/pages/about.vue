@@ -50,24 +50,24 @@ import { BRAND } from '~/config/brand'
       </div>
     </div>
 
-    <!-- 플랫폼 규모 통계 -->
+    <!-- 플랫폼 서비스 특징 및 표준 운영 체계 -->
     <div class="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white rounded-3xl p-8 sm:p-10 shadow-xl border border-slate-800">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
         <div>
-          <div class="text-3xl sm:text-4xl font-black text-blue-400 font-mono">140만+</div>
-          <div class="text-xs text-slate-300 mt-1 font-bold">전 세계 호텔 & 리조트</div>
+          <div class="text-2xl sm:text-3xl font-black text-blue-400 font-mono">100+ 도시</div>
+          <div class="text-xs text-slate-300 mt-1 font-bold">국내외 호텔 & 리조트 연동</div>
         </div>
         <div>
-          <div class="text-3xl sm:text-4xl font-black text-emerald-400 font-mono">500+</div>
-          <div class="text-xs text-slate-300 mt-1 font-bold">글로벌 제휴 항공사</div>
+          <div class="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">실시간 비교</div>
+          <div class="text-xs text-slate-300 mt-1 font-bold">주요 FSC & LCC 항공권</div>
         </div>
         <div>
-          <div class="text-3xl sm:text-4xl font-black text-amber-400 font-mono">200개국</div>
-          <div class="text-xs text-slate-300 mt-1 font-bold">렌터카 & 픽업 네트워크</div>
+          <div class="text-2xl sm:text-3xl font-black text-amber-400 font-mono">안심 모빌리티</div>
+          <div class="text-xs text-slate-300 mt-1 font-bold">렌터카 & 공항 픽업 네트워크</div>
         </div>
         <div>
-          <div class="text-3xl sm:text-4xl font-black text-purple-400 font-mono">99.8%</div>
-          <div class="text-xs text-slate-300 mt-1 font-bold">바우처 정상 발권률</div>
+          <div class="text-2xl sm:text-3xl font-black text-purple-400 font-mono">모바일 e-티켓</div>
+          <div class="text-xs text-slate-300 mt-1 font-bold">실시간 전자 바우처 발권</div>
         </div>
       </div>
     </div>
