@@ -3,11 +3,15 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePartnerStore } from '~/stores/partner'
 
+definePageMeta({
+  middleware: 'partner-auth'
+})
+
 const router = useRouter()
 const partnerStore = usePartnerStore()
 
 onMounted(() => {
-  if (!partnerStore.isLoggedIn) {
+  if (!partnerStore.isLoggedIn || !partnerStore.partner) {
     router.replace('/partner/login')
   }
 })
@@ -111,7 +115,7 @@ const updateStock = (idx: number, delta: number) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-100">
+  <div v-if="partnerStore.isLoggedIn && partnerStore.partner" class="min-h-screen bg-slate-100">
     <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40">
       <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
         <div class="flex items-center gap-6">
@@ -130,7 +134,7 @@ const updateStock = (idx: number, delta: number) => {
           </nav>
         </div>
         <div class="flex items-center gap-4 text-xs">
-          <span class="font-bold text-slate-300">{{ partnerStore.partner.companyName }}</span>
+          <span class="font-bold text-slate-300">{{ partnerStore.partner?.companyName }}</span>
           <button @click="partnerStore.logout(); router.push('/partner/login')" class="text-rose-400 font-bold">로그아웃</button>
         </div>
       </div>
@@ -274,6 +278,28 @@ const updateStock = (idx: number, delta: number) => {
           <button @click="isAddModalOpen = false" class="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs">취소</button>
           <button @click="handleAddProduct" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl text-xs shadow">등록 완료</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div v-else class="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 max-w-md w-full text-center space-y-4">
+      <div class="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto text-2xl font-bold">
+        🔒
+      </div>
+      <div>
+        <h2 class="text-xl font-black text-slate-900 tracking-tight">파트너 인증 필요</h2>
+        <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">
+          상품 가격, 원가 및 인벤토리 재고 관리는 인가된 파트너 계정으로 로그인한 상태에서만 접근할 수 있습니다.
+        </p>
+      </div>
+      <div class="pt-2">
+        <NuxtLink
+          to="/partner/login"
+          class="w-full inline-block py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-md transition"
+        >
+          파트너 로그인 바로가기 →
+        </NuxtLink>
       </div>
     </div>
   </div>

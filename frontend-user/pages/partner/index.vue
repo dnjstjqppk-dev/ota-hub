@@ -4,12 +4,16 @@ import { useRouter } from 'vue-router'
 import { usePartnerStore } from '~/stores/partner'
 import { useCurrencyStore } from '~/stores/currency'
 
+definePageMeta({
+  middleware: 'partner-auth'
+})
+
 const router = useRouter()
 const partnerStore = usePartnerStore()
 const currencyStore = useCurrencyStore()
 
 onMounted(() => {
-  if (!partnerStore.isLoggedIn) {
+  if (!partnerStore.isLoggedIn || !partnerStore.partner) {
     router.replace('/partner/login')
   }
 })
@@ -27,7 +31,7 @@ const recentBookings = ref([
   {
     id: 'b-001',
     bookingCode: 'GF-HT-98214',
-    guestName: '김민수 (성인 2명)',
+    guestName: '김** (성인 2명)',
     productName: '디럭스 킹 룸 (시티뷰 조식 포함)',
     checkInDate: '2026-11-01',
     nights: 2,
@@ -39,7 +43,7 @@ const recentBookings = ref([
   {
     id: 'b-008',
     bookingCode: 'GF-HT-99302',
-    guestName: '박서연 (성인 2명, 아동 1명)',
+    guestName: '박** (성인 2명, 아동 1명)',
     productName: '프리미어 이그제큐티브 스위트',
     checkInDate: '2026-11-03',
     nights: 3,
@@ -51,7 +55,7 @@ const recentBookings = ref([
   {
     id: 'b-009',
     bookingCode: 'GF-HT-99411',
-    guestName: '정우진 (성인 1명)',
+    guestName: '정** (성인 1명)',
     productName: '스탠다드 퀸 룸 (얼리버드)',
     checkInDate: '2026-11-05',
     nights: 1,
@@ -63,7 +67,7 @@ const recentBookings = ref([
   {
     id: 'b-010',
     bookingCode: 'GF-HT-98774',
-    guestName: 'Michael Chang (미국)',
+    guestName: 'M. C*** (미국)',
     productName: '클럽 라운지 엑세스 킹룸',
     checkInDate: '2026-11-08',
     nights: 4,
@@ -88,7 +92,7 @@ const handleLogout = () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-100">
+  <div v-if="partnerStore.isLoggedIn && partnerStore.partner" class="min-h-screen bg-slate-100">
     <!-- 파트너 포털 전용 상단 네비게이션 바 -->
     <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40">
       <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -112,8 +116,8 @@ const handleLogout = () => {
 
         <div class="flex items-center gap-4 text-xs">
           <div class="hidden sm:flex flex-col text-right">
-            <span class="font-bold text-slate-200">{{ partnerStore.partner.companyName }}</span>
-            <span class="text-[10px] text-slate-400 font-mono">{{ partnerStore.partner.businessNumber }}</span>
+            <span class="font-bold text-slate-200">{{ partnerStore.partner?.companyName }}</span>
+            <span class="text-[10px] text-slate-400 font-mono">{{ partnerStore.partner?.businessNumber }}</span>
           </div>
 
           <NuxtLink to="/" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold transition">
@@ -291,6 +295,28 @@ const handleLogout = () => {
         </div>
       </div>
     </main>
+  </div>
+
+  <div v-else class="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 max-w-md w-full text-center space-y-4">
+      <div class="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto text-2xl font-bold">
+        🔒
+      </div>
+      <div>
+        <h2 class="text-xl font-black text-slate-900 tracking-tight">파트너 인증 필요</h2>
+        <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">
+          인가된 공급사(호텔, 항공사, 렌터카사 등) 계정으로 로그인한 후에만 파트너 대시보드 및 예약 데이터에 접근할 수 있습니다.
+        </p>
+      </div>
+      <div class="pt-2">
+        <NuxtLink
+          to="/partner/login"
+          class="w-full inline-block py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-md transition"
+        >
+          파트너 로그인 바로가기 →
+        </NuxtLink>
+      </div>
+    </div>
   </div>
 </template>
 

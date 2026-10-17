@@ -3,153 +3,32 @@ import { ref, onMounted } from 'vue'
 import { useAuthStore } from '~/stores/auth'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { getUserBookings, type BookingRecord } from '~/data/initialBookings'
 
 const authStore = useAuthStore()
 const currencyStore = useCurrencyStore()
-const bookings = ref<any[]>([])
+const bookings = ref<BookingRecord[]>([])
 const loading = ref(false)
-
-const defaultSeedBookings = [
-  {
-    id: 'GF-HT-98214',
-    booking_code: 'GF-HT-98214',
-    domain_type: 'HOTEL',
-    created_at: '2026-10-14T08:30:00Z',
-    status: 'CONFIRMED',
-    confirmation_number: 'HYATT-SEL-882194',
-    final_amount_krw: 320000,
-    paid_currency: 'KRW',
-    paid_currency_amount: 320000,
-    primary_contact_name: '김민수',
-    primary_contact_email: 'trip@getfortrip.com',
-    voucher_url: true
-  },
-  {
-    id: 'GF-FL-44912',
-    booking_code: 'GF-FL-44912',
-    domain_type: 'FLIGHT',
-    created_at: '2026-10-15T02:15:00Z',
-    status: 'CONFIRMED',
-    confirmation_number: 'KE-ETKT-70389',
-    final_amount_krw: 258000,
-    paid_currency: 'KRW',
-    paid_currency_amount: 258000,
-    primary_contact_name: '김민수',
-    primary_contact_email: 'trip@getfortrip.com',
-    voucher_url: true
-  },
-  {
-    id: 'GF-TR-29103',
-    booking_code: 'GF-TR-29103',
-    domain_type: 'TRAIN',
-    created_at: '2026-10-15T03:10:00Z',
-    status: 'CONFIRMED',
-    confirmation_number: 'KTX-021-3H12A',
-    final_amount_krw: 59800,
-    paid_currency: 'KRW',
-    paid_currency_amount: 59800,
-    primary_contact_name: '김민수',
-    primary_contact_email: 'trip@getfortrip.com',
-    voucher_url: true
-  },
-  {
-    id: 'GF-CAR-11849',
-    booking_code: 'GF-CAR-11849',
-    domain_type: 'CAR',
-    created_at: '2026-10-15T03:45:00Z',
-    status: 'CONFIRMED',
-    confirmation_number: 'LOTTE-RENT-5541',
-    final_amount_krw: 180000,
-    paid_currency: 'KRW',
-    paid_currency_amount: 180000,
-    primary_contact_name: '김민수',
-    primary_contact_email: 'trip@getfortrip.com',
-    voucher_url: true
-  },
-  {
-    id: 'GF-TF-77218',
-    booking_code: 'GF-TF-77218',
-    domain_type: 'TRANSFER',
-    created_at: '2026-10-15T04:00:00Z',
-    status: 'CONFIRMED',
-    confirmation_number: 'VAN-LIM-9941',
-    final_amount_krw: 95000,
-    paid_currency: 'KRW',
-    paid_currency_amount: 95000,
-    primary_contact_name: '김민수',
-    primary_contact_email: 'trip@getfortrip.com',
-    voucher_url: true
-  },
-  {
-    id: 'GF-ACT-33019',
-    booking_code: 'GF-ACT-33019',
-    domain_type: 'ACTIVITY',
-    created_at: '2026-10-15T04:20:00Z',
-    status: 'CONFIRMED',
-    confirmation_number: 'TDR-DSN-99120',
-    final_amount_krw: 85000,
-    paid_currency: 'KRW',
-    paid_currency_amount: 85000,
-    primary_contact_name: '김민수',
-    primary_contact_email: 'trip@getfortrip.com',
-    voucher_url: true
-  },
-  {
-    id: 'GF-PKG-55102',
-    booking_code: 'GF-PKG-55102',
-    domain_type: 'PACKAGE',
-    created_at: '2026-10-15T04:40:00Z',
-    status: 'CONFIRMED',
-    confirmation_number: 'PKG-TYO-4N5D',
-    final_amount_krw: 750000,
-    paid_currency: 'KRW',
-    paid_currency_amount: 750000,
-    primary_contact_name: '김민수',
-    primary_contact_email: 'trip@getfortrip.com',
-    voucher_url: true
-  }
-]
 
 const fetchMyBookings = async () => {
   loading.value = true
   let apiList: any[] = []
   try {
-    const res = await fetch(useApiUrl(`/bookings/user/${authStore.user.id}`))
-    const json = await res.json()
-    if (json.data && Array.isArray(json.data) && json.data.length > 0) {
-      apiList = json.data
+    const res = await fetch(useApiUrl(`/bookings/user/${authStore.user.id}`), { signal: AbortSignal.timeout(1500) })
+    if (res.ok) {
+      const json = await res.json()
+      if (json.data && Array.isArray(json.data) && json.data.length > 0) {
+        apiList = json.data
+      }
     }
   } catch (e) {
-    console.warn('API fetch bookings fallback:', e)
+    // API offline fallback to unified local bookings
   }
 
-  // Load from localStorage
-  let localList: any[] = []
-  try {
-    const raw = localStorage.getItem('user_mock_bookings')
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      localList = parsed.map((item: any) => ({
-        id: item.id,
-        booking_code: item.id,
-        domain_type: item.domain || 'HOTEL',
-        created_at: item.created_at || new Date().toISOString(),
-        status: item.status || 'CONFIRMED',
-        confirmation_number: 'PNR-' + item.id.replace(/[^A-Za-z0-9]/g, '').slice(-6).toUpperCase(),
-        final_amount_krw: item.amount || 150000,
-        paid_currency: item.paid_currency || 'KRW',
-        paid_currency_amount: item.amount || 150000,
-        primary_contact_name: item.contact || '김민수 (010-1234-5678)',
-        primary_contact_email: 'trip@getfortrip.com',
-        voucher_url: true
-      }))
-    }
-  } catch (e) {}
-
-  if (apiList.length > 0 || localList.length > 0) {
-    bookings.value = [...localList, ...apiList]
+  if (apiList.length > 0) {
+    bookings.value = apiList
   } else {
-    bookings.value = defaultSeedBookings
+    bookings.value = getUserBookings()
   }
   loading.value = false
 }

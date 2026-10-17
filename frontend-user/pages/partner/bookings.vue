@@ -3,11 +3,15 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePartnerStore } from '~/stores/partner'
 
+definePageMeta({
+  middleware: 'partner-auth'
+})
+
 const router = useRouter()
 const partnerStore = usePartnerStore()
 
 onMounted(() => {
-  if (!partnerStore.isLoggedIn) {
+  if (!partnerStore.isLoggedIn || !partnerStore.partner) {
     router.replace('/partner/login')
   }
 })
@@ -22,9 +26,9 @@ const partnerBookings = ref([
     id: 'b-001',
     bookingCode: 'GF-HT-98214',
     productName: '디럭스 킹 룸 (시티뷰 조식 포함)',
-    guestName: '김민수',
-    guestPhone: '010-1234-5678',
-    guestEmail: 'trip@getfortrip.com',
+    guestName: '김**',
+    guestPhone: '010-****-5678',
+    guestEmail: 'tr**@getfortrip.com',
     domainType: 'HOTEL',
     checkInDate: '2026-11-01',
     checkOutDate: '2026-11-03',
@@ -42,9 +46,9 @@ const partnerBookings = ref([
     id: 'b-008',
     bookingCode: 'GF-HT-99302',
     productName: '프리미어 이그제큐티브 스위트',
-    guestName: '박서연',
-    guestPhone: '010-9876-5432',
-    guestEmail: 'seoyeon.park@gmail.com',
+    guestName: '박**',
+    guestPhone: '010-****-5432',
+    guestEmail: 'se**@gmail.com',
     domainType: 'HOTEL',
     checkInDate: '2026-11-03',
     checkOutDate: '2026-11-06',
@@ -62,9 +66,9 @@ const partnerBookings = ref([
     id: 'b-009',
     bookingCode: 'GF-HT-99411',
     productName: '스탠다드 퀸 룸 (얼리버드)',
-    guestName: '정우진',
-    guestPhone: '010-3344-5566',
-    guestEmail: 'woojin.jung@naver.com',
+    guestName: '정**',
+    guestPhone: '010-****-5566',
+    guestEmail: 'wo**@naver.com',
     domainType: 'HOTEL',
     checkInDate: '2026-11-05',
     checkOutDate: '2026-11-06',
@@ -82,9 +86,9 @@ const partnerBookings = ref([
     id: 'b-010',
     bookingCode: 'GF-HT-98774',
     productName: '클럽 라운지 엑세스 킹룸',
-    guestName: 'Michael Chang',
-    guestPhone: '+1-415-882-9912',
-    guestEmail: 'mchang@silicon.io',
+    guestName: 'M. C***',
+    guestPhone: '+1-415-***-9912',
+    guestEmail: 'mc**@silicon.io',
     domainType: 'HOTEL',
     checkInDate: '2026-11-08',
     checkOutDate: '2026-11-12',
@@ -102,9 +106,9 @@ const partnerBookings = ref([
     id: 'b-011',
     bookingCode: 'GF-HT-97551',
     productName: '디럭스 킹 룸 (시티뷰 조식 포함)',
-    guestName: '이지수',
-    guestPhone: '010-7788-9900',
-    guestEmail: 'jisoo.lee@kakao.com',
+    guestName: '이**',
+    guestPhone: '010-****-9900',
+    guestEmail: 'ji**@kakao.com',
     domainType: 'HOTEL',
     checkInDate: '2026-10-10',
     checkOutDate: '2026-10-12',
@@ -160,7 +164,7 @@ const markCheckIn = (b: any) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-100">
+  <div v-if="partnerStore.isLoggedIn && partnerStore.partner" class="min-h-screen bg-slate-100">
     <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40">
       <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
         <div class="flex items-center gap-6">
@@ -179,7 +183,7 @@ const markCheckIn = (b: any) => {
           </nav>
         </div>
         <div class="flex items-center gap-4 text-xs">
-          <span class="font-bold text-slate-300">{{ partnerStore.partner.companyName }}</span>
+          <span class="font-bold text-slate-300">{{ partnerStore.partner?.companyName }}</span>
           <button @click="partnerStore.logout(); router.push('/partner/login')" class="text-rose-400 font-bold">로그아웃</button>
         </div>
       </div>
@@ -330,6 +334,28 @@ const markCheckIn = (b: any) => {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div v-else class="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 max-w-md w-full text-center space-y-4">
+      <div class="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto text-2xl font-bold">
+        🔒
+      </div>
+      <div>
+        <h2 class="text-xl font-black text-slate-900 tracking-tight">파트너 인증 필요</h2>
+        <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">
+          고객의 소중한 개인정보(성명, 연락처, 일정)를 보호하기 위해 인가된 파트너 계정으로 로그인한 경우에만 접근할 수 있습니다.
+        </p>
+      </div>
+      <div class="pt-2">
+        <NuxtLink
+          to="/partner/login"
+          class="w-full inline-block py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-md transition"
+        >
+          파트너 로그인 바로가기 →
+        </NuxtLink>
       </div>
     </div>
   </div>

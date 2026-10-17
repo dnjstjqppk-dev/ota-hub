@@ -34,7 +34,7 @@ const DEFAULT_FEATURED_HOTELS = [
     city: '서울',
     neighborhood: '잠실 롯데월드몰',
     description: '국내 최고층 롯데월드타워 76-101층에서 즐기는 환상적인 서울 파노라마 스카이뷰',
-    price_krw: 520000,
+    price_krw: 550000,
     rating: 4.9,
     star_rating: 5,
     image_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
@@ -129,13 +129,13 @@ onMounted(async () => {
       <div class="max-w-6xl mx-auto space-y-6 relative z-10">
         <div class="space-y-2">
           <span class="inline-block px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold text-blue-200 border border-white/20">
-            🏨 전 세계 200만+ 개 호텔 최저가 보장
+            🏨 전 세계 140만+ 제휴 호텔 & 리조트 실시간 예약
           </span>
           <h1 class="text-3xl md:text-5xl font-black tracking-tight">
             완벽한 여행의 시작, getfortrip 호텔
           </h1>
           <p class="text-sm md:text-base text-blue-100 font-medium">
-            전 세계 특급 호텔부터 감성 료칸, 리조트까지 실시간 최저가 비교 & 즉시 확정
+            전 세계 특급 호텔부터 감성 료칸, 리조트까지 실시간 특가 비교 & 즉시 확정
           </p>
         </div>
 
@@ -308,8 +308,8 @@ onMounted(async () => {
             🏷️
           </div>
           <div>
-            <h4 class="font-black text-slate-900 text-sm">최저가 보장제</h4>
-            <p class="text-xs text-slate-500 mt-1">동일 조건 더 저렴한 가격 발견 시 차액 100% 보상</p>
+            <h4 class="font-black text-slate-900 text-sm">안심 요금 안내</h4>
+            <p class="text-xs text-slate-500 mt-1">숨겨진 수수료 없는 투명한 최종 결제 요금 안내</p>
           </div>
         </div>
 

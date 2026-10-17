@@ -86,10 +86,22 @@ const applyCoupon = () => {
   }
 }
 
+import { getHotelById } from '~/data/hotelCatalog'
+
 const handlePayment = async () => {
   isSubmitting.value = true
+
+  // Supplier failure test condition or validation
+  if (contactName.value.trim().toUpperCase() === 'FAIL') {
+    setTimeout(() => {
+      isSubmitting.value = false
+      alert('⚠️ [공급사 실시간 확정 실패 안내]\n호텔 예약시스템(PMS/GDS) 실시간 잔여 객실 마감으로 인해 예약이 실패하였습니다.\n결제 승인은 즉시 전액 승인 취소/환불되었으며 코인은 차감되지 않았습니다.')
+    }, 600)
+    return
+  }
+
   let finalBookingId = `GF-HT-${Math.floor(10000 + Math.random() * 90000)}`
-  const finalAmount = priceDetail.value?.final_amount_krw || 320000
+  const finalAmount = priceDetail.value?.final_amount_krw || (room.value?.base_price_krw || 550000)
   try {
     // 1. Create Draft Booking with 15min lock
     const draftRes = await fetch(useApiUrl('/bookings'), {
@@ -98,8 +110,8 @@ const handlePayment = async () => {
       body: JSON.stringify({
         user_id: authStore.user.id,
         domain_type: 'HOTEL',
-        base_amount_krw: priceDetail.value?.base_amount_krw || 320000,
-        tax_amount_krw: priceDetail.value?.tax_amount_krw || 32000,
+        base_amount_krw: priceDetail.value?.base_amount_krw || 550000,
+        tax_amount_krw: priceDetail.value?.tax_amount_krw || 55000,
         service_fee_krw: priceDetail.value?.service_fee_krw || 0,
         discount_amount_krw: (priceDetail.value?.coupon_discount_krw || 0) + (priceDetail.value?.trip_coins_discount_krw || 0),
         trip_coins_used: Number(tripCoinsToUse.value),
@@ -124,11 +136,12 @@ const handlePayment = async () => {
   }
 
   // Save to local storage for My Bookings
+  const hotelTitle = `${hotel.value?.name_ko || hotel.value?.name || '시그니엘 서울 롯데월드타워'} (${room.value?.name_ko || room.value?.name || '그랜드 디럭스 더블룸'})`
   try {
     const newRecord = {
       id: finalBookingId,
       domain: 'HOTEL',
-      title: `${hotel.value?.name || '파크 하얏트 서울'} (${room.value?.name || '파크 킹 룸'})`,
+      title: hotelTitle,
       schedule: '2026.11.15 체크인 ~ 2026.11.17 체크아웃 (2박)',
       amount: finalAmount,
       paid_currency: currencyStore.activeCurrency,
@@ -145,45 +158,34 @@ const handlePayment = async () => {
   authStore.deductCoins(Number(tripCoinsToUse.value))
   isSubmitting.value = false
 
-  router.push(`/booking/success?bookingId=${finalBookingId}&domain=HOTEL&amount=${finalAmount}&title=${encodeURIComponent(hotel.value?.name || '파크 하얏트 서울')}&schedule=${encodeURIComponent('2026.11.15 체크인 ~ 2026.11.17 체크아웃 (2박)')}&contact=${encodeURIComponent(contactName.value + ' (' + contactPhone.value + ')')}`)
+  router.push(`/booking/success?bookingId=${finalBookingId}&domain=HOTEL&amount=${finalAmount}&title=${encodeURIComponent(hotelTitle)}&schedule=${encodeURIComponent('2026.11.15 체크인 ~ 2026.11.17 체크아웃 (2박)')}&contact=${encodeURIComponent(contactName.value + ' (' + contactPhone.value + ')')}`)
 }
 
 onMounted(async () => {
-  try {
-    const hotelId = route.query.hotelId as string || 'c0000000-0000-0000-0000-000000000001'
-    const roomId = route.query.roomId as string || 'd0000000-0000-0000-0000-000000000001'
+  const hotelId = (route.query.hotelId as string) || 'htl_seoul_01'
+  const roomId = (route.query.roomId as string) || ''
 
-    const res = await fetch(useApiUrl(`/hotels/${hotelId}`))
-    const json = await res.json()
-    hotel.value = json.data
-    room.value = hotel.value?.rooms?.find((r: any) => r.id === roomId) || hotel.value?.rooms?.[0]
+  try {
+    const res = await fetch(useApiUrl(`/hotels/${hotelId}`), { signal: AbortSignal.timeout(1500) })
+    if (res.ok) {
+      const json = await res.json()
+      if (json.data) {
+        hotel.value = json.data
+        room.value = hotel.value?.rooms?.find((r: any) => r.id === roomId) || hotel.value?.rooms?.[0]
+      }
+    }
   } catch (e) {
-    console.error(e)
+    // Fall back to master hotel catalog
   }
 
   if (!hotel.value) {
-    hotel.value = {
-      id: 'c0000000-0000-0000-0000-000000000001',
-      name: '파크 하얏트 서울 (Park Hyatt Seoul)',
-      star_rating: 5,
-      address: '서울특별시 강남구 테헤란로 606',
-      city: '서울',
-      main_image_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-      rooms: [
-        {
-          id: 'd0000000-0000-0000-0000-000000000001',
-          name: '파크 킹 룸 (Park King Room)',
-          bed_type: '킹베드 1개',
-          max_occupancy: 2,
-          base_price_krw: 320000,
-          has_free_breakfast: true,
-          free_cancellation_until: '체크인 1일 전 18:00까지 무료 취소',
-          room_size_sqm: 42
-        }
-      ]
+    const catHotel = getHotelById(hotelId) || getHotelById('htl_seoul_01')
+    if (catHotel) {
+      hotel.value = catHotel
+      room.value = catHotel.rooms.find(r => r.id === roomId) || catHotel.rooms[0]
     }
-    room.value = hotel.value.rooms[0]
   }
+
   await calculatePrice()
   loading.value = false
 })

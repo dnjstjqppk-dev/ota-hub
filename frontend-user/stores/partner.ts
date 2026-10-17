@@ -54,8 +54,8 @@ export const usePartnerStore = defineStore('partner', {
       } catch (e) {}
     }
     return {
-      partner: saved || DEMO_PARTNERS['hotel_partner@getfortrip.com'],
-      isLoggedIn: !!saved || false
+      partner: saved,
+      isLoggedIn: !!saved
     }
   },
   actions: {
@@ -96,6 +96,7 @@ export const usePartnerStore = defineStore('partner', {
     },
     logout() {
       this.isLoggedIn = false
+      this.partner = null
       if (typeof window !== 'undefined') {
         localStorage.removeItem('getfortrip_partner_session')
       }

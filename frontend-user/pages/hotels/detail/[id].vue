@@ -62,18 +62,22 @@ const fallbackHotelDetail = {
   ]
 }
 
+import { getHotelById } from '~/data/hotelCatalog'
+
 onMounted(async () => {
+  const hotelId = (route.params.id || route.query.hotelId || route.query.id || 'htl_tokyo_01') as string
+  const catalogHotel = getHotelById(hotelId) || fallbackHotelDetail
+
   try {
-    const hotelId = route.params.id || route.query.hotelId || route.query.id || 'htl_tokyo_01'
-    const res = await fetch(useApiUrl(`/hotels/${hotelId}`))
+    const res = await fetch(useApiUrl(`/hotels/${hotelId}`), { signal: AbortSignal.timeout(1500) })
     if (res.ok) {
       const json = await res.json()
-      hotel.value = json.data ? { ...fallbackHotelDetail, ...json.data } : fallbackHotelDetail
+      hotel.value = json.data ? { ...catalogHotel, ...json.data } : catalogHotel
     } else {
-      hotel.value = fallbackHotelDetail
+      hotel.value = catalogHotel
     }
   } catch (e) {
-    hotel.value = fallbackHotelDetail
+    hotel.value = catalogHotel
   } finally {
     loading.value = false
   }

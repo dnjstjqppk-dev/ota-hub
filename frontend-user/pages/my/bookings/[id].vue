@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '~/stores/auth'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { getUserBookingById } from '~/data/initialBookings'
 import { BRAND } from '~/config/brand'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 const currencyStore = useCurrencyStore()
 
 const booking = ref<any>(null)
@@ -15,68 +18,45 @@ const canceling = ref(false)
 
 const fetchBooking = async () => {
   loading.value = true
-  try {
-    const res = await fetch(useApiUrl(`/bookings/${route.params.id}`))
-    const json = await res.json()
-    if (json.data) {
-      booking.value = json.data
-      loading.value = false
-      return
-    }
-  } catch (e) {
-    console.warn('API fetch single booking fallback:', e)
-  }
-
-  // Check localStorage
   const targetId = route.params.id as string
+
+  // 1. Try Live API
   try {
-    const raw = localStorage.getItem('user_mock_bookings')
-    if (raw) {
-      const list = JSON.parse(raw)
-      const found = list.find((b: any) => b.id === targetId || b.id.includes(targetId))
-      if (found) {
-        booking.value = {
-          id: found.id,
-          booking_code: found.id,
-          domain_type: found.domain || 'HOTEL',
-          created_at: found.created_at || new Date().toISOString(),
-          status: found.status || 'CONFIRMED',
-          confirmation_number: 'PNR-' + found.id.replace(/[^A-Za-z0-9]/g, '').slice(-6).toUpperCase(),
-          base_amount_krw: found.amount || 280000,
-          tax_amount_krw: 0,
-          service_fee_krw: 0,
-          discount_amount_krw: 0,
-          final_amount_krw: found.amount || 280000,
-          paid_currency: found.paid_currency || 'KRW',
-          paid_currency_amount: found.amount || 280000,
-          primary_contact_name: found.contact || '김민수 (010-1234-5678)',
-          primary_contact_email: 'trip@getfortrip.com',
-          special_requests: `${found.title || '일반 예약'} (${found.schedule || '일정 확인'})`
-        }
+    const res = await fetch(useApiUrl(`/bookings/${targetId}`), { signal: AbortSignal.timeout(1500) })
+    if (res.ok) {
+      const json = await res.json()
+      if (json.data) {
+        booking.value = json.data
         loading.value = false
         return
       }
     }
   } catch (e) {}
 
-  // Fallback default rich booking voucher
-  booking.value = {
-    id: targetId || 'GF-HT-98214',
-    booking_code: targetId || 'GF-HT-98214',
-    domain_type: targetId.includes('FL') ? 'FLIGHT' : targetId.includes('TR') ? 'TRAIN' : targetId.includes('CAR') ? 'CAR' : targetId.includes('TF') ? 'TRANSFER' : targetId.includes('ACT') ? 'ACTIVITY' : targetId.includes('PKG') ? 'PACKAGE' : 'HOTEL',
-    created_at: new Date().toISOString(),
-    status: 'CONFIRMED',
-    confirmation_number: 'PNR-' + (targetId || 'CONFIRM88').replace(/[^A-Za-z0-9]/g, '').slice(-6).toUpperCase(),
-    base_amount_krw: 285000,
-    tax_amount_krw: 28500,
-    service_fee_krw: 0,
-    discount_amount_krw: 20000,
-    final_amount_krw: 293500,
-    paid_currency: 'KRW',
-    paid_currency_amount: 293500,
-    primary_contact_name: '김민수 (010-1234-5678)',
-    primary_contact_email: 'trip@getfortrip.com',
-    special_requests: '모바일 전자 확인서 및 체크인 e-바우처'
+  // 2. Strict lookup in authenticated user's store
+  const found = getUserBookingById(targetId)
+  if (found) {
+    booking.value = {
+      id: found.id,
+      booking_code: found.booking_code || found.id,
+      domain_type: found.domain_type || found.domain || 'HOTEL',
+      created_at: found.created_at || new Date().toISOString(),
+      status: found.status || 'CONFIRMED',
+      confirmation_number: found.confirmation_number || found.pnr,
+      base_amount_krw: found.final_amount_krw || found.amountKrw || found.amount,
+      tax_amount_krw: 0,
+      service_fee_krw: 0,
+      discount_amount_krw: 0,
+      final_amount_krw: found.final_amount_krw || found.amountKrw || found.amount,
+      paid_currency: found.paid_currency || 'KRW',
+      paid_currency_amount: found.paid_currency_amount || found.amount,
+      primary_contact_name: found.primary_contact_name || `${authStore.user.fullName} (${authStore.user.email})`,
+      primary_contact_email: found.primary_contact_email || authStore.user.email,
+      special_requests: found.special_requests || `${found.title} (${found.schedule})`
+    }
+  } else {
+    // Strict Access Control: Unknown or unauthorized booking ID
+    booking.value = null
   }
   loading.value = false
 }
@@ -86,7 +66,9 @@ const handleCancel = async () => {
   canceling.value = true
   try {
     await fetch(useApiUrl(`/bookings/${route.params.id}/cancel`), { method: 'POST' })
-    await fetchBooking()
+    if (booking.value) {
+      booking.value.status = 'CANCELLED'
+    }
     alert('예약 취소 신청이 성공적으로 접수되었습니다.')
   } catch (e) {
     alert('취소 처리 중 오류가 발생했습니다.')
@@ -109,12 +91,23 @@ onMounted(() => {
     전자 바우처 및 예약 상세 정보를 불러오는 중입니다...
   </div>
 
-  <div v-else-if="!booking" class="max-w-4xl mx-auto px-4 py-24 text-center text-slate-500">
-    <div class="text-4xl mb-3">🔍</div>
-    <h2 class="text-xl font-bold">예약 정보를 찾을 수 없습니다.</h2>
-    <NuxtLink to="/my/bookings" class="mt-4 inline-block px-5 py-2.5 bg-trip-blue text-white text-xs font-bold rounded-xl">
-      내 예약 목록으로 이동
-    </NuxtLink>
+  <div v-else-if="!booking" class="max-w-lg mx-auto px-4 py-20 text-center space-y-4">
+    <div class="w-16 h-16 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center text-2xl mx-auto font-black shadow-sm">
+      ✕
+    </div>
+    <div>
+      <h2 class="text-xl font-black text-slate-900">예약 정보를 찾을 수 없습니다</h2>
+      <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+        요청하신 예약 번호(<span class="font-mono font-bold text-slate-700">{{ route.params.id }}</span>)는 존재하지 않거나,
+        로그인된 계정(<span class="font-bold text-slate-700">{{ authStore.user.email }}</span>)의 예약 내역과 일치하지 않습니다.<br>
+        개인정보 보호 및 예약 보안 규정에 따라 타인의 예약 데이터는 열람이 제한됩니다.
+      </p>
+    </div>
+    <div class="pt-2">
+      <NuxtLink to="/my/bookings" class="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition">
+        내 전체 예약 목록으로 돌아가기 →
+      </NuxtLink>
+    </div>
   </div>
 
   <div v-else class="max-w-4xl mx-auto px-4 py-8 space-y-6 print:p-0 print:m-0">

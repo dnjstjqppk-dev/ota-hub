@@ -1,106 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAuthStore } from '~/stores/auth'
 import { useCurrencyStore } from '~/stores/currency'
+import { getUserBookings, type BookingRecord } from '~/data/initialBookings'
 
 const authStore = useAuthStore()
 const currencyStore = useCurrencyStore()
 
 const activeTab = ref<'bookings' | 'coupons' | 'passengers' | 'payments'>('bookings')
 
-const upcomingBookings = ref([
-  {
-    id: 'GF-HT-98214',
-    domain: 'HOTEL',
-    domainName: '호텔',
-    title: '그랜드 하얏트 도쿄 롯폰기 힐스',
-    schedule: '2026.11.01 (일) ~ 2026.11.03 (화) · 2박',
-    roomInfo: '디럭스 킹 룸 (시티뷰 조식 포함)',
-    amountKrw: 320000,
-    status: 'CONFIRMED',
-    statusLabel: '예약 확정 완료',
-    pnr: 'HYATT-SEL-882194',
-    badgeClass: 'bg-emerald-50 text-emerald-600 border-emerald-200'
-  },
-  {
-    id: 'GF-FL-44912',
-    domain: 'FLIGHT',
-    domainName: '항공권',
-    title: '대한항공 KE703 (인천 ICN → 도쿄 NRT)',
-    schedule: '2026.11.01 (일) 10:10 출발 · 직항',
-    roomInfo: '일반석 (무료 위탁수하물 23kg 포함) · 좌석 28A',
-    amountKrw: 258000,
-    status: 'CONFIRMED',
-    statusLabel: '전자 항공권(e-Ticket) 발급',
-    pnr: 'KE-ETKT-70389',
-    badgeClass: 'bg-blue-50 text-blue-600 border-blue-200'
-  },
-  {
-    id: 'GF-TR-29103',
-    domain: 'TRAIN',
-    domainName: '기차표',
-    title: 'KTX 021 (서울역 → 부산역)',
-    schedule: '2026.11.15 (일) 08:30 출발 · 2시간 35분 소요',
-    roomInfo: '일반실 3호차 12A 창가석',
-    amountKrw: 59800,
-    status: 'CONFIRMED',
-    statusLabel: '모바일 승차권 발권됨',
-    pnr: 'KTX-021-3H12A',
-    badgeClass: 'bg-purple-50 text-purple-600 border-purple-200'
-  },
-  {
-    id: 'GF-CAR-11849',
-    domain: 'CAR',
-    domainName: '렌터카',
-    title: '롯데렌터카 현대 더 뉴 아반떼 (2025/2026)',
-    schedule: '2026.11.20 (금) 10:00 ~ 2026.11.22 (일) 18:00',
-    roomInfo: '제주공항 셔틀 1구역 인수 · 완전자차(Super CDW) 포함',
-    amountKrw: 180000,
-    status: 'CONFIRMED',
-    statusLabel: '차량 배차 확정',
-    pnr: 'LOTTE-RENT-5541',
-    badgeClass: 'bg-amber-50 text-amber-600 border-amber-200'
-  },
-  {
-    id: 'GF-TF-77218',
-    domain: 'TRANSFER',
-    domainName: '공항픽업',
-    title: '인천국제공항 T1 → 서울 도심 비즈니스 밴 리무진',
-    schedule: '2026.11.01 (일) 12:30 탑승 (비행기 편명 KE703 추적)',
-    roomInfo: '스타리아 라운지 리무진 (최대 6인, 수하물 6개)',
-    amountKrw: 95000,
-    status: 'CONFIRMED',
-    statusLabel: '기사 배정 완료',
-    pnr: 'VAN-LIM-9941',
-    badgeClass: 'bg-teal-50 text-teal-600 border-teal-200'
-  },
-  {
-    id: 'GF-ACT-33019',
-    domain: 'ACTIVITY',
-    domainName: '투어·티켓',
-    title: '도쿄 디즈니랜드 1일 e-티켓 (QR 즉시 입장)',
-    schedule: '2026.11.02 (월) 종일 자유이용권',
-    roomInfo: '성인 1일권 2매 (모바일 바우처 QR 코드 포함)',
-    amountKrw: 85000,
-    status: 'CONFIRMED',
-    statusLabel: 'e-바우처 QR 발송됨',
-    pnr: 'TDR-DSN-99120',
-    badgeClass: 'bg-rose-50 text-rose-600 border-rose-200'
-  },
-  {
-    id: 'GF-PKG-55102',
-    domain: 'PACKAGE',
-    domainName: '항공+호텔',
-    title: '도쿄 롯폰기 하얏트 에어텔 4일 결합 패키지',
-    schedule: '2026.12.10 (목) ~ 2026.12.13 (일) · 3박 4일',
-    roomInfo: '대한항공 직항 왕복 + 5성급 호텔 3박 (20% 번들 할인)',
-    amountKrw: 750000,
-    status: 'CONFIRMED',
-    statusLabel: '통합 에어텔 확정',
-    pnr: 'PKG-TYO-4N5D',
-    badgeClass: 'bg-indigo-50 text-indigo-600 border-indigo-200'
-  }
-])
+const upcomingBookings = ref<BookingRecord[]>([])
+
+onMounted(() => {
+  upcomingBookings.value = getUserBookings()
+})
 
 const coupons = ref([
   {

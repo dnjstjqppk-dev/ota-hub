@@ -23,9 +23,9 @@ import { BRAND } from '~/config/brand'
         <div class="w-12 h-12 rounded-2xl bg-blue-50 text-trip-blue flex items-center justify-center text-2xl font-black">
           💎
         </div>
-        <h3 class="text-lg font-black text-slate-900">최저가 보장 & 투명한 요금</h3>
+        <h3 class="text-lg font-black text-slate-900">안심 특가 & 투명한 요금</h3>
         <p class="text-xs text-slate-600 leading-relaxed">
-          숨겨진 추가 비용 없이 결제 단계에서 최종 금액을 명확하게 제시하며, 글로벌 공급사 직계약을 통한 독점 특가를 제공합니다.
+          숨겨진 추가 비용 없이 결제 단계에서 최종 금액을 명확하게 제시하며, 글로벌 공급사 직계약을 통한 실시간 특가를 제공합니다.
         </p>
       </div>
 

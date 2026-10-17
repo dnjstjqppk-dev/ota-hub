@@ -28,15 +28,15 @@ export const BRAND = {
   copyright: 'Copyright © 2026 getfortrip Inc. All rights reserved.',
   supportEmail: 'support@getfortrip.com',
   businessLicense: '제 2026-서울강남-0941호',
-  iataCertified: true,
-  pciDssLevel: 'PCI-DSS 레벨 1 최고 등급 보안 인증',
+  securityProtocol: 'PG사 전자금융 암호화 토큰 처리 (전자금융거래법 준수)',
+  airlineTicketingEngine: '글로벌 항공사 GDS 및 NDC 실시간 직연동 발권',
 
-  // Loyalty & Rewards
+  // Loyalty & Rewards (1G = ₩1 KRW)
   coinName: 'getfortrip Coins',
   coinNameKo: 'getfortrip 코인',
   coinSymbol: 'G',
   coinUnit: 'G-Coins',
-  coinExchangeRateKRW: 10, // 1 G-Coin = 10 KRW
+  coinExchangeRateKRW: 1, // 1 G-Coin = 1 KRW (28,500G = ₩28,500)
 
   // Visual Assets
   logoUrl: '/logo.svg',

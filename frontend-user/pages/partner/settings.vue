@@ -3,35 +3,51 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePartnerStore } from '~/stores/partner'
 
+definePageMeta({
+  middleware: 'partner-auth'
+})
+
 const router = useRouter()
 const partnerStore = usePartnerStore()
 
 onMounted(() => {
-  if (!partnerStore.isLoggedIn) {
+  if (!partnerStore.isLoggedIn || !partnerStore.partner) {
     router.replace('/partner/login')
   }
 })
 
-const apiKey = ref(partnerStore.partner.token || 'ptn_live_sec_88419204918239')
-const webhookUrl = ref('https://api.hyatt-sel.internal/v1/ota/getfortrip-events')
-const webhookSecret = ref('whsec_991820491829381')
+const apiKey = ref('')
+const webhookUrl = ref('')
+const webhookSecret = ref('')
 const isCopied = ref(false)
 const pingStatus = ref('')
+const showKey = ref(false)
+
+onMounted(() => {
+  if (partnerStore.isLoggedIn && partnerStore.partner) {
+    apiKey.value = 'ptn_live_sec_' + (partnerStore.partner.token ? partnerStore.partner.token.slice(-12) : '••••••••••••••••')
+    webhookUrl.value = 'https://api.' + (partnerStore.partner.companyName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'partner') + '.internal/v1/ota/getfortrip-events'
+    webhookSecret.value = 'whsec_••••••••••••••••'
+  }
+})
 
 const copyKey = () => {
+  if (!apiKey.value) return
   navigator.clipboard.writeText(apiKey.value)
   isCopied.value = true
   setTimeout(() => isCopied.value = false, 2000)
 }
 
 const regenerateKey = () => {
+  if (!partnerStore.isLoggedIn) return
   if (confirm('API 키를 재발급하시겠습니까? 기존 연동 시스템의 토큰이 즉시 만료됩니다.')) {
     apiKey.value = 'ptn_live_sec_' + Math.random().toString(36).substring(2, 16) + Math.random().toString(36).substring(2, 8)
-    alert('새로운 API Secret Key가 발급되었습니다.')
+    alert('새로운 API Secret Key가 안전하게 재발급되었습니다.')
   }
 }
 
 const sendPing = () => {
+  if (!partnerStore.isLoggedIn) return
   pingStatus.value = '전송 중...'
   setTimeout(() => {
     pingStatus.value = '200 OK - 웹훅 엔드포인트 수신 확인 완료!'
@@ -39,12 +55,13 @@ const sendPing = () => {
 }
 
 const saveSettings = () => {
+  if (!partnerStore.isLoggedIn) return
   alert('파트너 연동 설정이 안전하게 저장되었습니다.')
 }
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-100">
+  <div v-if="partnerStore.isLoggedIn && partnerStore.partner" class="min-h-screen bg-slate-100">
     <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40">
       <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
         <div class="flex items-center gap-6">
@@ -63,7 +80,7 @@ const saveSettings = () => {
           </nav>
         </div>
         <div class="flex items-center gap-4 text-xs">
-          <span class="font-bold text-slate-300">{{ partnerStore.partner.companyName }}</span>
+          <span class="font-bold text-slate-300">{{ partnerStore.partner?.companyName }}</span>
           <button @click="partnerStore.logout(); router.push('/partner/login')" class="text-rose-400 font-bold">로그아웃</button>
         </div>
       </div>
@@ -81,19 +98,19 @@ const saveSettings = () => {
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div>
             <label class="block font-bold text-slate-700 mb-1">상호명 (법인명)</label>
-            <input :value="partnerStore.partner.companyName" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800" />
+            <input :value="partnerStore.partner?.companyName" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800" />
           </div>
           <div>
             <label class="block font-bold text-slate-700 mb-1">사업자 등록번호</label>
-            <input :value="partnerStore.partner.businessNumber" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800" />
+            <input :value="partnerStore.partner?.businessNumber" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800" />
           </div>
           <div>
             <label class="block font-bold text-slate-700 mb-1">담당자 이메일</label>
-            <input :value="partnerStore.partner.email" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800" />
+            <input :value="partnerStore.partner?.email" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800" />
           </div>
           <div>
             <label class="block font-bold text-slate-700 mb-1">대표 연락처</label>
-            <input :value="partnerStore.partner.contactPhone" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800" />
+            <input :value="partnerStore.partner?.contactPhone" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800" />
           </div>
         </div>
       </div>
@@ -159,6 +176,28 @@ const saveSettings = () => {
         </div>
       </div>
     </main>
+  </div>
+
+  <div v-else class="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 max-w-md w-full text-center space-y-4">
+      <div class="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto text-2xl font-bold">
+        🔒
+      </div>
+      <div>
+        <h2 class="text-xl font-black text-slate-900 tracking-tight">파트너 인증 필요</h2>
+        <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">
+          OpenAPI Secret Key 발급 및 웹훅 설정은 인가된 파트너 계정으로 로그인한 상태에서만 접근할 수 있습니다.
+        </p>
+      </div>
+      <div class="pt-2">
+        <NuxtLink
+          to="/partner/login"
+          class="w-full inline-block py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-md transition"
+        >
+          파트너 로그인 바로가기 →
+        </NuxtLink>
+      </div>
+    </div>
   </div>
 </template>
 

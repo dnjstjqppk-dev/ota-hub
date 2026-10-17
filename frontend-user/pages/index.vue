@@ -22,7 +22,7 @@ const DEFAULT_HOTELS = [
     star_rating: 5,
     review_score: 4.9,
     thumbnail_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-    rooms: [{ base_price_krw: 520000 }]
+    rooms: [{ base_price_krw: 550000 }]
   },
   {
     id: 'htl_osaka_01',

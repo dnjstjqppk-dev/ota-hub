@@ -51,13 +51,13 @@ const popularRoutes = [
       <div class="max-w-6xl mx-auto space-y-6 relative z-10">
         <div class="space-y-2">
           <span class="inline-block px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold text-sky-200 border border-white/20">
-            ✈️ 전 세계 500+ 항공사 실시간 최저가 비교
+            ✈️ 전 세계 500+ 항공사 실시간 운임 비교
           </span>
           <h1 class="text-3xl md:text-5xl font-black tracking-tight">
             가장 스마트한 항공권 예약, getfortrip
           </h1>
           <p class="text-sm md:text-base text-sky-100 font-medium">
-            발권 수수료 0원, 7일 최저가 캘린더, 무료 수하물 안심 보장
+            발권 수수료 투명 공개, 7일 요금 캘린더, 실시간 전자항공권(e-Ticket) 즉시 발권
           </p>
         </div>
 
