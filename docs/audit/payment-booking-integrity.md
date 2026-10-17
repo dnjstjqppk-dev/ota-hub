@@ -46,3 +46,4 @@ stateDiagram-v2
 ## 5. 공급사 발권 불일치 조정 (Reconciliation Engine)
 - 매일 자정(UTC 00:00) PG사의 승인/매입 정산 내역과 getforTrip `payments` 테이블, 그리고 공급사(GDS/PMS)의 확정 PNR 리스트를 3-Way 대조(3-Way Reconciliation)합니다.
 - 금액 불일치나 누락 건이 발견될 경우 즉시 슬랙 보안 채널로 알림을 전송하고 관리자 콘솔의 불일치 큐(`Reconciliation Queue`)에 격리하여 수동 검수를 진행합니다.
+

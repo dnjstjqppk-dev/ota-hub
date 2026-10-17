@@ -32,3 +32,4 @@
 ### 2.3 SSR/SSG 렌더링 안정성 확보
 - 컴포넌트 셋업 시점에 `searchHotelCatalog(destination)` 동기 호출을 통해 초기 상태를 즉시 채워 넣음으로써 무한 로딩 및 0건 노출을 원천 차단함.
 - `nitro.prerender.routes`에 주요 호텔 상세 경로(`/hotels/detail/htl_tokyo_01/`, `/hotels/detail/htl_seoul_01/`, `/hotels/detail/htl_osaka_01/`)를 명시하여 정적 HTML 사전 빌드 완료.
+

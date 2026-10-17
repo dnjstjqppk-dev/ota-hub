@@ -32,3 +32,4 @@ getforTrip 파트너 포털(Partner Portal)은 호텔 체인, 렌터카 업체, 
   - `GET /api/v1/partner/bookings`: 자사 예약 목록 페이징 및 폴링 규격
   - `POST /api/v1/partner/bookings/{id}/confirm`: PMS 확정 PNR 반환 웹훅 규격
   - HMAC-SHA256 서명 기반 웹훅 보안 및 레이트 리밋 (분당 600회) 명세 완비.
+

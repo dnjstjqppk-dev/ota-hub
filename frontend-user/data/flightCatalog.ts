@@ -601,3 +601,4 @@ export function searchFlightCatalog(params: {
 export function getFlightById(id: string): FlightLeg | null {
   return MASTER_FLIGHT_SCHEDULES.find(f => f.id === id) || null
 }
+

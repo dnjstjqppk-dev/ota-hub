@@ -243,3 +243,4 @@ erDiagram
 
 4. **파트너사(B2B) 격리 및 감사 추적**
    - 모든 공급사 리소스(`HOTELS`, `CAR_RENTALS`, `ACTIVITIES`)는 `partner_id`를 소유하며, RLS(Row Level Security) 또는 애플리케이션 레벨 권한 검증을 통해 타 공급사의 재고 및 정산 데이터에 접근할 수 없도록 강제합니다.
+

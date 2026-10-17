@@ -247,3 +247,4 @@ export function searchPackageCatalog(params: {
 
   return list
 }
+

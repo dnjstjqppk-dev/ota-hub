@@ -104,3 +104,4 @@ GROUP BY h.id, h.name_ko, h.star_rating, h.review_score;
    - 예약 생성, 결제 승인, 재고 차감: 오직 프라이머리(Primary) 인스턴스에서 엄격한 트랜잭션 격리수준(`READ COMMITTED` / `REPEATABLE READ`)으로 처리.
 2. **복제 지연(Replication Lag) 방지책**:
    - 예약 완료 직후 "마이페이지 즉시 이동" 시점에는 세션에 `just_booked=true` 플래그를 설정하여 3초간 Primary DB를 직접 조회하도록 라우팅.
+

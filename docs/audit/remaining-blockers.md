@@ -29,3 +29,4 @@
    - 일본 PayPay, 중국 Alipay/WeChat Pay, 동남아 GrabPay 등 현지 결제 수단 추가 연동.
 4. **블록체인 분산 장부 기반 트립 코인 확장**:
    - getforTrip 코인의 글로벌 파트너사 간 제휴 적립/사용 네트워크 확장.
+

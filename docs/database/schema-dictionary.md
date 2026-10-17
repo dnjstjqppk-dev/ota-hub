@@ -171,3 +171,4 @@ PMS/GDS/Channel Manager 직접 연동을 위한 API 인증 자격증명.
 | `status` | VARCHAR(20) | NO | 'AUTHORIZED' | - | `AUTHORIZED`, `SETTLED`, `CANCELLED`, `FAILED` |
 | `pg_raw_response` | JSONB | NO | '{}' | - | PG사 웹훅/응답 전문 원본 (감사용) |
 | `paid_at` | TIMESTAMPTZ | YES | NULL | - | 승인 완료 시각 |
+

@@ -64,3 +64,4 @@ API,Booking,/api/v1/bookings/calculate,POST,No,No,통화/쿠폰/코인 반영 �
 API,Booking,/api/v1/bookings/:id/pay,POST,No,No,PG사 승인 후 예약 최종 확정 트랜잭션 API
 API,Booking,/api/v1/bookings/:id/cancel,POST,Yes,No,예약 취소 및 환불 수수료 계산 API
 API,Partner,/api/v1/partner/ari,POST,Yes(API_Key),No,B2B 실시간 재고/요금 일괄 업데이트 API
+

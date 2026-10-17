@@ -26,3 +26,4 @@ getforTrip 글로벌 OTA의 각 도메인별 공식 연동 공급사(Provider/GD
    - 파트너사의 객실 매진 이벤트 수신 시 Cloudflare KV 및 Redis 캐시를 50ms 이내에 즉시 Invalidate.
 3. **결제 웹훅 멱등성 (Idempotency)**:
    - PG사로부터 중복 웹훅이 수신되더라도 `transaction_code` 고유 키를 기반으로 단 1회만 결제 승인 원장에 반영.
+

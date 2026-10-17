@@ -34,3 +34,4 @@ getforTrip OTA 플랫폼은 글로벌 고객의 결제 정보 및 여권/연락�
 2. **Broken Access Control**: 리소스 접근 시 세션의 `user_id` 또는 `partner_id`와 데이터 소유자를 백엔드에서 반드시 대조.
 3. **Cryptographic Failures**: TLS 1.3 강제 적용, HSTS(Strict-Transport-Security) 헤더 활성화.
 4. **Security Misconfiguration**: Cloudflare WAF를 통해 악성 봇, SQLi, XSS 페이로드 실시간 차단.
+

@@ -254,3 +254,4 @@ export function searchCarCatalog(params: {
 
   return list
 }
+

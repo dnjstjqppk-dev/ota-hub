@@ -243,3 +243,4 @@ export function searchTrainCatalog(params: {
 export function getTrainById(id: string): TrainJourney | null {
   return MASTER_TRAIN_SCHEDULES.find(t => t.id === id) || null
 }
+
