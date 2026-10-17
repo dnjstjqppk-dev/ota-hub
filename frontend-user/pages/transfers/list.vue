@@ -16,6 +16,14 @@ const passengers = ref(Number(route.query.passengers) || 2)
 const selectedTier = ref<string>('ALL') // ALL, ECONOMY_SEDAN, COMFORT_SEDAN, BUSINESS_VAN, LUXURY_FIRST
 const minBags = ref(0)
 const sortBy = ref<'recommended' | 'price_asc' | 'capacity_desc'>('recommended')
+const showMobileFilter = ref(false)
+
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (selectedTier.value !== 'ALL') count++
+  if (minBags.value > 0) count++
+  return count
+})
 
 const vehicles = ref<any[]>([])
 const loading = ref(false)
@@ -139,10 +147,47 @@ onMounted(() => {
       </NuxtLink>
     </div>
 
+    <!-- 모바일 전용 퀵 필터 칩 바 (Trip-style) -->
+    <div class="lg:hidden flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
+      <button
+        @click="showMobileFilter = true"
+        :class="[
+          'px-3.5 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 whitespace-nowrap shadow-sm',
+          activeFilterCount > 0 ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white text-slate-700 border-slate-300'
+        ]"
+      >
+        <span>⚡ 픽업 필터</span>
+        <span v-if="activeFilterCount > 0" class="w-4 h-4 rounded-full bg-white text-cyan-600 text-[10px] flex items-center justify-center font-black">
+          {{ activeFilterCount }}
+        </span>
+      </button>
+
+      <button
+        @click="selectedTier = selectedTier === 'COMFORT_SEDAN' ? 'ALL' : 'COMFORT_SEDAN'"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedTier === 'COMFORT_SEDAN' ? 'bg-cyan-50 text-cyan-600 border-cyan-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        세단 (3인)
+      </button>
+
+      <button
+        @click="selectedTier = selectedTier === 'BUSINESS_VAN' ? 'ALL' : 'BUSINESS_VAN'"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedTier === 'BUSINESS_VAN' ? 'bg-cyan-50 text-cyan-600 border-cyan-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        밴 (6인)
+      </button>
+
+      <button
+        @click="selectedTier = selectedTier === 'LUXURY_FIRST' ? 'ALL' : 'LUXURY_FIRST'"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedTier === 'LUXURY_FIRST' ? 'bg-cyan-50 text-cyan-600 border-cyan-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        VIP 럭셔리
+      </button>
+    </div>
+
     <!-- 메인 레이아웃 (좌측 필터 + 우측 차량 목록) -->
     <div class="flex flex-col lg:flex-row gap-8 items-start">
       <!-- 1. 패싯 필터 사이드바 -->
-      <aside class="w-full lg:w-64 bg-white rounded-2xl border border-slate-200 p-5 space-y-6 flex-shrink-0 shadow-sm">
+      <aside class="hidden lg:block w-full lg:w-64 bg-white rounded-2xl border border-slate-200 p-5 space-y-6 flex-shrink-0 shadow-sm">
         <div class="flex items-center justify-between pb-4 border-b border-slate-100">
           <span class="font-black text-sm text-slate-900">차량 등급 필터</span>
           <button
@@ -278,6 +323,50 @@ onMounted(() => {
         </div>
       </main>
     </div>
+
+    <!-- 모바일 필터 바텀시트 / 모달 -->
+    <Teleport to="body">
+      <div v-if="showMobileFilter" class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm lg:hidden">
+        <div class="bg-white rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+          <div class="flex items-center justify-between p-4 border-b border-slate-100">
+            <h3 class="font-black text-base text-slate-900">공항픽업 차량 필터</h3>
+            <button @click="showMobileFilter = false" class="text-slate-400 p-1 hover:text-slate-700 text-xl font-bold">✕</button>
+          </div>
+          
+          <div class="overflow-y-auto p-5 space-y-6">
+            <div class="space-y-2.5">
+              <label class="text-xs font-black text-slate-700 block">차량 등급 (Vehicle Class)</label>
+              <div class="space-y-1.5 text-xs text-slate-600">
+                <label v-for="tier in [
+                  { id: 'ALL', label: '전체 차량' },
+                  { id: 'COMFORT_SEDAN', label: '컴포트 세단 (3인/3수하물)' },
+                  { id: 'BUSINESS_VAN', label: '비즈니스 밴 (6인/6수하물)' },
+                  { id: 'LUXURY_FIRST', label: 'VIP 럭셔리 퍼스트' }
+                ]" :key="tier.id" class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
+                  <input type="radio" :value="tier.id" v-model="selectedTier" name="m_trf_tier" class="text-cyan-600 focus:ring-0" />
+                  <span>{{ tier.label }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center gap-3">
+            <button
+              @click="selectedTier = 'ALL'; minBags = 0;"
+              class="w-1/3 py-3 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 bg-white"
+            >
+              초기화
+            </button>
+            <button
+              @click="showMobileFilter = false"
+              class="w-2/3 py-3 rounded-xl bg-cyan-600 text-white font-black text-xs shadow-lg shadow-cyan-500/30"
+            >
+              적용하기 ({{ filteredVehicles.length }}대 차량)
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 

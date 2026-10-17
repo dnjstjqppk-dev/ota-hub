@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
@@ -17,6 +17,18 @@ const freeCancel = ref(false)
 const breakfast = ref(false)
 const sortBy = ref<'recommended' | 'price_asc' | 'score_desc'>('recommended')
 const mapView = ref(false)
+const showMobileFilter = ref(false)
+
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (selectedStar.value > 0) count++
+  if (selectedScore.value > 0) count++
+  if (selectedPropertyType.value !== 'ALL') count++
+  if (maxPrice.value < 1000000) count++
+  if (freeCancel.value) count++
+  if (breakfast.value) count++
+  return count
+})
 
 const DEFAULT_HOTEL_LIST = [
   {
@@ -165,10 +177,54 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- 모바일 전용 퀵 필터 칩 바 (Trip-style) -->
+    <div class="lg:hidden flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
+      <button
+        @click="showMobileFilter = true"
+        :class="[
+          'px-3.5 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 whitespace-nowrap shadow-sm',
+          activeFilterCount > 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-300'
+        ]"
+      >
+        <span>⚡ 상세 필터</span>
+        <span v-if="activeFilterCount > 0" class="w-4 h-4 rounded-full bg-white text-blue-600 text-[10px] flex items-center justify-center font-black">
+          {{ activeFilterCount }}
+        </span>
+      </button>
+
+      <button
+        @click="selectedStar = selectedStar === 5 ? 0 : 5"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedStar === 5 ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        ★ 5성급
+      </button>
+
+      <button
+        @click="freeCancel = !freeCancel"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', freeCancel ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        ✓ 무료 취소
+      </button>
+
+      <button
+        @click="breakfast = !breakfast"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', breakfast ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        🍳 조식 포함
+      </button>
+
+      <button
+        @click="selectedScore = selectedScore === 4.8 ? 0 : 4.8"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedScore === 4.8 ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        4.8+ 평점
+      </button>
+    </div>
+
     <!-- 메인 레이아웃: 필터 사이드바 + 호텔 목록 -->
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
       <!-- 12개 다중 조건 필터 사이드바 (Trip-style) -->
-      <aside class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-fit space-y-6">
+      <aside class="hidden lg:block bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-fit space-y-6">
         <div class="flex items-center justify-between pb-3 border-b border-slate-100">
           <h3 class="font-black text-sm text-slate-900">상세 필터</h3>
           <button
@@ -367,5 +423,107 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- 모바일 필터 바텀시트 / 모달 -->
+    <Teleport to="body">
+      <div v-if="showMobileFilter" class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm lg:hidden">
+        <div class="bg-white rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+          <div class="flex items-center justify-between p-4 border-b border-slate-100">
+            <h3 class="font-black text-base text-slate-900">상세 필터</h3>
+            <button @click="showMobileFilter = false" class="text-slate-400 p-1 hover:text-slate-700 text-xl font-bold">✕</button>
+          </div>
+          
+          <div class="overflow-y-auto p-5 space-y-6">
+            <!-- 성급 필터 -->
+            <div>
+              <h4 class="font-bold text-xs text-slate-900 mb-2.5">호텔 등급 (성급)</h4>
+              <div class="space-y-2 text-xs">
+                <label v-for="s in [5, 4, 3]" :key="s" class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <input
+                    type="radio"
+                    name="m_star"
+                    :value="s"
+                    :checked="selectedStar === s"
+                    @change="selectedStar = selectedStar === s ? 0 : s"
+                    class="accent-blue-600"
+                  />
+                  <span>★ {{ s }}성급 이상</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <input type="radio" name="m_star" :value="0" :checked="selectedStar === 0" @change="selectedStar = 0" class="accent-blue-600" />
+                  <span>전체 등급</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 고객 평점 필터 -->
+            <div class="border-t border-slate-100 pt-4">
+              <h4 class="font-bold text-xs text-slate-900 mb-2.5">고객 평점</h4>
+              <div class="grid grid-cols-3 gap-1.5 text-xs">
+                <button
+                  v-for="sc in [{ val: 4.8, label: '4.8+ 최고' }, { val: 4.5, label: '4.5+ 매우만족' }, { val: 4.0, label: '4.0+ 만족' }]"
+                  :key="sc.val"
+                  @click="selectedScore = selectedScore === sc.val ? 0 : sc.val"
+                  :class="[
+                    'p-2 rounded-xl font-bold border transition text-[11px] text-center',
+                    selectedScore === sc.val ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                  ]"
+                >
+                  {{ sc.label }}
+                </button>
+              </div>
+            </div>
+
+            <!-- 숙소 유형 필터 -->
+            <div class="border-t border-slate-100 pt-4">
+              <h4 class="font-bold text-xs text-slate-900 mb-2.5">숙소 유형</h4>
+              <div class="space-y-2 text-xs">
+                <label v-for="pt in [{ id: 'ALL', label: '모든 숙소 유형' }, { id: 'HOTEL', label: '호텔' }, { id: 'RESORT', label: '리조트' }, { id: 'APARTMENT', label: '레지던스 / 아파트' }]" :key="pt.id" class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <input type="radio" v-model="selectedPropertyType" :value="pt.id" name="m_ptype" class="accent-blue-600" />
+                  <span>{{ pt.label }}</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 1박 요금 상한선 -->
+            <div class="border-t border-slate-100 pt-4">
+              <div class="flex justify-between items-center mb-1">
+                <h4 class="font-bold text-xs text-slate-900">1박 요금 상한선</h4>
+                <span class="text-xs font-bold text-blue-600 font-mono">{{ currencyStore.formatKRW(maxPrice) }}</span>
+              </div>
+              <input v-model="maxPrice" type="range" min="100000" max="1000000" step="50000" class="w-full accent-blue-600 cursor-pointer" />
+            </div>
+
+            <!-- 인기 혜택 필터 -->
+            <div class="border-t border-slate-100 pt-4 space-y-2">
+              <h4 class="font-bold text-xs text-slate-900 mb-2">인기 혜택 필터</h4>
+              <label class="flex items-center gap-2 text-xs font-semibold cursor-pointer text-slate-700">
+                <input v-model="freeCancel" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500" />
+                <span>✓ 무료 취소 가능</span>
+              </label>
+              <label class="flex items-center gap-2 text-xs font-semibold cursor-pointer text-slate-700">
+                <input v-model="breakfast" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500" />
+                <span>🍳 조식 포함</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center gap-3">
+            <button
+              @click="selectedStar = 0; selectedScore = 0; selectedPropertyType = 'ALL'; maxPrice = 1000000; freeCancel = false; breakfast = false"
+              class="w-1/3 py-3 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 bg-white"
+            >
+              초기화
+            </button>
+            <button
+              @click="showMobileFilter = false"
+              class="w-2/3 py-3 rounded-xl bg-blue-600 text-white font-black text-xs shadow-lg shadow-blue-500/30"
+            >
+              적용하기 ({{ hotels.length }}개 숙소)
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

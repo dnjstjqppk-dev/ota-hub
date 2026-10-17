@@ -155,7 +155,7 @@ onMounted(() => {
           </div>
 
           <!-- 가격 및 선택 버튼 -->
-          <div class="pt-4 border-t border-slate-100 flex items-center justify-between gap-4">
+          <div class="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div class="text-xs text-slate-400 line-through">
                 개별 구매가: {{ currencyStore.formatKRW(pkg.original_price_krw) }}
@@ -168,16 +168,16 @@ onMounted(() => {
               </div>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 w-full sm:w-auto">
               <NuxtLink
                 :to="`/packages/detail/${pkg.id}`"
-                class="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-2xl transition whitespace-nowrap"
+                class="flex-1 sm:flex-initial text-center px-4 sm:px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-2xl transition whitespace-nowrap"
               >
                 패키지 상세
               </NuxtLink>
               <NuxtLink
                 :to="`/packages/booking?packageId=${pkg.id}`"
-                class="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-2xl shadow-lg transition whitespace-nowrap"
+                class="flex-1 sm:flex-initial text-center px-5 sm:px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-2xl shadow-lg transition whitespace-nowrap"
               >
                 결합 예약하기
               </NuxtLink>

@@ -1,19 +1,13 @@
 <script setup lang="ts">
-import { useRoute, useRouter } from 'vue-router'
-import { onMounted } from 'vue'
-
 const route = useRoute()
-const router = useRouter()
-
-onMounted(() => {
-  const id = route.query.id || route.query.trainId || 'tr-001'
-  router.replace(`/trains/detail/${id}`)
-})
+const id = (route.query.id || route.query.trainId || 'trn_ktx_01') as string
+await navigateTo(`/trains/detail/${id}`, { replace: true })
 </script>
 
 <template>
   <div class="max-w-6xl mx-auto px-4 py-24 text-center text-slate-400 font-bold">
-    열차 상세 페이지로 이동 중...
+    열차 상세 정보를 불러오는 중입니다...
   </div>
 </template>
+
 

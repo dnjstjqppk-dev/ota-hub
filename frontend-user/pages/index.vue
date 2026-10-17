@@ -128,19 +128,47 @@ onMounted(async () => {
 <template>
   <div>
     <!-- 히어로 배너 섹션 -->
-    <div class="relative bg-gradient-to-r from-blue-900 via-trip-navy to-blue-800 text-white pt-20 pb-32 px-4 overflow-hidden">
+    <div class="relative bg-gradient-to-r from-blue-900 via-trip-navy to-blue-800 text-white pt-10 pb-12 md:pt-20 md:pb-32 px-4 overflow-hidden">
       <div class="absolute -top-40 -right-40 w-96 h-96 bg-trip-blue/30 rounded-full blur-3xl pointer-events-none"></div>
       
       <div class="max-w-6xl mx-auto text-center space-y-3 relative z-10">
         <span class="inline-block px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold tracking-wider text-blue-200 border border-white/20 uppercase">
           ✈️ 2026 Global Mega Travel Season
         </span>
-        <h1 class="text-4xl md:text-5xl font-black tracking-tight">
+        <h1 class="text-2xl sm:text-3xl md:text-5xl font-black tracking-tight">
           전 세계 어디든, getfortrip과 함께
         </h1>
-        <p class="text-base text-blue-100 font-medium">
+        <p class="text-xs sm:text-sm md:text-base text-blue-100 font-medium">
           최저가 항공권, 특가 호텔, 기차표부터 현지 eSIM까지 한 번에 예약하세요.
         </p>
+      </div>
+    </div>
+
+    <!-- 모바일 전용 Trip-style 10대 카테고리 퀵 그리드 (2열 x 5행 카드) -->
+    <div class="md:hidden px-3 -mt-6 mb-4 relative z-30">
+      <div class="bg-white/95 backdrop-blur-md rounded-2xl p-2.5 shadow-lg border border-slate-100 grid grid-cols-5 gap-1.5 text-center">
+        <NuxtLink
+          v-for="cat in [
+            { label: '호텔', icon: '🏨', to: '/hotels/list', color: 'bg-blue-50 text-blue-600' },
+            { label: '항공권', icon: '✈️', to: '/flights/search', color: 'bg-indigo-50 text-indigo-600' },
+            { label: '기차표', icon: '🚄', to: '/trains/search', color: 'bg-emerald-50 text-emerald-600' },
+            { label: '렌터카', icon: '🚗', to: '/cars', color: 'bg-amber-50 text-amber-600' },
+            { label: '공항픽업', icon: '🚐', to: '/transfers', color: 'bg-teal-50 text-teal-600' },
+            { label: '투어·티켓', icon: '🎟️', to: '/things-to-do', color: 'bg-purple-50 text-purple-600' },
+            { label: '항공+호텔', icon: '🏖️', to: '/packages/list', color: 'bg-rose-50 text-rose-600' },
+            { label: 'eSIM', icon: '📶', to: '/esim', color: 'bg-cyan-50 text-cyan-600' },
+            { label: '여행자보험', icon: '🛡️', to: '/insurance', color: 'bg-green-50 text-green-600' },
+            { label: '특가혜택', icon: '🏷️', to: '/deals', color: 'bg-orange-50 text-orange-600' }
+          ]"
+          :key="cat.label"
+          :to="cat.to"
+          class="flex flex-col items-center justify-center p-1 rounded-xl hover:bg-slate-50 transition active:scale-95"
+        >
+          <div :class="['w-9 h-9 rounded-xl flex items-center justify-center text-base mb-1 shadow-sm', cat.color]">
+            {{ cat.icon }}
+          </div>
+          <span class="text-[10px] font-black text-slate-800 tracking-tight whitespace-nowrap">{{ cat.label }}</span>
+        </NuxtLink>
       </div>
     </div>
 

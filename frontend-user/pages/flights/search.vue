@@ -17,6 +17,16 @@ const selectedAirlines = ref<string[]>([])
 const selectedTimeSlot = ref<string>('ALL')
 const baggageOnly = ref(false)
 const sortBy = ref<'cheapest' | 'fastest' | 'recommended'>('cheapest')
+const showMobileFilter = ref(false)
+
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (selectedStops.value !== null) count++
+  if (selectedAirlines.value.length > 0) count++
+  if (selectedTimeSlot.value !== 'ALL') count++
+  if (baggageOnly.value) count++
+  return count
+})
 
 const flights = ref<any[]>([])
 const loading = ref(false)
@@ -225,21 +235,65 @@ onMounted(() => {
     </div>
 
     <!-- 2. 7일 전후 최저가 캘린더 바 (Trip-style) -->
-    <div class="grid grid-cols-7 gap-2 bg-white p-3 rounded-2xl border border-slate-200 text-center text-xs">
+    <div class="flex overflow-x-auto gap-2 bg-white p-3 rounded-2xl border border-slate-200 text-center text-xs scrollbar-none">
       <div
         v-for="(day, i) in ['10/29', '10/30', '10/31', '11/01 (오늘)', '11/02', '11/03', '11/04']"
         :key="day"
-        :class="['p-2 rounded-xl transition cursor-pointer', i === 3 ? 'bg-blue-50 border border-blue-600 font-bold text-blue-600' : 'hover:bg-slate-50 text-slate-600']"
+        :class="['min-w-[76px] flex-1 p-2 rounded-xl transition cursor-pointer flex-shrink-0 sm:flex-shrink', i === 3 ? 'bg-blue-50 border border-blue-600 font-bold text-blue-600' : 'hover:bg-slate-50 text-slate-600']"
       >
         <div>{{ day }}</div>
         <div class="font-mono mt-1 font-bold">{{ currencyStore.formatKRW(330000 + i * 5000) }}</div>
       </div>
     </div>
 
+    <!-- 모바일 전용 퀵 필터 칩 바 (Trip-style) -->
+    <div class="lg:hidden flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
+      <button
+        @click="showMobileFilter = true"
+        :class="[
+          'px-3.5 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 whitespace-nowrap shadow-sm',
+          activeFilterCount > 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-300'
+        ]"
+      >
+        <span>⚡ 상세 필터</span>
+        <span v-if="activeFilterCount > 0" class="w-4 h-4 rounded-full bg-white text-blue-600 text-[10px] flex items-center justify-center font-black">
+          {{ activeFilterCount }}
+        </span>
+      </button>
+
+      <button
+        @click="selectedStops = selectedStops === 0 ? null : 0"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedStops === 0 ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        직항만
+      </button>
+
+      <button
+        @click="selectedTimeSlot = selectedTimeSlot === 'MORNING' ? 'ALL' : 'MORNING'"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedTimeSlot === 'MORNING' ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        🌅 오전 출발
+      </button>
+
+      <button
+        @click="baggageOnly = !baggageOnly"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', baggageOnly ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        🧳 무료 수하물
+      </button>
+
+      <button
+        @click="sortBy = 'cheapest'"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', sortBy === 'cheapest' ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        최저가순
+      </button>
+    </div>
+
     <!-- 3. 메인 그리드: 좌측 패싯 필터 사이드바 + 우측 항공권 리스트 -->
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
       <!-- 좌측 패싯 필터 사이드바 (Trip-style) -->
-      <aside class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-fit space-y-6">
+      <aside class="hidden lg:block bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-fit space-y-6">
         <div class="flex items-center justify-between pb-3 border-b border-slate-100">
           <h3 class="font-black text-sm text-slate-900">항공권 필터</h3>
           <button
@@ -436,5 +490,85 @@ onMounted(() => {
         </div>
       </main>
     </div>
+
+    <!-- 모바일 필터 바텀시트 / 모달 -->
+    <Teleport to="body">
+      <div v-if="showMobileFilter" class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm lg:hidden">
+        <div class="bg-white rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+          <div class="flex items-center justify-between p-4 border-b border-slate-100">
+            <h3 class="font-black text-base text-slate-900">항공권 상세 필터</h3>
+            <button @click="showMobileFilter = false" class="text-slate-400 p-1 hover:text-slate-700 text-xl font-bold">✕</button>
+          </div>
+          
+          <div class="overflow-y-auto p-5 space-y-6">
+            <!-- 경유 횟수 -->
+            <div>
+              <h4 class="font-bold text-xs text-slate-900 mb-2.5">경유 횟수</h4>
+              <div class="space-y-2 text-xs">
+                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <input type="radio" :checked="selectedStops === null" @change="selectedStops = null" name="m_stops" class="accent-blue-600" />
+                  <span>전체 구간</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <input type="radio" :checked="selectedStops === 0" @change="selectedStops = 0" name="m_stops" class="accent-blue-600" />
+                  <span>직항만 (Non-stop)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <input type="radio" :checked="selectedStops === 1" @change="selectedStops = 1" name="m_stops" class="accent-blue-600" />
+                  <span>1회 경유 이하</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 출발 시간대 -->
+            <div class="border-t border-slate-100 pt-4">
+              <h4 class="font-bold text-xs text-slate-900 mb-2.5">출발 시간대</h4>
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <button
+                  v-for="slot in [
+                    { id: 'ALL', label: '전체 시간' },
+                    { id: 'MORNING', label: '오전 (06:00~12:00)' },
+                    { id: 'AFTERNOON', label: '오후 (12:00~18:00)' },
+                    { id: 'NIGHT', label: '야간 (18:00~24:00)' }
+                  ]"
+                  :key="slot.id"
+                  @click="selectedTimeSlot = slot.id"
+                  :class="[
+                    'p-2 rounded-xl font-bold border transition text-[11px] text-center',
+                    selectedTimeSlot === slot.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                  ]"
+                >
+                  {{ slot.label }}
+                </button>
+              </div>
+            </div>
+
+            <!-- 수하물 조건 -->
+            <div class="border-t border-slate-100 pt-4">
+              <h4 class="font-bold text-xs text-slate-900 mb-2">수하물 옵션</h4>
+              <label class="flex items-center gap-2 text-xs font-semibold cursor-pointer text-slate-700">
+                <input v-model="baggageOnly" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500" />
+                <span>🧳 무료 위탁수하물 포함만</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center gap-3">
+            <button
+              @click="selectedStops = null; selectedAirlines = []; selectedTimeSlot = 'ALL'; baggageOnly = false"
+              class="w-1/3 py-3 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 bg-white"
+            >
+              초기화
+            </button>
+            <button
+              @click="showMobileFilter = false"
+              class="w-2/3 py-3 rounded-xl bg-blue-600 text-white font-black text-xs shadow-lg shadow-blue-500/30"
+            >
+              적용하기 ({{ filteredFlights.length }}개 항공편)
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

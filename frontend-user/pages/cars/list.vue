@@ -18,6 +18,16 @@ const selectedCompany = ref<string>('ALL')
 const superCdwOnly = ref(false)
 const freeCancelOnly = ref(false)
 const sortBy = ref<'recommended' | 'price_asc' | 'seats_desc'>('recommended')
+const showMobileFilter = ref(false)
+
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (selectedCategory.value !== 'ALL') count++
+  if (selectedTransmission.value !== 'ALL') count++
+  if (superCdwOnly.value) count++
+  if (freeCancelOnly.value) count++
+  return count
+})
 
 const cars = ref<any[]>([])
 const loading = ref(false)
@@ -174,10 +184,61 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- 모바일 전용 퀵 필터 칩 바 (Trip-style) -->
+    <div class="lg:hidden flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
+      <button
+        @click="showMobileFilter = true"
+        :class="[
+          'px-3.5 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 whitespace-nowrap shadow-sm',
+          activeFilterCount > 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-300'
+        ]"
+      >
+        <span>⚡ 렌터카 필터</span>
+        <span v-if="activeFilterCount > 0" class="w-4 h-4 rounded-full bg-white text-blue-600 text-[10px] flex items-center justify-center font-black">
+          {{ activeFilterCount }}
+        </span>
+      </button>
+
+      <button
+        @click="selectedCategory = selectedCategory === 'COMPACT' ? 'ALL' : 'COMPACT'"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedCategory === 'COMPACT' ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        경차/소형
+      </button>
+
+      <button
+        @click="selectedCategory = selectedCategory === 'SEDAN' ? 'ALL' : 'SEDAN'"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedCategory === 'SEDAN' ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        세단
+      </button>
+
+      <button
+        @click="selectedCategory = selectedCategory === 'SUV' ? 'ALL' : 'SUV'"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedCategory === 'SUV' ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        SUV
+      </button>
+
+      <button
+        @click="superCdwOnly = !superCdwOnly"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', superCdwOnly ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        완전자차 0원
+      </button>
+
+      <button
+        @click="freeCancelOnly = !freeCancelOnly"
+        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', freeCancelOnly ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
+      >
+        무료 취소
+      </button>
+    </div>
+
     <!-- 메인 레이아웃 (좌측 Trip-style 패싯 필터 + 우측 차량 카드 리스트) -->
     <div class="flex flex-col lg:flex-row gap-8 items-start">
       <!-- 1. 패싯 필터 사이드바 -->
-      <aside class="w-full lg:w-64 bg-white rounded-2xl border border-slate-200 p-5 space-y-6 flex-shrink-0 shadow-sm">
+      <aside class="hidden lg:block w-full lg:w-64 bg-white rounded-2xl border border-slate-200 p-5 space-y-6 flex-shrink-0 shadow-sm">
         <div class="flex items-center justify-between pb-4 border-b border-slate-100">
           <span class="font-black text-sm text-slate-900">상세 필터</span>
           <button
@@ -337,6 +398,67 @@ onMounted(() => {
         </div>
       </main>
     </div>
+
+    <!-- 모바일 필터 바텀시트 / 모달 -->
+    <Teleport to="body">
+      <div v-if="showMobileFilter" class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm lg:hidden">
+        <div class="bg-white rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+          <div class="flex items-center justify-between p-4 border-b border-slate-100">
+            <h3 class="font-black text-base text-slate-900">렌터카 상세 필터</h3>
+            <button @click="showMobileFilter = false" class="text-slate-400 p-1 hover:text-slate-700 text-xl font-bold">✕</button>
+          </div>
+          
+          <div class="overflow-y-auto p-5 space-y-6">
+            <!-- 차종 필터 -->
+            <div class="space-y-2.5">
+              <label class="text-xs font-black text-slate-700 block">차량 크기 / 차종</label>
+              <div class="space-y-1.5 text-xs text-slate-600">
+                <label v-for="cat in [
+                  { id: 'ALL', label: '전체 보기' },
+                  { id: 'COMPACT', label: '경차 / 소형차 (Compact)' },
+                  { id: 'SEDAN', label: '준중형 / 중형 세단 (Sedan)' },
+                  { id: 'SUV', label: 'SUV / CUV' },
+                  { id: 'VAN', label: '승합 / 패밀리 밴 (Van)' }
+                ]" :key="cat.id" class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
+                  <input type="radio" :value="cat.id" v-model="selectedCategory" name="m_car_cat" class="text-blue-600 focus:ring-0" />
+                  <span>{{ cat.label }}</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 보험 및 혜택 옵션 -->
+            <div class="space-y-2.5 pt-4 border-t border-slate-100">
+              <label class="text-xs font-black text-slate-700 block">보험 및 편의 옵션</label>
+              <div class="space-y-2 text-xs text-slate-600">
+                <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
+                  <input type="checkbox" v-model="superCdwOnly" class="rounded text-blue-600 focus:ring-0" />
+                  <span>완전자차 보장 포함 (면책금 0원)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
+                  <input type="checkbox" v-model="freeCancelOnly" class="rounded text-blue-600 focus:ring-0" />
+                  <span>무료 취소 가능 차량만</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center gap-3">
+            <button
+              @click="selectedCategory = 'ALL'; selectedTransmission = 'ALL'; superCdwOnly = false; freeCancelOnly = false;"
+              class="w-1/3 py-3 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 bg-white"
+            >
+              초기화
+            </button>
+            <button
+              @click="showMobileFilter = false"
+              class="w-2/3 py-3 rounded-xl bg-blue-600 text-white font-black text-xs shadow-lg shadow-blue-500/30"
+            >
+              적용하기 ({{ filteredCars.length }}대 차량)
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 

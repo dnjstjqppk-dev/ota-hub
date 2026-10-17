@@ -105,10 +105,10 @@ const handleSearch = () => {
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto -mt-20 relative z-30 px-4">
-    <div class="bg-white rounded-3xl shadow-2xl overflow-visible border border-slate-200/80">
+  <div class="max-w-6xl mx-auto -mt-8 md:-mt-20 relative z-30 px-3 md:px-4">
+    <div class="bg-white rounded-2xl md:rounded-3xl shadow-xl md:shadow-2xl overflow-visible border border-slate-200/80">
       <!-- 7대 도메인 탭 스위처 -->
-      <div class="flex border-b border-slate-100 bg-slate-50/80 overflow-x-auto scrollbar-none rounded-t-3xl">
+      <div class="flex border-b border-slate-100 bg-slate-50/80 overflow-x-auto scrollbar-none rounded-t-2xl md:rounded-t-3xl">
         <button
           v-for="t in [
             { id: 'hotels', label: '호텔', icon: '🏨' },
@@ -122,22 +122,22 @@ const handleSearch = () => {
           :key="t.id"
           @click="activeTab = t.id as TabType"
           :class="[
-            'flex items-center gap-2 px-6 py-4 font-bold text-sm transition-all whitespace-nowrap',
+            'flex items-center gap-1.5 md:gap-2 px-3.5 md:px-6 py-3 md:py-4 font-bold text-xs md:text-sm transition-all whitespace-nowrap',
             activeTab === t.id
               ? 'bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm'
               : 'text-slate-600 hover:text-blue-600'
           ]"
         >
-          <span class="text-base">{{ t.icon }}</span>
+          <span class="text-sm md:text-base">{{ t.icon }}</span>
           <span>{{ t.label }}</span>
         </button>
       </div>
 
       <!-- 동적 검색 폼 영역 -->
-      <div class="p-6">
+      <div class="p-3.5 md:p-6">
         <!-- 1. 호텔 (Hotels) 검색 폼 -->
-        <div v-if="activeTab === 'hotels'" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-          <div class="border border-slate-200 rounded-2xl p-2.5 hover:border-blue-500 transition-colors">
+        <div v-if="activeTab === 'hotels'" class="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4 items-center">
+          <div class="border border-slate-200 rounded-xl md:rounded-2xl p-2.5 hover:border-blue-500 transition-colors">
             <label class="text-[11px] font-bold text-slate-400 block mb-1">목적지 / 호텔명</label>
             <SearchAutocomplete
               v-model="hotelCity"
@@ -148,18 +148,18 @@ const handleSearch = () => {
             />
           </div>
 
-          <div class="border border-slate-200 rounded-2xl p-3 hover:border-blue-500 transition-colors">
+          <div class="border border-slate-200 rounded-xl md:rounded-2xl p-2.5 md:p-3 hover:border-blue-500 transition-colors">
             <label class="text-[11px] font-bold text-slate-400 block mb-0.5">체크인 - 체크아웃</label>
-            <div class="flex items-center gap-2 text-sm font-bold text-slate-900">
-              <input v-model="checkIn" type="date" class="outline-none text-xs font-bold bg-transparent" />
-              <span>~</span>
-              <input v-model="checkOut" type="date" class="outline-none text-xs font-bold bg-transparent" />
+            <div class="flex items-center gap-1.5 md:gap-2 text-sm font-bold text-slate-900">
+              <input v-model="checkIn" type="date" class="min-w-0 flex-1 outline-none text-xs font-bold bg-transparent" />
+              <span class="text-slate-400">~</span>
+              <input v-model="checkOut" type="date" class="min-w-0 flex-1 outline-none text-xs font-bold bg-transparent" />
             </div>
           </div>
 
-          <div class="border border-slate-200 rounded-2xl p-3 hover:border-blue-500 transition-colors">
+          <div class="border border-slate-200 rounded-xl md:rounded-2xl p-2.5 md:p-3 hover:border-blue-500 transition-colors">
             <label class="text-[11px] font-bold text-slate-400 block mb-0.5">인원 및 객실</label>
-            <div class="text-sm font-bold text-slate-900">
+            <div class="text-xs md:text-sm font-bold text-slate-900">
               성인 {{ guests.adults }}명, 객실 {{ guests.rooms }}개
             </div>
           </div>

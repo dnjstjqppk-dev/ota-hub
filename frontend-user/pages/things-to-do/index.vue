@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
@@ -15,6 +15,17 @@ const selectedDuration = ref('')
 const selectedLanguage = ref('')
 const maxPrice = ref(200000)
 const sortBy = ref<'recommended' | 'price_asc' | 'rating_desc'>('recommended')
+const showMobileFilter = ref(false)
+
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (selectedCategory.value !== 'ALL') count++
+  if (freeCancelOnly.value) count++
+  if (instantOnly.value) count++
+  if (selectedDuration.value) count++
+  if (maxPrice.value < 200000) count++
+  return count
+})
 
 const activities = ref<any[]>([])
 const loading = ref(false)
@@ -152,8 +163,21 @@ onMounted(() => {
       <p class="text-xs md:text-sm text-slate-500 mt-1">유니버설 스튜디오, 디즈니랜드, 박물관 도슨트 및 즉시 개통되는 글로벌 eSIM</p>
     </div>
 
-    <!-- 가로 스크롤 카테고리 퀵 바 -->
-    <div class="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-200">
+    <!-- 가로 스크롤 카테고리 퀵 바 & 모바일 필터 버튼 -->
+    <div class="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-200 scrollbar-none">
+      <button
+        @click="showMobileFilter = true"
+        :class="[
+          'lg:hidden px-3.5 py-2 rounded-full text-xs font-bold border flex items-center gap-1.5 whitespace-nowrap shadow-sm',
+          activeFilterCount > 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-300'
+        ]"
+      >
+        <span>⚡ 필터</span>
+        <span v-if="activeFilterCount > 0" class="w-4 h-4 rounded-full bg-white text-blue-600 text-[10px] flex items-center justify-center font-black">
+          {{ activeFilterCount }}
+        </span>
+      </button>
+
       <button
         v-for="cat in categories"
         :key="cat.id"
@@ -172,7 +196,7 @@ onMounted(() => {
     <!-- 메인 레이아웃: 좌측 패싯 필터 사이드바 + 우측 카드 리스트 -->
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
       <!-- 1. 패싯 필터 사이드바 (Trip-style 12개 다중 조건) -->
-      <aside class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm h-fit space-y-6">
+      <aside class="hidden lg:block bg-white p-5 rounded-2xl border border-slate-200 shadow-sm h-fit space-y-6">
         <div class="flex items-center justify-between pb-3 border-b border-slate-100">
           <span class="font-black text-sm text-slate-900">상세 필터 검색</span>
           <button
@@ -373,5 +397,88 @@ onMounted(() => {
         </div>
       </main>
     </div>
+
+    <!-- 모바일 필터 바텀시트 / 모달 -->
+    <Teleport to="body">
+      <div v-if="showMobileFilter" class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm lg:hidden">
+        <div class="bg-white rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+          <div class="flex items-center justify-between p-4 border-b border-slate-100">
+            <h3 class="font-black text-base text-slate-900">투어·티켓 상세 필터</h3>
+            <button @click="showMobileFilter = false" class="text-slate-400 p-1 hover:text-slate-700 text-xl font-bold">✕</button>
+          </div>
+          
+          <div class="overflow-y-auto p-5 space-y-6">
+            <!-- 예약 및 바우처 혜택 -->
+            <div>
+              <h4 class="font-bold text-xs text-slate-900 mb-2">예약 및 바우처 혜택</h4>
+              <div class="space-y-2 text-xs">
+                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <input v-model="instantOnly" type="checkbox" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
+                  <span>⚡ 즉시 확정 (모바일 QR 즉시 발권)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <input v-model="freeCancelOnly" type="checkbox" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
+                  <span>✓ 무료 취소 가능</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 소요 시간 필터 -->
+            <div class="border-t border-slate-100 pt-4">
+              <h4 class="font-bold text-xs text-slate-900 mb-2">소요 시간</h4>
+              <div class="space-y-2 text-xs">
+                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <input type="radio" v-model="selectedDuration" value="" name="m_dur" class="accent-blue-600" />
+                  <span>전체 소요시간</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <input type="radio" v-model="selectedDuration" value="UNDER_2H" name="m_dur" class="accent-blue-600" />
+                  <span>2시간 미만 (전망대/간편 입장)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <input type="radio" v-model="selectedDuration" value="HALF_DAY" name="m_dur" class="accent-blue-600" />
+                  <span>반일 투어 (2~4시간)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                  <input type="radio" v-model="selectedDuration" value="FULL_DAY" name="m_dur" class="accent-blue-600" />
+                  <span>종일 투어 (테마파크/1일 투어)</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 최대 가격 -->
+            <div class="border-t border-slate-100 pt-4">
+              <div class="flex justify-between items-center mb-1">
+                <h4 class="font-bold text-xs text-slate-900">최대 가격</h4>
+                <span class="font-mono text-xs font-bold text-blue-600">{{ currencyStore.formatKRW(maxPrice) }}</span>
+              </div>
+              <input
+                v-model.number="maxPrice"
+                type="range"
+                min="5000"
+                max="200000"
+                step="5000"
+                class="w-full accent-blue-600 cursor-pointer"
+              />
+            </div>
+          </div>
+
+          <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center gap-3">
+            <button
+              @click="selectedCategory = 'ALL'; freeCancelOnly = false; instantOnly = false; selectedDuration = ''; maxPrice = 200000"
+              class="w-1/3 py-3 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 bg-white"
+            >
+              초기화
+            </button>
+            <button
+              @click="showMobileFilter = false"
+              class="w-2/3 py-3 rounded-xl bg-blue-600 text-white font-black text-xs shadow-lg shadow-blue-500/30"
+            >
+              적용하기 ({{ activities.length }}개 상품)
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
