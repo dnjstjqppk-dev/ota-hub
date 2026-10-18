@@ -2,16 +2,16 @@ package engine
 
 import (
 	"errors"
-	"math"
 	"getfortrip/backend/internal/domain"
+	"math"
 )
 
 type PricingInput struct {
 	BaseAmountKRW     float64         `json:"base_amount_krw"`
-	TaxRate           float64         `json:"tax_rate"`           // default 0.10 (10%)
-	ServiceFeeRate    float64         `json:"service_fee_rate"`   // default 0.03 (3%)
-	CouponDiscountKRW float64         `json:"coupon_discount_krw"`// 원화 할인액
-	TripCoinsRedeem   int             `json:"trip_coins_redeem"`  // 1 coin = 10 KRW
+	TaxRate           float64         `json:"tax_rate"`            // default 0.10 (10%)
+	ServiceFeeRate    float64         `json:"service_fee_rate"`    // default 0.03 (3%)
+	CouponDiscountKRW float64         `json:"coupon_discount_krw"` // 원화 할인액
+	TripCoinsRedeem   int             `json:"trip_coins_redeem"`   // 1 coin = 10 KRW
 	TargetCurrency    domain.Currency `json:"target_currency"`
 	ExchangeRateToKRW float64         `json:"exchange_rate_to_krw"` // 1 TargetCurrency = X KRW
 }
@@ -98,4 +98,3 @@ func CalculateExactPrice(input PricingInput) (*PricingResult, error) {
 		Symbol:               symbol,
 	}, nil
 }
-

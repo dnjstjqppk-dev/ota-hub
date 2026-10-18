@@ -28,7 +28,7 @@ func TestGetDomainFilters(t *testing.T) {
 		}
 
 		var resp struct {
-			Code int                            `json:"code"`
+			Code int                             `json:"code"`
 			Data []domain.DomainFilterDefinition `json:"data"`
 		}
 
@@ -56,7 +56,7 @@ func TestGetAllFilters(t *testing.T) {
 	}
 
 	var resp struct {
-		Code int                                         `json:"code"`
+		Code int                                        `json:"code"`
 		Data map[string][]domain.DomainFilterDefinition `json:"data"`
 	}
 
@@ -100,4 +100,3 @@ func TestCatalogFilteringWithFacets(t *testing.T) {
 		t.Fatalf("GetTransfers failed: %d", wTransfer.Code)
 	}
 }
-

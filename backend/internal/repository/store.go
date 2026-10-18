@@ -2,33 +2,33 @@ package repository
 
 import (
 	"fmt"
+	"getfortrip/backend/internal/domain"
+	"getfortrip/backend/internal/engine"
 	"strings"
 	"sync"
 	"time"
-	"getfortrip/backend/internal/domain"
-	"getfortrip/backend/internal/engine"
 )
 
 type Store struct {
-	mu           sync.RWMutex
-	Users        map[string]domain.User
-	Travelers    map[string][]domain.SavedTraveler
-	ExchangeRate map[domain.Currency]domain.ExchangeRate
-	Hotels       map[string]domain.Hotel
-	HotelRooms   map[string]domain.HotelRoom
-	Flights      map[string]domain.Flight
-	Trains       map[string]domain.Train
-	Cars         map[string]domain.CarRental
-	Transfers    map[string]domain.AirportTransfer
-	Activities   map[string]domain.Activity
-	Packages     map[string]domain.DynamicPackage
-	Promotions   map[string]domain.Promotion
-	Bookings     map[string]domain.Booking
-	TripMoments  map[string]domain.TripMoment
-	Reviews      map[string][]domain.Review
-	AuditLogs    []domain.AdminAuditLog
-	Notices      []domain.Notice
-	CSTickets    map[string]domain.CSTicket
+	mu                sync.RWMutex
+	Users             map[string]domain.User
+	Travelers         map[string][]domain.SavedTraveler
+	ExchangeRate      map[domain.Currency]domain.ExchangeRate
+	Hotels            map[string]domain.Hotel
+	HotelRooms        map[string]domain.HotelRoom
+	Flights           map[string]domain.Flight
+	Trains            map[string]domain.Train
+	Cars              map[string]domain.CarRental
+	Transfers         map[string]domain.AirportTransfer
+	Activities        map[string]domain.Activity
+	Packages          map[string]domain.DynamicPackage
+	Promotions        map[string]domain.Promotion
+	Bookings          map[string]domain.Booking
+	TripMoments       map[string]domain.TripMoment
+	Reviews           map[string][]domain.Review
+	AuditLogs         []domain.AdminAuditLog
+	Notices           []domain.Notice
+	CSTickets         map[string]domain.CSTicket
 	FilterDefinitions map[string][]domain.DomainFilterDefinition
 
 	// Curation & Multi-Platform Webhook Ingestion Store
@@ -911,12 +911,12 @@ func (s *Store) GetDashboardStats() map[string]any {
 	}
 
 	return map[string]any{
-		"total_gmv_krw":   totalGMV,
-		"total_bookings":  len(s.Bookings),
+		"total_gmv_krw":    totalGMV,
+		"total_bookings":   len(s.Bookings),
 		"domain_breakdown": domainCounts,
 		"status_breakdown": statusCounts,
-		"active_users":    len(s.Users),
-		"timestamp":       time.Now(),
+		"active_users":     len(s.Users),
+		"timestamp":        time.Now(),
 	}
 }
 
@@ -1406,5 +1406,3 @@ func (s *Store) seedFilterDefinitions() {
 		},
 	}
 }
-
-

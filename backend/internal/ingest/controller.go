@@ -224,4 +224,3 @@ func (c *PipelineController) generateSlug(platform domain.OTAPlatform, city, tit
 	randomSuffix := rand.Intn(9000) + 1000
 	return fmt.Sprintf("%s-%s-%s-%d", strings.ToLower(string(platform)), cleanCity, cleanTitle, randomSuffix)
 }
-

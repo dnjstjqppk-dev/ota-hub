@@ -3,11 +3,11 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"getfortrip/backend/internal/domain"
+	"getfortrip/backend/internal/repository"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"getfortrip/backend/internal/domain"
-	"getfortrip/backend/internal/repository"
 )
 
 func TestIngestWebhookHTTPHandler(t *testing.T) {
@@ -68,4 +68,3 @@ func TestIngestWebhookHTTPHandler(t *testing.T) {
 		t.Fatalf("Expected status 200, got %d", getW.Code)
 	}
 }
-

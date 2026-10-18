@@ -1,13 +1,13 @@
 package main
 
 import (
+	"getfortrip/backend/internal/handler"
+	"getfortrip/backend/internal/repository"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
-	"getfortrip/backend/internal/handler"
-	"getfortrip/backend/internal/repository"
 )
 
 var defaultAllowedOrigins = []string{

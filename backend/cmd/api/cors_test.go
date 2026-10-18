@@ -57,4 +57,3 @@ func TestCORSProtection(t *testing.T) {
 		}
 	})
 }
-

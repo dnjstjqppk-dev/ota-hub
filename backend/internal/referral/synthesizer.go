@@ -2,19 +2,19 @@ package referral
 
 import (
 	"fmt"
+	"getfortrip/backend/internal/domain"
 	"net/url"
 	"os"
 	"strings"
-	"getfortrip/backend/internal/domain"
 )
 
 // Synthesizer generates affiliate referral links for all 5 platforms
 type Synthesizer struct {
-	AgodaCID         string
+	AgodaCID          string
 	TripComAllianceID string
-	KlookAID         string
-	KKdayCID         string
-	MyRealTripPID    string
+	KlookAID          string
+	KKdayCID          string
+	MyRealTripPID     string
 }
 
 // NewSynthesizer initializes partner configurations from environment or sensible defaults

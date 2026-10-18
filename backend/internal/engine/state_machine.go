@@ -58,4 +58,3 @@ func ValidateTransition(current, target domain.BookingStatus) error {
 	}
 	return nil
 }
-

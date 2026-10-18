@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"testing"
 	"getfortrip/backend/internal/domain"
+	"testing"
 )
 
 func TestCalculateExactPrice(t *testing.T) {
@@ -11,7 +11,7 @@ func TestCalculateExactPrice(t *testing.T) {
 		TaxRate:           0.10, // 58,000
 		ServiceFeeRate:    0.03, // 17,400
 		CouponDiscountKRW: 50000,
-		TripCoinsRedeem:   500,  // 5,000
+		TripCoinsRedeem:   500, // 5,000
 		TargetCurrency:    domain.CurrencyKRW,
 		ExchangeRateToKRW: 1.0,
 	}
@@ -48,4 +48,3 @@ func TestStateMachineTransitions(t *testing.T) {
 		t.Errorf("expected legal transition PAID->ISSUING, got: %v", err)
 	}
 }
-

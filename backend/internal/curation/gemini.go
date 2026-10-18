@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"getfortrip/backend/internal/domain"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"time"
-	"getfortrip/backend/internal/domain"
 )
 
 // GeminiClient handles AI-driven B2C rewriting and content structuration
@@ -64,8 +64,8 @@ func (g *GeminiClient) RewriteProduct(ctx context.Context, p *domain.UniversalPr
 			},
 		},
 		"generationConfig": map[string]interface{}{
-			"temperature":       0.65,
-			"topP":              0.95,
+			"temperature":      0.65,
+			"topP":             0.95,
 			"responseMimeType": "application/json",
 			"responseSchema": map[string]interface{}{
 				"type": "OBJECT",
@@ -266,4 +266,3 @@ func (g *GeminiClient) generateFallbackContent(p *domain.UniversalProduct, rawSc
 		UpdatedAt:        time.Now(),
 	}
 }
-

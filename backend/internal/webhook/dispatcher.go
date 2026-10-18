@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"getfortrip/backend/internal/domain"
 	"io"
 	"net/http"
 	"os"
 	"time"
-	"getfortrip/backend/internal/domain"
 )
 
 // Dispatcher manages outbound synchronization to travel-checkin
@@ -140,4 +140,3 @@ func (d *Dispatcher) DispatchCuratedProduct(ctx context.Context, p *domain.Unive
 
 	return logEntry, nil
 }
-

@@ -108,4 +108,3 @@ func TestPartnerActionNonexistentBooking(t *testing.T) {
 		t.Fatalf("Expected 404 Not Found for nonexistent booking, got %d", w.Code)
 	}
 }
-

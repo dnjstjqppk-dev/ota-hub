@@ -1,9 +1,9 @@
 package referral
 
 import (
+	"getfortrip/backend/internal/domain"
 	"strings"
 	"testing"
-	"getfortrip/backend/internal/domain"
 )
 
 func TestSynthesizerAllPlatforms(t *testing.T) {

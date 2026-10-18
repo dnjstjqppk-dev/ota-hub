@@ -107,18 +107,18 @@ type CuratedContent struct {
 
 // AffiliateReferral represents synthesized outbound deep links
 type AffiliateReferral struct {
-	ID               string    `json:"id"`
-	ProductID        string    `json:"product_id"`
+	ID               string      `json:"id"`
+	ProductID        string      `json:"product_id"`
 	Platform         OTAPlatform `json:"platform"`
-	OriginalURL      string    `json:"original_url"`
-	CleanURL         string    `json:"clean_url"`
-	FinalReferralURL string    `json:"final_referral_url"`
-	PartnerID        string    `json:"partner_id"`
-	SubTrackingID    string    `json:"sub_tracking_id"`
-	ClickCount       int       `json:"click_count"`
-	LastClickedAt    *time.Time `json:"last_clicked_at,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	OriginalURL      string      `json:"original_url"`
+	CleanURL         string      `json:"clean_url"`
+	FinalReferralURL string      `json:"final_referral_url"`
+	PartnerID        string      `json:"partner_id"`
+	SubTrackingID    string      `json:"sub_tracking_id"`
+	ClickCount       int         `json:"click_count"`
+	LastClickedAt    *time.Time  `json:"last_clicked_at,omitempty"`
+	CreatedAt        time.Time   `json:"created_at"`
+	UpdatedAt        time.Time   `json:"updated_at"`
 }
 
 // TravelCheckinWebhookLog tracks outbound push synchronization
@@ -139,35 +139,35 @@ type TravelCheckinWebhookLog struct {
 
 // TravelCheckinPostPayload is the standard contract dispatched to travel-checkin
 type TravelCheckinPostPayload struct {
-	Event     string                 `json:"event"`
-	Timestamp string                 `json:"timestamp"`
-	Publisher string                 `json:"publisher"`
-	SourceOTA OTAPlatform            `json:"source_ota"`
+	Event     string                  `json:"event"`
+	Timestamp string                  `json:"timestamp"`
+	Publisher string                  `json:"publisher"`
+	SourceOTA OTAPlatform             `json:"source_ota"`
 	Product   TravelCheckinProductDTO `json:"product"`
 }
 
 type TravelCheckinProductDTO struct {
-	ID              string             `json:"id"`
-	Slug            string             `json:"slug"`
-	Domain          ProductDomain      `json:"domain"`
-	OriginalTitle   string             `json:"original_title"`
-	B2CTitle        string             `json:"b2c_title"`
-	OneLineSummary  string             `json:"one_line_summary"`
-	KeyBenefits     []string           `json:"key_benefits"`
-	SEOBlogContent  string             `json:"seo_blog_content"`
-	MetaKeywords    []string           `json:"meta_keywords"`
-	Pricing         TravelCheckinPrice `json:"pricing"`
-	Location        TravelCheckinLoc   `json:"location"`
-	ThumbnailURL    string             `json:"thumbnail_url"`
-	ImageGallery    []string           `json:"image_gallery"`
-	Affiliate       TravelCheckinAff   `json:"affiliate"`
+	ID              string                 `json:"id"`
+	Slug            string                 `json:"slug"`
+	Domain          ProductDomain          `json:"domain"`
+	OriginalTitle   string                 `json:"original_title"`
+	B2CTitle        string                 `json:"b2c_title"`
+	OneLineSummary  string                 `json:"one_line_summary"`
+	KeyBenefits     []string               `json:"key_benefits"`
+	SEOBlogContent  string                 `json:"seo_blog_content"`
+	MetaKeywords    []string               `json:"meta_keywords"`
+	Pricing         TravelCheckinPrice     `json:"pricing"`
+	Location        TravelCheckinLoc       `json:"location"`
+	ThumbnailURL    string                 `json:"thumbnail_url"`
+	ImageGallery    []string               `json:"image_gallery"`
+	Affiliate       TravelCheckinAff       `json:"affiliate"`
 	PlatformDetails map[string]interface{} `json:"platform_details,omitempty"`
 }
 
 type TravelCheckinPrice struct {
-	BasePriceKRW    float64 `json:"base_price_krw"`
+	BasePriceKRW     float64 `json:"base_price_krw"`
 	OriginalCurrency string  `json:"original_currency"`
-	OriginalPrice   float64 `json:"original_price"`
+	OriginalPrice    float64 `json:"original_price"`
 }
 
 type TravelCheckinLoc struct {
@@ -182,4 +182,3 @@ type TravelCheckinAff struct {
 	PartnerID  string `json:"partner_id"`
 	Channel    string `json:"channel"`
 }
-

@@ -237,7 +237,7 @@ type Activity struct {
 	ReviewCount         int                      `json:"review_count"`
 	InstantConfirmation bool                     `json:"instant_confirmation"`
 	FreeCancellation    bool                     `json:"free_cancellation"`
-	DurationType        string                   `json:"duration_type"` // UNDER_2H, HALF_DAY, FULL_DAY, MULTI_DAY
+	DurationType        string                   `json:"duration_type"`  // UNDER_2H, HALF_DAY, FULL_DAY, MULTI_DAY
 	GuideLanguage       string                   `json:"guide_language"` // KO, EN, JA, ZH
 	VoucherType         string                   `json:"voucher_type"`   // QR_CODE, BARCODE, PHYSICAL_EXCHANGE
 	ThumbnailURL        string                   `json:"thumbnail_url"`
@@ -371,15 +371,15 @@ type Notice struct {
 }
 
 type CSTicket struct {
-	ID         string    `json:"id"`
-	UserID     string    `json:"user_id"`
-	BookingID  string    `json:"booking_id"`
-	Subject    string    `json:"subject"`
-	Category   string    `json:"category"`
-	Status     string    `json:"status"` // OPEN, IN_PROGRESS, RESOLVED
-	Messages   []any     `json:"messages"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	BookingID string    `json:"booking_id"`
+	Subject   string    `json:"subject"`
+	Category  string    `json:"category"`
+	Status    string    `json:"status"` // OPEN, IN_PROGRESS, RESOLVED
+	Messages  []any     `json:"messages"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Autocomplete & Suggest Model (getfortrip specification)
@@ -410,19 +410,17 @@ type DomainFilterOption struct {
 }
 
 type DomainFilterDefinition struct {
-	ID                    string               `json:"id"`
-	DomainType            DomainType           `json:"domain_type"` // HOTEL, FLIGHT, TRAIN, CAR, TRANSFER, ACTIVITY, PACKAGE
-	FilterGroup           string               `json:"filter_group"`
-	FilterKey             string               `json:"filter_key"`
-	DisplayNameKO         string               `json:"display_name_ko"`
-	DisplayNameEN         string               `json:"display_name_en"`
-	UIControlType         string               `json:"ui_control_type"` // CHECKBOX_LIST, RADIO_GROUP, RANGE_SLIDER, BOOLEAN_SWITCH
-	Icon                  string               `json:"icon"`
-	SortOrder             int                  `json:"sort_order"`
-	IsCollapsedByDefault  bool                 `json:"is_collapsed_by_default"`
-	IsSearchable          bool                 `json:"is_searchable"`
-	Options               []DomainFilterOption `json:"options"`
-	IsActive              bool                 `json:"is_active"`
+	ID                   string               `json:"id"`
+	DomainType           DomainType           `json:"domain_type"` // HOTEL, FLIGHT, TRAIN, CAR, TRANSFER, ACTIVITY, PACKAGE
+	FilterGroup          string               `json:"filter_group"`
+	FilterKey            string               `json:"filter_key"`
+	DisplayNameKO        string               `json:"display_name_ko"`
+	DisplayNameEN        string               `json:"display_name_en"`
+	UIControlType        string               `json:"ui_control_type"` // CHECKBOX_LIST, RADIO_GROUP, RANGE_SLIDER, BOOLEAN_SWITCH
+	Icon                 string               `json:"icon"`
+	SortOrder            int                  `json:"sort_order"`
+	IsCollapsedByDefault bool                 `json:"is_collapsed_by_default"`
+	IsSearchable         bool                 `json:"is_searchable"`
+	Options              []DomainFilterOption `json:"options"`
+	IsActive             bool                 `json:"is_active"`
 }
-
-

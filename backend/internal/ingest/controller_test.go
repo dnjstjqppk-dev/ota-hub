@@ -2,9 +2,9 @@ package ingest
 
 import (
 	"context"
-	"testing"
 	"getfortrip/backend/internal/domain"
 	"getfortrip/backend/internal/repository"
+	"testing"
 )
 
 func TestIngestPipeline5Platforms(t *testing.T) {
@@ -146,4 +146,3 @@ func TestIngestPipeline5Platforms(t *testing.T) {
 		t.Errorf("Expected 1 Klook product, got %d", len(klookOnly))
 	}
 }
-

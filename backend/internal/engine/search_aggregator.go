@@ -2,9 +2,9 @@ package engine
 
 import (
 	"context"
+	"getfortrip/backend/internal/domain"
 	"sync"
 	"time"
-	"getfortrip/backend/internal/domain"
 )
 
 type SupplierResult struct {
@@ -82,4 +82,3 @@ func (sa *SearchAggregator) AggregateHotels(ctx context.Context, city string, lo
 
 	return aggregated
 }
-
