@@ -1,15 +1,23 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ota-hub",
+  "main": "worker/index.ts",
   "compatibility_date": "2024-10-12",
+  "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true
   },
-
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ota_production",
+      "database_id": "d36231d8-4bfb-42e1-ae51-a019723e5db0"
+    }
+  ],
   "assets": {
     "directory": "frontend-user/.output/public",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": false
+    "run_worker_first": true
   }
 }
-

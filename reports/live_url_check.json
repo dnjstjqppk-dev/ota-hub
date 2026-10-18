@@ -1,0 +1,434 @@
+[
+  {
+    "path": "/about",
+    "testPath": "/about",
+    "status": 307,
+    "location": "/about/"
+  },
+  {
+    "path": "/booking/complete",
+    "testPath": "/booking/complete",
+    "status": 307,
+    "location": "/booking/complete/"
+  },
+  {
+    "path": "/booking/success",
+    "testPath": "/booking/success",
+    "status": 307,
+    "location": "/booking/success/"
+  },
+  {
+    "path": "/careers",
+    "testPath": "/careers",
+    "status": 307,
+    "location": "/careers/"
+  },
+  {
+    "path": "/cars/booking",
+    "testPath": "/cars/booking",
+    "status": 307,
+    "location": "/cars/booking/"
+  },
+  {
+    "path": "/cars/detail",
+    "testPath": "/cars/detail",
+    "status": 307,
+    "location": "/cars/detail/"
+  },
+  {
+    "path": "/cars/detail/:",
+    "testPath": "/cars/detail/tokyo-shinjuku-pass",
+    "status": 200,
+    "location": ""
+  },
+  {
+    "path": "/cars",
+    "testPath": "/cars",
+    "status": 307,
+    "location": "/cars/"
+  },
+  {
+    "path": "/cars/list",
+    "testPath": "/cars/list",
+    "status": 307,
+    "location": "/cars/list/"
+  },
+  {
+    "path": "/cookies",
+    "testPath": "/cookies",
+    "status": 307,
+    "location": "/cookies/"
+  },
+  {
+    "path": "/deals",
+    "testPath": "/deals",
+    "status": 307,
+    "location": "/deals/"
+  },
+  {
+    "path": "/esim",
+    "testPath": "/esim",
+    "status": 307,
+    "location": "/esim/"
+  },
+  {
+    "path": "/faq",
+    "testPath": "/faq",
+    "status": 307,
+    "location": "/faq/"
+  },
+  {
+    "path": "/flights/booking",
+    "testPath": "/flights/booking",
+    "status": 307,
+    "location": "/flights/booking/"
+  },
+  {
+    "path": "/flights/detail",
+    "testPath": "/flights/detail",
+    "status": 307,
+    "location": "/flights/detail/"
+  },
+  {
+    "path": "/flights/detail/:",
+    "testPath": "/flights/detail/tokyo-shinjuku-pass",
+    "status": 200,
+    "location": ""
+  },
+  {
+    "path": "/flights",
+    "testPath": "/flights",
+    "status": 307,
+    "location": "/flights/"
+  },
+  {
+    "path": "/flights/search",
+    "testPath": "/flights/search",
+    "status": 307,
+    "location": "/flights/search/"
+  },
+  {
+    "path": "/help",
+    "testPath": "/help",
+    "status": 307,
+    "location": "/help/"
+  },
+  {
+    "path": "/hotels/booking",
+    "testPath": "/hotels/booking",
+    "status": 307,
+    "location": "/hotels/booking/"
+  },
+  {
+    "path": "/hotels/detail",
+    "testPath": "/hotels/detail",
+    "status": 307,
+    "location": "/hotels/detail/"
+  },
+  {
+    "path": "/hotels/detail/:",
+    "testPath": "/hotels/detail/tokyo-shinjuku-pass",
+    "status": 200,
+    "location": ""
+  },
+  {
+    "path": "/hotels",
+    "testPath": "/hotels",
+    "status": 307,
+    "location": "/hotels/"
+  },
+  {
+    "path": "/hotels/list",
+    "testPath": "/hotels/list",
+    "status": 307,
+    "location": "/hotels/list/"
+  },
+  {
+    "path": "/hotels/:",
+    "testPath": "/hotels/tokyo-shinjuku-pass",
+    "status": 200,
+    "location": ""
+  },
+  {
+    "path": "/",
+    "testPath": "/",
+    "status": 200,
+    "location": ""
+  },
+  {
+    "path": "/insurance",
+    "testPath": "/insurance",
+    "status": 307,
+    "location": "/insurance/"
+  },
+  {
+    "path": "/login",
+    "testPath": "/login",
+    "status": 307,
+    "location": "/login/"
+  },
+  {
+    "path": "/moments",
+    "testPath": "/moments",
+    "status": 307,
+    "location": "/moments/"
+  },
+  {
+    "path": "/my/bookings/:",
+    "testPath": "/my/bookings/tokyo-shinjuku-pass",
+    "status": 200,
+    "location": ""
+  },
+  {
+    "path": "/my/bookings",
+    "testPath": "/my/bookings",
+    "status": 307,
+    "location": "/my/bookings/"
+  },
+  {
+    "path": "/my/coupons",
+    "testPath": "/my/coupons",
+    "status": 307,
+    "location": "/my/coupons/"
+  },
+  {
+    "path": "/my",
+    "testPath": "/my",
+    "status": 307,
+    "location": "/my/"
+  },
+  {
+    "path": "/my/passengers",
+    "testPath": "/my/passengers",
+    "status": 307,
+    "location": "/my/passengers/"
+  },
+  {
+    "path": "/my/profile",
+    "testPath": "/my/profile",
+    "status": 307,
+    "location": "/my/profile/"
+  },
+  {
+    "path": "/news",
+    "testPath": "/news",
+    "status": 307,
+    "location": "/news/"
+  },
+  {
+    "path": "/packages/booking",
+    "testPath": "/packages/booking",
+    "status": 307,
+    "location": "/packages/booking/"
+  },
+  {
+    "path": "/packages/builder",
+    "testPath": "/packages/builder",
+    "status": 307,
+    "location": "/packages/builder/"
+  },
+  {
+    "path": "/packages/detail",
+    "testPath": "/packages/detail",
+    "status": 307,
+    "location": "/packages/detail/"
+  },
+  {
+    "path": "/packages/detail/:",
+    "testPath": "/packages/detail/tokyo-shinjuku-pass",
+    "status": 200,
+    "location": ""
+  },
+  {
+    "path": "/packages",
+    "testPath": "/packages",
+    "status": 307,
+    "location": "/packages/"
+  },
+  {
+    "path": "/packages/list",
+    "testPath": "/packages/list",
+    "status": 307,
+    "location": "/packages/list/"
+  },
+  {
+    "path": "/partner/api-docs",
+    "testPath": "/partner/api-docs",
+    "status": 307,
+    "location": "/partner/api-docs/"
+  },
+  {
+    "path": "/partner/bookings",
+    "testPath": "/partner/bookings",
+    "status": 307,
+    "location": "/partner/bookings/"
+  },
+  {
+    "path": "/partner",
+    "testPath": "/partner",
+    "status": 307,
+    "location": "/partner/"
+  },
+  {
+    "path": "/partner/login",
+    "testPath": "/partner/login",
+    "status": 307,
+    "location": "/partner/login/"
+  },
+  {
+    "path": "/partner/products",
+    "testPath": "/partner/products",
+    "status": 307,
+    "location": "/partner/products/"
+  },
+  {
+    "path": "/partner/settings",
+    "testPath": "/partner/settings",
+    "status": 307,
+    "location": "/partner/settings/"
+  },
+  {
+    "path": "/partner/settlement",
+    "testPath": "/partner/settlement",
+    "status": 307,
+    "location": "/partner/settlement/"
+  },
+  {
+    "path": "/privacy",
+    "testPath": "/privacy",
+    "status": 307,
+    "location": "/privacy/"
+  },
+  {
+    "path": "/refund-policy",
+    "testPath": "/refund-policy",
+    "status": 307,
+    "location": "/refund-policy/"
+  },
+  {
+    "path": "/rewards",
+    "testPath": "/rewards",
+    "status": 307,
+    "location": "/rewards/"
+  },
+  {
+    "path": "/safety",
+    "testPath": "/safety",
+    "status": 307,
+    "location": "/safety/"
+  },
+  {
+    "path": "/sustainability",
+    "testPath": "/sustainability",
+    "status": 307,
+    "location": "/sustainability/"
+  },
+  {
+    "path": "/terms",
+    "testPath": "/terms",
+    "status": 307,
+    "location": "/terms/"
+  },
+  {
+    "path": "/things-to-do/booking",
+    "testPath": "/things-to-do/booking",
+    "status": 307,
+    "location": "/things-to-do/booking/"
+  },
+  {
+    "path": "/things-to-do/detail",
+    "testPath": "/things-to-do/detail",
+    "status": 307,
+    "location": "/things-to-do/detail/"
+  },
+  {
+    "path": "/things-to-do/detail/:",
+    "testPath": "/things-to-do/detail/tokyo-shinjuku-pass",
+    "status": 200,
+    "location": ""
+  },
+  {
+    "path": "/things-to-do",
+    "testPath": "/things-to-do",
+    "status": 307,
+    "location": "/things-to-do/"
+  },
+  {
+    "path": "/things-to-do/list",
+    "testPath": "/things-to-do/list",
+    "status": 307,
+    "location": "/things-to-do/list/"
+  },
+  {
+    "path": "/things-to-do/:",
+    "testPath": "/things-to-do/tokyo-shinjuku-pass",
+    "status": 200,
+    "location": ""
+  },
+  {
+    "path": "/trains/booking",
+    "testPath": "/trains/booking",
+    "status": 307,
+    "location": "/trains/booking/"
+  },
+  {
+    "path": "/trains/detail",
+    "testPath": "/trains/detail",
+    "status": 307,
+    "location": "/trains/detail/"
+  },
+  {
+    "path": "/trains/detail/:",
+    "testPath": "/trains/detail/tokyo-shinjuku-pass",
+    "status": 200,
+    "location": ""
+  },
+  {
+    "path": "/trains",
+    "testPath": "/trains",
+    "status": 307,
+    "location": "/trains/"
+  },
+  {
+    "path": "/trains/search",
+    "testPath": "/trains/search",
+    "status": 307,
+    "location": "/trains/search/"
+  },
+  {
+    "path": "/transfers/booking",
+    "testPath": "/transfers/booking",
+    "status": 307,
+    "location": "/transfers/booking/"
+  },
+  {
+    "path": "/transfers/detail",
+    "testPath": "/transfers/detail",
+    "status": 307,
+    "location": "/transfers/detail/"
+  },
+  {
+    "path": "/transfers/detail/:",
+    "testPath": "/transfers/detail/tokyo-shinjuku-pass",
+    "status": 200,
+    "location": ""
+  },
+  {
+    "path": "/transfers",
+    "testPath": "/transfers",
+    "status": 307,
+    "location": "/transfers/"
+  },
+  {
+    "path": "/transfers/list",
+    "testPath": "/transfers/list",
+    "status": 307,
+    "location": "/transfers/list/"
+  },
+  {
+    "path": "/trip-best",
+    "testPath": "/trip-best",
+    "status": 307,
+    "location": "/trip-best/"
+  }
+]

@@ -471,13 +471,47 @@ watch(internalValue, (val) => {
       }
     } catch (e: any) {
       if (e?.name === 'AbortError') return
-      // 로컬 지능형 폴백 필터
+      // 로컬 지능형 폴백 필터 (IATA 공항 코드 & 글로벌 랜드마크 종합 인덱스)
       const qLower = q.toLowerCase()
-      suggestions.value = domainPopularList.value.filter(item => 
-        item.title.toLowerCase().includes(qLower) ||
-        (item.subtitle && item.subtitle.toLowerCase().includes(qLower)) ||
-        (item.code && item.code.toLowerCase().includes(qLower))
-      )
+      const combined = [
+        ...domainPopularList.value,
+        { id: 'iata-icn', title: '인천국제공항 (ICN)', subtitle: '대한민국 서울/인천 Incheon Int Airport', code: 'ICN', type: 'airport', badge: '한국 허브', count_info: '일일 450편+', target_url: '/flights/search?dest=ICN' },
+        { id: 'iata-gmp', title: '김포국제공항 (GMP)', subtitle: '대한민국 서울 Gimpo Airport', code: 'GMP', type: 'airport', badge: '도심 공항', count_info: '일일 180편', target_url: '/flights/search?dest=GMP' },
+        { id: 'iata-cju', title: '제주국제공항 (CJU)', subtitle: '대한민국 제주특별자치도 Jeju Int Airport', code: 'CJU', type: 'airport', badge: '휴양지 허브', count_info: '일일 220편', target_url: '/flights/search?dest=CJU' },
+        { id: 'iata-pus', title: '김해국제공항 (PUS)', subtitle: '대한민국 부산/영남 Gimhae Int Airport', code: 'PUS', type: 'airport', badge: '영남 허브', count_info: '일일 140편', target_url: '/flights/search?dest=PUS' },
+        { id: 'iata-nrt', title: '도쿄 나리타국제공항 (NRT)', subtitle: '일본 도쿄/지바 Tokyo Narita Airport', code: 'NRT', type: 'airport', badge: '국제선 허브', count_info: '일일 280편', target_url: '/flights/search?dest=NRT' },
+        { id: 'iata-hnd', title: '도쿄 하네다공항 (HND)', subtitle: '일본 도쿄도 Tokyo Haneda Airport', code: 'HND', type: 'airport', badge: '도심 공항', count_info: '일일 320편', target_url: '/flights/search?dest=HND' },
+        { id: 'iata-kix', title: '오사카 간사이국제공항 (KIX)', subtitle: '일본 오사카/간사이 Kansai Int Airport', code: 'KIX', type: 'airport', badge: '간사이 중심', count_info: '일일 210편', target_url: '/flights/search?dest=KIX' },
+        { id: 'iata-fuk', title: '후쿠오카공항 (FUK)', subtitle: '일본 규슈 후쿠오카 Fukuoka Airport', code: 'FUK', type: 'airport', badge: '단거리 인기', count_info: '일일 110편', target_url: '/flights/search?dest=FUK' },
+        { id: 'iata-cts', title: '삿포로 신치토세공항 (CTS)', subtitle: '일본 홋카이도 New Chitose Airport', code: 'CTS', type: 'airport', badge: '설경 인기', count_info: '일일 90편', target_url: '/flights/search?dest=CTS' },
+        { id: 'iata-oka', title: '오키나와 나하공항 (OKA)', subtitle: '일본 오키나와 Naha Airport', code: 'OKA', type: 'airport', badge: '휴양 섬', count_info: '일일 85편', target_url: '/flights/search?dest=OKA' },
+        { id: 'iata-bkk', title: '방콕 수완나품국제공항 (BKK)', subtitle: '태국 방콕 Suvarnabhumi Airport', code: 'BKK', type: 'airport', badge: '동남아 허브', count_info: '일일 340편', target_url: '/flights/search?dest=BKK' },
+        { id: 'iata-dad', title: '다낭국제공항 (DAD)', subtitle: '베트남 다낭 Da Nang Int Airport', code: 'DAD', type: 'airport', badge: '가족 휴양', count_info: '일일 95편', target_url: '/flights/search?dest=DAD' },
+        { id: 'iata-sin', title: '싱가포르 창이국제공항 (SIN)', subtitle: '싱가포르 Singapore Changi Airport', code: 'SIN', type: 'airport', badge: '세계 1위', count_info: '일일 380편', target_url: '/flights/search?dest=SIN' },
+        { id: 'iata-tpe', title: '타이베이 타오위안공항 (TPE)', subtitle: '대만 타이베이 Taoyuan Int Airport', code: 'TPE', type: 'airport', badge: '식도락 인기', count_info: '일일 160편', target_url: '/flights/search?dest=TPE' },
+        { id: 'iata-cdg', title: '파리 샤를드골국제공항 (CDG)', subtitle: '프랑스 파리 Charles de Gaulle Airport', code: 'CDG', type: 'airport', badge: '유럽 관문', count_info: '일일 420편', target_url: '/flights/search?dest=CDG' },
+        { id: 'iata-lhr', title: '런던 히드로공항 (LHR)', subtitle: '영국 런던 London Heathrow Airport', code: 'LHR', type: 'airport', badge: '유럽 최대', count_info: '일일 480편', target_url: '/flights/search?dest=LHR' },
+        { id: 'iata-jfk', title: '뉴욕 존F케네디국제공항 (JFK)', subtitle: '미국 뉴욕 New York JFK Int Airport', code: 'JFK', type: 'airport', badge: '미주 대표', count_info: '일일 510편', target_url: '/flights/search?dest=JFK' },
+        { id: 'iata-lax', title: '로스앤젤레스국제공항 (LAX)', subtitle: '미국 캘리포니아 Los Angeles Airport', code: 'LAX', type: 'airport', badge: '서부 거점', count_info: '일일 490편', target_url: '/flights/search?dest=LAX' },
+        { id: 'lmk-eiffel', title: '에펠탑 (Eiffel Tower)', subtitle: '프랑스 파리 7구 상드마르스 공원 명소', type: 'activity', badge: '세계 랜드마크', count_info: '입장권 예약', target_url: '/things-to-do?q=에펠탑' },
+        { id: 'lmk-louvre', title: '루브르 박물관 (Louvre Museum)', subtitle: '프랑스 파리 1구 세계 최대 미술관', type: 'activity', badge: '미술관/박물관', count_info: '패스트트랙', target_url: '/things-to-do?q=루브르' },
+        { id: 'lmk-usj', title: '유니버설 스튜디오 재팬 (USJ)', subtitle: '일본 오사카 익스프레스 패스 테마파크', type: 'activity', badge: '초인기 명소', count_info: '즉시 확정', target_url: '/things-to-do?q=유니버설' },
+        { id: 'lmk-disney', title: '도쿄 디즈니랜드 / 디즈니씨', subtitle: '일본 지바현 우라야스시 테마파크 e-티켓', type: 'activity', badge: '초인기 명소', count_info: 'e-티켓 즉시 발권', target_url: '/things-to-do?q=디즈니랜드' },
+        { id: 'lmk-mbs', title: '마리나 베이 샌즈 스카이파크', subtitle: '싱가포르 마리나 베이 57층 인피니티풀 전망대', type: 'activity', badge: '도시 랜드마크', count_info: '전망대 입장권', target_url: '/things-to-do?q=마리나베이' }
+      ]
+
+      // Filter and deduplicate
+      const seen = new Set<string>()
+      suggestions.value = combined.filter(item => {
+        const matches = 
+          item.title.toLowerCase().includes(qLower) ||
+          (item.subtitle && item.subtitle.toLowerCase().includes(qLower)) ||
+          (item.code && item.code.toLowerCase().includes(qLower))
+        if (!matches) return false
+        if (seen.has(item.title)) return false
+        seen.add(item.title)
+        return true
+      }).slice(0, 8)
     } finally {
       loading.value = false
       highlightIndex.value = -1

@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '~/stores/auth'
+import { useApiUrl } from '~/composables/useApi'
 
 const router = useRouter()
 const route = useRoute()
@@ -24,19 +25,40 @@ const handleLogin = async () => {
   isSubmitting.value = true
   errorMessage.value = ''
 
-  // Simulate authentication
-  setTimeout(() => {
-    authStore.login({
-      id: 'usr_' + Math.random().toString(36).substring(2, 9),
-      email: email.value,
-      fullName: email.value.split('@')[0] || '여행회원',
-      tier: 'SILVER',
-      tripCoins: 1000,
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'
+  try {
+    const loginUrl = useApiUrl('/auth/login')
+    const res = await $fetch<{
+      success: boolean
+      token: string
+      user: {
+        id: string
+        email: string
+        fullName: string
+        tier: string
+        tripCoins: number
+        avatarUrl?: string
+      }
+    }>(loginUrl, {
+      method: 'POST',
+      body: {
+        email: email.value,
+        password: password.value
+      }
     })
+
+    if (res && res.success && res.user) {
+      authStore.login(res.user, res.token)
+      router.push(redirectPath)
+    } else {
+      throw new Error('로그인 응답 형식이 올바르지 않습니다.')
+    }
+  } catch (err: any) {
+    // If backend returns 401 or network error
+    const detail = err?.data?.error || err?.message || '로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.'
+    errorMessage.value = detail
+  } finally {
     isSubmitting.value = false
-    router.push(redirectPath)
-  }, 400)
+  }
 }
 
 const handleDemoLogin = () => {
@@ -93,14 +115,18 @@ const handleDemoLogin = () => {
             <input v-model="rememberMe" type="checkbox" class="w-4 h-4 rounded text-trip-blue" />
             <span class="text-slate-600 font-medium">로그인 상태 유지</span>
           </label>
+          <NuxtLink :to="{ path: '/register', query: route.query }" class="font-bold text-trip-blue hover:underline text-xs">
+            회원가입 ›
+          </NuxtLink>
         </div>
 
         <button
           type="submit"
           :disabled="isSubmitting"
-          class="w-full py-3.5 bg-trip-blue hover:bg-blue-600 text-white font-black rounded-xl text-sm shadow-md transition disabled:opacity-50"
+          class="w-full py-3.5 bg-trip-blue hover:bg-blue-600 text-white font-black rounded-xl text-sm shadow-md transition disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
         >
-          {{ isSubmitting ? '로그인 처리 중...' : '로그인' }}
+          <span v-if="!isSubmitting">로그인</span>
+          <span v-else class="animate-pulse">로그인 확인 중...</span>
         </button>
       </form>
 
@@ -110,15 +136,22 @@ const handleDemoLogin = () => {
         <span class="bg-white px-3 text-[11px] font-bold text-slate-400 absolute">또는 간편 로그인</span>
       </div>
 
-      <!-- 간편 데모 로그인 & B2B 바로가기 -->
+      <!-- 간편 데모 로그인 & 신규 회원가입 & B2B 바로가기 -->
       <div class="space-y-3">
         <button
           @click="handleDemoLogin"
-          class="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-sm transition flex items-center justify-center gap-2"
+          class="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-sm transition flex items-center justify-center gap-2 cursor-pointer"
         >
           <span>👑</span>
           <span>VIP 체험 계정으로 1초 로그인 (데모)</span>
         </button>
+
+        <NuxtLink
+          :to="{ path: '/register', query: route.query }"
+          class="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition flex items-center justify-center gap-2"
+        >
+          <span>✨ 아직 회원이 아니신가요? 1분 회원가입 (+5,000 코인)</span>
+        </NuxtLink>
 
         <div class="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
           <span>공급사 및 제휴 파트너이신가요?</span>
@@ -130,4 +163,3 @@ const handleDemoLogin = () => {
     </div>
   </div>
 </template>
-

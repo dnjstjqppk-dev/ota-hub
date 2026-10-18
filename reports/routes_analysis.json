@@ -1,0 +1,578 @@
+[
+  {
+    "file": "frontend-user/pages/about.vue",
+    "route": "/about",
+    "lines": 77,
+    "hasApi": false,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/booking/complete.vue",
+    "route": "/booking/complete",
+    "lines": 9,
+    "hasApi": false,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/booking/success.vue",
+    "route": "/booking/success",
+    "lines": 250,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/careers.vue",
+    "route": "/careers",
+    "lines": 68,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/cars/booking.vue",
+    "route": "/cars/booking",
+    "lines": 389,
+    "hasApi": true,
+    "hasCatalog": true,
+    "hasMock": true
+  },
+  {
+    "file": "frontend-user/pages/cars/detail/index.vue",
+    "route": "/cars/detail",
+    "lines": 14,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/cars/detail/[id].vue",
+    "route": "/cars/detail/:",
+    "lines": 177,
+    "hasApi": true,
+    "hasCatalog": true,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/cars/index.vue",
+    "route": "/cars",
+    "lines": 343,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/cars/list.vue",
+    "route": "/cars/list",
+    "lines": 465,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/cookies.vue",
+    "route": "/cookies",
+    "lines": 40,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/deals.vue",
+    "route": "/deals",
+    "lines": 102,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/esim.vue",
+    "route": "/esim",
+    "lines": 276,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/faq.vue",
+    "route": "/faq",
+    "lines": 108,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/flights/booking.vue",
+    "route": "/flights/booking",
+    "lines": 462,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": true
+  },
+  {
+    "file": "frontend-user/pages/flights/detail/index.vue",
+    "route": "/flights/detail",
+    "lines": 14,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/flights/detail/[id].vue",
+    "route": "/flights/detail/:",
+    "lines": 267,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/flights/index.vue",
+    "route": "/flights",
+    "lines": 219,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/flights/search.vue",
+    "route": "/flights/search",
+    "lines": 570,
+    "hasApi": true,
+    "hasCatalog": true,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/help.vue",
+    "route": "/help",
+    "lines": 160,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/hotels/booking.vue",
+    "route": "/hotels/booking",
+    "lines": 402,
+    "hasApi": true,
+    "hasCatalog": true,
+    "hasMock": true
+  },
+  {
+    "file": "frontend-user/pages/hotels/detail/index.vue",
+    "route": "/hotels/detail",
+    "lines": 13,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/hotels/detail/[id].vue",
+    "route": "/hotels/detail/:",
+    "lines": 237,
+    "hasApi": true,
+    "hasCatalog": true,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/hotels/index.vue",
+    "route": "/hotels",
+    "lines": 339,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/hotels/list.vue",
+    "route": "/hotels/list",
+    "lines": 529,
+    "hasApi": true,
+    "hasCatalog": true,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/hotels/[id].vue",
+    "route": "/hotels/:",
+    "lines": 13,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/index.vue",
+    "route": "/",
+    "lines": 305,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/insurance.vue",
+    "route": "/insurance",
+    "lines": 206,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/login.vue",
+    "route": "/login",
+    "lines": 134,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/moments/index.vue",
+    "route": "/moments",
+    "lines": 195,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/my/bookings/[id].vue",
+    "route": "/my/bookings/:",
+    "lines": 272,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/my/bookings.vue",
+    "route": "/my/bookings",
+    "lines": 193,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": true
+  },
+  {
+    "file": "frontend-user/pages/my/coupons.vue",
+    "route": "/my/coupons",
+    "lines": 97,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/my/index.vue",
+    "route": "/my",
+    "lines": 393,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/my/passengers.vue",
+    "route": "/my/passengers",
+    "lines": 159,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/my/profile.vue",
+    "route": "/my/profile",
+    "lines": 111,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/news.vue",
+    "route": "/news",
+    "lines": 60,
+    "hasApi": false,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/packages/booking.vue",
+    "route": "/packages/booking",
+    "lines": 401,
+    "hasApi": true,
+    "hasCatalog": true,
+    "hasMock": true
+  },
+  {
+    "file": "frontend-user/pages/packages/builder.vue",
+    "route": "/packages/builder",
+    "lines": 109,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/packages/detail/index.vue",
+    "route": "/packages/detail",
+    "lines": 14,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/packages/detail/[id].vue",
+    "route": "/packages/detail/:",
+    "lines": 209,
+    "hasApi": true,
+    "hasCatalog": true,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/packages/index.vue",
+    "route": "/packages",
+    "lines": 229,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/packages/list.vue",
+    "route": "/packages/list",
+    "lines": 157,
+    "hasApi": true,
+    "hasCatalog": true,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/partner/api-docs.vue",
+    "route": "/partner/api-docs",
+    "lines": 292,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/partner/bookings.vue",
+    "route": "/partner/bookings",
+    "lines": 364,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/partner/index.vue",
+    "route": "/partner",
+    "lines": 323,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/partner/login.vue",
+    "route": "/partner/login",
+    "lines": 145,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/partner/products.vue",
+    "route": "/partner/products",
+    "lines": 308,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/partner/settings.vue",
+    "route": "/partner/settings",
+    "lines": 204,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/partner/settlement.vue",
+    "route": "/partner/settlement",
+    "lines": 208,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/privacy.vue",
+    "route": "/privacy",
+    "lines": 47,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/refund-policy.vue",
+    "route": "/refund-policy",
+    "lines": 62,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/rewards.vue",
+    "route": "/rewards",
+    "lines": 94,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/safety.vue",
+    "route": "/safety",
+    "lines": 54,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/sustainability.vue",
+    "route": "/sustainability",
+    "lines": 55,
+    "hasApi": false,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/terms.vue",
+    "route": "/terms",
+    "lines": 52,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/things-to-do/booking.vue",
+    "route": "/things-to-do/booking",
+    "lines": 384,
+    "hasApi": true,
+    "hasCatalog": true,
+    "hasMock": true
+  },
+  {
+    "file": "frontend-user/pages/things-to-do/detail/index.vue",
+    "route": "/things-to-do/detail",
+    "lines": 13,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/things-to-do/detail/[id].vue",
+    "route": "/things-to-do/detail/:",
+    "lines": 393,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/things-to-do/index.vue",
+    "route": "/things-to-do",
+    "lines": 434,
+    "hasApi": true,
+    "hasCatalog": true,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/things-to-do/list.vue",
+    "route": "/things-to-do/list",
+    "lines": 9,
+    "hasApi": false,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/things-to-do/[id].vue",
+    "route": "/things-to-do/:",
+    "lines": 13,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/trains/booking.vue",
+    "route": "/trains/booking",
+    "lines": 381,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": true
+  },
+  {
+    "file": "frontend-user/pages/trains/detail/index.vue",
+    "route": "/trains/detail",
+    "lines": 14,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/trains/detail/[id].vue",
+    "route": "/trains/detail/:",
+    "lines": 233,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/trains/index.vue",
+    "route": "/trains",
+    "lines": 252,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/trains/search.vue",
+    "route": "/trains/search",
+    "lines": 310,
+    "hasApi": true,
+    "hasCatalog": true,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/transfers/booking.vue",
+    "route": "/transfers/booking",
+    "lines": 328,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": true
+  },
+  {
+    "file": "frontend-user/pages/transfers/detail/index.vue",
+    "route": "/transfers/detail",
+    "lines": 14,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/transfers/detail/[id].vue",
+    "route": "/transfers/detail/:",
+    "lines": 158,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/transfers/index.vue",
+    "route": "/transfers",
+    "lines": 300,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/transfers/list.vue",
+    "route": "/transfers/list",
+    "lines": 373,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  },
+  {
+    "file": "frontend-user/pages/trip-best.vue",
+    "route": "/trip-best",
+    "lines": 111,
+    "hasApi": true,
+    "hasCatalog": false,
+    "hasMock": false
+  }
+]

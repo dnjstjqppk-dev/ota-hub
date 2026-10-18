@@ -468,14 +468,17 @@ func (h *APIHandler) PayBooking(w http.ResponseWriter, r *http.Request) {
 
 	proof := payReq.PaymentProof
 	if proof == "" {
-		proof = r.Header.Get("X-Payment-Proof")
-	}
-	if proof == "" {
 		proof = r.Header.Get("Authorization")
 	}
 
+	// Zero-Tolerance Rule: Explicitly reject arbitrary X-Payment-Proof header bypass
+	if r.Header.Get("X-Payment-Proof") != "" && payReq.PaymentProof == "" && r.Header.Get("Authorization") == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized payment proof header bypass rejected: cryptographic signature required")
+		return
+	}
+
 	if proof == "" {
-		writeError(w, http.StatusBadRequest, "payment proof or authorization token required for payment confirmation")
+		writeError(w, http.StatusBadRequest, "verified payment proof or authorization token required for payment confirmation")
 		return
 	}
 

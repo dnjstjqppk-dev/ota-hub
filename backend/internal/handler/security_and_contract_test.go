@@ -74,6 +74,17 @@ func TestSecurityAndContract(t *testing.T) {
 		if wWithProof.Code != http.StatusOK {
 			t.Fatalf("Expected 200 OK for payment with valid proof, got %d", wWithProof.Code)
 		}
+
+		// Fake X-Payment-Proof header bypass is explicitly rejected with 401
+		fakeBooking, _ := store.CreateDraftBooking(domain.Booking{BaseAmountKRW: 50000, FinalAmountKRW: 50000})
+		fakeReq := httptest.NewRequest("POST", "/api/v1/bookings/"+fakeBooking.ID+"/pay", bytes.NewReader([]byte(`{}`)))
+		fakeReq.Header.Set("X-Payment-Proof", "evil_hacker_proof")
+		fakeReq.SetPathValue("id", fakeBooking.ID)
+		wFake := httptest.NewRecorder()
+		h.PayBooking(wFake, fakeReq)
+		if wFake.Code != http.StatusUnauthorized {
+			t.Fatalf("Expected 401 Unauthorized for fake X-Payment-Proof header, got %d", wFake.Code)
+		}
 	})
 
 	t.Run("empty_suggestion_payload_is_array", func(t *testing.T) {

@@ -524,5 +524,18 @@ onMounted(() => {
         </div>
       </div>
     </Teleport>
+
+    <!-- 모바일 플로팅 필터 플로팅 버튼 (getfortrip 스타일) -->
+    <div class="lg:hidden fixed bottom-20 right-4 z-40">
+      <button
+        @click="showMobileFilter = true"
+        class="flex items-center gap-2 px-4 py-3 bg-trip-navy text-white text-xs font-black rounded-full shadow-2xl border border-slate-700/80 active:scale-95 transition-all cursor-pointer"
+      >
+        <span>⚡ 필터</span>
+        <span v-if="activeFilterCount > 0" class="w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] flex items-center justify-center font-black">
+          {{ activeFilterCount }}
+        </span>
+      </button>
+    </div>
   </div>
 </template>

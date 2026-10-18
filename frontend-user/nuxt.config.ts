@@ -88,9 +88,9 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      apiBase: 'http://localhost:8080/api/v1',
+      apiBase: process.env.NUXT_PUBLIC_API_BASE || '/api/v1',
       brandName: 'getfortrip',
-      brandDomain: 'getfortrip.com'
+      brandDomain: process.env.PUBLIC_SITE_URL ? new URL(process.env.PUBLIC_SITE_URL).hostname : 'getfortrip.com'
     }
   },
   app: {

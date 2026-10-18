@@ -27,7 +27,8 @@ const IGNORED_DIRS = new Set([
   '.nuxt',
   '.system_generated',
   'brain',
-  'scratch'
+  'scratch',
+  'reports'
 ])
 
 const IGNORED_FILES = new Set([
