@@ -59,3 +59,4 @@
 2. **Phase 2 (Post PG-Approval):**
    - **Trigger:** Toss Payments / PortOne Merchant MID issuance.
    - **Action:** Transition direct booking endpoints from Escrow Hold to Live PG settlement.
+

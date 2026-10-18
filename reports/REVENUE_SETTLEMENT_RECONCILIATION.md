@@ -90,3 +90,4 @@ Every completed outbound transaction triggers an authenticated server-to-server 
 - **Tax Invoicing:** VAT (10%) applied only to net commission earnings for domestic partner transactions.
 - **PCI-DSS:** Zero credit card numbers or CVVs stored in getfortrip D1 database; all payment processing delegated to level-1 PCI-DSS compliant PG gateways.
 - **Audit Ledger:** All financial actions logged to `admin_audit_logs` with tamper-evident actor ID and timestamp.
+

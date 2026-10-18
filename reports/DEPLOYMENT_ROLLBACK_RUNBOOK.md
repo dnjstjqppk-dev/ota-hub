@@ -101,3 +101,4 @@ If JWT secret or partner HMAC webhook secret is suspected to be compromised:
 - [ ] Webhook HMAC verification active: Invalid signatures return `401/403`.
 - [ ] Run full automated test suite: `node scripts/verify-production.js` (Must be 22/22 PASS).
 - [ ] SRE incident postmortem filed within 24 hours.
+
