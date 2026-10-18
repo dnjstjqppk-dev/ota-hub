@@ -19,5 +19,9 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     "run_worker_first": true
+  },
+  "vars": {
+    "JWT_SECRET": "47ab072289de6845c7336403b693e8bee13baa28ad7020e56c703386c101f650",
+    "AFFILIATE_HMAC_SECRET": "7069045ddc627aa2cb6573fdbbee49e593f2e53c90f71866e5db38fa7f04bb77"
   }
 }

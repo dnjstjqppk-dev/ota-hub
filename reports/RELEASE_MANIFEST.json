@@ -1,0 +1,57 @@
+{
+  "project": "getfortrip",
+  "version": "1.0.0-prod",
+  "build_timestamp": "2026-10-18T14:54:00Z",
+  "git": {
+    "branch": "main",
+    "repository": "https://github.com/dnjstjqppk-dev/ota-hub.git",
+    "status": "hardened-clean"
+  },
+  "deployment": {
+    "target_platform": "Cloudflare Workers & D1 Database",
+    "worker_name": "ota-hub",
+    "worker_version_id": "81f0ee1c-4c2f-4663-8931-7711204f77c2",
+    "worker_url": "https://ota-hub.dnjstjqppk.workers.dev",
+    "target_domain": "https://getfortrip.com",
+    "d1_database_id": "d36231d8-4bfb-42e1-ae51-a019723e5db0",
+    "d1_database_name": "ota_production"
+  },
+  "security_audit": {
+    "audit_date": "2026-10-18",
+    "password_hasher": "PBKDF2-SHA256 (100,000 iterations)",
+    "jwt_spec": "RFC 7519 HMAC-SHA256 (UTF-8 safe base64url)",
+    "admin_backdoor": "ELIMINATED",
+    "sandbox_signature_bypass": "ELIMINATED",
+    "idor_prevention": "VERIFIED (403 on foreign user booking access)",
+    "admin_rbac": "VERIFIED (403 on non-admin user access)",
+    "e2e_forensic_suite": {
+      "runner": "scripts/verify-production.js",
+      "total_tests": 22,
+      "passed": 22,
+      "failed": 0,
+      "pass_rate": "100%"
+    }
+  },
+  "modules": {
+    "backend_go": {
+      "version": "go1.27.0",
+      "test_status": "PASS",
+      "binary_path": "backend/cmd/api"
+    },
+    "frontend_user": {
+      "framework": "Nuxt 3",
+      "prerendered_routes_count": 240,
+      "zero_404_verified": true
+    },
+    "frontend_admin": {
+      "framework": "Vue 3 + Vite",
+      "build_status": "PASS",
+      "output_dir": "frontend-admin/dist"
+    },
+    "edge_worker": {
+      "runtime": "Cloudflare Workers",
+      "source_file": "worker/index.ts",
+      "config_file": "wrangler.jsonc"
+    }
+  }
+}

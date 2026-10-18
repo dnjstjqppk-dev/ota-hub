@@ -9,3 +9,4 @@ await navigateTo('/my/bookings', { replace: true })
     <span>예약 내역으로 이동 중...</span>
   </div>
 </template>
+

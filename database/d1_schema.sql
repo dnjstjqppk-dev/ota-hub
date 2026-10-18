@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     full_name TEXT NOT NULL,
     phone_number TEXT,
+    role TEXT DEFAULT 'USER',
     preferred_currency TEXT DEFAULT 'KRW',
     preferred_language TEXT DEFAULT 'ko',
     tier TEXT DEFAULT 'SILVER',
@@ -115,14 +116,15 @@ VALUES
 ('klook', 'Klook', 'https://www.klook.com/ko/activity/{item_id}/?aid=38291&aff_sub={click_id}', 'AID-KLOOK-38291', 'klook_hmac_secret_2026', 1),
 ('myrealtrip', 'MyRealTrip', 'https://www.myrealtrip.com/offers/{item_id}?aff_id=getfortrip&click_id={click_id}', 'AID-MRT-7721', 'mrt_hmac_secret_2026', 1);
 
--- Seed initial admin user if not exists
-INSERT OR IGNORE INTO users (id, email, password_hash, full_name, phone_number, tier, trip_coins)
+-- Seed initial admin user if not exists (PBKDF2-HMAC-SHA256 hashed with per-user random salt)
+INSERT OR IGNORE INTO users (id, email, password_hash, full_name, phone_number, role, tier, trip_coins)
 VALUES (
     'usr-admin-001',
     'admin@getfortrip.com',
-    '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', -- sha256 of 'admin1234!'
+    'pbkdf2:sha256:100000:4a78ff00cace8af97d13f3ecfcc6b9fd:eb4f2a9e3c2056a7f3a272cb0866a2ddfe485ce09f4bf172984926deb661ca06',
     '총괄 관리자',
     '010-1234-5678',
+    'ADMIN',
     'DIAMOND_PLUS',
     100000
 );
