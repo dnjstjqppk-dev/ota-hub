@@ -679,10 +679,39 @@ func (s *Store) SearchHotels(city string, star int, minPrice, maxPrice float64, 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var results []domain.Hotel
+	results := make([]domain.Hotel, 0)
+	cleanCity := strings.TrimSpace(city)
+	if idx := strings.Index(cleanCity, "("); idx > 0 {
+		cleanCity = strings.TrimSpace(cleanCity[:idx])
+	}
+	cleanCityLower := strings.ToLower(cleanCity)
+
 	for _, h := range s.Hotels {
-		if city != "" && !strings.Contains(h.City, city) && !strings.Contains(h.NameKO, city) {
-			continue
+		if cleanCity != "" {
+			hCityLower := strings.ToLower(h.City)
+			hNameLower := strings.ToLower(h.NameKO)
+			matched := strings.Contains(hCityLower, cleanCityLower) ||
+				strings.Contains(cleanCityLower, hCityLower) ||
+				strings.Contains(hNameLower, cleanCityLower) ||
+				strings.Contains(cleanCityLower, hNameLower)
+			if !matched {
+				if (cleanCityLower == "tokyo" || cleanCityLower == "tyo") && strings.Contains(hCityLower, "도쿄") {
+					matched = true
+				} else if (cleanCityLower == "osaka" || cleanCityLower == "osa") && strings.Contains(hCityLower, "오사카") {
+					matched = true
+				} else if (cleanCityLower == "seoul" || cleanCityLower == "sel") && strings.Contains(hCityLower, "서울") {
+					matched = true
+				} else if (cleanCityLower == "bangkok" || cleanCityLower == "bkk") && strings.Contains(hCityLower, "방콕") {
+					matched = true
+				} else if (cleanCityLower == "fukuoka" || cleanCityLower == "fuk") && strings.Contains(hCityLower, "후쿠오카") {
+					matched = true
+				} else if (cleanCityLower == "paris" || cleanCityLower == "par") && strings.Contains(hCityLower, "파리") {
+					matched = true
+				}
+			}
+			if !matched {
+				continue
+			}
 		}
 		if star > 0 && h.StarRating < star {
 			continue
@@ -809,6 +838,10 @@ func (s *Store) GetPackageDetail(id string) (*domain.DynamicPackage, error) {
 
 // CreateDraftBooking creates draft booking with 15min inventory lock
 func (s *Store) CreateDraftBooking(b domain.Booking) (*domain.Booking, error) {
+	if b.BaseAmountKRW <= 0 || b.FinalAmountKRW < 0 {
+		return nil, fmt.Errorf("invalid booking amount: amount cannot be negative or zero")
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -973,7 +1006,7 @@ func (s *Store) SearchSuggest(query string, domainFilter string) []domain.Sugges
 	}
 
 	// Filter and match
-	var matched []domain.SuggestItem
+	matched := make([]domain.SuggestItem, 0)
 	for _, item := range catalog {
 		// Domain filter check
 		if df != "" && df != "all" {

@@ -41,27 +41,33 @@ const fetchMyBookings = async () => {
 const cancelBooking = async (id: string) => {
   if (!confirm('정말 예약을 취소하시겠습니까? 무료 취소 기간인 경우 전액 환불됩니다.')) return
   try {
-    await fetch(useApiUrl(`/bookings/${id}/cancel`), { method: 'POST' })
-  } catch (e) {}
-
-  // Update local storage
-  try {
-    const raw = localStorage.getItem('user_mock_bookings')
-    if (raw) {
-      const list = JSON.parse(raw)
-      const found = list.find((b: any) => b.id === id)
-      if (found) {
-        found.status = 'CANCELLED'
-        localStorage.setItem('user_mock_bookings', JSON.stringify(list))
-      }
+    const res = await fetch(useApiUrl(`/bookings/${id}/cancel`), { method: 'POST' })
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}))
+      throw new Error(errJson?.error || '서버 취소 처리에 실패했습니다.')
     }
-  } catch (e) {}
 
-  const target = bookings.value.find(b => b.id === id)
-  if (target) {
-    target.status = 'CANCELLED'
+    // Update local storage
+    try {
+      const raw = localStorage.getItem('user_mock_bookings')
+      if (raw) {
+        const list = JSON.parse(raw)
+        const found = list.find((b: any) => b.id === id)
+        if (found) {
+          found.status = 'CANCELLED'
+          localStorage.setItem('user_mock_bookings', JSON.stringify(list))
+        }
+      }
+    } catch (e) {}
+
+    const target = bookings.value.find(b => b.id === id)
+    if (target) {
+      target.status = 'CANCELLED'
+    }
+    alert('예약이 정상적으로 취소되었습니다. 취소 확인 영수증이 발행되었습니다.')
+  } catch (e: any) {
+    alert(`⚠️ [예약 취소 오류]\n${e.message || '예약을 취소할 수 없습니다. 고객센터로 문의해 주세요.'}`)
   }
-  alert('예약이 정상적으로 취소되었습니다. 취소 확인 영수증이 발행되었습니다.')
 }
 
 onMounted(() => {

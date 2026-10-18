@@ -99,11 +99,11 @@ const popularRoutes = [
             <div class="md:col-span-5 grid grid-cols-2 gap-2 relative">
               <div class="space-y-1">
                 <label class="text-xs font-bold text-slate-400">출발지</label>
-                <SearchAutocomplete v-model="origin" type="flights" placeholder="출발 공항" />
+                <SearchAutocomplete v-model="origin" domain="flights" placeholder="출발 공항" />
               </div>
               <div class="space-y-1">
                 <label class="text-xs font-bold text-slate-400">도착지</label>
-                <SearchAutocomplete v-model="dest" type="flights" placeholder="도착 공항" />
+                <SearchAutocomplete v-model="dest" domain="flights" placeholder="도착 공항" />
               </div>
             </div>
 

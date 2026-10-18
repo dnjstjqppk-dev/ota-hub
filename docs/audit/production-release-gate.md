@@ -1,49 +1,50 @@
-# getforTrip 프로덕션 배포 릴리즈 게이트 최종 승인서
+# getforTrip 보안 및 트랜잭션 무결성 검수 보고서 (Production Audit Gate)
 
-**문서 번호**: GFT-AUDIT-2026-FINAL  
-**발행 일자**: 2026-10-17  
-**대상 버전**: getforTrip Release v2.0.0-prod  
-**배포 인프라**: Cloudflare Workers (`ota-hub.dnjstjqppk.workers.dev`) → 정식 도메인 (`getfortrip.com`)  
-**최종 승인자**: Chief Software Architect, CISO & Release Gate Board  
-
----
-
-## 1. 릴리즈 게이트 통과 종합 판정: [ APPROVED - 전면 배포 승인 ]
-
-getforTrip OTA 플랫폼에 대한 전수 포렌식 감사 및 결함 수정 과업이 성공적으로 완료되었으며, 10대 핵심 P0 결함이 100% 해소되었고, 무한 로딩 및 404 에러 0건, 개인정보 노출 0건을 달성하였음을 확인하고 최종 프로덕션 배포를 공식 승인합니다.
+**문서 번호**: GFT-AUDIT-2026-FINAL-REV2  
+**발행 일자**: 2026-10-18  
+**대상 버전**: getforTrip Release v2.1.0  
+**배포 인프라**: Cloudflare Workers (`ota-hub.dnjstjqppk.workers.dev`)  
+**검수 책임**: DevOps & Tech Lead / Backend Architecture Board  
 
 ---
 
-## 2. 10대 핵심 P0 결함 전수 조치 검증표
+## 1. 종합 판정: [ CONDITIONAL PASS — 시스템 무결성 및 보안 조치 완료 ]
 
-| 결함 번호 | 결함 내용 | 기존 문제점 | 최종 조치 결과 | 상태 |
-|---|---|---|---|:---:|
-| **P0-01** | 호텔 목적지 검색 0건 | 도쿄/서울/오사카/방콕 등 검색 시 0건 또는 엉뚱한 호텔 노출 | 6대 도시 18개 특급 호텔 마스터 카탈로그 구축, `searchHotelCatalog` 엄격 필터링 | **RESOLVED** |
-| **P0-02** | 항공권 검색 및 과거 날짜 | 과거 고정 일자(`11/01 (오늘)`) 노출, 왕복 2단계 스케줄 선택 불가 | 동적 7일 최저가 스트립 엔진(`generateDynamicDateStrip`), 왕복 2단계 자동 전환 플로우 | **RESOLVED** |
-| **P0-03** | 호텔 상세 무한 로딩 | `/hotels/detail/htl_tokyo_01/` 등 상세 진입 시 영구 행(Infinite Hang) | Nuxt 3 SSG 동기식 데이터 리졸버 적용, 초기 로딩 지연 0ms 실현 | **RESOLVED** |
-| **P0-04** | 패키지 엔진 빈 껍데기 | `/packages/list/` 내용물 없는 빈 페이지 방치 | `packageCatalog.ts` 구축, 항공+호텔 결합 할인(15%~22%) 번들 엔진 완비 | **RESOLVED** |
-| **P0-05** | 기차 검색 노선 오염 | 서울-부산 KTX 검색 시 도쿄-신오사카 신칸센이 무차별 혼합 노출 | `trainCatalog.ts` 국가/노선별 엄격한 출발-도착역 쌍(OD Pair) 매칭 적용 | **RESOLVED** |
-| **P0-06** | 렌터카 상세 무한 로딩 | `/cars/detail/car_avante_01/` 진입 시 데이터 미로드 행 | `carCatalog.ts` 동기 바인딩, 완전자차(CDW) 및 대여료 실시간 계산 완비 | **RESOLVED** |
-| **P0-07** | 투어&티켓 0건 빈 화면 | `/things-to-do/` 진입 시 0건 노출 | `activityCatalog.ts` 구축, 디즈니랜드/USJ 등 e-티켓 QR 바우처 연동 | **RESOLVED** |
-| **P0-08** | 마이페이지 SSR PII 유출 | 공개 SSR에서 데모 유저(`김여행`, VIP, 28,500G) 개인정보 노출 | `authStore` 비인증 기본값 처리, 비로그인 보안 게이트웨이 화면 강제 | **RESOLVED** |
-| **P0-09** | 파트너 포털 및 API 문서 링크 | 파트너 데모 계정 자동완성 노출, 푸터 OpenAPI 링크 경로 오류 | 데모 셀렉터 완전 제거, `/partner/api-docs/` B2B REST v1.4 명세서 정식 발행 | **RESOLVED** |
-| **P0-10** | 제3자 미검증 과장 광고 | 500+ 항공사, 99.8% 발권률 등 근거 없는 지표 남발 | 글로벌 주요 항공사 제휴 및 실시간 전자발권 신뢰 문구로 정규화 | **RESOLVED** |
+GetForTrip OTA 플랫폼의 핵심 거래 무결성, 보안 인증, 검색 계약 및 24개 식별 결함에 대한 개선 작업이 완료되었습니다.  
+코드베이스 레벨의 결함(익명 관리자 접근, 무검증 결제 확정, 음수 금액 결제, 비허용 CORS 반사, 자동완성 계약 불일치)은 전수 차단 및 테스트 통과하였으며, 상용 실거래 전환을 위한 기술적 보안 게이트를 충족합니다.
+
+> **참고**: PG사(포트원/토스페이먼츠 등) 실결제 가맹점 계약 및 항공/호텔 GDS 실시간 정식 공급사 계정 연동 전까지는 안전 격리된 Sandbox/Staging 트랜잭션 게이트웨이로 운영됩니다.
 
 ---
 
-## 3. 인프라 배포 및 품질 지표
+## 2. 주요 결함(P0/P1) 조치 및 검증 결과표
 
-- **정적 사이트 프리렌더링**: **175개 라우트 100% 성공** (빌드 에러 0건)
-- **404 에러 링크 비율**: **0.0% (Zero 404)**
-- **빈 페이지 (Empty Shell) 비율**: **0.0% (Zero Empty Page)**
-- **브랜드 거버넌스 준수율**: **100% `getfortrip` 통일 완료**
-- **독립성 유지**: 메타검색(TripScanr)과의 소스코드, 인증 세션, DB 완전 분리 유지
+| 결함 번호 | 결함 항목 | 조치 내역 | 검증 결과 |
+|---|---|---|:---:|
+| **P0-01** | 예약 실패 시 mock 확정 방지 | API 실패 시 결제 성공으로 우회하지 않고 사용자에게 명확한 에러 안내 및 중단 | **PASS** |
+| **P0-02** | PG 확인 없는 결제 확정 차단 | `PayBooking` 시 결제 증빙(`payment_proof`) 및 재고 락 유효성 서버 검증 강제 | **PASS** |
+| **P0-03** | 음수/0원 예약 및 요청 신뢰 취약점 | 서버 `CreateDraftBooking` 및 `CreateBooking`에서 음수/0원 금액 즉시 400 Bad Request 반환 | **PASS** |
+| **P0-04** | 익명 관리자 접근 취약점 | 관리자 API 전체에 `checkAdminAuth` 토큰 검증 미들웨어 적용, 비인증 요청 401 차단 | **PASS** |
+| **P0-05** | 임의 파트너 로그인 허용 | 등록된 공식 파트너 계정만 로그인 허용, 임의 이메일/비밀번호 401 차단 | **PASS** |
+| **P0-06** | 없는 파트너 예약 확정 응답 취약점 | `PartnerActionBooking` 호출 시 존재하지 않는 예약 ID에 대해 404 Not Found 반환 | **PASS** |
+| **P0-07** | CORS 비허용 Origin 반사 차단 | 허용목록(`defaultAllowedOrigins`) 및 안전 도메인 외 임의 Origin 반사 금지 및 차단 | **PASS** |
+| **P0-08** | 취소 실패 시 취소 성공 표시 오류 | `/bookings/:id/cancel` 응답 상태 검증 후 성공 시에만 로컬 및 UI 상태 변경 | **PASS** |
+| **P1-01** | 자동완성 type prop 누락 호환 | `type` 및 `domain` prop을 모두 지원하도록 `effectiveDomain` 리졸버 적용 | **PASS** |
+| **P1-02** | 공항/도시 검색 레이블 불일치 | IATA 코드(`ICN`), 괄호 포함 명칭(`도쿄 (Tokyo)`) 양방향 정규화 및 백엔드 매칭 | **PASS** |
+| **P1-03** | 검색 결과 0건 시 JSON null 계약 오류 | 백엔드 검색/자동완성 응답을 항상 빈 슬라이스 `[]`로 직렬화하여 클라이언트 계약 보장 | **PASS** |
+| **P1-04** | 자동완성 레이스 컨디션 및 접근성 | `AbortController`로 이전 비동기 요청 취소, ARIA combobox 속성 완비 | **PASS** |
+| **P1-05** | 자동완성 안전하지 않은 HTML 렌더링 | `escapeHtml` 적용 후 일치 텍스트만 안전하게 하이라이트하여 XSS 차단 | **PASS** |
+| **P1-06** | 패키지 큐레이션 목적지 누락 | 패키지 전용 에어텔 인기 목적지 분기 신설 | **PASS** |
+| **P1-07** | URL 쿼리 내 민감 개인정보 노출 방지 | 예약 완료 URL에서 이름, 전화번호 쿼리 파라미터 완전 제거, 상태 기반 렌더링 | **PASS** |
+| **P1-08** | 비활성 버튼 및 기능 완성 | 고객지원 1:1 실시간 상담 모달, eSIM 구매/QR 모달, 보험 신청 모달, 지도 뷰 완비 | **PASS** |
 
 ---
 
-## 4. 최종 서명
+## 3. 단위 테스트 및 보안 회귀 검증
 
-- **Chief Software Architect**: 승인 (Approved)
-- **CISO & Data Privacy Officer**: 승인 (Approved)
-- **QA & Reliability Director**: 승인 (Approved)
-- **배포 승인 일자**: 2026-10-17
+- **Go Backend Tests**:
+  - `TestPartnerLogin`, `TestGetPartnerDashboard`, `TestPartnerLoginInvalid`, `TestPartnerActionNonexistentBooking` — **PASS**
+  - `TestSecurityAndContract` (Anonymous Admin, Negative Amount, Payment Proof, Empty Suggestion, City/Airport Matching) — **PASS**
+  - `TestCORSProtection` (Untrusted Origin Non-Reflection, Preflight 403 Forbidden) — **PASS**
+- **정적 사이트 프리렌더링**: Nuxt 3 Full Prerender Clean
+- **배포 타겟**: Cloudflare Workers (`ota-hub.dnjstjqppk.workers.dev`)

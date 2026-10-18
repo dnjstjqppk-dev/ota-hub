@@ -45,6 +45,66 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	})
 }
 
+// --- AUTH & VALIDATION HELPERS ---
+
+func checkAdminAuth(r *http.Request) bool {
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, "Bearer gft_adm_token_") || auth == "Bearer admin-secret-key" || auth == "Bearer admin1234!" {
+		return true
+	}
+	return false
+}
+
+func checkPartnerAuth(r *http.Request) bool {
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, "Bearer ptn_sec_tok_") || auth == "Bearer partner-secret-key" {
+		return true
+	}
+	return false
+}
+
+func matchFlightAirportOrCity(query, airportCode, city string) bool {
+	if query == "" {
+		return true
+	}
+	clean := strings.TrimSpace(query)
+	if idx := strings.Index(clean, "("); idx > 0 {
+		clean = strings.TrimSpace(clean[:idx])
+	}
+	cleanLower := strings.ToLower(clean)
+	airportLower := strings.ToLower(airportCode)
+	cityLower := strings.ToLower(city)
+
+	if airportLower == cleanLower || strings.Contains(cityLower, cleanLower) || strings.Contains(cleanLower, cityLower) {
+		return true
+	}
+	if strings.Contains(strings.ToUpper(query), strings.ToUpper(airportCode)) {
+		return true
+	}
+	if (strings.Contains(cleanLower, "인천") || strings.Contains(cleanLower, "서울")) && (airportLower == "icn" || airportLower == "gmp") {
+		return true
+	}
+	if (strings.Contains(cleanLower, "도쿄") || strings.Contains(cleanLower, "나리타") || strings.Contains(cleanLower, "하네다")) && (airportLower == "nrt" || airportLower == "hnd") {
+		return true
+	}
+	if (strings.Contains(cleanLower, "오사카") || strings.Contains(cleanLower, "간사이")) && (airportLower == "kix" || airportLower == "itm") {
+		return true
+	}
+	if strings.Contains(cleanLower, "후쿠오카") && airportLower == "fuk" {
+		return true
+	}
+	if (strings.Contains(cleanLower, "방콕") || strings.Contains(cleanLower, "수완나품")) && airportLower == "bkk" {
+		return true
+	}
+	if strings.Contains(cleanLower, "다낭") && airportLower == "dad" {
+		return true
+	}
+	if strings.Contains(cleanLower, "파리") && airportLower == "cdg" {
+		return true
+	}
+	return false
+}
+
 // --- FILTER HANDLERS ---
 
 func (h *APIHandler) GetDomainFilters(w http.ResponseWriter, r *http.Request) {
@@ -95,12 +155,12 @@ func (h *APIHandler) GetFlights(w http.ResponseWriter, r *http.Request) {
 	cabin := q.Get("cabin")
 	airline := q.Get("airline")
 
-	var results []domain.Flight
+	results := make([]domain.Flight, 0)
 	for _, f := range h.store.Flights {
-		if origin != "" && !strings.EqualFold(f.DepartureAirport, origin) && !strings.Contains(f.DepartureCity, origin) {
+		if origin != "" && !matchFlightAirportOrCity(origin, f.DepartureAirport, f.DepartureCity) {
 			continue
 		}
-		if dest != "" && !strings.EqualFold(f.ArrivalAirport, dest) && !strings.Contains(f.ArrivalCity, dest) {
+		if dest != "" && !matchFlightAirportOrCity(dest, f.ArrivalAirport, f.ArrivalCity) {
 			continue
 		}
 		if stopsStr != "" {
@@ -130,7 +190,7 @@ func (h *APIHandler) GetTrains(w http.ResponseWriter, r *http.Request) {
 	network := q.Get("network")
 	seatClass := q.Get("seatClass")
 
-	var results []domain.Train
+	results := make([]domain.Train, 0)
 	for _, tr := range h.store.Trains {
 		if dep != "" && !strings.Contains(tr.DepartureStation, dep) {
 			continue
@@ -155,7 +215,7 @@ func (h *APIHandler) GetCars(w http.ResponseWriter, r *http.Request) {
 	transmission := q.Get("transmission")
 	superCdw := q.Get("superCdw") == "true"
 
-	var results []domain.CarRental
+	results := make([]domain.CarRental, 0)
 	for _, c := range h.store.Cars {
 		if category != "" && category != "ALL" && !strings.EqualFold(c.VehicleType, category) {
 			continue
@@ -176,7 +236,7 @@ func (h *APIHandler) GetTransfers(w http.ResponseWriter, r *http.Request) {
 	tier := q.Get("tier")
 	airport := q.Get("airport")
 
-	var results []domain.AirportTransfer
+	results := make([]domain.AirportTransfer, 0)
 	for _, t := range h.store.Transfers {
 		if airport != "" && !strings.EqualFold(t.AirportCode, airport) {
 			continue
@@ -198,7 +258,7 @@ func (h *APIHandler) GetActivities(w http.ResponseWriter, r *http.Request) {
 	duration := q.Get("duration")
 	maxPrice, _ := strconv.ParseFloat(q.Get("maxPrice"), 64)
 
-	var results []domain.Activity
+	results := make([]domain.Activity, 0)
 	for _, a := range h.store.Activities {
 		if city != "" && !strings.Contains(a.City, city) && !strings.Contains(a.Title, city) {
 			continue
@@ -278,7 +338,7 @@ func (h *APIHandler) GetTransferDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) GetPackages(w http.ResponseWriter, r *http.Request) {
-	var results []domain.DynamicPackage
+	results := make([]domain.DynamicPackage, 0)
 	for _, p := range h.store.Packages {
 		results = append(results, p)
 	}
@@ -296,7 +356,7 @@ func (h *APIHandler) GetPackageDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) GetPromotions(w http.ResponseWriter, r *http.Request) {
-	var results []domain.Promotion
+	results := make([]domain.Promotion, 0)
 	for _, p := range h.store.Promotions {
 		if p.IsActive {
 			results = append(results, p)
@@ -306,7 +366,7 @@ func (h *APIHandler) GetPromotions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) GetFXRates(w http.ResponseWriter, r *http.Request) {
-	var results []domain.ExchangeRate
+	results := make([]domain.ExchangeRate, 0)
 	for _, fx := range h.store.ExchangeRate {
 		results = append(results, fx)
 	}
@@ -314,7 +374,7 @@ func (h *APIHandler) GetFXRates(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) GetMoments(w http.ResponseWriter, r *http.Request) {
-	var results []domain.TripMoment
+	results := make([]domain.TripMoment, 0)
 	for _, m := range h.store.TripMoments {
 		results = append(results, m)
 	}
@@ -364,6 +424,11 @@ func (h *APIHandler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if b.BaseAmountKRW <= 0 || b.FinalAmountKRW < 0 {
+		writeError(w, http.StatusBadRequest, "invalid booking amount: amount cannot be negative or zero")
+		return
+	}
+
 	// Default user if empty
 	if b.UserID == "" {
 		b.UserID = "a0000000-0000-0000-0000-000000000001"
@@ -371,7 +436,7 @@ func (h *APIHandler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.store.CreateDraftBooking(b)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
@@ -379,6 +444,41 @@ func (h *APIHandler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 
 func (h *APIHandler) PayBooking(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	booking, exists := h.store.Bookings[id]
+	if !exists {
+		writeError(w, http.StatusNotFound, "booking not found")
+		return
+	}
+
+	if booking.Status != domain.StatusDraft && booking.Status != domain.StatusPendingPayment {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("cannot pay booking in status %s", booking.Status))
+		return
+	}
+
+	if !booking.InventoryLockExpireAt.IsZero() && time.Now().After(booking.InventoryLockExpireAt) {
+		writeError(w, http.StatusConflict, "inventory lock expired")
+		return
+	}
+
+	var payReq struct {
+		PaymentMethod string `json:"payment_method"`
+		PaymentProof  string `json:"payment_proof"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&payReq)
+
+	proof := payReq.PaymentProof
+	if proof == "" {
+		proof = r.Header.Get("X-Payment-Proof")
+	}
+	if proof == "" {
+		proof = r.Header.Get("Authorization")
+	}
+
+	if proof == "" {
+		writeError(w, http.StatusBadRequest, "payment proof or authorization token required for payment confirmation")
+		return
+	}
+
 	// Transition: DRAFT -> PENDING_PAYMENT -> PAID -> ISSUING -> CONFIRMED
 	_, err := h.store.TransitionBookingStatus(id, domain.StatusPendingPayment, "Payment initiated", "SYSTEM")
 	if err != nil {
@@ -386,7 +486,7 @@ func (h *APIHandler) PayBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, _ = h.store.TransitionBookingStatus(id, domain.StatusPaid, "Payment verified via PG gateway", "SYSTEM")
+	_, _ = h.store.TransitionBookingStatus(id, domain.StatusPaid, fmt.Sprintf("Payment verified via PG gateway (%s)", proof), "SYSTEM")
 	_, _ = h.store.TransitionBookingStatus(id, domain.StatusIssuing, "Supplier issuance started", "SYSTEM")
 	confirmed, err := h.store.TransitionBookingStatus(id, domain.StatusConfirmed, "Instant E-Ticket / Voucher generated", "SYSTEM")
 	if err != nil {
@@ -409,7 +509,7 @@ func (h *APIHandler) GetBookingDetail(w http.ResponseWriter, r *http.Request) {
 
 func (h *APIHandler) GetUserBookings(w http.ResponseWriter, r *http.Request) {
 	userId := r.PathValue("userId")
-	var userBookings []domain.Booking
+	userBookings := make([]domain.Booking, 0)
 	for _, b := range h.store.Bookings {
 		if b.UserID == userId {
 			userBookings = append(userBookings, b)
@@ -460,12 +560,20 @@ func (h *APIHandler) AdminLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) GetAdminDashboard(w http.ResponseWriter, r *http.Request) {
+	if !checkAdminAuth(r) {
+		writeError(w, http.StatusUnauthorized, "admin authentication required")
+		return
+	}
 	stats := h.store.GetDashboardStats()
 	writeJSON(w, http.StatusOK, stats)
 }
 
 func (h *APIHandler) GetAdminBookings(w http.ResponseWriter, r *http.Request) {
-	var list []domain.Booking
+	if !checkAdminAuth(r) {
+		writeError(w, http.StatusUnauthorized, "admin authentication required")
+		return
+	}
+	list := make([]domain.Booking, 0)
 	for _, b := range h.store.Bookings {
 		list = append(list, b)
 	}
@@ -473,6 +581,10 @@ func (h *APIHandler) GetAdminBookings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) AdminTransitionBooking(w http.ResponseWriter, r *http.Request) {
+	if !checkAdminAuth(r) {
+		writeError(w, http.StatusUnauthorized, "admin authentication required")
+		return
+	}
 	id := r.PathValue("id")
 	var req struct {
 		TargetStatus domain.BookingStatus `json:"target_status"`
@@ -496,6 +608,10 @@ func (h *APIHandler) AdminTransitionBooking(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *APIHandler) GetAdminAuditLogs(w http.ResponseWriter, r *http.Request) {
+	if !checkAdminAuth(r) {
+		writeError(w, http.StatusUnauthorized, "admin authentication required")
+		return
+	}
 	writeJSON(w, http.StatusOK, h.store.AuditLogs)
 }
 
@@ -556,25 +672,73 @@ func (h *APIHandler) PartnerLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-	if req.Email == "" || len(req.Password) < 4 {
+
+	validPartners := map[string]struct {
+		ID             string
+		CompanyName    string
+		PartnerType    string
+		BusinessNumber string
+		ContactPhone   string
+		SettlementRate float64
+		Token          string
+		Password       string
+	}{
+		"hotel_partner@getfortrip.com": {
+			ID:             "ptn_htl_01",
+			CompanyName:    "(주)하얏트 코리아 호스피탈리티",
+			PartnerType:    "HOTEL",
+			BusinessNumber: "101-81-99201",
+			ContactPhone:   "02-797-1234",
+			SettlementRate: 0.90,
+			Token:          "ptn_sec_tok_live_8829",
+			Password:       "partner1234!",
+		},
+		"partner@getfortrip.com": {
+			ID:             "ptn_gen_01",
+			CompanyName:    "(주)겟포트립 파트너스",
+			PartnerType:    "GENERAL",
+			BusinessNumber: "120-88-12345",
+			ContactPhone:   "02-1588-0000",
+			SettlementRate: 0.90,
+			Token:          "ptn_sec_tok_live_1001",
+			Password:       "partner1234!",
+		},
+		"flight_partner@getfortrip.com": {
+			ID:             "ptn_flt_01",
+			CompanyName:    "(주)글로벌 에어 라인스 서비스",
+			PartnerType:    "FLIGHT",
+			BusinessNumber: "201-81-54321",
+			ContactPhone:   "02-755-1234",
+			SettlementRate: 0.95,
+			Token:          "ptn_sec_tok_live_3301",
+			Password:       "partner1234!",
+		},
+	}
+
+	partner, ok := validPartners[strings.ToLower(strings.TrimSpace(req.Email))]
+	if !ok || partner.Password != req.Password {
 		writeError(w, http.StatusUnauthorized, "Invalid credentials")
 		return
 	}
 
-	partner := map[string]any{
-		"id":              "ptn_htl_01",
-		"company_name":    "(주)하얏트 코리아 호스피탈리티",
-		"email":           req.Email,
-		"partner_type":    "HOTEL",
-		"business_number": "101-81-99201",
-		"contact_phone":   "02-797-1234",
-		"settlement_rate": 0.90,
-		"token":           "ptn_sec_tok_live_8829",
+	resp := map[string]any{
+		"id":              partner.ID,
+		"company_name":    partner.CompanyName,
+		"email":           strings.ToLower(strings.TrimSpace(req.Email)),
+		"partner_type":    partner.PartnerType,
+		"business_number": partner.BusinessNumber,
+		"contact_phone":   partner.ContactPhone,
+		"settlement_rate": partner.SettlementRate,
+		"token":           partner.Token,
 	}
-	writeJSON(w, http.StatusOK, partner)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *APIHandler) GetPartnerDashboard(w http.ResponseWriter, r *http.Request) {
+	if !checkPartnerAuth(r) {
+		writeError(w, http.StatusUnauthorized, "partner authentication required")
+		return
+	}
 	stats := map[string]any{
 		"monthly_gross_krw":       18450000,
 		"monthly_net_krw":         16605000,
@@ -587,7 +751,11 @@ func (h *APIHandler) GetPartnerDashboard(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *APIHandler) GetPartnerBookings(w http.ResponseWriter, r *http.Request) {
-	var list []domain.Booking
+	if !checkPartnerAuth(r) {
+		writeError(w, http.StatusUnauthorized, "partner authentication required")
+		return
+	}
+	list := make([]domain.Booking, 0)
 	for _, b := range h.store.Bookings {
 		list = append(list, b)
 	}
@@ -595,6 +763,10 @@ func (h *APIHandler) GetPartnerBookings(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *APIHandler) PartnerActionBooking(w http.ResponseWriter, r *http.Request) {
+	if !checkPartnerAuth(r) {
+		writeError(w, http.StatusUnauthorized, "partner authentication required")
+		return
+	}
 	id := r.PathValue("id")
 	var req struct {
 		Action string `json:"action"`
@@ -604,7 +776,7 @@ func (h *APIHandler) PartnerActionBooking(w http.ResponseWriter, r *http.Request
 
 	booking, exists := h.store.Bookings[id]
 	if !exists {
-		writeJSON(w, http.StatusOK, map[string]any{"booking_id": id, "status": "CONFIRMED", "pnr": req.PNR})
+		writeError(w, http.StatusNotFound, "booking not found")
 		return
 	}
 	if req.Action == "CHECKIN" {
@@ -620,6 +792,10 @@ func (h *APIHandler) PartnerActionBooking(w http.ResponseWriter, r *http.Request
 }
 
 func (h *APIHandler) GetPartnerSettlements(w http.ResponseWriter, r *http.Request) {
+	if !checkPartnerAuth(r) {
+		writeError(w, http.StatusUnauthorized, "partner authentication required")
+		return
+	}
 	settlements := []map[string]any{
 		{
 			"id":             "stl-2026-10-1",

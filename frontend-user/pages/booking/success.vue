@@ -10,8 +10,7 @@ const currencyStore = useCurrencyStore()
 const bookingId = ref((route.query.bookingId as string) || `GF-20261015-${Math.floor(1000 + Math.random() * 9000)}`)
 const domainType = ref((route.query.domain as string) || 'HOTEL') // HOTEL, FLIGHT, TRAIN, CAR, TRANSFER, ACTIVITY, PACKAGE
 const paidAmount = ref(Number(route.query.amount) || 285000)
-const paymentMethod = ref((route.query.paymentMethod as string) || '신용/체크카드 (일시불)')
-const primaryContact = ref((route.query.contact as string) || '김민수 (010-1234-5678)')
+const primaryContact = ref((route.query.contact as string) || '예약자 정보 확인 완료')
 const title = ref((route.query.title as string) || '')
 const schedule = ref((route.query.schedule as string) || '')
 
@@ -101,6 +100,7 @@ onMounted(() => {
         if (parsed.amount) paidAmount.value = parsed.amount
         if (parsed.title) title.value = parsed.title
         if (parsed.schedule) schedule.value = parsed.schedule
+        if (parsed.contact) primaryContact.value = parsed.contact
       }
     } catch (e) {
       // Ignore

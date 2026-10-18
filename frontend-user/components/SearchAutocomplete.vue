@@ -29,6 +29,10 @@
 
       <input
         v-model="internalValue"
+        role="combobox"
+        :aria-expanded="isOpen"
+        aria-autocomplete="list"
+        aria-haspopup="listbox"
         @focus="handleFocus"
         @input="handleInput"
         @keydown.down.prevent="navigateHighlight(1)"
@@ -192,20 +196,25 @@ import { useApiUrl } from '~/composables/useApi'
 const props = withDefaults(defineProps<{
   modelValue?: string
   domain?: string // 'hotels' | 'flights' | 'trains' | 'cars' | 'things-to-do' | 'packages' | 'all'
+  type?: string // fallback for domain prop
   placeholder?: string
   icon?: string // 'search' | 'plane' | 'train' | 'car' | 'ticket'
   inputClass?: string
   autoNavigate?: boolean
 }>(), {
   modelValue: '',
-  domain: 'hotels',
+  domain: '',
+  type: '',
   icon: 'search',
   autoNavigate: false
 })
 
+const effectiveDomain = computed(() => props.domain || props.type || 'hotels')
+
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
   (e: 'select', item: any): void
+  (e: 'select-code', code: string): void
 }>()
 
 const router = useRouter()
@@ -238,7 +247,7 @@ const clearInput = () => {
 // 스마트 플레이스홀더 텍스트
 const computedPlaceholder = computed(() => {
   if (props.placeholder) return props.placeholder
-  switch (props.domain) {
+  switch (effectiveDomain.value) {
     case 'flights':
       return '도시명, 공항명, 또는 IATA 코드 (예: ICN, 도쿄, NRT)'
     case 'trains':
@@ -255,7 +264,7 @@ const computedPlaceholder = computed(() => {
 })
 
 const domainLabel = computed(() => {
-  switch (props.domain) {
+  switch (effectiveDomain.value) {
     case 'flights': return '항공'
     case 'trains': return '열차'
     case 'cars': return '렌터카'
@@ -267,7 +276,7 @@ const domainLabel = computed(() => {
 
 // 도메인별 큐레이션 인기 목적지 목록 (getfortrip 인기 지점)
 const domainPopularList = computed(() => {
-  switch (props.domain) {
+  switch (effectiveDomain.value) {
     case 'flights':
       return [
         { id: 'p-icn', title: '인천국제공항 (ICN)', subtitle: '대한민국 서울/인천', code: 'ICN', type: 'airport', badge: '인기 허브', count_info: '일일 320편', target_url: '/flights/search?dest=ICN' },
@@ -300,6 +309,12 @@ const domainPopularList = computed(() => {
         { id: 'pa-sky', title: '시부야 스카이 전망대 입장권', subtitle: '일본 도쿄 시부야 스크램블 최상층', type: 'activity', badge: '전망대', count_info: '일몰 인기', target_url: '/things-to-do?q=시부야스카이' },
         { id: 'pa-esim', title: '일본 매일 2GB+ 무제한 고속 eSIM', subtitle: 'Softbank/Docomo 로컬망', type: 'activity', badge: '베스트셀러', count_info: 'QR 3분 발송', target_url: '/things-to-do?category=esim' },
       ]
+    case 'packages':
+      return [
+        { id: 'pp-tyo', title: '[항공+호텔] 도쿄 3박 4일 에어텔', subtitle: '왕복 항공권 + 시부야/신주쿠 호텔 패키지', code: 'TYO', type: 'package', badge: '인기 패키지', count_info: '최대 25% 할인', target_url: '/packages/builder?dest=도쿄' },
+        { id: 'pp-osa', title: '[항공+호텔] 오사카 2박 3일 미식 에어텔', subtitle: '왕복 항공권 + 난바/도톤보리 호텔 패키지', code: 'OSA', type: 'package', badge: '인기 패키지', count_info: '최대 30% 할인', target_url: '/packages/builder?dest=오사카' },
+        { id: 'pp-dad', title: '[항공+호텔] 다낭 4박 5일 풀빌라 패키지', subtitle: '국적기 직항 + 미케비치 5성급 리조트', code: 'DAD', type: 'package', badge: '휴양 패키지', count_info: '최대 35% 할인', target_url: '/packages/builder?dest=다낭' },
+      ]
     default:
       // Hotels & General
       return [
@@ -315,11 +330,11 @@ const domainPopularList = computed(() => {
 
 // 최근 검색어 로컬스토리지 관리
 const recentSearches = ref<any[]>([])
-const recentStorageKey = `gft_recent_${props.domain || 'all'}`
+const recentStorageKey = computed(() => `gft_recent_${effectiveDomain.value || 'all'}`)
 
 onMounted(() => {
   try {
-    const saved = localStorage.getItem(recentStorageKey)
+    const saved = localStorage.getItem(recentStorageKey.value)
     if (saved) recentSearches.value = JSON.parse(saved)
   } catch (e) {}
 })
@@ -335,24 +350,24 @@ const saveRecentSearch = (item: any) => {
       subtitle: item.subtitle,
       target_url: item.target_url,
       type: item.type,
-      domain: item.domain || props.domain
+      domain: item.domain || effectiveDomain.value
     })
     if (recentSearches.value.length > 8) recentSearches.value.pop()
-    localStorage.setItem(recentStorageKey, JSON.stringify(recentSearches.value))
+    localStorage.setItem(recentStorageKey.value, JSON.stringify(recentSearches.value))
   } catch (e) {}
 }
 
 const removeRecentItem = (idx: number) => {
   recentSearches.value.splice(idx, 1)
   try {
-    localStorage.setItem(recentStorageKey, JSON.stringify(recentSearches.value))
+    localStorage.setItem(recentStorageKey.value, JSON.stringify(recentSearches.value))
   } catch (e) {}
 }
 
 const clearAllRecent = () => {
   recentSearches.value = []
   try {
-    localStorage.removeItem(recentStorageKey)
+    localStorage.removeItem(recentStorageKey.value)
   } catch (e) {}
 }
 
@@ -361,6 +376,9 @@ const handleItemSelect = (item: any) => {
   internalValue.value = item.title
   emit('update:modelValue', item.title)
   emit('select', item)
+  if (item.code) {
+    emit('select-code', item.code)
+  }
   saveRecentSearch(item)
   isOpen.value = false
 
@@ -369,12 +387,24 @@ const handleItemSelect = (item: any) => {
   }
 }
 
-// 매칭 문자열 하이라이트 (getfortrip UX)
+// 매칭 문자열 HTML 안전 이스케이프 및 하이라이트
+const escapeHtml = (unsafe: string): string => {
+  return String(unsafe)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+}
+
 const highlightMatch = (text: string) => {
-  if (!internalValue.value || !text) return text
-  const cleanQ = internalValue.value.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(`(${cleanQ})`, 'gi')
-  return text.replace(regex, '<span class="text-blue-600 font-extrabold bg-blue-50/50 rounded px-0.5">$1</span>')
+  if (!text) return ''
+  const escapedText = escapeHtml(text)
+  const q = internalValue.value ? internalValue.value.trim() : ''
+  if (!q) return escapedText
+  const escapedQ = escapeHtml(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${escapedQ})`, 'gi')
+  return escapedText.replace(regex, '<span class="text-blue-600 font-extrabold bg-blue-50/50 rounded px-0.5">$1</span>')
 }
 
 // 배지 및 아이콘 스타일 클래스
@@ -404,10 +434,23 @@ const getBadgeClass = (type: string) => {
   }
 }
 
-// 150ms Debounced 실시간 자동완성 검색 API
+// 150ms Debounced 실시간 자동완성 검색 API (AbortController 레이스 방지)
 let debounceTimer: any = null
+let abortController: AbortController | null = null
+
+onUnmounted(() => {
+  clearTimeout(debounceTimer)
+  if (abortController) {
+    abortController.abort()
+  }
+})
+
 watch(internalValue, (val) => {
   clearTimeout(debounceTimer)
+  if (abortController) {
+    abortController.abort()
+    abortController = null
+  }
   const q = val.trim()
   if (!q) {
     suggestions.value = []
@@ -416,16 +459,18 @@ watch(internalValue, (val) => {
   }
   loading.value = true
   debounceTimer = setTimeout(async () => {
+    abortController = new AbortController()
     try {
-      const url = useApiUrl(`/search/suggest?q=${encodeURIComponent(q)}&domain=${props.domain || ''}`)
-      const res = await fetch(url)
+      const url = useApiUrl(`/search/suggest?q=${encodeURIComponent(q)}&domain=${effectiveDomain.value || ''}`)
+      const res = await fetch(url, { signal: abortController.signal })
       if (res.ok) {
         const json = await res.json()
-        suggestions.value = json.data || json
+        suggestions.value = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : [])
       } else {
         throw new Error('API failed')
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'AbortError') return
       // 로컬 지능형 폴백 필터
       const qLower = q.toLowerCase()
       suggestions.value = domainPopularList.value.filter(item => 

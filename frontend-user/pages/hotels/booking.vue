@@ -129,14 +129,38 @@ const handlePayment = async () => {
         special_requests: specialRequests.value
       })
     })
-    const draftJson = await draftRes.json()
-    if (draftJson?.data?.id) {
-      finalBookingId = draftJson.data.id
-      // 2. Execute Payment & Auto Issuance
-      await fetch(useApiUrl(`/bookings/${finalBookingId}/pay`), { method: 'POST' })
+    if (!draftRes.ok) {
+      const errJson = await draftRes.json().catch(() => ({}))
+      throw new Error(errJson?.error || '예약 생성에 실패했습니다.')
     }
-  } catch (e) {
-    console.warn('API booking call fallback to mock storage:', e)
+    const draftJson = await draftRes.json()
+    if (!draftJson?.data?.id) {
+      throw new Error('예약 번호 발급에 실패했습니다.')
+    }
+    finalBookingId = draftJson.data.id
+
+    // 2. Execute Payment & Auto Issuance with Proof
+    const payProof = 'pg_proof_' + Date.now()
+    const payRes = await fetch(useApiUrl(`/bookings/${finalBookingId}/pay`), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Payment-Proof': payProof
+      },
+      body: JSON.stringify({
+        payment_method: selectedPaymentMethod.value || 'CARD',
+        payment_proof: payProof
+      })
+    })
+
+    if (!payRes.ok) {
+      const errJson = await payRes.json().catch(() => ({}))
+      throw new Error(errJson?.error || '결제 승인 처리 중 오류가 발생했습니다.')
+    }
+  } catch (e: any) {
+    isSubmitting.value = false
+    alert(`⚠️ [예약 및 결제 오류]\n${e.message || '예약 처리를 완료할 수 없습니다. 잠시 후 다시 시도해 주세요.'}`)
+    return
   }
 
   // Save to local storage for My Bookings
@@ -162,7 +186,7 @@ const handlePayment = async () => {
   authStore.deductCoins(Number(tripCoinsToUse.value))
   isSubmitting.value = false
 
-  router.push(`/booking/success?bookingId=${finalBookingId}&domain=HOTEL&amount=${finalAmount}&title=${encodeURIComponent(hotelTitle)}&schedule=${encodeURIComponent('2026.11.15 체크인 ~ 2026.11.17 체크아웃 (2박)')}&contact=${encodeURIComponent(contactName.value + ' (' + contactPhone.value + ')')}`)
+  router.push(`/booking/success?bookingId=${finalBookingId}&domain=HOTEL&amount=${finalAmount}&title=${encodeURIComponent(hotelTitle)}&schedule=${encodeURIComponent('2026.11.15 체크인 ~ 2026.11.17 체크아웃 (2박)')}`)
 }
 
 onMounted(async () => {

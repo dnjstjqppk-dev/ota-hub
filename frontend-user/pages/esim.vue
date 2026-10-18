@@ -95,8 +95,26 @@ const filteredPlans = computed(() => {
   })
 })
 
+const selectedPlan = ref<any>(null)
+const isModalOpen = ref(false)
+const buyerEmail = ref('')
+const isSuccess = ref(false)
+const qrVoucher = ref('')
+
 const buyEsim = (plan: any) => {
-  alert(`[${plan.title}] 구매 페이지로 이동합니다.\n결제 완료 즉시 QR 코드가 발송됩니다.`)
+  selectedPlan.value = plan
+  buyerEmail.value = 'user@getfortrip.com'
+  isSuccess.value = false
+  isModalOpen.value = true
+}
+
+const completeEsimPurchase = () => {
+  if (!buyerEmail.value) {
+    alert('QR 코드를 수신할 이메일을 입력해 주세요.')
+    return
+  }
+  qrVoucher.value = `LPA:1$getfortrip.esim.com$GFT-${Date.now().toString(36).toUpperCase()}`
+  isSuccess.value = true
 }
 </script>
 
@@ -189,6 +207,65 @@ const buyEsim = (plan: any) => {
             class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black shadow-sm transition"
           >
             즉시 구매하기
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- eSIM 즉시 구매 & QR 발급 모달 -->
+    <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden p-6 space-y-6">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">📱</span>
+            <h3 class="font-bold text-slate-900 text-sm">eSIM 즉시 결제 & QR 발급</h3>
+          </div>
+          <button @click="isModalOpen = false" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+        </div>
+
+        <div v-if="!isSuccess" class="space-y-4 text-xs">
+          <div class="bg-blue-50/70 p-4 rounded-2xl border border-blue-100 space-y-1">
+            <div class="font-bold text-blue-900">{{ selectedPlan?.title }}</div>
+            <div class="text-[11px] text-blue-700">{{ selectedPlan?.country }} · {{ selectedPlan?.network }} 로컬망</div>
+            <div class="text-base font-black text-blue-900 pt-2 font-mono">₩{{ selectedPlan?.priceKrw.toLocaleString() }}</div>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="font-bold text-slate-700 block">QR 코드 수신 이메일</label>
+            <input
+              v-model="buyerEmail"
+              type="email"
+              placeholder="example@getfortrip.com"
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span class="text-[10px] text-slate-400">결제 완료 시 위 이메일로 활성화 프로파일이 즉시 발송됩니다.</span>
+          </div>
+
+          <button
+            @click="completeEsimPurchase"
+            class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs shadow-md transition"
+          >
+            ₩{{ selectedPlan?.priceKrw.toLocaleString() }} 결제 및 QR 발급
+          </button>
+        </div>
+
+        <!-- 발급 완료 상태 -->
+        <div v-else class="text-center space-y-4 py-2">
+          <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-xl font-black">✓</div>
+          <div class="space-y-1">
+            <h4 class="font-black text-slate-900 text-base">eSIM 발급이 완료되었습니다!</h4>
+            <p class="text-[11px] text-slate-500">{{ buyerEmail }}로 활성화 QR 코드가 전송되었습니다.</p>
+          </div>
+          <div class="bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-300 space-y-2">
+            <div class="text-4xl py-2">📶</div>
+            <div class="text-[10px] text-slate-400 font-mono break-all">{{ qrVoucher }}</div>
+            <div class="text-[11px] font-bold text-blue-600">휴대폰 설정 > 셀룰러 > eSIM 추가에서 등록하세요</div>
+          </div>
+          <button
+            @click="isModalOpen = false"
+            class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"
+          >
+            확인 및 닫기
           </button>
         </div>
       </div>

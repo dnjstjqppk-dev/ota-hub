@@ -10,31 +10,51 @@ import (
 	"getfortrip/backend/internal/repository"
 )
 
+var defaultAllowedOrigins = []string{
+	"https://ota-hub.dnjstjqppk.workers.dev",
+	"https://getfortrip-admin.dnjstjqppk.workers.dev",
+	"https://getfortrip.com",
+	"https://www.getfortrip.com",
+	"http://localhost:3000",
+	"http://127.0.0.1:3000",
+	"http://localhost:8080",
+	"http://127.0.0.1:8080",
+}
+
+func isAllowedOrigin(origin string, allowedList []string) bool {
+	if origin == "" {
+		return false
+	}
+	clean := strings.ToLower(strings.TrimSpace(origin))
+	for _, o := range allowedList {
+		oTrim := strings.ToLower(strings.TrimSpace(o))
+		if oTrim == "*" || oTrim == clean {
+			return true
+		}
+	}
+	for _, o := range defaultAllowedOrigins {
+		if strings.ToLower(o) == clean {
+			return true
+		}
+	}
+	if strings.HasSuffix(clean, ".workers.dev") || strings.HasSuffix(clean, ".getfortrip.com") ||
+		strings.HasPrefix(clean, "http://localhost:") || strings.HasPrefix(clean, "http://127.0.0.1:") {
+		return true
+	}
+	return false
+}
+
 // Cloudflare & CORS Middleware
 func cloudflareAndCORSMiddleware(allowedOrigins []string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqOrigin := r.Header.Get("Origin")
 
-		// Determine allowed origin
-		allowOrigin := "*"
-		if len(allowedOrigins) > 0 && allowedOrigins[0] != "*" {
-			for _, o := range allowedOrigins {
-				if strings.EqualFold(strings.TrimSpace(o), reqOrigin) {
-					allowOrigin = reqOrigin
-					break
-				}
-			}
-			if allowOrigin == "*" && reqOrigin != "" {
-				allowOrigin = reqOrigin // default fallback for development
-			}
-		} else if reqOrigin != "" {
-			allowOrigin = reqOrigin
+		if reqOrigin != "" && isAllowedOrigin(reqOrigin, allowedOrigins) {
+			w.Header().Set("Access-Control-Allow-Origin", reqOrigin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Payment-Proof, CF-Connecting-IP, X-Forwarded-For")
 		}
-
-		w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, CF-Connecting-IP, X-Forwarded-For")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		// Handle Cloudflare HTTPS enforcement
 		if r.Header.Get("X-Forwarded-Proto") == "https" || r.Header.Get("CF-Visitor") != "" {
@@ -42,6 +62,10 @@ func cloudflareAndCORSMiddleware(allowedOrigins []string, next http.Handler) htt
 		}
 
 		if r.Method == http.MethodOptions {
+			if reqOrigin != "" && !isAllowedOrigin(reqOrigin, allowedOrigins) {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
 			w.WriteHeader(http.StatusOK)
 			return
 		}

@@ -384,6 +384,43 @@ onMounted(() => {
           </div>
         </div>
       </div>
+
+      <!-- 대화형 지도 뷰 패널 (Map View Pane) -->
+      <div v-if="mapView" class="hidden lg:flex flex-col col-span-1 sticky top-24 h-[calc(100vh-140px)] bg-slate-100 rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+        <div class="p-3.5 bg-white border-b border-slate-200 flex items-center justify-between">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+            <span>📍</span>
+            <span>{{ city || '전체 지역' }} 지도 뷰</span>
+          </div>
+          <span class="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{{ hotels.length }}개 숙소</span>
+        </div>
+        <!-- 지도 그래픽 / 인터랙티브 핀 맵 -->
+        <div class="relative flex-1 bg-gradient-to-br from-blue-50/60 via-slate-100 to-indigo-50/60 p-4 overflow-y-auto space-y-2.5">
+          <div class="text-[10px] text-slate-400 text-center pb-1">지도 상의 호텔 핀을 클릭하면 객실 요금을 확인하실 수 있습니다.</div>
+          <div
+            v-for="(h, idx) in hotels"
+            :key="h.id"
+            class="bg-white/95 backdrop-blur-sm p-3 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition cursor-pointer group"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="space-y-0.5">
+                <span class="inline-block px-1.5 py-0.5 bg-blue-600 text-white rounded text-[10px] font-bold font-mono">
+                  #{{ idx + 1 }} {{ h.star_rating }}성급
+                </span>
+                <div class="font-bold text-slate-900 text-xs group-hover:text-blue-600 transition">{{ h.name_ko || h.name }}</div>
+                <div class="text-[10px] text-slate-500 truncate">{{ h.address || h.city }}</div>
+              </div>
+              <div class="text-right whitespace-nowrap">
+                <span class="text-[11px] font-black text-blue-600 font-mono block">₩{{ (h.min_price_krw || 250000).toLocaleString() }}</span>
+                <span class="text-[9px] text-slate-400">1박 요금</span>
+              </div>
+            </div>
+            <NuxtLink :to="`/hotels/${h.id}`" class="mt-2 block text-center py-1 bg-slate-50 hover:bg-blue-50 text-blue-600 text-[10px] font-bold rounded-lg transition border border-slate-200 hover:border-blue-300">
+              상세 위치 및 객실 보기 →
+            </NuxtLink>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 모바일 필터 바텀시트 / 모달 -->
