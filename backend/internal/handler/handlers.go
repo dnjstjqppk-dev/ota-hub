@@ -3,13 +3,14 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"getfortrip/backend/internal/domain"
-	"getfortrip/backend/internal/engine"
-	"getfortrip/backend/internal/repository"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"getfortrip/backend/internal/domain"
+	"getfortrip/backend/internal/engine"
+	"getfortrip/backend/internal/repository"
 )
 
 type APIHandler struct {

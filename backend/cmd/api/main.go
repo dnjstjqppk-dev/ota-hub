@@ -1,13 +1,14 @@
 package main
 
 import (
-	"getfortrip/backend/internal/handler"
-	"getfortrip/backend/internal/repository"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"getfortrip/backend/internal/handler"
+	"getfortrip/backend/internal/repository"
 )
 
 var defaultAllowedOrigins = []string{
@@ -176,4 +177,3 @@ func main() {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }
-// Synchronized: 2026-10-19T00:15:00Z
