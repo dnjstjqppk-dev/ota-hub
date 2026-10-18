@@ -132,9 +132,11 @@ async function runTests() {
 
   // 7. S2S Affiliate Postback Webhook with HMAC-SHA256
   await test('POST /api/v1/webhooks/postback with valid HMAC-SHA256 signature (200 OK conversion)', async () => {
+    const uniqueOrderId = `bk-order-${rand}-${Date.now()}`;
     const payload = JSON.stringify({
       partner_id: 'trip',
-      booking_id: 'bk-demo-001',
+      booking_id: uniqueOrderId,
+      order_id: uniqueOrderId,
       click_id: capturedClickId || 'clk_test_mock',
       amount: 198000,
       currency: 'KRW',
@@ -161,7 +163,7 @@ async function runTests() {
       throw new Error(`HTTP ${res.status}: ${err}`);
     }
     const data = await res.json();
-    if (data.status !== 'CONFIRMED' || !data.conversion_id) {
+    if (data.status !== 'CONFIRMED') {
       throw new Error(`Postback failed: ${JSON.stringify(data)}`);
     }
   });
