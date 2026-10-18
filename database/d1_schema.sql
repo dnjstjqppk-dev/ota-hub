@@ -146,3 +146,4 @@ VALUES (
     'VCHR-SHILLA-9921',
     '{"checkIn":"2026-11-01","checkOut":"2026-11-03","rooms":1,"guests":2,"breakfast":true}'
 );
+-- Synchronized: 2026-10-19T00:15:00Z

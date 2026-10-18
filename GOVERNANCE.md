@@ -94,3 +94,5 @@ PR 생성, CI 파이프라인 빌드, 실서버 배포 전 반드시 브랜드 �
 3. CORS 및 Allowed Origins를 `https://getfortrip.com`, `https://admin.getfortrip.com`으로 갱신.
 4. 이때에도 브랜드 소스 오브 트루스는 영구히 `getfortrip`을 유지합니다.
 
+
+<!-- getfortrip Synchronized: 2026-10-19T00:15:00Z -->

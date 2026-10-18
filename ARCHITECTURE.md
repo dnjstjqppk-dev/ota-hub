@@ -175,3 +175,5 @@ stateDiagram-v2
    $$\text{TargetCurrencyAmount} = \frac{\text{FinalAmountKRW}}{\text{ExchangeRateToKRW}}$$
    - KRW / JPY: 소수점 이하 반올림 (정수형)
    - USD / EUR / GBP / CNY: 소수점 둘째 자리 반올림 (`0.01` 단위)
+
+<!-- getfortrip Synchronized: 2026-10-19T00:15:00Z -->

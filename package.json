@@ -1,6 +1,6 @@
 {
   "name": "getfortrip-platform",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "getfortrip Global OTA Platform (Nuxt 3 SPA + Vue 3 Admin + Go API)",
   "workspaces": [

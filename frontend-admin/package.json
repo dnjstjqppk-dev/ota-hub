@@ -1,6 +1,6 @@
 {
   "name": "getfortrip-admin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "getfortrip Global Admin Console & Backoffice",
   "scripts": {
     "dev": "vite",
