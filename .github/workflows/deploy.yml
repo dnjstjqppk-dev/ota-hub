@@ -1,0 +1,47 @@
+name: Cloudflare Automated Rebuild & Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Build & Deploy to Cloudflare Workers
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm --prefix frontend-user install
+          cd frontend-admin && npm install
+
+      - name: Run Brand Governance Guard
+        run: npm run check:branding
+
+      - name: Run Backend Tests
+        run: |
+          cd backend
+          go test ./...
+
+      - name: Build & Deploy to Cloudflare Workers
+        run: node scripts/build-and-deploy.js
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

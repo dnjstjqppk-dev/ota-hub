@@ -1,0 +1,21 @@
+#!/bin/sh
+# ==============================================================================
+# getfortrip Global OTA Platform - Post-Commit Auto Rebuild & Deploy Hook
+# ==============================================================================
+
+# Check if SKIP_DEPLOY is set
+if [ "$SKIP_DEPLOY" = "1" ]; then
+    echo "⏩ [Post-commit] SKIP_DEPLOY=1 detected. Skipping Cloudflare rebuild."
+    exit 0
+fi
+
+# Check if commit message contains [skip deploy] or [skip ci]
+LAST_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
+if echo "$LAST_MSG" | grep -qE "\[skip deploy\]|\[skip ci\]"; then
+    echo "⏩ [Post-commit] [skip deploy] tag detected in commit message. Skipping Cloudflare rebuild."
+    exit 0
+fi
+
+echo "🚀 [Post-commit] Git commit detected! Triggering automatic Cloudflare rebuild & deployment..."
+node scripts/build-and-deploy.js
+exit $?
