@@ -8,8 +8,7 @@
     "build": "nuxt generate",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
-    "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "preview": "nuxt preview"
   },
   "dependencies": {
     "@pinia/nuxt": "^1.0.3",
@@ -26,6 +25,8 @@
   },
   "optionalDependencies": {
     "@oxc-parser/binding-linux-x64-gnu": "^0.155.0",
-    "@oxc-parser/binding-wasm32-wasi": "^0.155.0"
+    "@oxc-parser/binding-wasm32-wasi": "^0.155.0",
+    "@rolldown/binding-linux-x64-gnu": "1.2.13",
+    "@rolldown/binding-wasm32-wasi": "1.2.13"
   }
 }
