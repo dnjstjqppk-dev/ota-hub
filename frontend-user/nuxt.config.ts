@@ -6,6 +6,7 @@ declare const process: {
 export default defineNuxtConfig({
   ssr: true,
   nitro: {
+    preset: 'static',
     prerender: {
       crawlLinks: true,
       routes: [
@@ -84,6 +85,11 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: false },
   css: ['assets/css/tailwind.css'],
+  vite: {
+    build: {
+      cssMinify: 'esbuild'
+    }
+  },
   postcss: {
     plugins: {
       tailwindcss: {},

@@ -43,6 +43,10 @@ try {
   
   fs.cpSync(adminDist, targetAdmin, { recursive: true });
   console.log('  ✅ Admin SPA integrated into public/admin successfully.\n');
+  
+  // Ensure .gitkeep is preserved
+  fs.writeFileSync(path.join(rootDir, 'frontend-user', '.output', 'public', '.gitkeep'), '');
+
   console.log('✨ All assets ready in frontend-user/.output/public for Cloudflare deployment!\n');
 } catch (err) {
   console.error('\n❌ [ERROR] Build pipeline failed:');
