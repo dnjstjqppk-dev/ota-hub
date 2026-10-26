@@ -67,6 +67,23 @@ const fetchMoments = async () => {
   }
 }
 
+const approveMoment = (id: string) => {
+  const target = moments.value.find(m => m.id === id)
+  if (target) {
+    target.featured = true
+    alert(`모먼트 [${target.title.slice(0, 20)}...]가 메인 피처드로 승인되었습니다.`)
+  }
+}
+
+const blindMoment = (id: string) => {
+  const targetIdx = moments.value.findIndex(m => m.id === id)
+  if (targetIdx >= 0) {
+    const title = moments.value[targetIdx].title
+    moments.value.splice(targetIdx, 1)
+    alert(`스팸/부적절 모먼트 [${title.slice(0, 20)}...]가 블라인드 처리되었습니다.`)
+  }
+}
+
 onMounted(() => {
   fetchMoments()
 })
@@ -105,10 +122,10 @@ onMounted(() => {
         </div>
 
         <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
-          <button class="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-100 transition">
-            메인 피처드 승인
+          <button @click="approveMoment(m.id)" class="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-100 transition cursor-pointer">
+            {{ m.featured ? '✓ 메인 피처드 승인됨' : '메인 피처드 승인' }}
           </button>
-          <button class="px-3 py-1.5 bg-rose-50 text-rose-700 text-xs font-bold rounded-lg hover:bg-rose-100 transition">
+          <button @click="blindMoment(m.id)" class="px-3 py-1.5 bg-rose-50 text-rose-700 text-xs font-bold rounded-lg hover:bg-rose-100 transition cursor-pointer">
             스팸 블라인드
           </button>
         </div>

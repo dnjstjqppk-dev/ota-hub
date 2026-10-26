@@ -8,10 +8,10 @@ import (
 
 type PricingInput struct {
 	BaseAmountKRW     float64         `json:"base_amount_krw"`
-	TaxRate           float64         `json:"tax_rate"`            // default 0.10 (10%)
-	ServiceFeeRate    float64         `json:"service_fee_rate"`    // default 0.03 (3%)
-	CouponDiscountKRW float64         `json:"coupon_discount_krw"` // 원화 할인액
-	TripCoinsRedeem   int             `json:"trip_coins_redeem"`   // 1 coin = 10 KRW
+	TaxRate           float64         `json:"tax_rate"`             // default 0.10 (10%)
+	ServiceFeeRate    float64         `json:"service_fee_rate"`     // default 0.03 (3%)
+	CouponDiscountKRW float64         `json:"coupon_discount_krw"`  // 원화 할인액 (>= 0)
+	TripCoinsRedeem   int             `json:"trip_coins_redeem"`    // 1 G-Coin = 1 KRW (>= 0)
 	TargetCurrency    domain.Currency `json:"target_currency"`
 	ExchangeRateToKRW float64         `json:"exchange_rate_to_krw"` // 1 TargetCurrency = X KRW
 }
@@ -29,10 +29,16 @@ type PricingResult struct {
 	Symbol               string          `json:"symbol"`
 }
 
-// CalculateExactPrice performs precision calculations without floating drift
+// CalculateExactPrice performs precision calculations without floating drift (1 G-Coin = 1 KRW)
 func CalculateExactPrice(input PricingInput) (*PricingResult, error) {
 	if input.BaseAmountKRW <= 0 {
 		return nil, errors.New("base amount must be greater than zero")
+	}
+	if input.CouponDiscountKRW < 0 {
+		return nil, errors.New("coupon discount cannot be negative")
+	}
+	if input.TripCoinsRedeem < 0 {
+		return nil, errors.New("redeemed coins cannot be negative")
 	}
 	if input.ExchangeRateToKRW <= 0 {
 		input.ExchangeRateToKRW = 1.0 // fallback
@@ -48,7 +54,8 @@ func CalculateExactPrice(input PricingInput) (*PricingResult, error) {
 	serviceFee := math.Round(input.BaseAmountKRW * input.ServiceFeeRate)
 	gross := input.BaseAmountKRW + tax + serviceFee
 
-	coinDiscount := float64(input.TripCoinsRedeem * 10)
+	// Unified Brand Standard: 1 G-Coin = 1 KRW
+	coinDiscount := float64(input.TripCoinsRedeem)
 	totalDiscount := input.CouponDiscountKRW + coinDiscount
 
 	finalKRW := gross - totalDiscount
@@ -56,7 +63,6 @@ func CalculateExactPrice(input PricingInput) (*PricingResult, error) {
 		finalKRW = 0
 	}
 
-	// 환율 변환
 	converted := finalKRW / input.ExchangeRateToKRW
 	var formattedTarget float64
 	var symbol string

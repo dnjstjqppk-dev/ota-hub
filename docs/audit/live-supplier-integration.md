@@ -31,7 +31,7 @@ sequenceDiagram
     else 공급사 확정 실패 (Overbooking / Timeout)
         Supplier-->>OTA: 7b. 확정 실패 (Sold Out / API Timeout)
         OTA->>PG: 8b. 결제 자동 승인 취소 (Auto-Void / Full Refund)
-        OTA->>OTA: 9b. 사용된 Trip Coins 즉시 원상 복구
+        OTA->>OTA: 9b. 사용된 G-Coins 즉시 원상 복구
         OTA-->>Customer: 10b. 실시간 실패 안내 및 전액 환불 통보
     end
 ```

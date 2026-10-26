@@ -46,6 +46,21 @@ const DEFAULT_PROMOTIONS = [
 ]
 
 const promotions = ref<any[]>(DEFAULT_PROMOTIONS)
+const copiedCode = ref<string | null>(null)
+
+const copyCouponCode = async (code: string) => {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(code)
+    }
+    copiedCode.value = code
+    setTimeout(() => {
+      if (copiedCode.value === code) copiedCode.value = null
+    }, 2000)
+  } catch (e) {
+    console.warn('Clipboard write failed', e)
+  }
+}
 
 onMounted(async () => {
   try {
@@ -91,8 +106,8 @@ onMounted(async () => {
           <div class="px-4 py-2 bg-slate-100 border border-dashed border-slate-300 rounded-xl font-mono font-bold text-trip-blue text-sm">
             {{ p.code }}
           </div>
-          <button @click="alert(`쿠폰 코드 [${p.code}]가 복사되었습니다.`)" class="text-xs text-slate-500 hover:text-trip-blue font-bold">
-            코드 복사
+          <button @click="copyCouponCode(p.code)" class="text-xs text-slate-500 hover:text-trip-blue font-bold cursor-pointer">
+            {{ copiedCode === p.code ? '✓ 복사완료' : '코드 복사' }}
           </button>
         </div>
       </div>

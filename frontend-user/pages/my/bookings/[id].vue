@@ -99,7 +99,7 @@ onMounted(() => {
       <h2 class="text-xl font-black text-slate-900">예약 정보를 찾을 수 없습니다</h2>
       <p class="text-xs text-slate-500 mt-2 leading-relaxed">
         요청하신 예약 번호(<span class="font-mono font-bold text-slate-700">{{ route.params.id }}</span>)는 존재하지 않거나,
-        로그인된 계정(<span class="font-bold text-slate-700">{{ authStore.user.email }}</span>)의 예약 내역과 일치하지 않습니다.<br>
+        로그인된 계정(<span class="font-bold text-slate-700">{{ authStore.user?.email || '비로그인 상태' }}</span>)의 예약 내역과 일치하지 않습니다.<br>
         개인정보 보호 및 예약 보안 규정에 따라 타인의 예약 데이터는 열람이 제한됩니다.
       </p>
     </div>

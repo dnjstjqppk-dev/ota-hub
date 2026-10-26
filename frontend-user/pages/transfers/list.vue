@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { MASTER_TRANSFER_CATALOG, searchTransferCatalog } from '~/data/transferCatalog'
 
 const route = useRoute()
 const currencyStore = useCurrencyStore()
@@ -25,61 +26,7 @@ const activeFilterCount = computed(() => {
   return count
 })
 
-const fallbackTransfers = [
-  {
-    id: 'tf_icn_van_01',
-    airport_code: 'ICN',
-    airport_name: '인천국제공항 T1/T2',
-    destination_zone: '서울 도심 (명동/중구/강남) 전역',
-    vehicle_tier: 'BUSINESS_VAN',
-    vehicle_name: '비즈니스 밴 (Business Van)',
-    vehicle_model_example: '현대 스타리아 라운지 리무진 / 기아 카니발 하이리무진',
-    max_passengers: 6,
-    max_luggage: 6,
-    price_krw: 120000,
-    free_waiting_mins: 60,
-    flight_tracking: true,
-    meet_and_greet: true,
-    free_cancellation_hours: 24,
-    image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800'
-  },
-  {
-    id: 'tf_icn_sedan_01',
-    airport_code: 'ICN',
-    airport_name: '인천국제공항 T1/T2',
-    destination_zone: '서울 도심 (명동/중구/강남) 전역',
-    vehicle_tier: 'COMFORT_SEDAN',
-    vehicle_name: '컴포트 세단 (Comfort Sedan)',
-    vehicle_model_example: '현대 그랜저 GN7 / 기아 K8',
-    max_passengers: 3,
-    max_luggage: 3,
-    price_krw: 85000,
-    free_waiting_mins: 60,
-    flight_tracking: true,
-    meet_and_greet: true,
-    free_cancellation_hours: 24,
-    image_url: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800'
-  },
-  {
-    id: 'tf_icn_luxury_01',
-    airport_code: 'ICN',
-    airport_name: '인천국제공항 T1/T2',
-    destination_zone: '서울 도심 전역',
-    vehicle_tier: 'LUXURY_FIRST',
-    vehicle_name: 'VIP 럭셔리 퍼스트 (First Class)',
-    vehicle_model_example: '제네시스 G90 / 메르세데스 벤츠 S-Class',
-    max_passengers: 3,
-    max_luggage: 3,
-    price_krw: 220000,
-    free_waiting_mins: 90,
-    flight_tracking: true,
-    meet_and_greet: true,
-    free_cancellation_hours: 24,
-    image_url: 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800'
-  }
-]
-
-const vehicles = ref<any[]>(fallbackTransfers)
+const vehicles = ref<any[]>(MASTER_TRANSFER_CATALOG)
 const loading = ref(false)
 
 const fetchTransfers = async () => {
@@ -87,9 +34,9 @@ const fetchTransfers = async () => {
   try {
     const res = await fetch(useApiUrl('/transfers'))
     const json = await res.json()
-    vehicles.value = json.data && json.data.length ? json.data : fallbackTransfers
+    vehicles.value = json.data && json.data.length ? json.data : MASTER_TRANSFER_CATALOG
   } catch (e) {
-    vehicles.value = fallbackTransfers
+    vehicles.value = MASTER_TRANSFER_CATALOG
   } finally {
     loading.value = false
   }

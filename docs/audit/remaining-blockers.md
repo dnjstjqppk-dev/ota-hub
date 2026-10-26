@@ -27,6 +27,6 @@
    - 이미 작성된 Flutter 모바일 아키텍처를 기반으로 iOS App Store 및 Google Play Store 공식 론칭.
 3. **글로벌 통화 및 현지 결제 수단(APMs) 확장**:
    - 일본 PayPay, 중국 Alipay/WeChat Pay, 동남아 GrabPay 등 현지 결제 수단 추가 연동.
-4. **블록체인 분산 장부 기반 트립 코인 확장**:
-   - getforTrip 코인의 글로벌 파트너사 간 제휴 적립/사용 네트워크 확장.
+4. **블록체인 분산 장부 기반 G-코인 확장**:
+   - getfortrip 코인의 글로벌 파트너사 간 제휴 적립/사용 네트워크 확장.
 

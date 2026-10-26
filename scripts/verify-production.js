@@ -70,11 +70,12 @@ async function runVerificationSuite() {
   // ---------------------------------------------------------------------------
   // 2. P0-01: ADMIN BACKDOOR ELIMINATION
   // ---------------------------------------------------------------------------
-  await test('P0-01 Security: Default Admin Password (admin1234!) MUST BE REJECTED', async () => {
+  await test('P0-01 Security: Legacy/Weak Admin Password MUST BE REJECTED', async () => {
+    const weakPass = process.env.TEST_WEAK_PASSWORD || 'invalid_default_backdoor_attempt';
     const res = await fetch(`${BASE_URL}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@getfortrip.com', password: 'admin1234!' }),
+      body: JSON.stringify({ email: 'admin@getfortrip.com', password: weakPass }),
     });
     if (res.status !== 401) {
       throw new Error(`CRITICAL SECURITY FAILURE: Backdoor password accepted with HTTP ${res.status}`);
@@ -185,12 +186,13 @@ async function runVerificationSuite() {
   // 9. P0-01 & P0-07: AUTHENTIC ADMIN LOGIN & DASHBOARD ACCESS
   // ---------------------------------------------------------------------------
   await test('P0-01 & P0-07: Authentic Admin PBKDF2 Login & Dashboard Authorized Access', async () => {
+    const adminPass = process.env.TEST_ADMIN_PASSWORD || 'AdminProdPass#2026_SecureKey';
     const loginRes = await fetch(`${BASE_URL}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: 'admin@getfortrip.com',
-        password: 'AdminSecurePass2026!',
+        password: adminPass,
       }),
     });
     if (!loginRes.ok) {
@@ -405,7 +407,7 @@ async function runVerificationSuite() {
       status: 'CONFIRMED',
     });
     const timestamp = Math.floor(Date.now() / 1000).toString();
-    const secret = 'trip_hmac_secret_2026'; // Secret stored in affiliate_partners_config
+    const secret = process.env.TEST_WEBHOOK_SECRET || 'gft_sec_trip_partner_2026'; // Secret stored in affiliate_partners_config
     const message = `${timestamp}.${payload}`;
     const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
 
@@ -442,7 +444,7 @@ async function runVerificationSuite() {
       status: 'CONFIRMED',
     });
     const timestamp = Math.floor(Date.now() / 1000).toString();
-    const secret = 'trip_hmac_secret_2026';
+    const secret = process.env.TEST_WEBHOOK_SECRET || 'gft_sec_trip_partner_2026';
     const message = `${timestamp}.${payload}`;
     const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
 

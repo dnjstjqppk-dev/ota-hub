@@ -219,32 +219,30 @@ export const INITIAL_USER_BOOKINGS: BookingRecord[] = [
  * Get unified booking list for the active user.
  * Merges localStorage dynamically created bookings with verified seed bookings.
  */
-export function getUserBookings(): BookingRecord[] {
+export function getUserBookings(currentUserEmail?: string): BookingRecord[] {
+  const isDemo = currentUserEmail === 'vip@getfortrip.com'
   if (typeof window === 'undefined') {
-    return INITIAL_USER_BOOKINGS
+    return isDemo ? INITIAL_USER_BOOKINGS : []
   }
 
   try {
     const raw = localStorage.getItem('user_mock_bookings')
-    if (raw) {
-      const list = JSON.parse(raw)
-      if (Array.isArray(list) && list.length > 0) {
-        // Merge without duplicating IDs
-        const existingIds = new Set(list.map((b: any) => b.id))
-        const combined = [...list]
-        for (const seed of INITIAL_USER_BOOKINGS) {
-          if (!existingIds.has(seed.id)) {
-            combined.push(seed)
-          }
+    const list = raw ? JSON.parse(raw) : []
+    const userCreated = Array.isArray(list) ? list : []
+
+    if (isDemo) {
+      const existingIds = new Set(userCreated.map((b: any) => b.id))
+      const combined = [...userCreated]
+      for (const seed of INITIAL_USER_BOOKINGS) {
+        if (!existingIds.has(seed.id)) {
+          combined.push(seed)
         }
-        return combined
       }
+      return combined
     }
-    // Initialize storage with verified initial bookings
-    localStorage.setItem('user_mock_bookings', JSON.stringify(INITIAL_USER_BOOKINGS))
-    return INITIAL_USER_BOOKINGS
+    return userCreated
   } catch (e) {
-    return INITIAL_USER_BOOKINGS
+    return isDemo ? INITIAL_USER_BOOKINGS : []
   }
 }
 

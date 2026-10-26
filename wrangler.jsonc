@@ -21,8 +21,7 @@
     "run_worker_first": true
   },
   "vars": {
-    "JWT_SECRET": "47ab072289de6845c7336403b693e8bee13baa28ad7020e56c703386c101f650",
-    "AFFILIATE_HMAC_SECRET": "7069045ddc627aa2cb6573fdbbee49e593f2e53c90f71866e5db38fa7f04bb77"
+    "ALLOWED_ORIGINS": "https://getfortrip.com,https://www.getfortrip.com,https://admin.getfortrip.com,https://ota-hub.dnjstjqppk.workers.dev,http://localhost:3000,http://localhost:3001",
+    "PUBLIC_SITE_URL": "https://getfortrip.com"
   }
 }
-// Synchronized: 2026-10-19T00:15:00Z

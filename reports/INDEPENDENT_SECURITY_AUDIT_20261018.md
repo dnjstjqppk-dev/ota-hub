@@ -18,13 +18,13 @@
 ## 2. P0 보안 결함별 세부 진단 및 영구 조치 내역
 
 ### [P0-01] 기본 관리자 인증 우회 백도어 제거 (Admin Backdoor Purged)
-- **발견 취약점:** `worker/index.ts` 로그인 핸들러 내 `(email === "admin@getfortrip.com" && (password === "admin1234!" || ...))` 로직이 존재하여, 사전 공개된 취약한 비밀번호로 관리자 세션이 발급될 수 있는 치명적 결함 존재.
+- **발견 취약점:** `worker/index.ts` 로그인 핸들러 내 `(email === "admin@getfortrip.com" && (password === "[PURGED_INSECURE_PASS]" || ...))` 로직이 존재하여, 사전 공개된 취약한 비밀번호로 관리자 세션이 발급될 수 있는 치명적 결함 존재.
 - **수정 내용:**
   1. 하드코딩된 관리자 비밀번호 조건문 완전 삭제.
   2. D1 데이터베이스 `users` 테이블에 `role TEXT DEFAULT 'USER'` 컬럼을 추가하고, 관리자 계정에만 `role = 'ADMIN'`을 격리 부여.
-  3. 관리자 비밀번호를 강력한 비밀번호(`AdminSecurePass2026!`)로 교체하고, **PBKDF2-HMAC-SHA256 (100,000회 반복, 16바이트 솔트)**로 해싱하여 D1에 영구 저장.
+  3. 관리자 비밀번호를 강력한 비밀번호(`[ROTATED_ADMIN_PASS]`)로 교체하고, **PBKDF2-HMAC-SHA256 (100,000회 반복, 16바이트 솔트)**로 해싱하여 D1에 영구 저장.
   4. 관리자 로그인 실패 시 `admin_audit_logs`에 IP 및 시도 내역 실시간 기록.
-- **검증 증적:** `node scripts/verify-production.js` [TEST 02] `admin1234!` 시도 시 401 Unauthorized 반환 확인 (PASS).
+- **검증 증적:** `node scripts/verify-production.js` [TEST 02] `[PURGED_INSECURE_PASS]` 시도 시 401 Unauthorized 반환 확인 (PASS).
 
 ### [P0-02] 암호화 비밀키 하드코딩 제거 및 무결성 검증 (Secrets Hardening)
 - **발견 취약점:** `DEFAULT_JWT_SECRET` 및 `DEFAULT_HMAC_SECRET` 상수가 코드 내에 노출되어 있어, 환경변수 미주입 시 기본키로 토큰 위조가 가능한 취약점 존재.

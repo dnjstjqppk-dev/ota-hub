@@ -2,8 +2,10 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -49,16 +51,28 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 // --- AUTH & VALIDATION HELPERS ---
 
 func checkAdminAuth(r *http.Request) bool {
-	auth := r.Header.Get("Authorization")
-	if strings.HasPrefix(auth, "Bearer gft_adm_token_") || auth == "Bearer admin-secret-key" || auth == "Bearer admin1234!" {
-		return true
+	claims, err := getVerifiedClaims(r)
+	if err != nil {
+		return false
 	}
-	return false
+	return claims.Role == "ADMIN" || claims.Role == "SUPER_ADMIN"
+}
+
+func getVerifiedClaims(r *http.Request) (*JWTClaims, error) {
+	auth := r.Header.Get("Authorization")
+	if auth == "" {
+		return nil, errors.New("missing authorization header")
+	}
+	return ValidateJWT(auth, getJWTSecret())
 }
 
 func checkPartnerAuth(r *http.Request) bool {
+	claims, err := getVerifiedClaims(r)
+	if err == nil && claims.Role == "PARTNER" {
+		return true
+	}
 	auth := r.Header.Get("Authorization")
-	if strings.HasPrefix(auth, "Bearer ptn_sec_tok_") || auth == "Bearer partner-secret-key" {
+	if strings.HasPrefix(auth, "Bearer ptn_sec_tok_") {
 		return true
 	}
 	return false
@@ -545,8 +559,22 @@ func (h *APIHandler) AdminLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	email := strings.TrimSpace(strings.ToLower(req.Email))
-	if (email == "admin@getfortrip.com" || email == "admin") && req.Password == "admin1234!" {
-		token := "gft_adm_token_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	adminPass := os.Getenv("ADMIN_PASSWORD")
+	if adminPass == "" {
+		adminPass = "AdminProdPass#2026_SecureKey"
+	}
+
+	if (email == "admin@getfortrip.com" || email == "admin") && req.Password == adminPass {
+		token, err := GenerateJWT(JWTClaims{
+			ID:    "adm_001",
+			Email: "admin@getfortrip.com",
+			Role:  "SUPER_ADMIN",
+			Exp:   time.Now().Add(24 * time.Hour).Unix(),
+		}, getJWTSecret())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to issue admin token")
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"success": true,
 			"token":   token,

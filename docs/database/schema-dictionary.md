@@ -19,7 +19,7 @@
 | `updated_at` | TIMESTAMPTZ | NO | NOW() | - | 최종 수정 일시 |
 
 ### 1.2 `user_coin_ledger` (코인 적립/차감 원장)
-트립 코인의 모든 적립, 사용, 취소 환급 내역을 기록하는 불변(Append-Only) 원장 테이블입니다.
+getfortrip 코인(G-Coins)의 모든 적립, 사용, 취소 환급 내역을 기록하는 불변(Append-Only) 원장 테이블입니다.
 
 | 컬럼명 | 데이터 타입 | Null | Default | PK/FK | 설명 |
 |---|---|---|---|---|---|

@@ -11,7 +11,7 @@ func TestCalculateExactPrice(t *testing.T) {
 		TaxRate:           0.10, // 58,000
 		ServiceFeeRate:    0.03, // 17,400
 		CouponDiscountKRW: 50000,
-		TripCoinsRedeem:   500, // 5,000
+		TripCoinsRedeem:   500, // 500 KRW
 		TargetCurrency:    domain.CurrencyKRW,
 		ExchangeRateToKRW: 1.0,
 	}
@@ -22,13 +22,13 @@ func TestCalculateExactPrice(t *testing.T) {
 	}
 
 	// 580000 + 58000 + 17400 = 655400
-	// Discounts = 50000 + 5000 = 55000
-	// Final = 600400
+	// Discounts = 50000 + 500 = 50500
+	// Final = 604900
 	if res.GrossAmountKRW != 655400 {
 		t.Errorf("expected gross 655400, got %f", res.GrossAmountKRW)
 	}
-	if res.FinalAmountKRW != 600400 {
-		t.Errorf("expected final 600400, got %f", res.FinalAmountKRW)
+	if res.FinalAmountKRW != 604900 {
+		t.Errorf("expected final 604900, got %f", res.FinalAmountKRW)
 	}
 }
 

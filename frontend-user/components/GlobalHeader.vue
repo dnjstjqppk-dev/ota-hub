@@ -3,17 +3,21 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useAuthStore } from '~/stores/auth'
+import { useLocaleStore, type SupportedLocale } from '~/stores/locale'
 import { BRAND } from '~/config/brand'
 
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 const authStore = useAuthStore()
+const localeStore = useLocaleStore()
 
 const showCurrencyDropdown = ref(false)
+const showLocaleDropdown = ref(false)
 const isMobileDrawerOpen = ref(false)
 
 onMounted(() => {
   currencyStore.fetchRates()
+  localeStore.initLocale()
 })
 
 const categories = [
@@ -107,6 +111,44 @@ const closeDrawer = () => {
             </button>
           </div>
         </div>
+
+        <!-- 언어 선택기 -->
+        <div class="relative flex-shrink-0">
+          <button
+            @click="showLocaleDropdown = !showLocaleDropdown"
+            class="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-slate-200 hover:border-trip-blue text-trip-navy font-bold transition whitespace-nowrap text-xs"
+          >
+            <span>🌐</span>
+            <span>{{ localeStore.activeLocale.toUpperCase() }}</span>
+          </button>
+          <div
+            v-if="showLocaleDropdown"
+            class="absolute right-0 mt-1 w-28 bg-white border border-trip-border rounded-xl shadow-xl p-1 z-50 space-y-0.5"
+          >
+            <button
+              v-for="loc in [
+                { id: 'ko-kr', label: '한국어 (KO)' },
+                { id: 'en-us', label: 'English (EN)' },
+                { id: 'ja-jp', label: '日本語 (JA)' },
+                { id: 'zh-cn', label: '中文 (ZH)' }
+              ]"
+              :key="loc.id"
+              @click="localeStore.setLocale(loc.id as any); showLocaleDropdown = false"
+              :class="[
+                'w-full text-left px-2.5 py-1.5 rounded-lg font-bold text-xs whitespace-nowrap',
+                localeStore.activeLocale === loc.id ? 'bg-blue-50 text-trip-blue' : 'hover:bg-slate-50 text-slate-700'
+              ]"
+            >
+              {{ loc.label }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 위시리스트 (데스크톱) -->
+        <NuxtLink to="/my/wishlist" class="hidden md:inline-flex items-center gap-1 font-bold text-trip-navy hover:text-trip-blue whitespace-nowrap flex-shrink-0" title="위시리스트 & 최저가 알림">
+          <span>❤️</span>
+          <span>위시리스트</span>
+        </NuxtLink>
 
         <!-- 특가 프로모션 (데스크톱) -->
         <NuxtLink to="/deals" class="hidden sm:inline-block text-trip-orange font-bold hover:underline whitespace-nowrap flex-shrink-0">
@@ -206,6 +248,10 @@ const closeDrawer = () => {
           <NuxtLink to="/my/bookings" @click="closeDrawer" class="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 text-slate-700 text-xs font-bold">
             <span>📄</span>
             <span>내 예약 관리</span>
+          </NuxtLink>
+          <NuxtLink to="/my/wishlist" @click="closeDrawer" class="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 text-slate-700 text-xs font-bold">
+            <span>❤️</span>
+            <span>위시리스트 & 최저가 알림</span>
           </NuxtLink>
           <NuxtLink to="/deals" @click="closeDrawer" class="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 text-slate-700 text-xs font-bold">
             <span>🎁</span>

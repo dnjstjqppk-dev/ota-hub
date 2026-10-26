@@ -19,11 +19,19 @@ const fetchMyBookings = async () => {
   loading.value = true
   let apiList: any[] = []
   try {
-    const res = await fetch(useApiUrl(`/bookings/user/${authStore.user?.id}`), { signal: AbortSignal.timeout(1500) })
+    const headers: Record<string, string> = {}
+    if (authStore.token) {
+      headers['Authorization'] = `Bearer ${authStore.token}`
+    }
+    const res = await fetch(useApiUrl(`/bookings/user/${authStore.user?.id}`), {
+      headers,
+      signal: AbortSignal.timeout(2000)
+    })
     if (res.ok) {
       const json = await res.json()
-      if (json.data && Array.isArray(json.data) && json.data.length > 0) {
-        apiList = json.data
+      const list = json.data || json.bookings
+      if (Array.isArray(list) && list.length > 0) {
+        apiList = list
       }
     }
   } catch (e) {
@@ -33,7 +41,7 @@ const fetchMyBookings = async () => {
   if (apiList.length > 0) {
     bookings.value = apiList
   } else {
-    bookings.value = getUserBookings()
+    bookings.value = getUserBookings(authStore.user?.email)
   }
   loading.value = false
 }
@@ -41,7 +49,10 @@ const fetchMyBookings = async () => {
 const cancelBooking = async (id: string) => {
   if (!confirm('정말 예약을 취소하시겠습니까? 무료 취소 기간인 경우 전액 환불됩니다.')) return
   try {
-    const res = await fetch(useApiUrl(`/bookings/${id}/cancel`), { method: 'POST' })
+    const res = await fetch(useApiUrl(`/bookings/${id}/cancel`), {
+      method: 'POST',
+      headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {}
+    })
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}))
       throw new Error(errJson?.error || '서버 취소 처리에 실패했습니다.')

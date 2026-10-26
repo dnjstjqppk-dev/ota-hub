@@ -27,7 +27,7 @@ const authStore = useAuthStore()
           <div class="text-3xl font-black text-amber-400 font-mono">
             {{ (authStore.user.tripCoins || 0).toLocaleString() }} <span class="text-base">G</span>
           </div>
-          <div class="text-[11px] text-slate-300 mt-0.5">₩{{ ((authStore.user.tripCoins || 0) * 10).toLocaleString() }}원 상당 결제 할인 가능</div>
+          <div class="text-[11px] text-slate-300 mt-0.5">₩{{ ((authStore.user.tripCoins || 0) * 1).toLocaleString() }}원 상당 결제 할인 가능</div>
         </div>
       </div>
 

@@ -19,6 +19,7 @@ const pkg = ref<any>(initialPkg)
 const loading = ref(false)
 
 // Guest & Passenger info
+const travelerCount = ref(Number(route.query.adults) || 2)
 const contactName = ref(authStore.user?.fullName || '')
 const contactEmail = ref(authStore.user?.email || '')
 const contactPhone = ref(authStore.user?.phone || '+82-10-1234-5678')

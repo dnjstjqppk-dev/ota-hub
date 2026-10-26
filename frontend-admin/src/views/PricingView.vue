@@ -59,7 +59,7 @@ const runCalculation = async () => {
 
   const base = Number(testBaseKRW.value) || 580000
   const disc = Number(testDiscount.value) || 0
-  const coinsDisc = (Number(testCoins.value) || 0) * 10
+  const coinsDisc = (Number(testCoins.value) || 0) * 1
   const tax = Math.round(base * 0.1)
   const service = Math.round(base * 0.03)
   const finalKrw = Math.max(0, base + tax + service - disc - coinsDisc)

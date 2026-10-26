@@ -25,8 +25,12 @@ func TestSecurityAndContract(t *testing.T) {
 		}
 
 		// With valid admin token
+		admToken, err := GenerateJWT(JWTClaims{ID: "adm_001", Role: "ADMIN"}, getJWTSecret())
+		if err != nil {
+			t.Fatalf("Failed to generate test admin JWT: %v", err)
+		}
 		reqAuth := httptest.NewRequest("GET", "/api/v1/admin/bookings", nil)
-		reqAuth.Header.Set("Authorization", "Bearer gft_adm_token_valid")
+		reqAuth.Header.Set("Authorization", "Bearer "+admToken)
 		wAuth := httptest.NewRecorder()
 		h.GetAdminBookings(wAuth, reqAuth)
 		if wAuth.Code != http.StatusOK {

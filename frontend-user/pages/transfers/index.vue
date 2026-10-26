@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { MASTER_TRANSFER_CATALOG } from '~/data/transferCatalog'
 
 const router = useRouter()
 const currencyStore = useCurrencyStore()
@@ -18,40 +19,16 @@ const pickupTime = ref('14:30')
 const passengers = ref(2)
 const luggage = ref(2)
 
-const fallbackTransfers = [
-  {
-    id: 'tf_icn_van_01',
-    vehicle_class: '비즈니스 대형 밴 (Business MPV)',
-    model_name: '현대 스타리아 라운지 / 기아 카니발 하이리무진',
-    capacity: 6,
-    luggage: 6,
-    price_krw: 120000,
-    image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=600',
-    features: ['항공편 지연 자동 추적', '입국장 60분 무료 대기', '기사 네임보드 피켓 영접', '고속도로 통행료/유류비 포함']
-  },
-  {
-    id: 'tf_icn_sedan_01',
-    vehicle_class: '이코노미 세단 (Economy Sedan)',
-    model_name: '현대 그랜저 GN7 / 기아 K8 동급',
-    capacity: 3,
-    luggage: 3,
-    price_krw: 85000,
-    image_url: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=600',
-    features: ['안락한 4도어 고급 세단', '생수 무료 제공', '무료 60분 대기']
-  },
-  {
-    id: 'tf_icn_luxury_01',
-    vehicle_class: '럭셔리 VIP 세단 (Luxury First)',
-    model_name: '제네시스 G90 / 벤츠 S-Class 동급',
-    capacity: 3,
-    luggage: 3,
-    price_krw: 220000,
-    image_url: 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=600',
-    features: ['정장 의전 전담 기사', 'VIP 영접 서비스', '고속도로 톨게이트 전액 포함']
-  }
-]
-
-const transferVehicles = ref<any[]>(fallbackTransfers)
+const transferVehicles = ref<any[]>(MASTER_TRANSFER_CATALOG.slice(0, 3).map(t => ({
+  id: t.id,
+  vehicle_class: t.vehicle_class,
+  model_name: t.vehicle_model_example,
+  capacity: t.max_passengers,
+  luggage: t.max_luggage,
+  price_krw: t.price_krw,
+  image_url: t.image_url,
+  features: t.features
+})))
 const loading = ref(false)
 
 const handleSearch = () => {

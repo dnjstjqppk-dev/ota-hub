@@ -124,7 +124,7 @@ const handlePayment = async () => {
 
   // Save to local storage for My Bookings
   const actTitle = `${activity.value?.title || '투어·티켓'} (${selectedPackageName.value || '1일권'})`
-  const actSchedule = `${travelDate.value} (모바일 바우처 QR 코드)`
+  const actSchedule = `${selectedDate.value} (모바일 바우처 QR 코드)`
   try {
     const newRecord = {
       id: finalBookingId,

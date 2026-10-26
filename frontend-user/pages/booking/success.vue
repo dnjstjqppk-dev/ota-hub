@@ -13,6 +13,9 @@ const paidAmount = ref(Number(route.query.amount) || 285000)
 const primaryContact = ref((route.query.contact as string) || '예약자 정보 확인 완료')
 const title = ref((route.query.title as string) || '')
 const schedule = ref((route.query.schedule as string) || '')
+const paymentMethod = ref((route.query.paymentMethod as string) || '신용/체크카드 (완전 암호화 결제)')
+const status = ref((route.query.status as string) || 'PENDING_PAYMENT')
+const voucherCode = ref((route.query.voucher as string) || null)
 
 const domainDetails = computed(() => {
   const d = domainType.value.toUpperCase()
@@ -101,6 +104,9 @@ onMounted(() => {
         if (parsed.title) title.value = parsed.title
         if (parsed.schedule) schedule.value = parsed.schedule
         if (parsed.contact) primaryContact.value = parsed.contact
+        if (parsed.payment_method || parsed.paymentMethod) paymentMethod.value = parsed.payment_method || parsed.paymentMethod
+        if (parsed.status) status.value = parsed.status
+        if (parsed.voucher_code || parsed.voucherCode) voucherCode.value = parsed.voucher_code || parsed.voucherCode
       }
     } catch (e) {
       // Ignore

@@ -12,14 +12,14 @@
 
 | 테스트 항목 | 테스트 시나리오 | 요청 자격증명 | 기대 HTTP 상태 | 실제 수신 상태 | 판정 |
 |---|---|---|:---:|:---:|:---:|
-| **AUTH-01** | 기본 관리자 비밀번호(`admin1234!`) 로그인 시도 | `admin@getfortrip.com` / `admin1234!` | **401 Unauthorized** | `401 Unauthorized` | **PASS** |
+| **AUTH-01** | 기본 관리자 비밀번호(`[PURGED_INSECURE_PASS]`) 로그인 시도 | `admin@getfortrip.com` / `[PURGED_INSECURE_PASS]` | **401 Unauthorized** | `401 Unauthorized` | **PASS** |
 | **AUTH-02** | 미인증 사용자의 보호된 프로필 API 접근 | No Token / Anonymous | **401 Unauthorized** | `401 Unauthorized` | **PASS** |
 | **AUTH-03** | 위조된(Tampered) JWT 토큰으로 인증 시도 | `eyJhbGciOiJIUzI1Ni...invalidsig` | **401 Unauthorized** | `401 Unauthorized` | **PASS** |
 | **AUTH-04** | 취약한 비밀번호(8자 미만 또는 숫자 누락) 회원가입 | `weak` | **400 Bad Request** | `400 Bad Request` | **PASS** |
 | **AUTH-05** | 정상 B2C 회원가입 (PBKDF2 10만 회 해싱) | `User Alpha` / `SecureP@ssw0rd2026!` | **201 Created** | `201 Created` | **PASS** |
 | **AUTH-06** | 정상 B2C 로그인 및 세션 쿠키 발급 | `User Alpha` / `SecureP@ssw0rd2026!` | **200 OK** | `200 OK` | **PASS** |
 | **AUTH-07** | 일반 회원의 관리자 API 접근 시도 (RBAC) | User Token (`role: USER`) | **403 Forbidden** | `403 Forbidden` | **PASS** |
-| **AUTH-08** | 정규 관리자 계정 로그인 (PBKDF2) | `admin@getfortrip.com` / `AdminSecurePass2026!` | **200 OK** | `200 OK` | **PASS** |
+| **AUTH-08** | 정규 관리자 계정 로그인 (PBKDF2) | `admin@getfortrip.com` / `[ROTATED_ADMIN_PASS]` | **200 OK** | `200 OK` | **PASS** |
 | **AUTH-09** | 정규 관리자의 관리자 대시보드 접근 (RBAC) | Admin Token (`role: ADMIN`) | **200 OK** | `200 OK` | **PASS** |
 | **IDOR-01** | User B가 User A의 예약번호/ID 직접 조회 | User B Token -> User A Booking ID | **403 Forbidden** | `403 Forbidden` | **PASS** |
 | **IDOR-02** | User B가 `/api/v1/bookings/user/UserA_ID` 조회 | User B Token -> User A User ID | **403 Forbidden** | `403 Forbidden` | **PASS** |

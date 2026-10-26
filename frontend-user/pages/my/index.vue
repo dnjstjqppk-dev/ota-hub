@@ -46,28 +46,33 @@ const coupons = ref([
   }
 ])
 
-const savedPassengers = ref([
-  {
-    nameKo: '김여행',
-    nameEn: 'KIM YEOHAENG',
-    gender: 'MALE',
-    birth: '1990-05-15',
-    passportNumber: 'M88192049',
-    passportExpiry: '2031-10-12',
-    nationality: '대한민국 (KOR)',
-    isPrimary: true
-  },
-  {
-    nameKo: '이수진',
-    nameEn: 'LEE SOOJIN',
-    gender: 'FEMALE',
-    birth: '1992-08-20',
-    passportNumber: 'M44910293',
-    passportExpiry: '2029-05-18',
-    nationality: '대한민국 (KOR)',
-    isPrimary: false
+const savedPassengers = computed(() => {
+  if (authStore.user?.email === 'vip@getfortrip.com') {
+    return [
+      {
+        nameKo: '김여행',
+        nameEn: 'KIM YEOHAENG',
+        gender: 'MALE',
+        birth: '1990-05-15',
+        passportNumber: 'M88192049',
+        passportExpiry: '2031-10-12',
+        nationality: '대한민국 (KOR)',
+        isPrimary: true
+      },
+      {
+        nameKo: '이수진',
+        nameEn: 'LEE SOOJIN',
+        gender: 'FEMALE',
+        birth: '1992-08-20',
+        passportNumber: 'M44910293',
+        passportExpiry: '2029-05-18',
+        nationality: '대한민국 (KOR)',
+        isPrimary: false
+      }
+    ]
   }
-])
+  return []
+})
 
 const savedCards = ref([
   {
@@ -368,7 +373,7 @@ const savedCards = ref([
         <h2 class="text-xl sm:text-2xl font-black text-slate-900">로그인이 필요한 서비스입니다</h2>
         <p class="text-xs sm:text-sm text-slate-500 leading-relaxed">
           고객님의 개인정보 및 예약 내역을 안전하게 보호하기 위해 인증이 필요합니다.<br>
-          getfortrip 계정으로 로그인하여 예약, 쿠폰, 트립코인을 관리하세요.
+          getfortrip 계정으로 로그인하여 예약, 쿠폰, getfortrip 코인(G-Coins)을 관리하세요.
         </p>
       </div>
       <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">

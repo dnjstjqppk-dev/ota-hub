@@ -76,7 +76,7 @@ const handleDemoLogin = () => {
           <img src="/logo.svg" alt="getfortrip" class="h-9 w-auto mx-auto object-contain" />
         </NuxtLink>
         <h1 class="text-2xl font-black text-slate-900 pt-2">반갑습니다!</h1>
-        <p class="text-xs text-slate-500">getforTrip 계정으로 로그인하여 특가 혜택과 예약을 확인하세요.</p>
+        <p class="text-xs text-slate-500">getfortrip 계정으로 로그인하여 특가 혜택과 예약을 확인하세요.</p>
       </div>
 
       <!-- 로그인 폼 -->
@@ -99,7 +99,7 @@ const handleDemoLogin = () => {
         <div>
           <div class="flex items-center justify-between mb-1">
             <label class="block font-bold text-slate-700">비밀번호</label>
-            <a href="#" class="text-[11px] font-bold text-trip-blue hover:underline">비밀번호 찾기</a>
+            <NuxtLink to="/forgot-password" class="text-[11px] font-bold text-trip-blue hover:underline">비밀번호 찾기</NuxtLink>
           </div>
           <input
             v-model="password"

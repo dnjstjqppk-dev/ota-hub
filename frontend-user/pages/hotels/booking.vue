@@ -148,7 +148,7 @@ const handlePayment = async () => {
         'X-Payment-Proof': payProof
       },
       body: JSON.stringify({
-        payment_method: selectedPaymentMethod.value || 'CARD',
+        payment_method: paymentMethod.value || 'CARD',
         payment_proof: payProof
       })
     })

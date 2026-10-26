@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { apiUrl } from '../config/api'
 
 type DomainKey = 'hotels' | 'flights' | 'trains' | 'cars' | 'transfers' | 'activities' | 'packages' | 'curated'
@@ -10,6 +10,14 @@ const loading = ref(false)
 const searchQuery = ref('')
 const selectedItem = ref<any | null>(null)
 const isDetailOpen = ref(false)
+
+const filteredItems = computed(() => {
+  if (!searchQuery.value.trim()) return items.value
+  const q = searchQuery.value.trim().toLowerCase()
+  return items.value.filter((item) => {
+    return JSON.stringify(item).toLowerCase().includes(q)
+  })
+})
 
 const domains: { id: DomainKey; label: string; countBadge?: number }[] = [
   { id: 'hotels', label: '호텔 (Hotels)' },
@@ -385,7 +393,7 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
-          <tr v-for="h in items" :key="h.id" class="hover:bg-slate-50/70 transition">
+          <tr v-for="h in filteredItems" :key="h.id" class="hover:bg-slate-50/70 transition">
             <td class="p-4">
               <div class="font-bold text-slate-900">{{ h.name_ko }}</div>
               <div class="text-[11px] text-slate-400">{{ h.name_en }}</div>
@@ -434,7 +442,7 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
-          <tr v-for="f in items" :key="f.id" class="hover:bg-slate-50/70 transition">
+          <tr v-for="f in filteredItems" :key="f.id" class="hover:bg-slate-50/70 transition">
             <td class="p-4">
               <div class="font-bold text-slate-900">{{ f.flight_number }}</div>
               <div class="text-[11px] text-slate-400">{{ f.airline_name }} ({{ f.airline_code }})</div>
@@ -485,7 +493,7 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
-          <tr v-for="t in items" :key="t.id" class="hover:bg-slate-50/70 transition">
+          <tr v-for="t in filteredItems" :key="t.id" class="hover:bg-slate-50/70 transition">
             <td class="p-4">
               <span class="font-bold text-slate-900">{{ t.train_number }}</span>
               <span class="ml-1.5 px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px] font-bold">{{ t.train_type }}</span>
@@ -519,7 +527,7 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
-          <tr v-for="c in items" :key="c.id" class="hover:bg-slate-50/70 transition">
+          <tr v-for="c in filteredItems" :key="c.id" class="hover:bg-slate-50/70 transition">
             <td class="p-4 font-bold text-slate-900">{{ c.vehicle_model }} ({{ c.company_name }})</td>
             <td class="p-4"><span class="px-2 py-0.5 bg-slate-100 rounded text-[10px] font-bold">{{ c.vehicle_type }}</span> / {{ c.transmission }}</td>
             <td class="p-4 font-semibold text-slate-700">{{ c.seats }}인승</td>
@@ -548,7 +556,7 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
-          <tr v-for="tf in items" :key="tf.id" class="hover:bg-slate-50/70 transition">
+          <tr v-for="tf in filteredItems" :key="tf.id" class="hover:bg-slate-50/70 transition">
             <td class="p-4 font-bold text-slate-900">{{ tf.service_title }}</td>
             <td class="p-4 font-semibold text-slate-800">{{ tf.airport_code }} ↔ {{ tf.destination_area }}</td>
             <td class="p-4 font-mono text-blue-600 font-bold">{{ tf.vehicle_class }}</td>
@@ -577,7 +585,7 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
-          <tr v-for="a in items" :key="a.id" class="hover:bg-slate-50/70 transition">
+          <tr v-for="a in filteredItems" :key="a.id" class="hover:bg-slate-50/70 transition">
             <td class="p-4">
               <div class="font-bold text-slate-900 max-w-sm">{{ a.title }}</div>
               <div class="text-[10px] text-slate-400 mt-0.5">{{ a.highlights?.length || 0 }}개 핵심 특장점 등록됨</div>
@@ -625,7 +633,7 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
-          <tr v-for="pkg in items" :key="pkg.id" class="hover:bg-slate-50/70 transition">
+          <tr v-for="pkg in filteredItems" :key="pkg.id" class="hover:bg-slate-50/70 transition">
             <td class="p-4 font-bold text-slate-900">{{ pkg.title }}</td>
             <td class="p-4 font-semibold text-slate-800">{{ pkg.destination_city }}</td>
             <td class="p-4 font-mono text-[10px] text-slate-500">
@@ -660,7 +668,7 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
-          <tr v-for="p in items" :key="p.id" class="hover:bg-slate-50/70 transition">
+          <tr v-for="p in filteredItems" :key="p.id" class="hover:bg-slate-50/70 transition">
             <td class="p-4">
               <span class="px-2.5 py-1 bg-slate-900 text-white font-black text-[10px] rounded-lg tracking-wider">
                 {{ p.platform }}

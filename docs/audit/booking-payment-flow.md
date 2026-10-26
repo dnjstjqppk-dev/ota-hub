@@ -54,7 +54,7 @@ getforTrip의 B2C 예약 흐름 8단계 전 구간에 대한 검증을 완료하
   - `pages/hotels/list.vue`: `base_price_krw: 550000` (수정 완료)
   - `data/hotelCatalog.ts`: `base_price_krw: 550000` (기준값 고정)
 
-### 2.2 Trip Coins 환율 명시 및 가치 통일
+### 2.2 G-Coins 환율 명시 및 가치 통일
 - **기존 결함**: `brand.ts`에 `coinExchangeRateKRW: 10`으로 잘못 기재되어 UI상 표기와 불일치 발생.
 - **조치 결과**:
   - `coinExchangeRateKRW: 1` (1 G-Coin = ₩1 KRW)로 정규화.
@@ -79,7 +79,7 @@ getforTrip의 B2C 예약 흐름 8단계 전 구간에 대한 검증을 완료하
 | 점검 대상 | 항목 | 이전 상태 | 수정 후 상태 | 검증 |
 |---|---|---|---|---|
 | 시그니엘 서울 | 1박 기준 요금 | 52만 vs 55만 불일치 | 전 페이지 550,000원 통일 | PASS |
-| Trip Coins | 교환 가치 | 환율 모호 (1G=10원 오기) | 28,500G = ₩28,500 (1G=1원) | PASS |
+| G-Coins | 교환 가치 | 환율 모호 (1G=10원 오기) | 28,500G = ₩28,500 (1G=1원) | PASS |
 | 호텔 인벤토리 | 제휴 규모 표기 | 200만 vs 140만 혼용 | 140만+ 제휴 호텔 & 리조트 통일 | PASS |
 | 과장 마케팅 카피 | 최저가 보장/인증 | 무단 인증 문구 노출 | 전자금융 표준 보안 및 안심 특가로 대체 | PASS |
 | 예약 동기화 | /my vs /my/bookings | 목록 건수/데이터 불일치 | 단일 원천(`getUserBookings`) 100% 일치 | PASS |

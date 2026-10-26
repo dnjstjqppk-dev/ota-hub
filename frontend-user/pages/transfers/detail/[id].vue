@@ -3,51 +3,28 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { getTransferById, MASTER_TRANSFER_CATALOG } from '~/data/transferCatalog'
 
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
-const fallbackTransfer = {
-  id: 'tf_icn_van_01',
-  airport_code: 'ICN',
-  airport_name: '인천국제공항 제1/제2여객터미널',
-  destination_zone: '서울 도심 (명동/중구/용산/강남) 전역',
-  vehicle_tier: 'BUSINESS_VAN',
-  vehicle_name: '비즈니스 밴 리무진 (Business Van)',
-  vehicle_model_example: '현대 스타리아 라운지 리무진 / 기아 카니발 하이리무진',
-  max_passengers: 6,
-  max_luggage: 6,
-  price_krw: 120000,
-  free_waiting_mins: 60,
-  flight_tracking: true,
-  meet_and_greet: true,
-  free_cancellation_hours: 24,
-  image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800',
-  service_highlights: [
-    '항공편 실시간 자동 추적: 항공기 조기 착륙 또는 지연 착륙 시 기사님이 착륙 시간에 맞춰 자동 대기',
-    '입국장 무료 대기 60분: 비행기 착륙 시각부터 60분간 무료 대기 제공 (입국심사 및 수하물 수취 여유 보장)',
-    '입국장 피켓 영접: 입국장 게이트 앞에서 고객님 성함이 적힌 네임보드를 든 전담 기사님 영접',
-    '추가 요금 제로: 공항 고속도로 통행료, 주차료, 유류비 일체 포함 정찰제 요금',
-    '무료 생수 및 스마트폰 초고속 충전기 구비'
-  ],
-  meeting_guide: '입국장 세관 통과 후 메인 로비로 나오시면, 입국 게이트 바로 앞에서 고객님의 영문 성함이 기재된 getforTrip 네임보드를 들고 계신 전담 기사님을 만나실 수 있습니다.'
-}
-
+const fallbackTransfer = MASTER_TRANSFER_CATALOG[0]
 const transfer = ref<any>(fallbackTransfer)
 const loading = ref(false)
 
 onMounted(async () => {
+  const tfId = (route.params.id as string) || (route.query.id as string) || 'tf_icn_van_01'
+  const localMatch = getTransferById(tfId) || fallbackTransfer
   try {
-    const tfId = route.params.id || route.query.id || 'tf_icn_van_01'
     const res = await fetch(useApiUrl(`/transfers/${tfId}`))
     if (res.ok) {
       const json = await res.json()
-      transfer.value = json.data ? { ...fallbackTransfer, ...json.data } : fallbackTransfer
+      transfer.value = json.data ? { ...localMatch, ...json.data } : localMatch
     } else {
-      transfer.value = fallbackTransfer
+      transfer.value = localMatch
     }
   } catch (e) {
-    transfer.value = fallbackTransfer
+    transfer.value = localMatch
   } finally {
     loading.value = false
   }

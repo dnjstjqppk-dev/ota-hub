@@ -28,6 +28,8 @@ build/
 .env.*
 !.env.example
 *.local
+.dev.vars
+.dev.vars.*
 
 # Logs
 logs/
@@ -53,4 +55,5 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+temp_master_prompt.md
 # Synchronized: 2026-10-19T00:15:00Z

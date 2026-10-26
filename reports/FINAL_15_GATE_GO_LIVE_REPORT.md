@@ -36,7 +36,7 @@
 ### Gates 1 ~ 8: Technical & Security Hardening (100% PASS)
 - **Gate 01 & 02:** Pre-commit hooks (`.githooks/pre-commit`) and Nuxt 3 static prerendering guarantee zero 404 dead-ends and zero mock data leakage in production.
 - **Gate 03 & 04:** Supplier fallback and meta-search curation pipelines dynamically construct affiliate outlinks with cryptographic session attribution.
-- **Gate 05 & 06:** PBKDF2-SHA256 with 100,000 iterations replaced legacy plaintext/unsalted hashing. Admin backdoors (`admin1234!`) were eradicated. Non-admin users are strictly blocked with HTTP 403.
+- **Gate 05 & 06:** PBKDF2-SHA256 with 100,000 iterations replaced legacy plaintext/unsalted hashing. Admin backdoors (`[PURGED_INSECURE_PASS]`) were eradicated. Non-admin users are strictly blocked with HTTP 403.
 - **Gate 07 & 08:** IDOR vulnerabilities in `/api/v1/bookings/:id` have been eliminated with strict user ownership validation. S2S webhooks enforce HMAC signatures and a strict 5-minute replay prevention window.
 
 ### Gates 09 & 10: External Merchant & Regulatory Status (CONDITIONAL)

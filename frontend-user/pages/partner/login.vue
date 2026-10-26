@@ -21,7 +21,7 @@ const handleLogin = async () => {
 
   loading.value = true
   try {
-    const success = partnerStore.login(email.value, password.value)
+    const success = await partnerStore.login(email.value, password.value)
     if (success) {
       router.push('/partner')
     } else {
