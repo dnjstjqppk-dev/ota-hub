@@ -1,5 +1,8 @@
 # Nuxt dev/build outputs
-.output
+.output/*
+!.output/public/
+.output/public/*
+!.output/public/.gitkeep
 .data
 .nuxt
 .nitro

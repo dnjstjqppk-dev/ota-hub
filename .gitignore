@@ -8,7 +8,10 @@ vendor/
 
 # Build artifacts & caches
 dist/
-.output/
+.output/*
+!.output/public/
+.output/public/*
+!.output/public/.gitkeep
 .nuxt/
 .nitro/
 .cache/

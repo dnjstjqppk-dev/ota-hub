@@ -7,6 +7,9 @@
   "observability": {
     "enabled": true
   },
+  "build": {
+    "command": "node scripts/build-all.js"
+  },
   "d1_databases": [
     {
       "binding": "DB",
