@@ -7,7 +7,7 @@ import { useApiUrl } from '~/composables/useApi'
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
-const city = ref(route.query.city as string || '도쿄')
+const city = ref((route.query.city || route.query.dest) as string || '도쿄')
 const origin = ref(route.query.origin as string || '서울/인천 (ICN)')
 
 import { searchPackageCatalog, type PackageBundle } from '~/data/packageCatalog'

@@ -489,6 +489,39 @@ async function runVerificationSuite() {
   });
 
   // ---------------------------------------------------------------------------
+  // 23. TRIP-STYLE SEARCH AUTOCOMPLETE / SUGGEST
+  // ---------------------------------------------------------------------------
+  await test("Search Autocomplete: GET /api/v1/search/suggest?q=도쿄 returns rich suggestions", async () => {
+    const res = await fetch(`${BASE_URL}/api/v1/search/suggest?q=${encodeURIComponent('도쿄')}&domain=hotels`);
+    if (!res.ok) throw new Error(`Search suggest failed with HTTP ${res.status}`);
+    const json = await res.json();
+    if (!json.success || !Array.isArray(json.data) || json.data.length === 0) {
+      throw new Error(`Expected non-empty suggestion list: ${JSON.stringify(json)}`);
+    }
+    const hasTokyo = json.data.some(d => d.title.includes('도쿄'));
+    if (!hasTokyo) throw new Error(`Expected at least one Tokyo match in suggestions: ${JSON.stringify(json.data)}`);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 24. MASTER CATALOG QUERIES WITH MULTI-DIMENSIONAL FILTERS
+  // ---------------------------------------------------------------------------
+  await test("Catalog Queries: GET /api/v1/hotels?city=서울 & /api/v1/flights return D1 items", async () => {
+    const hRes = await fetch(`${BASE_URL}/api/v1/hotels?city=${encodeURIComponent('서울')}`);
+    if (!hRes.ok) throw new Error(`Hotels query failed with HTTP ${hRes.status}`);
+    const hJson = await hRes.json();
+    if (!hJson.success || !Array.isArray(hJson.data) || hJson.data.length === 0) {
+      throw new Error(`Expected hotel catalog results: ${JSON.stringify(hJson)}`);
+    }
+
+    const fRes = await fetch(`${BASE_URL}/api/v1/flights`);
+    if (!fRes.ok) throw new Error(`Flights query failed with HTTP ${fRes.status}`);
+    const fJson = await fRes.json();
+    if (!fJson.success || !Array.isArray(fJson.data) || fJson.data.length === 0) {
+      throw new Error(`Expected flight catalog results: ${JSON.stringify(fJson)}`);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // SUMMARY
   // ---------------------------------------------------------------------------
   console.log('\n==============================================================================');

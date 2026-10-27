@@ -1072,29 +1072,298 @@ export default {
     }
 
     // =========================================================================
-    // 6. MASTER CATALOG APIS (Hotels, Flights, Trains, Cars, Transfers, Activities, Packages, FX, Notices)
+    // 6. SEARCH AUTOCOMPLETE & MASTER CATALOG APIS
     // =========================================================================
+
+    // Global Search Autocomplete / Suggest API (Trip-style)
+    if (path === "/api/v1/search/suggest") {
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const domain = (url.searchParams.get("domain") || "").trim().toLowerCase();
+
+      // Top-tier predefined destinations (Airports, Major Metros, Landmarks, Stations)
+      const GLOBAL_INDEX: Array<{
+        id: string;
+        title: string;
+        subtitle: string;
+        code?: string;
+        type: string;
+        badge: string;
+        count_info: string;
+        target_url: string;
+        domain: string;
+      }> = [
+        // Metros & Cities
+        { id: 'sel', title: '서울 (Seoul)', subtitle: '대한민국 서울특별시 (Seoul, Korea)', code: 'SEL', type: 'city', badge: '인기 1위', count_info: '숙소 3,120개', target_url: '/hotels/list?city=서울', domain: 'hotels' },
+        { id: 'cju', title: '제주 (Jeju)', subtitle: '대한민국 제주특별자치도 (Jeju Island)', code: 'CJU', type: 'city', badge: '휴양 1위', count_info: '숙소 1,450개', target_url: '/hotels/list?city=제주', domain: 'hotels' },
+        { id: 'pus', title: '부산 (Busan)', subtitle: '대한민국 부산광역시 (Busan, Korea)', code: 'PUS', type: 'city', badge: '해양 관광', count_info: '숙소 1,180개', target_url: '/hotels/list?city=부산', domain: 'hotels' },
+        { id: 'tyo', title: '도쿄 (Tokyo)', subtitle: '일본 간토 지방, 도쿄도 (Tokyo, Japan)', code: 'TYO', type: 'city', badge: '글로벌 인기', count_info: '숙소 2,450개', target_url: '/hotels/list?city=도쿄', domain: 'hotels' },
+        { id: 'osa', title: '오사카 (Osaka)', subtitle: '일본 간사이 지방, 오사카부 (Osaka, Japan)', code: 'OSA', type: 'city', badge: '식도락 1위', count_info: '숙소 1,820개', target_url: '/hotels/list?city=오사카', domain: 'hotels' },
+        { id: 'fuk', title: '후쿠오카 (Fukuoka)', subtitle: '일본 규슈 후쿠오카현 (Fukuoka, Japan)', code: 'FUK', type: 'city', badge: '단거리 인기', count_info: '숙소 980개', target_url: '/hotels/list?city=후쿠오카', domain: 'hotels' },
+        { id: 'spk', title: '삿포로 (Sapporo)', subtitle: '일본 홋카이도 (Sapporo, Hokkaido)', code: 'CTS', type: 'city', badge: '설경/미식', count_info: '숙소 620개', target_url: '/hotels/list?city=삿포로', domain: 'hotels' },
+        { id: 'oka', title: '오키나와 (Okinawa)', subtitle: '일본 규슈 남부 아열대 휴양지', code: 'OKA', type: 'city', badge: '에메랄드 해변', count_info: '숙소 890개', target_url: '/hotels/list?city=오키나와', domain: 'hotels' },
+        { id: 'bkk', title: '방콕 (Bangkok)', subtitle: '태국 방콕 특별시 (Bangkok, Thailand)', code: 'BKK', type: 'city', badge: '동남아 1위', count_info: '숙소 3,400개', target_url: '/hotels/list?city=방콕', domain: 'hotels' },
+        { id: 'dad', title: '다낭 (Da Nang)', subtitle: '베트남 다낭 미케비치 (Da Nang, Vietnam)', code: 'DAD', type: 'city', badge: '가족 휴양', count_info: '숙소 1,260개', target_url: '/hotels/list?city=다낭', domain: 'hotels' },
+        { id: 'sin', title: '싱가포르 (Singapore)', subtitle: '싱가포르 공화국 (Singapore)', code: 'SIN', type: 'city', badge: '도심 럭셔리', count_info: '숙소 840개', target_url: '/hotels/list?city=싱가포르', domain: 'hotels' },
+        { id: 'tpe', title: '타이베이 (Taipei)', subtitle: '대만 타이베이시 (Taipei, Taiwan)', code: 'TPE', type: 'city', badge: '야시장/온천', count_info: '숙소 1,120개', target_url: '/hotels/list?city=타이베이', domain: 'hotels' },
+        { id: 'par', title: '파리 (Paris)', subtitle: '프랑스 일드프랑스 (Paris, France)', code: 'PAR', type: 'city', badge: '유럽 대표', count_info: '숙소 2,890개', target_url: '/hotels/list?city=파리', domain: 'hotels' },
+        { id: 'lon', title: '런던 (London)', subtitle: '영국 잉글랜드 (London, United Kingdom)', code: 'LON', type: 'city', badge: '문화 수도', count_info: '숙소 3,200개', target_url: '/hotels/list?city=런던', domain: 'hotels' },
+        { id: 'nyc', title: '뉴욕 (New York)', subtitle: '미국 뉴욕주 (New York, USA)', code: 'NYC', type: 'city', badge: '미주 1위', count_info: '숙소 2,150개', target_url: '/hotels/list?city=뉴욕', domain: 'hotels' },
+
+        // Airports
+        { id: 'air-icn', title: '인천국제공항 (ICN)', subtitle: '대한민국 서울/인천 Incheon Int Airport', code: 'ICN', type: 'airport', badge: '대한민국 허브', count_info: '일일 450편+', target_url: '/flights/search?dest=ICN', domain: 'flights' },
+        { id: 'air-gmp', title: '김포국제공항 (GMP)', subtitle: '대한민국 서울 Gimpo Airport', code: 'GMP', type: 'airport', badge: '도심 공항', count_info: '일일 180편', target_url: '/flights/search?dest=GMP', domain: 'flights' },
+        { id: 'air-cju', title: '제주국제공항 (CJU)', subtitle: '대한민국 제주특별자치도 Jeju Airport', code: 'CJU', type: 'airport', badge: '휴양 허브', count_info: '일일 220편', target_url: '/flights/search?dest=CJU', domain: 'flights' },
+        { id: 'air-nrt', title: '도쿄 나리타공항 (NRT)', subtitle: '일본 도쿄/지바 Tokyo Narita Airport', code: 'NRT', type: 'airport', badge: '국제선 허브', count_info: '일일 280편', target_url: '/flights/search?dest=NRT', domain: 'flights' },
+        { id: 'air-hnd', title: '도쿄 하네다공항 (HND)', subtitle: '일본 도쿄도 Tokyo Haneda Airport', code: 'HND', type: 'airport', badge: '도심 최단거리', count_info: '일일 320편', target_url: '/flights/search?dest=HND', domain: 'flights' },
+        { id: 'air-kix', title: '오사카 간사이공항 (KIX)', subtitle: '일본 오사카/간사이 Kansai Airport', code: 'KIX', type: 'airport', badge: '간사이 관문', count_info: '일일 210편', target_url: '/flights/search?dest=KIX', domain: 'flights' },
+        { id: 'air-fuk', title: '후쿠오카공항 (FUK)', subtitle: '일본 규슈 Fukuoka Airport', code: 'FUK', type: 'airport', badge: '시내 10분', count_info: '일일 110편', target_url: '/flights/search?dest=FUK', domain: 'flights' },
+        { id: 'air-bkk', title: '방콕 수완나품공항 (BKK)', subtitle: '태국 방콕 Suvarnabhumi Airport', code: 'BKK', type: 'airport', badge: '동남아 허브', count_info: '일일 340편', target_url: '/flights/search?dest=BKK', domain: 'flights' },
+        { id: 'air-dad', title: '다낭국제공항 (DAD)', subtitle: '베트남 다낭 Da Nang Airport', code: 'DAD', type: 'airport', badge: '직항 인기', count_info: '일일 95편', target_url: '/flights/search?dest=DAD', domain: 'flights' },
+        { id: 'air-sin', title: '싱가포르 창이공항 (SIN)', subtitle: '싱가포르 Singapore Changi Airport', code: 'SIN', type: 'airport', badge: '세계 1위', count_info: '일일 380편', target_url: '/flights/search?dest=SIN', domain: 'flights' },
+        { id: 'air-cdg', title: '파리 샤를드골공항 (CDG)', subtitle: '프랑스 파리 Charles de Gaulle Airport', code: 'CDG', type: 'airport', badge: '유럽 관문', count_info: '일일 420편', target_url: '/flights/search?dest=CDG', domain: 'flights' },
+        { id: 'air-lhr', title: '런던 히드로공항 (LHR)', subtitle: '영국 런던 London Heathrow Airport', code: 'LHR', type: 'airport', badge: '유럽 최대', count_info: '일일 480편', target_url: '/flights/search?dest=LHR', domain: 'flights' },
+        { id: 'air-jfk', title: '뉴욕 JFK공항 (JFK)', subtitle: '미국 뉴욕 John F. Kennedy Airport', code: 'JFK', type: 'airport', badge: '미주 대표', count_info: '일일 510편', target_url: '/flights/search?dest=JFK', domain: 'flights' },
+
+        // Trains
+        { id: 'trn-seoul', title: '서울역 (Seoul Station)', subtitle: '대한민국 KTX/경부선 출발역', code: 'KTX', type: 'station', badge: '고속열차', count_info: 'KTX 출발', target_url: '/trains/search?dep=서울역', domain: 'trains' },
+        { id: 'trn-busan', title: '부산역 (Busan Station)', subtitle: '대한민국 KTX/경부선 종착역', code: 'KTX', type: 'station', badge: '고속열차', count_info: 'KTX 종착', target_url: '/trains/search?arr=부산역', domain: 'trains' },
+        { id: 'trn-tokyo', title: '도쿄역 (Tokyo Station)', subtitle: '일본 도카이도 신칸센 출발역', code: 'JR', type: 'station', badge: '신칸센', count_info: '노조미 정차', target_url: '/trains/search?dep=도쿄역', domain: 'trains' },
+        { id: 'trn-osa', title: '신오사카역 (Shin-Osaka Station)', subtitle: '일본 간사이 산요/도카이도 신칸센', code: 'JR', type: 'station', badge: '신칸센', count_info: '간사이 중심', target_url: '/trains/search?arr=신오사카역', domain: 'trains' },
+
+        // Cars & Rentals
+        { id: 'car-cju', title: '제주공항 렌터카 셔틀 스테이션', subtitle: '대한민국 제주특별자치도 렌터카하우스', type: 'car', badge: '완전자차 포함', count_info: '차량 250대+', target_url: '/cars?loc=제주공항', domain: 'cars' },
+        { id: 'car-icn', title: '인천국제공항 T1/T2 렌터카', subtitle: '대한민국 인천공항 터미널 지점', type: 'car', badge: '공항 픽업', count_info: '차량 120대+', target_url: '/cars?loc=인천공항', domain: 'cars' },
+        { id: 'car-nrt', title: '나리타공항 렌터카 카운터', subtitle: '일본 도쿄 나리타공항 터미널 지점', type: 'car', badge: 'ETC 지원', count_info: '차량 180대+', target_url: '/cars?loc=나리타공항', domain: 'cars' },
+
+        // Activities & Landmarks
+        { id: 'act-usj', title: '유니버설 스튜디오 재팬 (USJ)', subtitle: '일본 오사카 익스프레스 패스 테마파크', type: 'activity', badge: '초인기 명소', count_info: '즉시 확정', target_url: '/things-to-do?q=유니버설', domain: 'activities' },
+        { id: 'act-disney', title: '도쿄 디즈니랜드 / 디즈니씨 1일권', subtitle: '일본 지바현 우라야스시 테마파크 모바일 e-티켓', type: 'activity', badge: '초인기 명소', count_info: '즉시 발권', target_url: '/things-to-do?q=디즈니랜드', domain: 'activities' },
+        { id: 'act-shibuya', title: '시부야 스카이 전망대 입장권', subtitle: '일본 도쿄 시부야 스크램블 최상층', type: 'activity', badge: '전망대', count_info: '일몰 인기', target_url: '/things-to-do?q=시부야스카이', domain: 'activities' },
+        { id: 'act-esim', title: '일본 매일 2GB+ 무제한 고속 eSIM', subtitle: 'Softbank/Docomo 로컬망 즉시 발송', type: 'activity', badge: '베스트셀러', count_info: 'QR 3분 발송', target_url: '/esim', domain: 'activities' },
+        { id: 'act-louvre', title: '루브르 박물관 모바일 패스트트랙', subtitle: '프랑스 파리 1구 세계 최대 미술관', type: 'activity', badge: '패스트트랙', count_info: '시간 지정', target_url: '/things-to-do?q=루브르', domain: 'activities' },
+        { id: 'act-eiffel', title: '에펠탑 2층 및 정상 전망대 입장권', subtitle: '프랑스 파리 7구 상드마르스 랜드마크', type: 'activity', badge: '세계 랜드마크', count_info: '입장권 예약', target_url: '/things-to-do?q=에펠탑', domain: 'activities' },
+
+        // Packages
+        { id: 'pkg-tyo', title: '[항공+호텔] 도쿄 3박 4일 에어텔', subtitle: '대한항공 직항 + 롯폰기 하얏트 5성급 패키지', code: 'TYO', type: 'package', badge: '인기 패키지', count_info: '최대 25% 할인', target_url: '/packages/builder?dest=도쿄', domain: 'packages' },
+        { id: 'pkg-osa', title: '[항공+호텔] 오사카 2박 3일 미식 에어텔', subtitle: '아시아나 왕복 + 난바 중심가 호텔 패키지', code: 'OSA', type: 'package', badge: '인기 패키지', count_info: '최대 30% 할인', target_url: '/packages/builder?dest=오사카', domain: 'packages' }
+      ];
+
+      const results: any[] = [];
+      const seen = new Set<string>();
+
+      // Filter from static global index
+      for (const item of GLOBAL_INDEX) {
+        if (domain && domain !== 'all' && item.domain !== domain && !(domain === 'things-to-do' && item.domain === 'activities')) {
+          continue;
+        }
+        if (!q) {
+          results.push(item);
+          seen.add(item.title);
+          if (results.length >= 8) break;
+          continue;
+        }
+        const matches =
+          item.title.toLowerCase().includes(q) ||
+          item.subtitle.toLowerCase().includes(q) ||
+          (item.code && item.code.toLowerCase().includes(q));
+        if (matches && !seen.has(item.title)) {
+          results.push(item);
+          seen.add(item.title);
+          if (results.length >= 8) break;
+        }
+      }
+
+      // Query D1 database dynamically for hotels matching keyword
+      if (q && (domain === 'hotels' || domain === 'all' || !domain)) {
+        try {
+          const hotelHits = await env.DB.prepare(
+            "SELECT id, name_ko, name_en, city, star_rating, review_score, base_price_krw FROM hotels WHERE name_ko LIKE ? OR name_en LIKE ? OR city LIKE ? LIMIT 6"
+          ).bind(`%${q}%`, `%${q}%`, `%${q}%`).all();
+
+          for (const h of (hotelHits.results || []) as any[]) {
+            if (!seen.has(h.name_ko)) {
+              results.push({
+                id: h.id,
+                title: h.name_ko,
+                subtitle: `${h.city} · ${h.star_rating}성급 호텔 (평점 ${h.review_score})`,
+                type: 'hotel',
+                badge: `${h.star_rating}성급`,
+                count_info: `₩${Number(h.base_price_krw).toLocaleString()}`,
+                target_url: `/hotels/detail/${h.id}`,
+                domain: 'hotels'
+              });
+              seen.add(h.name_ko);
+            }
+          }
+        } catch (e) {}
+      }
+
+      // Query D1 database dynamically for activities matching keyword
+      if (q && (domain === 'activities' || domain === 'things-to-do' || domain === 'all' || !domain)) {
+        try {
+          const actHits = await env.DB.prepare(
+            "SELECT id, title, category, city, price_krw FROM activities WHERE title LIKE ? OR city LIKE ? LIMIT 4"
+          ).bind(`%${q}%`, `%${q}%`).all();
+
+          for (const a of (actHits.results || []) as any[]) {
+            if (!seen.has(a.title)) {
+              results.push({
+                id: a.id,
+                title: a.title,
+                subtitle: `${a.city} · ${a.category}`,
+                type: 'activity',
+                badge: '투어/티켓',
+                count_info: `₩${Number(a.price_krw).toLocaleString()}`,
+                target_url: `/things-to-do/detail/${a.id}`,
+                domain: 'activities'
+              });
+              seen.add(a.title);
+            }
+          }
+        } catch (e) {}
+      }
+
+      return json({ success: true, count: results.length, data: results.slice(0, 10) });
+    }
+
+    // Helper to format hotel json columns
+    const formatHotel = (row: any) => {
+      if (!row) return null;
+      let images = [];
+      let amenities = [];
+      let rooms = [];
+      try { images = JSON.parse(row.images_json || '[]'); } catch (e) {}
+      try { amenities = JSON.parse(row.amenities_json || '[]'); } catch (e) {}
+      try { rooms = JSON.parse(row.rooms_json || '[]'); } catch (e) {}
+      return {
+        ...row,
+        images,
+        amenities,
+        rooms,
+        free_cancellation: Boolean(row.free_cancellation),
+        free_breakfast: Boolean(row.free_breakfast),
+      };
+    };
+
     if (path === "/api/v1/hotels") {
       const city = url.searchParams.get("city") || "";
-      let q = "SELECT * FROM hotels";
+      const star = parseInt(url.searchParams.get("star") || "0", 10);
+      const minScore = parseFloat(url.searchParams.get("minScore") || url.searchParams.get("min_score") || "0");
+      const propertyType = url.searchParams.get("propertyType") || url.searchParams.get("property_type") || "";
+      const minPrice = parseFloat(url.searchParams.get("minPrice") || "0");
+      const maxPrice = parseFloat(url.searchParams.get("maxPrice") || "999999999");
+      const freeCancel = url.searchParams.get("freeCancel") === "true" || url.searchParams.get("free_cancellation") === "1";
+      const breakfast = url.searchParams.get("breakfast") === "true" || url.searchParams.get("free_breakfast") === "1";
+      const sortBy = url.searchParams.get("sortBy") || "recommended";
+      const limit = parseInt(url.searchParams.get("limit") || "50", 10);
+
+      let q = "SELECT * FROM hotels WHERE 1=1";
       const p: any[] = [];
       if (city) {
-        q += " WHERE city LIKE ?";
-        p.push(`%${city}%`);
+        q += " AND (city LIKE ? OR name_ko LIKE ? OR name_en LIKE ? OR neighborhood LIKE ?)";
+        p.push(`%${city}%`, `%${city}%`, `%${city}%`, `%${city}%`);
       }
-      q += " LIMIT 50";
+      if (star > 0) {
+        q += " AND star_rating >= ?";
+        p.push(star);
+      }
+      if (minScore > 0) {
+        q += " AND review_score >= ?";
+        p.push(minScore);
+      }
+      if (propertyType && propertyType !== "ALL") {
+        q += " AND property_type = ?";
+        p.push(propertyType);
+      }
+      if (minPrice > 0) {
+        q += " AND base_price_krw >= ?";
+        p.push(minPrice);
+      }
+      if (maxPrice < 999999999) {
+        q += " AND base_price_krw <= ?";
+        p.push(maxPrice);
+      }
+      if (freeCancel) {
+        q += " AND free_cancellation = 1";
+      }
+      if (breakfast) {
+        q += " AND free_breakfast = 1";
+      }
+
+      if (sortBy === "price_asc") {
+        q += " ORDER BY base_price_krw ASC";
+      } else if (sortBy === "price_desc") {
+        q += " ORDER BY base_price_krw DESC";
+      } else if (sortBy === "score_desc") {
+        q += " ORDER BY review_score DESC, review_count DESC";
+      } else if (sortBy === "star_desc") {
+        q += " ORDER BY star_rating DESC, review_score DESC";
+      } else {
+        q += " ORDER BY review_score DESC, star_rating DESC";
+      }
+      q += ` LIMIT ${Math.min(limit, 100)}`;
+
       const res = await env.DB.prepare(q).bind(...p).all();
-      return json({ success: true, data: res.results });
+      const formatted = (res.results || []).map(formatHotel);
+      return json({ success: true, count: formatted.length, data: formatted });
     }
     if (path.startsWith("/api/v1/hotels/")) {
       const id = path.replace("/api/v1/hotels/", "");
       const row = await env.DB.prepare("SELECT * FROM hotels WHERE id = ?").bind(id).first();
-      return json({ success: true, data: row });
+      if (!row) return json({ success: false, message: "Hotel not found" }, { status: 404 });
+      return json({ success: true, data: formatHotel(row) });
     }
 
     if (path === "/api/v1/flights") {
-      const res = await env.DB.prepare("SELECT * FROM flights LIMIT 50").all();
-      return json({ success: true, data: res.results });
+      const origin = url.searchParams.get("origin") || url.searchParams.get("dcity") || "";
+      const dest = url.searchParams.get("dest") || url.searchParams.get("acity") || "";
+      const stops = url.searchParams.get("stops");
+      const airline = url.searchParams.get("airline") || "";
+      const timeSlot = url.searchParams.get("timeSlot") || "";
+      const cabinClass = url.searchParams.get("cabinClass") || url.searchParams.get("class") || "";
+      const sortBy = url.searchParams.get("sortBy") || "cheapest";
+      const limit = parseInt(url.searchParams.get("limit") || "50", 10);
+
+      let q = "SELECT * FROM flights WHERE 1=1";
+      const p: any[] = [];
+      if (origin) {
+        q += " AND (departure_airport LIKE ? OR departure_city LIKE ?)";
+        p.push(`%${origin}%`, `%${origin}%`);
+      }
+      if (dest) {
+        q += " AND (arrival_airport LIKE ? OR arrival_city LIKE ?)";
+        p.push(`%${dest}%`, `%${dest}%`);
+      }
+      if (stops !== null && stops !== undefined && stops !== "") {
+        q += " AND stops = ?";
+        p.push(parseInt(stops, 10));
+      }
+      if (airline) {
+        q += " AND (airline_name LIKE ? OR airline_code LIKE ?)";
+        p.push(`%${airline}%`, `%${airline}%`);
+      }
+      if (timeSlot) {
+        q += " AND departure_time_slot = ?";
+        p.push(timeSlot.toUpperCase());
+      }
+      if (cabinClass) {
+        q += " AND cabin_class LIKE ?";
+        p.push(`%${cabinClass}%`);
+      }
+
+      if (sortBy === "cheapest" || sortBy === "price_asc") {
+        q += " ORDER BY base_price_krw ASC";
+      } else if (sortBy === "fastest") {
+        q += " ORDER BY duration_minutes ASC";
+      } else if (sortBy === "earliest") {
+        q += " ORDER BY departure_time ASC";
+      } else {
+        q += " ORDER BY base_price_krw ASC";
+      }
+      q += ` LIMIT ${Math.min(limit, 100)}`;
+
+      const res = await env.DB.prepare(q).bind(...p).all();
+      return json({ success: true, count: (res.results || []).length, data: res.results || [] });
     }
     if (path.startsWith("/api/v1/flights/")) {
       const id = path.replace("/api/v1/flights/", "");
@@ -1103,8 +1372,35 @@ export default {
     }
 
     if (path === "/api/v1/trains") {
-      const res = await env.DB.prepare("SELECT * FROM trains LIMIT 50").all();
-      return json({ success: true, data: res.results });
+      const dep = url.searchParams.get("dep") || url.searchParams.get("departure_station") || "";
+      const arr = url.searchParams.get("arr") || url.searchParams.get("arrival_station") || "";
+      const trainType = url.searchParams.get("trainType") || "";
+      const sortBy = url.searchParams.get("sortBy") || "departure_asc";
+
+      let q = "SELECT * FROM trains WHERE 1=1";
+      const p: any[] = [];
+      if (dep) {
+        q += " AND departure_station LIKE ?";
+        p.push(`%${dep}%`);
+      }
+      if (arr) {
+        q += " AND arrival_station LIKE ?";
+        p.push(`%${arr}%`);
+      }
+      if (trainType) {
+        q += " AND train_type LIKE ?";
+        p.push(`%${trainType}%`);
+      }
+      if (sortBy === "price_asc") {
+        q += " ORDER BY price_krw ASC";
+      } else if (sortBy === "duration_asc") {
+        q += " ORDER BY duration_minutes ASC";
+      } else {
+        q += " ORDER BY departure_time ASC";
+      }
+      q += " LIMIT 50";
+      const res = await env.DB.prepare(q).bind(...p).all();
+      return json({ success: true, count: (res.results || []).length, data: res.results || [] });
     }
     if (path.startsWith("/api/v1/trains/")) {
       const id = path.replace("/api/v1/trains/", "");
@@ -1113,8 +1409,33 @@ export default {
     }
 
     if (path === "/api/v1/cars") {
-      const res = await env.DB.prepare("SELECT * FROM cars LIMIT 50").all();
-      return json({ success: true, data: res.results });
+      const loc = url.searchParams.get("loc") || url.searchParams.get("location") || "";
+      const vehicleType = url.searchParams.get("vehicleType") || "";
+      const transmission = url.searchParams.get("transmission") || "";
+      const sortBy = url.searchParams.get("sortBy") || "price_asc";
+
+      let q = "SELECT * FROM cars WHERE 1=1";
+      const p: any[] = [];
+      if (loc) {
+        q += " AND pickup_location LIKE ?";
+        p.push(`%${loc}%`);
+      }
+      if (vehicleType && vehicleType !== "ALL") {
+        q += " AND vehicle_type = ?";
+        p.push(vehicleType);
+      }
+      if (transmission) {
+        q += " AND transmission = ?";
+        p.push(transmission.toUpperCase());
+      }
+      if (sortBy === "price_desc") {
+        q += " ORDER BY daily_price_krw DESC";
+      } else {
+        q += " ORDER BY daily_price_krw ASC";
+      }
+      q += " LIMIT 50";
+      const res = await env.DB.prepare(q).bind(...p).all();
+      return json({ success: true, count: (res.results || []).length, data: res.results || [] });
     }
     if (path.startsWith("/api/v1/cars/")) {
       const id = path.replace("/api/v1/cars/", "");
@@ -1123,8 +1444,21 @@ export default {
     }
 
     if (path === "/api/v1/transfers") {
-      const res = await env.DB.prepare("SELECT * FROM transfers LIMIT 50").all();
-      return json({ success: true, data: res.results });
+      const airport = url.searchParams.get("airport") || "";
+      const dest = url.searchParams.get("destination") || "";
+      let q = "SELECT * FROM transfers WHERE 1=1";
+      const p: any[] = [];
+      if (airport) {
+        q += " AND (airport_code LIKE ? OR service_title LIKE ?)";
+        p.push(`%${airport}%`, `%${airport}%`);
+      }
+      if (dest) {
+        q += " AND (destination_area LIKE ? OR service_title LIKE ?)";
+        p.push(`%${dest}%`, `%${dest}%`);
+      }
+      q += " LIMIT 50";
+      const res = await env.DB.prepare(q).bind(...p).all();
+      return json({ success: true, count: (res.results || []).length, data: res.results || [] });
     }
     if (path.startsWith("/api/v1/transfers/")) {
       const id = path.replace("/api/v1/transfers/", "");
@@ -1133,8 +1467,48 @@ export default {
     }
 
     if (path === "/api/v1/activities") {
-      const res = await env.DB.prepare("SELECT * FROM activities LIMIT 50").all();
-      return json({ success: true, data: res.results });
+      const qKeyword = url.searchParams.get("q") || url.searchParams.get("query") || "";
+      const city = url.searchParams.get("city") || "";
+      const category = url.searchParams.get("category") || "";
+      const instantOnly = url.searchParams.get("instantOnly") === "true";
+      const freeCancelOnly = url.searchParams.get("freeCancelOnly") === "true";
+      const maxPrice = parseFloat(url.searchParams.get("maxPrice") || "999999999");
+      const sortBy = url.searchParams.get("sortBy") || "recommended";
+
+      let q = "SELECT * FROM activities WHERE 1=1";
+      const p: any[] = [];
+      if (qKeyword) {
+        q += " AND (title LIKE ? OR description LIKE ? OR city LIKE ?)";
+        p.push(`%${qKeyword}%`, `%${qKeyword}%`, `%${qKeyword}%`);
+      }
+      if (city) {
+        q += " AND city LIKE ?";
+        p.push(`%${city}%`);
+      }
+      if (category && category !== "ALL") {
+        q += " AND category = ?";
+        p.push(category);
+      }
+      if (instantOnly) {
+        q += " AND instant_confirmation = 1";
+      }
+      if (freeCancelOnly) {
+        q += " AND free_cancellation = 1";
+      }
+      if (maxPrice < 999999999) {
+        q += " AND price_krw <= ?";
+        p.push(maxPrice);
+      }
+      if (sortBy === "price_asc") {
+        q += " ORDER BY price_krw ASC";
+      } else if (sortBy === "rating_desc") {
+        q += " ORDER BY review_score DESC, review_count DESC";
+      } else {
+        q += " ORDER BY review_score DESC, review_count DESC";
+      }
+      q += " LIMIT 50";
+      const res = await env.DB.prepare(q).bind(...p).all();
+      return json({ success: true, count: (res.results || []).length, data: res.results || [] });
     }
     if (path.startsWith("/api/v1/activities/")) {
       const id = path.replace("/api/v1/activities/", "");
@@ -1143,8 +1517,16 @@ export default {
     }
 
     if (path === "/api/v1/packages") {
-      const res = await env.DB.prepare("SELECT * FROM packages LIMIT 50").all();
-      return json({ success: true, data: res.results });
+      const dest = url.searchParams.get("dest") || url.searchParams.get("city") || "";
+      let q = "SELECT * FROM packages WHERE 1=1";
+      const p: any[] = [];
+      if (dest) {
+        q += " AND (destination_city LIKE ? OR title LIKE ?)";
+        p.push(`%${dest}%`, `%${dest}%`);
+      }
+      q += " ORDER BY package_discount_rate DESC LIMIT 50";
+      const res = await env.DB.prepare(q).bind(...p).all();
+      return json({ success: true, count: (res.results || []).length, data: res.results || [] });
     }
     if (path.startsWith("/api/v1/packages/")) {
       const id = path.replace("/api/v1/packages/", "");

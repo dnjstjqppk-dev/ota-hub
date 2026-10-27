@@ -71,16 +71,16 @@ const handleSearch = () => {
     })
   } else if (activeTab.value === 'cars') {
     router.push({
-      path: '/cars',
+      path: '/cars/list',
       query: {
-        loc: carPickupLocation.value,
-        pickup: carPickupDate.value,
-        return: carReturnDate.value
+        city: carPickupLocation.value,
+        pickupDate: carPickupDate.value,
+        returnDate: carReturnDate.value
       }
     })
   } else if (activeTab.value === 'transfers') {
     router.push({
-      path: '/transfers',
+      path: '/transfers/list',
       query: {
         airport: transferAirport.value,
         destination: transferHotel.value
@@ -95,7 +95,7 @@ const handleSearch = () => {
     })
   } else if (activeTab.value === 'packages') {
     router.push({
-      path: '/packages/builder',
+      path: '/packages/list',
       query: {
         dest: packageDest.value
       }

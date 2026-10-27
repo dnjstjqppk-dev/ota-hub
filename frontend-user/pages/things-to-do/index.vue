@@ -7,7 +7,7 @@ import { useApiUrl } from '~/composables/useApi'
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
-const city = ref(route.query.city as string || '')
+const city = ref((route.query.city || route.query.q || '') as string)
 const selectedCategory = ref(route.query.category as string || 'ALL')
 const freeCancelOnly = ref(false)
 const instantOnly = ref(false)
@@ -89,11 +89,9 @@ watch([city, selectedCategory, freeCancelOnly, instantOnly, maxPrice, sortBy], (
   fetchActivities()
 })
 
-watch(() => route.query.city, (newCity) => {
-  if (newCity !== undefined) {
-    city.value = (newCity as string) || ''
-    fetchActivities()
-  }
+watch(() => [route.query.city, route.query.q], ([newCity, newQ]) => {
+  city.value = ((newCity || newQ || '') as string)
+  fetchActivities()
 })
 
 onMounted(() => {
