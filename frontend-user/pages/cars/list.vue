@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
@@ -116,9 +116,9 @@ const fetchCars = async () => {
   try {
     const res = await fetch(useApiUrl('/cars'))
     const json = await res.json()
-    cars.value = json.data && json.data.length ? json.data : fallbackCars
+    cars.value = Array.isArray(json?.data) ? json.data : []
   } catch (e) {
-    cars.value = fallbackCars
+    cars.value = []
   } finally {
     loading.value = false
   }

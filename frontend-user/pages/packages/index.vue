@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
@@ -58,9 +58,9 @@ onMounted(async () => {
   try {
     const res = await fetch(useApiUrl('/packages'))
     const json = await res.json()
-    packages.value = json.data && json.data.length ? json.data : fallbackPackages
+    packages.value = Array.isArray(json?.data) ? json.data : []
   } catch (e) {
-    packages.value = fallbackPackages
+    packages.value = []
   } finally {
     loading.value = false
   }

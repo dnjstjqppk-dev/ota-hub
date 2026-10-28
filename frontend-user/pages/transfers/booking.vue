@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
@@ -129,10 +129,6 @@ const handlePayment = async () => {
       status: 'CONFIRMED',
       created_at: new Date().toISOString()
     }
-    const history = JSON.parse(localStorage.getItem('user_mock_bookings') || '[]')
-    history.unshift(newRecord)
-    localStorage.setItem('user_mock_bookings', JSON.stringify(history))
-    localStorage.setItem('last_getfortrip_booking', JSON.stringify(newRecord))
   } catch (e) {}
 
   authStore.deductCoins(Number(tripCoinsToUse.value))

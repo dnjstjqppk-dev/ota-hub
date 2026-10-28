@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
@@ -84,7 +84,7 @@ const fallbackCars = [
   }
 ]
 
-const cars = ref<any[]>(fallbackCars)
+const cars = ref<any[]>([])
 
 const handleSearch = () => {
   router.push({

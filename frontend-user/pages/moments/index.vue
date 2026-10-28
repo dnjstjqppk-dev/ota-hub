@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useApiUrl } from '~/composables/useApi'
 
@@ -61,7 +61,7 @@ const DEFAULT_MOMENTS = [
   }
 ]
 
-const moments = ref<any[]>(DEFAULT_MOMENTS)
+const moments = ref<any[]>([])
 const loading = ref(false)
 
 const showWriteModal = ref(false)

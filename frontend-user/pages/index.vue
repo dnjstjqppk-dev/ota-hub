@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
@@ -74,8 +74,8 @@ const DEFAULT_MOMENTS = [
 ]
 
 const currencyStore = useCurrencyStore()
-const hotels = ref<any[]>(DEFAULT_HOTELS)
-const moments = ref<any[]>(DEFAULT_MOMENTS)
+const hotels = ref<any[]>([])
+const moments = ref<any[]>([])
 
 import { useRoute } from 'vue-router'
 import { BRAND } from '~/config/brand'

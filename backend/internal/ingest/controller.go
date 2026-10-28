@@ -17,14 +17,14 @@ import (
 
 // PipelineController orchestrates multi-platform crawling ingestion, AI curation, and outbound syndication
 type PipelineController struct {
-	store      *repository.Store
+	store      *repository.InMemoryStore
 	gemini     *curation.GeminiClient
 	referral   *referral.Synthesizer
 	dispatcher *webhook.Dispatcher
 }
 
 // NewPipelineController instantiates the controller with dependencies
-func NewPipelineController(store *repository.Store) *PipelineController {
+func NewPipelineController(store *repository.InMemoryStore) *PipelineController {
 	return &PipelineController{
 		store:      store,
 		gemini:     curation.NewGeminiClient(),

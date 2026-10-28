@@ -81,7 +81,25 @@ export default defineNuxtConfig({
       ]
     }
   },
-  srcDir: '.',
+  modules: ['@nuxtjs/i18n'],
+  i18n: {
+    locales: [
+      { code: 'ko', iso: 'ko-KR', name: '한국어', file: 'ko.json' },
+      { code: 'en', iso: 'en-US', name: 'English', file: 'en.json' },
+      { code: 'ja', iso: 'ja-JP', name: '日本語', file: 'ja.json' },
+      { code: 'zh', iso: 'zh-CN', name: '中文', file: 'zh.json' }
+    ],
+    defaultLocale: 'ko',
+    lazy: true,
+    langDir: 'locales',
+    strategy: 'prefix_except_default',
+    detectBrowserLanguage: {
+      useCookie: true,
+      cookieKey: 'getfortrip_locale',
+      redirectOn: 'root'
+    }
+  },
+
   compatibilityDate: '2025-07-15',
   devtools: { enabled: false },
   css: ['assets/css/tailwind.css'],

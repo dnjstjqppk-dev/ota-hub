@@ -8,10 +8,10 @@ import (
 
 type PricingInput struct {
 	BaseAmountKRW     float64         `json:"base_amount_krw"`
-	TaxRate           float64         `json:"tax_rate"`             // default 0.10 (10%)
-	ServiceFeeRate    float64         `json:"service_fee_rate"`     // default 0.03 (3%)
-	CouponDiscountKRW float64         `json:"coupon_discount_krw"`  // 원화 할인액 (>= 0)
-	TripCoinsRedeem   int             `json:"trip_coins_redeem"`    // 1 G-Coin = 1 KRW (>= 0)
+	TaxRate           float64         `json:"tax_rate"`            // default 0.10 (10%)
+	ServiceFeeRate    float64         `json:"service_fee_rate"`    // default 0.03 (3%)
+	CouponDiscountKRW float64         `json:"coupon_discount_krw"` // 원화 할인액 (>= 0)
+	TripCoinsRedeem   int             `json:"trip_coins_redeem"`   // 1 G-Coin = 1 KRW (>= 0)
 	TargetCurrency    domain.Currency `json:"target_currency"`
 	ExchangeRateToKRW float64         `json:"exchange_rate_to_krw"` // 1 TargetCurrency = X KRW
 }

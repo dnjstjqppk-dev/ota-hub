@@ -1,0 +1,31 @@
+{
+  "nav": {
+    "home": "Home",
+    "hotels": "Hotels",
+    "flights": "Flights",
+    "trains": "Trains",
+    "cars": "Car Rental",
+    "transfers": "Airport Transfer",
+    "thingsToDo": "Things to Do",
+    "packages": "Packages",
+    "deals": "Deals",
+    "moments": "Moments",
+    "login": "Login",
+    "register": "Sign Up",
+    "myBookings": "My Bookings",
+    "rewards": "Rewards"
+  },
+  "common": {
+    "search": "Search",
+    "book": "Book",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "loading": "Loading...",
+    "noResults": "No results",
+    "currency": "USD"
+  },
+  "home": {
+    "title": "getfortrip - Travel the world in one place",
+    "subtitle": "Compare the best prices for hotels, flights, trains, cars and tours"
+  }
+}

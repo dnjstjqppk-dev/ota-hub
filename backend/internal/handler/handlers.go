@@ -16,11 +16,11 @@ import (
 )
 
 type APIHandler struct {
-	store      *repository.Store
+	store      *repository.InMemoryStore
 	aggregator *engine.SearchAggregator
 }
 
-func NewAPIHandler(store *repository.Store) *APIHandler {
+func NewAPIHandler(store *repository.InMemoryStore) *APIHandler {
 	return &APIHandler{
 		store:      store,
 		aggregator: engine.NewSearchAggregator(3 * time.Second),

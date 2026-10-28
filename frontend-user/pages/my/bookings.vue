@@ -1,9 +1,9 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '~/stores/auth'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
-import { getUserBookings, type BookingRecord } from '~/data/initialBookings'
+import type { BookingRecord } from '~/data/initialBookings'
 
 const authStore = useAuthStore()
 const currencyStore = useCurrencyStore()
@@ -41,7 +41,7 @@ const fetchMyBookings = async () => {
   if (apiList.length > 0) {
     bookings.value = apiList
   } else {
-    bookings.value = getUserBookings(authStore.user?.email)
+    bookings.value = []
   }
   loading.value = false
 }
@@ -57,19 +57,6 @@ const cancelBooking = async (id: string) => {
       const errJson = await res.json().catch(() => ({}))
       throw new Error(errJson?.error || '서버 취소 처리에 실패했습니다.')
     }
-
-    // Update local storage
-    try {
-      const raw = localStorage.getItem('user_mock_bookings')
-      if (raw) {
-        const list = JSON.parse(raw)
-        const found = list.find((b: any) => b.id === id)
-        if (found) {
-          found.status = 'CANCELLED'
-          localStorage.setItem('user_mock_bookings', JSON.stringify(list))
-        }
-      }
-    } catch (e) {}
 
     const target = bookings.value.find(b => b.id === id)
     if (target) {

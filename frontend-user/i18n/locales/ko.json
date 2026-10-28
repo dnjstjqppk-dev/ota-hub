@@ -1,0 +1,31 @@
+{
+  "nav": {
+    "home": "홈",
+    "hotels": "호텔",
+    "flights": "항공",
+    "trains": "기차",
+    "cars": "렌터카",
+    "transfers": "공항픽업",
+    "thingsToDo": "투어/액티비티",
+    "packages": "패키지",
+    "deals": "특가",
+    "moments": "Moments",
+    "login": "로그인",
+    "register": "회원가입",
+    "myBookings": "내 예약",
+    "rewards": "리워드"
+  },
+  "common": {
+    "search": "검색",
+    "book": "예약",
+    "cancel": "취소",
+    "confirm": "확인",
+    "loading": "로딩 중...",
+    "noResults": "결과가 없습니다",
+    "currency": "KRW"
+  },
+  "home": {
+    "title": "getfortrip - 전 세계 여행을 한 번에",
+    "subtitle": "호텔, 항공, 기차, 렌터카, 투어까지 최저가 비교"
+  }
+}

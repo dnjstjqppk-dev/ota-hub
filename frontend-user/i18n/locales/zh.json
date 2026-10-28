@@ -1,0 +1,31 @@
+{
+  "nav": {
+    "home": "首页",
+    "hotels": "酒店",
+    "flights": "机票",
+    "trains": "火车",
+    "cars": "租车",
+    "transfers": "机场接送",
+    "thingsToDo": "旅游/活动",
+    "packages": "套餐",
+    "deals": "特惠",
+    "moments": "Moments",
+    "login": "登录",
+    "register": "注册",
+    "myBookings": "我的预订",
+    "rewards": "奖励"
+  },
+  "common": {
+    "search": "搜索",
+    "book": "预订",
+    "cancel": "取消",
+    "confirm": "确认",
+    "loading": "加载中...",
+    "noResults": "无结果",
+    "currency": "CNY"
+  },
+  "home": {
+    "title": "getfortrip - 一站式环球旅行",
+    "subtitle": "酒店、机票、火车、租车、旅游最低价比较"
+  }
+}

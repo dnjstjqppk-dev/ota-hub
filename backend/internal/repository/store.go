@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-type Store struct {
+type InMemoryStore struct {
 	mu                sync.RWMutex
 	Users             map[string]domain.User
 	Travelers         map[string][]domain.SavedTraveler
@@ -39,8 +39,8 @@ type Store struct {
 	WebhookLogs        []domain.TravelCheckinWebhookLog
 }
 
-func NewStore() *Store {
-	s := &Store{
+func NewStore() *InMemoryStore {
+	s := &InMemoryStore{
 		Users:              make(map[string]domain.User),
 		Travelers:          make(map[string][]domain.SavedTraveler),
 		ExchangeRate:       make(map[domain.Currency]domain.ExchangeRate),
@@ -71,7 +71,7 @@ func NewStore() *Store {
 	return s
 }
 
-func (s *Store) seedDefaultData() {
+func (s *InMemoryStore) seedDefaultData() {
 	// FX Rates
 	s.ExchangeRate[domain.CurrencyKRW] = domain.ExchangeRate{Currency: domain.CurrencyKRW, RateToKRW: 1.0, Symbol: "₩", UpdatedAt: time.Now()}
 	s.ExchangeRate[domain.CurrencyUSD] = domain.ExchangeRate{Currency: domain.CurrencyUSD, RateToKRW: 1350.0, Symbol: "$", UpdatedAt: time.Now()}
@@ -675,7 +675,7 @@ func (s *Store) seedDefaultData() {
 }
 
 // SearchHotels queries hotels with multi-criteria filters
-func (s *Store) SearchHotels(city string, star int, minPrice, maxPrice float64, freeCancel, breakfast bool) []domain.Hotel {
+func (s *InMemoryStore) SearchHotels(city string, star int, minPrice, maxPrice float64, freeCancel, breakfast bool) []domain.Hotel {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -745,7 +745,7 @@ func (s *Store) SearchHotels(city string, star int, minPrice, maxPrice float64, 
 }
 
 // GetHotelDetail returns hotel with all rooms and reviews
-func (s *Store) GetHotelDetail(id string) (*domain.Hotel, error) {
+func (s *InMemoryStore) GetHotelDetail(id string) (*domain.Hotel, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -765,7 +765,7 @@ func (s *Store) GetHotelDetail(id string) (*domain.Hotel, error) {
 }
 
 // GetActivityDetail returns activity with its full packages and details
-func (s *Store) GetActivityDetail(id string) (*domain.Activity, error) {
+func (s *InMemoryStore) GetActivityDetail(id string) (*domain.Activity, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -777,7 +777,7 @@ func (s *Store) GetActivityDetail(id string) (*domain.Activity, error) {
 }
 
 // GetFlightDetail returns flight by ID
-func (s *Store) GetFlightDetail(id string) (*domain.Flight, error) {
+func (s *InMemoryStore) GetFlightDetail(id string) (*domain.Flight, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -789,7 +789,7 @@ func (s *Store) GetFlightDetail(id string) (*domain.Flight, error) {
 }
 
 // GetTrainDetail returns train by ID
-func (s *Store) GetTrainDetail(id string) (*domain.Train, error) {
+func (s *InMemoryStore) GetTrainDetail(id string) (*domain.Train, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -801,7 +801,7 @@ func (s *Store) GetTrainDetail(id string) (*domain.Train, error) {
 }
 
 // GetCarDetail returns car rental by ID
-func (s *Store) GetCarDetail(id string) (*domain.CarRental, error) {
+func (s *InMemoryStore) GetCarDetail(id string) (*domain.CarRental, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -813,7 +813,7 @@ func (s *Store) GetCarDetail(id string) (*domain.CarRental, error) {
 }
 
 // GetTransferDetail returns airport transfer by ID
-func (s *Store) GetTransferDetail(id string) (*domain.AirportTransfer, error) {
+func (s *InMemoryStore) GetTransferDetail(id string) (*domain.AirportTransfer, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -825,7 +825,7 @@ func (s *Store) GetTransferDetail(id string) (*domain.AirportTransfer, error) {
 }
 
 // GetPackageDetail returns dynamic package by ID
-func (s *Store) GetPackageDetail(id string) (*domain.DynamicPackage, error) {
+func (s *InMemoryStore) GetPackageDetail(id string) (*domain.DynamicPackage, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -837,7 +837,7 @@ func (s *Store) GetPackageDetail(id string) (*domain.DynamicPackage, error) {
 }
 
 // CreateDraftBooking creates draft booking with 15min inventory lock
-func (s *Store) CreateDraftBooking(b domain.Booking) (*domain.Booking, error) {
+func (s *InMemoryStore) CreateDraftBooking(b domain.Booking) (*domain.Booking, error) {
 	if b.BaseAmountKRW <= 0 || b.FinalAmountKRW < 0 {
 		return nil, fmt.Errorf("invalid booking amount: amount cannot be negative or zero")
 	}
@@ -857,7 +857,7 @@ func (s *Store) CreateDraftBooking(b domain.Booking) (*domain.Booking, error) {
 }
 
 // TransitionBookingStatus updates booking state with validation and audit logging
-func (s *Store) TransitionBookingStatus(bookingID string, targetStatus domain.BookingStatus, reason string, operator string) (*domain.Booking, error) {
+func (s *InMemoryStore) TransitionBookingStatus(bookingID string, targetStatus domain.BookingStatus, reason string, operator string) (*domain.Booking, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -896,7 +896,7 @@ func (s *Store) TransitionBookingStatus(bookingID string, targetStatus domain.Bo
 }
 
 // GetDashboardStats aggregates live metrics
-func (s *Store) GetDashboardStats() map[string]any {
+func (s *InMemoryStore) GetDashboardStats() map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -921,7 +921,7 @@ func (s *Store) GetDashboardStats() map[string]any {
 }
 
 // SearchSuggest provides getfortrip multi-domain autocomplete suggestions
-func (s *Store) SearchSuggest(query string, domainFilter string) []domain.SuggestItem {
+func (s *InMemoryStore) SearchSuggest(query string, domainFilter string) []domain.SuggestItem {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1046,7 +1046,7 @@ func (s *Store) SearchSuggest(query string, domainFilter string) []domain.Sugges
 // Curation & Multi-Platform Ingestion Storage Methods
 // ==============================================================================
 
-func (s *Store) SaveRawScrape(req domain.IngestRawRequest) string {
+func (s *InMemoryStore) SaveRawScrape(req domain.IngestRawRequest) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1055,7 +1055,7 @@ func (s *Store) SaveRawScrape(req domain.IngestRawRequest) string {
 	return id
 }
 
-func (s *Store) UpsertUniversalProduct(p *domain.UniversalProduct) {
+func (s *InMemoryStore) UpsertUniversalProduct(p *domain.UniversalProduct) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1063,7 +1063,7 @@ func (s *Store) UpsertUniversalProduct(p *domain.UniversalProduct) {
 	s.UniversalProducts[p.ID] = p
 }
 
-func (s *Store) SaveCuratedContent(c *domain.CuratedContent) {
+func (s *InMemoryStore) SaveCuratedContent(c *domain.CuratedContent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1076,7 +1076,7 @@ func (s *Store) SaveCuratedContent(c *domain.CuratedContent) {
 	}
 }
 
-func (s *Store) SaveAffiliateReferral(a *domain.AffiliateReferral) {
+func (s *InMemoryStore) SaveAffiliateReferral(a *domain.AffiliateReferral) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1088,7 +1088,7 @@ func (s *Store) SaveAffiliateReferral(a *domain.AffiliateReferral) {
 	}
 }
 
-func (s *Store) LogWebhookDispatch(logEntry *domain.TravelCheckinWebhookLog) {
+func (s *InMemoryStore) LogWebhookDispatch(logEntry *domain.TravelCheckinWebhookLog) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1104,7 +1104,7 @@ func (s *Store) LogWebhookDispatch(logEntry *domain.TravelCheckinWebhookLog) {
 	}
 }
 
-func (s *Store) GetCuratedProducts(platform domain.OTAPlatform, limit int) []*domain.UniversalProduct {
+func (s *InMemoryStore) GetCuratedProducts(platform domain.OTAPlatform, limit int) []*domain.UniversalProduct {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1128,7 +1128,7 @@ func (s *Store) GetCuratedProducts(platform domain.OTAPlatform, limit int) []*do
 	return result
 }
 
-func (s *Store) GetUniversalProduct(id string) *domain.UniversalProduct {
+func (s *InMemoryStore) GetUniversalProduct(id string) *domain.UniversalProduct {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1147,7 +1147,7 @@ func (s *Store) GetUniversalProduct(id string) *domain.UniversalProduct {
 }
 
 // GetDomainFilters retrieves filter taxonomy for a specific domain
-func (s *Store) GetDomainFilters(domainType string) []domain.DomainFilterDefinition {
+func (s *InMemoryStore) GetDomainFilters(domainType string) []domain.DomainFilterDefinition {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1179,7 +1179,7 @@ func (s *Store) GetDomainFilters(domainType string) []domain.DomainFilterDefinit
 }
 
 // GetAllFilters returns all filter taxonomies
-func (s *Store) GetAllFilters() map[string][]domain.DomainFilterDefinition {
+func (s *InMemoryStore) GetAllFilters() map[string][]domain.DomainFilterDefinition {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1190,7 +1190,7 @@ func (s *Store) GetAllFilters() map[string][]domain.DomainFilterDefinition {
 	return res
 }
 
-func (s *Store) seedFilterDefinitions() {
+func (s *InMemoryStore) seedFilterDefinitions() {
 	// 1. HOTEL Filters
 	s.FilterDefinitions["HOTEL"] = []domain.DomainFilterDefinition{
 		{

@@ -1,0 +1,31 @@
+{
+  "nav": {
+    "home": "ホーム",
+    "hotels": "ホテル",
+    "flights": "航空券",
+    "trains": "列車",
+    "cars": "レンタカー",
+    "transfers": "空港送迎",
+    "thingsToDo": "ツアー・アクティビティ",
+    "packages": "パッケージ",
+    "deals": "特価",
+    "moments": "Moments",
+    "login": "ログイン",
+    "register": "会員登録",
+    "myBookings": "予約管理",
+    "rewards": "リワード"
+  },
+  "common": {
+    "search": "検索",
+    "book": "予約",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "loading": "読み込み中...",
+    "noResults": "結果がありません",
+    "currency": "JPY"
+  },
+  "home": {
+    "title": "getfortrip - 世界を一つの場所で",
+    "subtitle": "ホテル・航空券・列車・レンタカー・ツアーの最安値比較"
+  }
+}

@@ -11,6 +11,7 @@
     "preview": "nuxt preview"
   },
   "dependencies": {
+    "@nuxtjs/i18n": "^10.6.0",
     "@pinia/nuxt": "^1.0.3",
     "autoprefixer": "^10.4.20",
     "nuxt": "^4.6.1",
@@ -24,14 +25,14 @@
     "@types/node": "^26.6.5"
   },
   "optionalDependencies": {
-    "lightningcss-linux-x64-gnu": "1.33.0",
-    "lightningcss-linux-x64-musl": "1.33.0",
     "@oxc-parser/binding-linux-x64-gnu": "^0.155.0",
     "@oxc-parser/binding-wasm32-wasi": "^0.155.0",
     "@rolldown/binding-linux-x64-gnu": "1.2.13",
     "@rolldown/binding-linux-x64-musl": "1.2.13",
     "@rolldown/binding-wasm32-wasi": "1.2.13",
     "@rollup/rollup-linux-x64-gnu": "^4.20.0",
-    "@rollup/rollup-linux-x64-musl": "^4.20.0"
+    "@rollup/rollup-linux-x64-musl": "^4.20.0",
+    "lightningcss-linux-x64-gnu": "1.33.0",
+    "lightningcss-linux-x64-musl": "1.33.0"
   }
 }
