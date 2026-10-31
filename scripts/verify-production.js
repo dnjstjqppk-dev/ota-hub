@@ -522,6 +522,40 @@ async function runVerificationSuite() {
   });
 
   // ---------------------------------------------------------------------------
+  // 25. CROSS-DOMAIN AUTOCOMPLETE (CARS, TRAINS, PACKAGES)
+  // ---------------------------------------------------------------------------
+  await test('Cross-Domain Autocomplete: Suggest across cars, trains, and packages', async () => {
+    const carRes = await fetch(`${BASE_URL}/api/v1/search/suggest?q=${encodeURIComponent('제주')}&domain=cars`);
+    if (!carRes.ok) throw new Error(`Car suggest failed: HTTP ${carRes.status}`);
+    const carJson = await carRes.json();
+    if (!carJson.success || !Array.isArray(carJson.data) || carJson.data.length === 0) {
+      throw new Error(`Expected car suggestions for 제주: ${JSON.stringify(carJson)}`);
+    }
+
+    const trainRes = await fetch(`${BASE_URL}/api/v1/search/suggest?q=${encodeURIComponent('서울')}&domain=trains`);
+    if (!trainRes.ok) throw new Error(`Train suggest failed: HTTP ${trainRes.status}`);
+    const trainJson = await trainRes.json();
+    if (!trainJson.success || !Array.isArray(trainJson.data) || trainJson.data.length === 0) {
+      throw new Error(`Expected train suggestions for 서울: ${JSON.stringify(trainJson)}`);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 26. 7-DOMAIN CATALOG API INTEGRITY CHECK
+  // ---------------------------------------------------------------------------
+  await test('Trip Category Endpoints: /hotels, /flights, /trains, /cars, /transfers, /activities, /packages', async () => {
+    const endpoints = ['hotels', 'flights', 'trains', 'cars', 'transfers', 'activities', 'packages'];
+    for (const ep of endpoints) {
+      const res = await fetch(`${BASE_URL}/api/v1/${ep}`);
+      if (!res.ok) throw new Error(`Endpoint /api/v1/${ep} failed with HTTP ${res.status}`);
+      const json = await res.json();
+      if (!json.success || !Array.isArray(json.data)) {
+        throw new Error(`Endpoint /api/v1/${ep} returned invalid data format: ${JSON.stringify(json)}`);
+      }
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // SUMMARY
   // ---------------------------------------------------------------------------
   console.log('\n==============================================================================');

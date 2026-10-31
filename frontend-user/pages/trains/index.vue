@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
+import SearchAutocomplete from '~/components/SearchAutocomplete.vue'
 
 const router = useRouter()
 const currencyStore = useCurrencyStore()
@@ -106,20 +107,22 @@ const popularRoutes = [
             <div class="md:col-span-5 grid grid-cols-2 gap-2">
               <div class="space-y-1">
                 <label class="text-xs font-bold text-slate-400">출발역</label>
-                <input
+                <SearchAutocomplete
                   v-model="depStation"
-                  type="text"
-                  class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-trip-blue"
+                  domain="trains"
+                  icon="train"
                   :placeholder="networkPresets[railNetwork].placeholder"
+                  inputClass="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-trip-blue"
                 />
               </div>
               <div class="space-y-1">
                 <label class="text-xs font-bold text-slate-400">도착역</label>
-                <input
+                <SearchAutocomplete
                   v-model="arrStation"
-                  type="text"
-                  class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-trip-blue"
+                  domain="trains"
+                  icon="train"
                   :placeholder="networkPresets[railNetwork].placeholder"
+                  inputClass="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-trip-blue"
                 />
               </div>
             </div>

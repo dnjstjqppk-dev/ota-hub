@@ -22,7 +22,18 @@ const fetchPackages = async () => {
     if (res.ok) {
       const json = await res.json()
       if (Array.isArray(json.data) && json.data.length > 0) {
-        packages.value = json.data
+        packages.value = json.data.map((p: any) => ({
+          ...p,
+          hero_image_url: p.hero_image_url || p.thumbnail_url,
+          savings_percentage: p.savings_percentage || p.package_discount_rate || 15,
+          bundle_price_krw: p.bundle_price_krw || p.total_package_krw,
+          original_price_krw: p.original_price_krw || p.total_original_krw,
+          badge: p.badge || '특가 번들',
+          duration_nights: p.duration_nights || 3,
+          duration_days: p.duration_days || 4,
+          flight: p.flight || { airline_name: '대한항공 (KE)', departure_city: '서울/인천', arrival_city: p.destination_city || city.value },
+          hotel: p.hotel || { name_ko: `${p.destination_city || city.value} 5성급 럭셔리 호텔`, city: p.destination_city || city.value }
+        }))
         loading.value = false
         return
       }
@@ -35,11 +46,16 @@ const fetchPackages = async () => {
   loading.value = false
 }
 
-watch(() => route.query.city, (newCity) => {
-  if (newCity !== undefined) {
-    city.value = (newCity as string) || ''
+watch(() => [route.query.city, route.query.dest], ([newCity, newDest]) => {
+  const c = newCity || newDest
+  if (c !== undefined) {
+    city.value = (c as string) || ''
     fetchPackages()
   }
+})
+
+watch(city, () => {
+  fetchPackages()
 })
 
 onMounted(() => {

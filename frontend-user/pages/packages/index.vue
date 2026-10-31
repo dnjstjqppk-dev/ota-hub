@@ -1,8 +1,9 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import SearchAutocomplete from '~/components/SearchAutocomplete.vue'
 
 const router = useRouter()
 const currencyStore = useCurrencyStore()
@@ -93,18 +94,22 @@ onMounted(async () => {
             <div class="md:col-span-5 grid grid-cols-2 gap-2">
               <div class="space-y-1">
                 <label class="text-xs font-bold text-slate-400">출발 도시/공항</label>
-                <input
+                <SearchAutocomplete
                   v-model="origin"
-                  type="text"
-                  class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-trip-blue"
+                  domain="flights"
+                  icon="plane"
+                  placeholder="출발 공항/도시"
+                  inputClass="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-trip-blue"
                 />
               </div>
               <div class="space-y-1">
                 <label class="text-xs font-bold text-slate-400">여행 목적지</label>
-                <input
+                <SearchAutocomplete
                   v-model="destination"
-                  type="text"
-                  class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-trip-blue"
+                  domain="packages"
+                  icon="search"
+                  placeholder="도착 도시 / 휴양지"
+                  inputClass="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-trip-blue"
                 />
               </div>
             </div>

@@ -96,9 +96,10 @@ watch([city, selectedStar, selectedScore, selectedPropertyType, maxPrice, freeCa
   fetchHotels()
 })
 
-watch(() => route.query.city, (newCity) => {
-  if (newCity !== undefined) {
-    city.value = (newCity as string) || ''
+watch([() => route.query.city, () => route.query.searchWord], ([newCity, newWord]) => {
+  const val = newCity || newWord
+  if (val !== undefined) {
+    city.value = (val as string) || ''
     fetchHotels()
   }
 })

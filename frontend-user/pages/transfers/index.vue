@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { MASTER_TRANSFER_CATALOG } from '~/data/transferCatalog'
+import SearchAutocomplete from '~/components/SearchAutocomplete.vue'
 
 const router = useRouter()
 const currencyStore = useCurrencyStore()
@@ -121,18 +122,20 @@ onMounted(async () => {
             <div class="md:col-span-5 grid grid-cols-2 gap-2">
               <div class="space-y-1">
                 <label class="text-xs font-bold text-slate-400">{{ mode === 'PICKUP' ? '도착 공항' : '출발 호텔/주소' }}</label>
-                <input
+                <SearchAutocomplete
                   v-model="airport"
-                  type="text"
-                  class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-trip-blue"
+                  :domain="mode === 'PICKUP' ? 'flights' : 'hotels'"
+                  :icon="mode === 'PICKUP' ? 'plane' : 'search'"
+                  inputClass="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-trip-blue"
                 />
               </div>
               <div class="space-y-1">
                 <label class="text-xs font-bold text-slate-400">{{ mode === 'PICKUP' ? '목적지 호텔/주소' : '도착 공항' }}</label>
-                <input
+                <SearchAutocomplete
                   v-model="destination"
-                  type="text"
-                  class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-trip-blue"
+                  :domain="mode === 'PICKUP' ? 'hotels' : 'flights'"
+                  :icon="mode === 'PICKUP' ? 'search' : 'plane'"
+                  inputClass="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-trip-blue"
                 />
               </div>
             </div>

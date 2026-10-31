@@ -53,12 +53,21 @@ const fetchActivities = async () => {
   loading.value = true
   try {
     const params = new URLSearchParams()
-    if (city.value) params.append('city', city.value)
+    if (city.value) {
+      params.append('city', city.value)
+      params.append('q', city.value)
+    }
     if (selectedCategory.value && selectedCategory.value !== 'ALL') {
       params.append('category', selectedCategory.value)
     }
-    if (freeCancelOnly.value) params.append('freeCancel', 'true')
-    if (instantOnly.value) params.append('instant', 'true')
+    if (freeCancelOnly.value) {
+      params.append('freeCancel', 'true')
+      params.append('freeCancelOnly', 'true')
+    }
+    if (instantOnly.value) {
+      params.append('instant', 'true')
+      params.append('instantOnly', 'true')
+    }
     if (maxPrice.value < 200000) params.append('maxPrice', String(maxPrice.value))
 
     const res = await fetch(`${useApiUrl('/activities')}?${params.toString()}`, { signal: AbortSignal.timeout(1500) })

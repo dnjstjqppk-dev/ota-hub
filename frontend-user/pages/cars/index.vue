@@ -1,8 +1,9 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import SearchAutocomplete from '~/components/SearchAutocomplete.vue'
 
 const router = useRouter()
 const currencyStore = useCurrencyStore()
@@ -153,29 +154,25 @@ onMounted(async () => {
           <!-- 인수 장소 -->
           <div class="space-y-1">
             <label class="text-[11px] font-bold text-slate-400">인수 장소 (도시/공항)</label>
-            <div class="relative">
-              <span class="absolute left-3 top-3 text-slate-400">📍</span>
-              <input
-                v-model="pickupCity"
-                type="text"
-                placeholder="예: 제주, 도쿄, 후쿠오카, 오사카"
-                class="w-full pl-9 pr-3 py-2.5 text-xs font-bold text-slate-900 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
+            <SearchAutocomplete
+              v-model="pickupCity"
+              domain="cars"
+              icon="car"
+              placeholder="예: 제주, 도쿄, 인천공항, 오사카"
+              inputClass="w-full pl-11 pr-3 py-2.5 text-xs font-bold text-slate-900 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+            />
           </div>
 
           <!-- 반납 장소 (상이할 때) -->
           <div v-if="returnDifferent" class="space-y-1">
             <label class="text-[11px] font-bold text-slate-400">반납 장소</label>
-            <div class="relative">
-              <span class="absolute left-3 top-3 text-slate-400">🏁</span>
-              <input
-                v-model="returnCity"
-                type="text"
-                placeholder="반납 도시 또는 공항"
-                class="w-full pl-9 pr-3 py-2.5 text-xs font-bold text-slate-900 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
+            <SearchAutocomplete
+              v-model="returnCity"
+              domain="cars"
+              icon="car"
+              placeholder="반납 도시 또는 공항"
+              inputClass="w-full pl-11 pr-3 py-2.5 text-xs font-bold text-slate-900 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+            />
           </div>
 
           <!-- 대여 일시 -->

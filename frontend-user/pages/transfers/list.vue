@@ -32,7 +32,10 @@ const loading = ref(false)
 const fetchTransfers = async () => {
   loading.value = true
   try {
-    const res = await fetch(useApiUrl('/transfers'))
+    const params = new URLSearchParams()
+    if (airport.value) params.append('airport', airport.value)
+    if (destination.value) params.append('destination', destination.value)
+    const res = await fetch(`${useApiUrl('/transfers')}?${params.toString()}`)
     const json = await res.json()
     vehicles.value = json.data && json.data.length ? json.data : MASTER_TRANSFER_CATALOG
   } catch (e) {
@@ -41,6 +44,12 @@ const fetchTransfers = async () => {
     loading.value = false
   }
 }
+
+watch(() => [route.query.airport, route.query.destination], ([newAirport, newDest]) => {
+  if (newAirport) airport.value = newAirport as string
+  if (newDest) destination.value = newDest as string
+  fetchTransfers()
+})
 
 const filteredVehicles = computed(() => {
   let list = [...vehicles.value]

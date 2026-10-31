@@ -78,6 +78,13 @@ watch([depStation, arrStation, selectedTrainType, selectedSeatClass], () => {
   fetchTrains()
 })
 
+watch(() => [route.query.dep, route.query.arr, route.query.date], ([newDep, newArr, newDate]) => {
+  if (newDep) depStation.value = newDep as string
+  if (newArr) arrStation.value = newArr as string
+  if (newDate) travelDate.value = newDate as string
+  fetchTrains()
+})
+
 onMounted(() => {
   fetchTrains()
 })

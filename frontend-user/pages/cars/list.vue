@@ -1,13 +1,14 @@
-﻿<script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+<script setup lang="ts">
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import SearchAutocomplete from '~/components/SearchAutocomplete.vue'
 
 const route = useRoute()
 const currencyStore = useCurrencyStore()
 
-const city = ref(route.query.city as string || '제주')
+const city = ref((route.query.city || route.query.loc || route.query.location || '제주') as string)
 const pickupDate = ref(route.query.pickupDate as string || '2026-11-01')
 const returnDate = ref(route.query.returnDate as string || '2026-11-03')
 
@@ -114,15 +115,50 @@ const fallbackCars = [
 const fetchCars = async () => {
   loading.value = true
   try {
-    const res = await fetch(useApiUrl('/cars'))
+    const params = new URLSearchParams()
+    if (city.value) {
+      params.append('city', city.value)
+      params.append('loc', city.value)
+    }
+    const res = await fetch(`${useApiUrl('/cars')}?${params.toString()}`)
     const json = await res.json()
-    cars.value = Array.isArray(json?.data) ? json.data : []
+    if (Array.isArray(json?.data) && json.data.length > 0) {
+      cars.value = json.data.map((c: any) => ({
+        ...c,
+        vehicle_category: c.vehicle_category || c.vehicle_type || 'SEDAN',
+        luggage_large: c.luggage_large ?? (c.vehicle_type === 'VAN' ? 4 : c.vehicle_type === 'SUV' ? 3 : 2),
+        luggage_small: c.luggage_small ?? 2,
+        insurance_super_cdw: c.insurance_super_cdw ?? (c.insurance_included === 1 || c.insurance_included === true),
+        unlimited_mileage: c.unlimited_mileage ?? true,
+        free_cancellation_hours: c.free_cancellation_hours ?? 48,
+        pickup_location_name: c.pickup_location_name || c.pickup_location || '공항 렌터카 하우스'
+      }))
+      loading.value = false
+      return
+    }
   } catch (e) {
-    cars.value = []
-  } finally {
-    loading.value = false
+    // Keep fallback
   }
+
+  const filteredFallback = fallbackCars.filter(c => {
+    if (!city.value) return true
+    return c.pickup_city.includes(city.value) || city.value.includes(c.pickup_city) || c.pickup_location_name.includes(city.value)
+  })
+  cars.value = filteredFallback.length > 0 ? filteredFallback : fallbackCars
+  loading.value = false
 }
+
+watch(() => [route.query.city, route.query.loc, route.query.location], ([newCity, newLoc, newLocation]) => {
+  const val = newCity || newLoc || newLocation
+  if (val) {
+    city.value = val as string
+    fetchCars()
+  }
+})
+
+watch(city, () => {
+  fetchCars()
+})
 
 const filteredCars = computed(() => {
   let list = [...cars.value]
@@ -174,10 +210,19 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-3 w-full md:w-auto">
+        <div class="w-64">
+          <SearchAutocomplete
+            v-model="city"
+            domain="cars"
+            icon="car"
+            placeholder="인수 도시 / 지점 변경"
+            inputClass="w-full pl-10 pr-3 py-2 text-xs font-bold text-slate-800 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+          />
+        </div>
         <NuxtLink
           to="/cars"
-          class="px-4 py-2 border border-slate-200 hover:border-blue-500 rounded-xl text-xs font-bold text-slate-700 transition"
+          class="px-4 py-2 border border-slate-200 hover:border-blue-500 rounded-xl text-xs font-bold text-slate-700 transition whitespace-nowrap"
         >
           검색 조건 변경
         </NuxtLink>

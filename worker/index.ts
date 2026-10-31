@@ -1153,8 +1153,12 @@ export default {
 
       // Filter from static global index
       for (const item of GLOBAL_INDEX) {
-        if (domain && domain !== 'all' && item.domain !== domain && !(domain === 'things-to-do' && item.domain === 'activities')) {
-          continue;
+        if (domain && domain !== 'all') {
+          const isActivityMatch = (domain === 'things-to-do' || domain === 'activities') && (item.domain === 'activities' || item.domain === 'things-to-do');
+          const isCityShared = item.type === 'city';
+          if (item.domain !== domain && !isActivityMatch && !isCityShared) {
+            continue;
+          }
         }
         if (!q) {
           results.push(item);
@@ -1167,7 +1171,19 @@ export default {
           item.subtitle.toLowerCase().includes(q) ||
           (item.code && item.code.toLowerCase().includes(q));
         if (matches && !seen.has(item.title)) {
-          results.push(item);
+          let itemCopy = { ...item };
+          if (domain === 'cars' && item.type === 'city') {
+            const cityName = item.title.split(' ')[0];
+            itemCopy.target_url = `/cars/list?city=${encodeURIComponent(cityName)}`;
+            itemCopy.count_info = '렌터카 비교';
+            itemCopy.domain = 'cars';
+          } else if (domain === 'packages' && item.type === 'city') {
+            const cityName = item.title.split(' ')[0];
+            itemCopy.target_url = `/packages/list?city=${encodeURIComponent(cityName)}`;
+            itemCopy.count_info = '패키지 특가';
+            itemCopy.domain = 'packages';
+          }
+          results.push(itemCopy);
           seen.add(item.title);
           if (results.length >= 8) break;
         }
@@ -1218,6 +1234,111 @@ export default {
                 domain: 'activities'
               });
               seen.add(a.title);
+            }
+          }
+        } catch (e) {}
+      }
+
+      // Query D1 database dynamically for flights matching keyword
+      if (q && (domain === 'flights' || domain === 'all' || !domain)) {
+        try {
+          const flightHits = await env.DB.prepare(
+            "SELECT id, flight_number, airline_name, departure_airport, arrival_airport, departure_city, arrival_city, base_price_krw FROM flights WHERE flight_number LIKE ? OR airline_name LIKE ? OR departure_city LIKE ? OR arrival_city LIKE ? OR departure_airport LIKE ? OR arrival_airport LIKE ? LIMIT 4"
+          ).bind(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`).all();
+
+          for (const f of (flightHits.results || []) as any[]) {
+            const label = `${f.airline_name} ${f.flight_number} (${f.departure_airport}→${f.arrival_airport})`;
+            if (!seen.has(label)) {
+              results.push({
+                id: f.id,
+                title: label,
+                subtitle: `${f.departure_city} → ${f.arrival_city}`,
+                code: f.arrival_airport,
+                type: 'airport',
+                badge: '운항편',
+                count_info: `₩${Number(f.base_price_krw).toLocaleString()}`,
+                target_url: `/flights/search?origin=${f.departure_airport}&dest=${f.arrival_airport}`,
+                domain: 'flights'
+              });
+              seen.add(label);
+            }
+          }
+        } catch (e) {}
+      }
+
+      // Query D1 database dynamically for trains matching keyword
+      if (q && (domain === 'trains' || domain === 'all' || !domain)) {
+        try {
+          const trainHits = await env.DB.prepare(
+            "SELECT id, train_number, train_type, departure_station, arrival_station, price_krw FROM trains WHERE train_number LIKE ? OR train_type LIKE ? OR departure_station LIKE ? OR arrival_station LIKE ? LIMIT 4"
+          ).bind(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`).all();
+
+          for (const t of (trainHits.results || []) as any[]) {
+            const label = `${t.train_type} ${t.train_number} (${t.departure_station}→${t.arrival_station})`;
+            if (!seen.has(label)) {
+              results.push({
+                id: t.id,
+                title: label,
+                subtitle: `${t.departure_station} → ${t.arrival_station}`,
+                code: t.train_type,
+                type: 'station',
+                badge: '고속열차',
+                count_info: `₩${Number(t.price_krw).toLocaleString()}`,
+                target_url: `/trains/search?dep=${encodeURIComponent(t.departure_station)}&arr=${encodeURIComponent(t.arrival_station)}`,
+                domain: 'trains'
+              });
+              seen.add(label);
+            }
+          }
+        } catch (e) {}
+      }
+
+      // Query D1 database dynamically for cars matching keyword
+      if (q && (domain === 'cars' || domain === 'all' || !domain)) {
+        try {
+          const carHits = await env.DB.prepare(
+            "SELECT id, company_name, vehicle_model, vehicle_type, daily_price_krw, pickup_location FROM cars WHERE company_name LIKE ? OR vehicle_model LIKE ? OR pickup_location LIKE ? LIMIT 4"
+          ).bind(`%${q}%`, `%${q}%`, `%${q}%`).all();
+
+          for (const c of (carHits.results || []) as any[]) {
+            const label = `${c.company_name} - ${c.vehicle_model}`;
+            if (!seen.has(label)) {
+              results.push({
+                id: c.id,
+                title: label,
+                subtitle: `${c.pickup_location} · ${c.vehicle_type}`,
+                type: 'car',
+                badge: '렌터카',
+                count_info: `₩${Number(c.daily_price_krw).toLocaleString()}/일`,
+                target_url: `/cars/detail/${c.id}`,
+                domain: 'cars'
+              });
+              seen.add(label);
+            }
+          }
+        } catch (e) {}
+      }
+
+      // Query D1 database dynamically for packages matching keyword
+      if (q && (domain === 'packages' || domain === 'all' || !domain)) {
+        try {
+          const pkgHits = await env.DB.prepare(
+            "SELECT id, title, destination_city, total_package_krw FROM packages WHERE title LIKE ? OR destination_city LIKE ? LIMIT 4"
+          ).bind(`%${q}%`, `%${q}%`).all();
+
+          for (const p of (pkgHits.results || []) as any[]) {
+            if (!seen.has(p.title)) {
+              results.push({
+                id: p.id,
+                title: p.title,
+                subtitle: `${p.destination_city} 항공+호텔 패키지`,
+                type: 'package',
+                badge: '패키지',
+                count_info: `₩${Number(p.total_package_krw).toLocaleString()}`,
+                target_url: `/packages/detail/${p.id}`,
+                domain: 'packages'
+              });
+              seen.add(p.title);
             }
           }
         } catch (e) {}
@@ -1315,8 +1436,16 @@ export default {
     }
 
     if (path === "/api/v1/flights") {
-      const origin = url.searchParams.get("origin") || url.searchParams.get("dcity") || "";
-      const dest = url.searchParams.get("dest") || url.searchParams.get("acity") || "";
+      const rawOrigin = url.searchParams.get("origin") || url.searchParams.get("dcity") || "";
+      const rawDest = url.searchParams.get("dest") || url.searchParams.get("acity") || "";
+      const originMatch = rawOrigin.match(/\b([A-Z]{3})\b/);
+      const originCode = originMatch ? originMatch[1] : "";
+      const cleanOrigin = rawOrigin.replace(/\s*\([^)]*\)/g, "").trim();
+
+      const destMatch = rawDest.match(/\b([A-Z]{3})\b/);
+      const destCode = destMatch ? destMatch[1] : "";
+      const cleanDest = rawDest.replace(/\s*\([^)]*\)/g, "").trim();
+
       const stops = url.searchParams.get("stops");
       const airline = url.searchParams.get("airline") || "";
       const timeSlot = url.searchParams.get("timeSlot") || "";
@@ -1326,13 +1455,13 @@ export default {
 
       let q = "SELECT * FROM flights WHERE 1=1";
       const p: any[] = [];
-      if (origin) {
-        q += " AND (departure_airport LIKE ? OR departure_city LIKE ?)";
-        p.push(`%${origin}%`, `%${origin}%`);
+      if (originCode || cleanOrigin) {
+        q += " AND (departure_airport = ? OR departure_airport LIKE ? OR departure_city LIKE ? OR ? LIKE '%' || departure_city || '%')";
+        p.push(originCode || cleanOrigin, `%${originCode || cleanOrigin}%`, `%${cleanOrigin}%`, cleanOrigin);
       }
-      if (dest) {
-        q += " AND (arrival_airport LIKE ? OR arrival_city LIKE ?)";
-        p.push(`%${dest}%`, `%${dest}%`);
+      if (destCode || cleanDest) {
+        q += " AND (arrival_airport = ? OR arrival_airport LIKE ? OR arrival_city LIKE ? OR ? LIKE '%' || arrival_city || '%')";
+        p.push(destCode || cleanDest, `%${destCode || cleanDest}%`, `%${cleanDest}%`, cleanDest);
       }
       if (stops !== null && stops !== undefined && stops !== "") {
         q += " AND stops = ?";
@@ -1342,11 +1471,11 @@ export default {
         q += " AND (airline_name LIKE ? OR airline_code LIKE ?)";
         p.push(`%${airline}%`, `%${airline}%`);
       }
-      if (timeSlot) {
+      if (timeSlot && timeSlot !== "ALL") {
         q += " AND departure_time_slot = ?";
         p.push(timeSlot.toUpperCase());
       }
-      if (cabinClass) {
+      if (cabinClass && cabinClass !== "ALL") {
         q += " AND cabin_class LIKE ?";
         p.push(`%${cabinClass}%`);
       }
@@ -1372,22 +1501,26 @@ export default {
     }
 
     if (path === "/api/v1/trains") {
-      const dep = url.searchParams.get("dep") || url.searchParams.get("departure_station") || "";
-      const arr = url.searchParams.get("arr") || url.searchParams.get("arrival_station") || "";
+      const rawDep = url.searchParams.get("dep") || url.searchParams.get("departure_station") || "";
+      const rawArr = url.searchParams.get("arr") || url.searchParams.get("arrival_station") || "";
       const trainType = url.searchParams.get("trainType") || "";
       const sortBy = url.searchParams.get("sortBy") || "departure_asc";
+
+      const cleanStation = (val: string) => val.replace(/\s*\([^)]*\)/g, "").trim();
+      const dep = cleanStation(rawDep);
+      const arr = cleanStation(rawArr);
 
       let q = "SELECT * FROM trains WHERE 1=1";
       const p: any[] = [];
       if (dep) {
-        q += " AND departure_station LIKE ?";
-        p.push(`%${dep}%`);
+        q += " AND (departure_station LIKE ? OR ? LIKE '%' || departure_station || '%')";
+        p.push(`%${dep}%`, dep);
       }
       if (arr) {
-        q += " AND arrival_station LIKE ?";
-        p.push(`%${arr}%`);
+        q += " AND (arrival_station LIKE ? OR ? LIKE '%' || arrival_station || '%')";
+        p.push(`%${arr}%`, arr);
       }
-      if (trainType) {
+      if (trainType && trainType !== "ALL") {
         q += " AND train_type LIKE ?";
         p.push(`%${trainType}%`);
       }
@@ -1409,7 +1542,8 @@ export default {
     }
 
     if (path === "/api/v1/cars") {
-      const loc = url.searchParams.get("loc") || url.searchParams.get("location") || "";
+      const city = url.searchParams.get("city") || "";
+      const loc = url.searchParams.get("loc") || url.searchParams.get("location") || city;
       const vehicleType = url.searchParams.get("vehicleType") || "";
       const transmission = url.searchParams.get("transmission") || "";
       const sortBy = url.searchParams.get("sortBy") || "price_asc";
@@ -1417,19 +1551,21 @@ export default {
       let q = "SELECT * FROM cars WHERE 1=1";
       const p: any[] = [];
       if (loc) {
-        q += " AND pickup_location LIKE ?";
-        p.push(`%${loc}%`);
+        q += " AND (pickup_location LIKE ? OR company_name LIKE ? OR vehicle_model LIKE ?)";
+        p.push(`%${loc}%`, `%${loc}%`, `%${loc}%`);
       }
       if (vehicleType && vehicleType !== "ALL") {
         q += " AND vehicle_type = ?";
         p.push(vehicleType);
       }
-      if (transmission) {
+      if (transmission && transmission !== "ALL") {
         q += " AND transmission = ?";
         p.push(transmission.toUpperCase());
       }
       if (sortBy === "price_desc") {
         q += " ORDER BY daily_price_krw DESC";
+      } else if (sortBy === "seats_desc") {
+        q += " ORDER BY seats DESC";
       } else {
         q += " ORDER BY daily_price_krw ASC";
       }
@@ -1444,17 +1580,22 @@ export default {
     }
 
     if (path === "/api/v1/transfers") {
-      const airport = url.searchParams.get("airport") || "";
-      const dest = url.searchParams.get("destination") || "";
+      const rawAirport = url.searchParams.get("airport") || "";
+      const rawDest = url.searchParams.get("destination") || url.searchParams.get("dest") || "";
+      const airportMatch = rawAirport.match(/\b([A-Z]{3})\b/);
+      const airportCode = airportMatch ? airportMatch[1] : "";
+      const cleanAirport = rawAirport.replace(/\s*\([^)]*\)/g, "").trim();
+      const cleanDest = rawDest.replace(/\s*\([^)]*\)/g, "").trim();
+
       let q = "SELECT * FROM transfers WHERE 1=1";
       const p: any[] = [];
-      if (airport) {
-        q += " AND (airport_code LIKE ? OR service_title LIKE ?)";
-        p.push(`%${airport}%`, `%${airport}%`);
+      if (airportCode || cleanAirport) {
+        q += " AND (airport_code = ? OR airport_code LIKE ? OR service_title LIKE ?)";
+        p.push(airportCode || cleanAirport, `%${airportCode || cleanAirport}%`, `%${cleanAirport}%`);
       }
-      if (dest) {
+      if (cleanDest) {
         q += " AND (destination_area LIKE ? OR service_title LIKE ?)";
-        p.push(`%${dest}%`, `%${dest}%`);
+        p.push(`%${cleanDest}%`, `%${cleanDest}%`);
       }
       q += " LIMIT 50";
       const res = await env.DB.prepare(q).bind(...p).all();
@@ -1470,8 +1611,8 @@ export default {
       const qKeyword = url.searchParams.get("q") || url.searchParams.get("query") || "";
       const city = url.searchParams.get("city") || "";
       const category = url.searchParams.get("category") || "";
-      const instantOnly = url.searchParams.get("instantOnly") === "true";
-      const freeCancelOnly = url.searchParams.get("freeCancelOnly") === "true";
+      const instantOnly = url.searchParams.get("instantOnly") === "true" || url.searchParams.get("instant") === "true";
+      const freeCancelOnly = url.searchParams.get("freeCancelOnly") === "true" || url.searchParams.get("freeCancel") === "true";
       const maxPrice = parseFloat(url.searchParams.get("maxPrice") || "999999999");
       const sortBy = url.searchParams.get("sortBy") || "recommended";
 
@@ -1482,8 +1623,8 @@ export default {
         p.push(`%${qKeyword}%`, `%${qKeyword}%`, `%${qKeyword}%`);
       }
       if (city) {
-        q += " AND city LIKE ?";
-        p.push(`%${city}%`);
+        q += " AND (city LIKE ? OR title LIKE ? OR description LIKE ?)";
+        p.push(`%${city}%`, `%${city}%`, `%${city}%`);
       }
       if (category && category !== "ALL") {
         q += " AND category = ?";
@@ -1508,12 +1649,31 @@ export default {
       }
       q += " LIMIT 50";
       const res = await env.DB.prepare(q).bind(...p).all();
-      return json({ success: true, count: (res.results || []).length, data: res.results || [] });
+      const list = (res.results || []).map((row: any) => {
+        let included: any[] = [];
+        try { included = JSON.parse(row.packages_json || '[]'); } catch (e) {}
+        return {
+          ...row,
+          included,
+          image_url: row.thumbnail_url || row.image_url
+        };
+      });
+      return json({ success: true, count: list.length, data: list });
     }
     if (path.startsWith("/api/v1/activities/")) {
       const id = path.replace("/api/v1/activities/", "");
       const row = await env.DB.prepare("SELECT * FROM activities WHERE id = ?").bind(id).first();
-      return json({ success: true, data: row });
+      if (!row) return json({ success: false, message: "Activity not found" }, { status: 404 });
+      let included: any[] = [];
+      try { included = JSON.parse((row as any).packages_json || '[]'); } catch (e) {}
+      return json({
+        success: true,
+        data: {
+          ...row,
+          included,
+          image_url: (row as any).thumbnail_url || (row as any).image_url
+        }
+      });
     }
 
     if (path === "/api/v1/packages") {
@@ -1526,12 +1686,45 @@ export default {
       }
       q += " ORDER BY package_discount_rate DESC LIMIT 50";
       const res = await env.DB.prepare(q).bind(...p).all();
-      return json({ success: true, count: (res.results || []).length, data: res.results || [] });
+      const list = (res.results || []).map((row: any) => {
+        let details: any = {};
+        try { details = JSON.parse(row.details_json || '{}'); } catch (e) {}
+        return {
+          ...row,
+          hero_image_url: row.thumbnail_url || details.hero_image_url,
+          savings_percentage: row.package_discount_rate || 15,
+          bundle_price_krw: row.total_package_krw,
+          original_price_krw: row.total_original_krw,
+          badge: details.badge || '특가 번들',
+          duration_nights: details.duration_nights || 3,
+          duration_days: details.duration_days || 4,
+          flight: details.flight || { airline_name: '대한항공 (KE)', departure_city: '서울/인천', arrival_city: row.destination_city },
+          hotel: details.hotel || { name_ko: `${row.destination_city} 5성급 럭셔리 호텔`, city: row.destination_city }
+        };
+      });
+      return json({ success: true, count: list.length, data: list });
     }
     if (path.startsWith("/api/v1/packages/")) {
       const id = path.replace("/api/v1/packages/", "");
       const row = await env.DB.prepare("SELECT * FROM packages WHERE id = ?").bind(id).first();
-      return json({ success: true, data: row });
+      if (!row) return json({ success: false, message: "Package not found" }, { status: 404 });
+      let details: any = {};
+      try { details = JSON.parse((row as any).details_json || '{}'); } catch (e) {}
+      return json({
+        success: true,
+        data: {
+          ...row,
+          hero_image_url: (row as any).thumbnail_url || details.hero_image_url,
+          savings_percentage: (row as any).package_discount_rate || 15,
+          bundle_price_krw: (row as any).total_package_krw,
+          original_price_krw: (row as any).total_original_krw,
+          badge: details.badge || '특가 번들',
+          duration_nights: details.duration_nights || 3,
+          duration_days: details.duration_days || 4,
+          flight: details.flight || { airline_name: '대한항공 (KE)', departure_city: '서울/인천', arrival_city: (row as any).destination_city },
+          hotel: details.hotel || { name_ko: `${(row as any).destination_city} 5성급 럭셔리 호텔`, city: (row as any).destination_city }
+        }
+      });
     }
 
     if (path === "/api/v1/promotions") {
