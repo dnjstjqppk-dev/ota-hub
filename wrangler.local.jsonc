@@ -1,0 +1,30 @@
+// Local development / QA configuration. Never deploy with this file.
+//   npx wrangler d1 migrations apply ota_local --local -c wrangler.local.jsonc
+//   node scripts/dev-seed.mjs
+//   npx wrangler dev -c wrangler.local.jsonc
+// Secrets (JWT_SECRET, PII_ENC_KEY) live in .dev.vars (git-ignored).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ota-hub-local",
+  "main": "worker/index.ts",
+  "compatibility_date": "2024-10-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "ota_local", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "worker/migrations" }
+  ],
+  "assets": {
+    "directory": "frontend-user/.output/public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "vars": {
+    "APP_ENV": "development",
+    "PAYMENT_PROVIDER": "sandbox",
+    "ALLOW_SIMULATED_SUPPLIERS": "true",
+    "ALLOW_DRAFT_ENTITY": "true",
+    "ALLOWED_ORIGINS": "http://localhost:3000,http://localhost:3001,http://localhost:8787",
+    "PUBLIC_SITE_URL": "http://localhost:8787"
+  }
+}

@@ -13,14 +13,17 @@ const fullName = ref('')
 const phoneNumber = ref('')
 const password = ref('')
 const passwordConfirm = ref('')
-const agreeTerms = ref(true)
+// Consent must be an affirmative action: never pre-ticked.
+const agreeTerms = ref(false)
+const agreePrivacy = ref(false)
 const agreeMarketing = ref(false)
 
 const errorMessage = ref('')
 const successMessage = ref('')
 const isSubmitting = ref(false)
 
-const redirectPath = (route.query.redirect as string) || '/my'
+const rawRedirect = (route.query.redirect as string) || ''
+const redirectPath = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/my'
 
 const handleRegister = async () => {
   if (!email.value || !password.value || !fullName.value) {
@@ -28,8 +31,8 @@ const handleRegister = async () => {
     return
   }
 
-  if (password.value.length < 8) {
-    errorMessage.value = '비밀번호는 최소 8자 이상이어야 합니다.'
+  if (password.value.length < 10 || !/[A-Za-z]/.test(password.value) || !/\d/.test(password.value)) {
+    errorMessage.value = '비밀번호는 영문과 숫자를 포함해 10자 이상이어야 합니다.'
     return
   }
 
@@ -38,8 +41,8 @@ const handleRegister = async () => {
     return
   }
 
-  if (!agreeTerms.value) {
-    errorMessage.value = '이용약관 및 개인정보 처리방침에 동의해 주세요.'
+  if (!agreeTerms.value || !agreePrivacy.value) {
+    errorMessage.value = '필수 항목(이용약관, 개인정보 수집·이용)에 동의해 주세요.'
     return
   }
 
@@ -66,7 +69,10 @@ const handleRegister = async () => {
         email: email.value,
         password: password.value,
         fullName: fullName.value,
-        phoneNumber: phoneNumber.value
+        phoneNumber: phoneNumber.value,
+        agreeTerms: agreeTerms.value,
+        agreePrivacy: agreePrivacy.value,
+        agreeMarketing: agreeMarketing.value
       }
     })
 
@@ -165,10 +171,15 @@ const handleRegister = async () => {
         <!-- 약관 동의 -->
         <div class="space-y-2 pt-2 border-t border-slate-100">
           <label class="flex items-start gap-2 cursor-pointer">
-            <input v-model="agreeTerms" type="checkbox" required class="mt-0.5 w-4 h-4 rounded text-trip-blue" />
+            <input v-model="agreeTerms" type="checkbox" required data-testid="agree-terms" class="mt-0.5 w-4 h-4 rounded text-trip-blue" />
             <span class="text-slate-600 font-medium leading-relaxed">
-              [필수] <NuxtLink to="/terms" target="_blank" class="text-trip-blue underline">이용약관</NuxtLink> 및 
-              <NuxtLink to="/privacy" target="_blank" class="text-trip-blue underline">개인정보 수집·이용</NuxtLink>에 동의합니다.
+              [필수] <NuxtLink to="/terms" target="_blank" class="text-trip-blue underline">이용약관</NuxtLink>에 동의합니다.
+            </span>
+          </label>
+          <label class="flex items-start gap-2 cursor-pointer">
+            <input v-model="agreePrivacy" type="checkbox" required data-testid="agree-privacy" class="mt-0.5 w-4 h-4 rounded text-trip-blue" />
+            <span class="text-slate-600 font-medium leading-relaxed">
+              [필수] <NuxtLink to="/privacy" target="_blank" class="text-trip-blue underline">개인정보 수집·이용</NuxtLink>에 동의합니다.
             </span>
           </label>
           <label class="flex items-start gap-2 cursor-pointer">

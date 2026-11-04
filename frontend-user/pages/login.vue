@@ -14,7 +14,9 @@ const rememberMe = ref(true)
 const errorMessage = ref('')
 const isSubmitting = ref(false)
 
-const redirectPath = (route.query.redirect as string) || '/my'
+const rawRedirect = (route.query.redirect as string) || ''
+// Only same-site relative paths (prevents open redirect via ?redirect=//evil.com).
+const redirectPath = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/my'
 
 const handleLogin = async () => {
   if (!email.value || !password.value) {
@@ -59,11 +61,6 @@ const handleLogin = async () => {
   } finally {
     isSubmitting.value = false
   }
-}
-
-const handleDemoLogin = () => {
-  authStore.loginAsDemo()
-  router.push(redirectPath)
 }
 </script>
 
@@ -138,19 +135,11 @@ const handleDemoLogin = () => {
 
       <!-- 간편 데모 로그인 & 신규 회원가입 & B2B 바로가기 -->
       <div class="space-y-3">
-        <button
-          @click="handleDemoLogin"
-          class="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-sm transition flex items-center justify-center gap-2 cursor-pointer"
-        >
-          <span>👑</span>
-          <span>VIP 체험 계정으로 1초 로그인 (데모)</span>
-        </button>
-
         <NuxtLink
           :to="{ path: '/register', query: route.query }"
           class="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition flex items-center justify-center gap-2"
         >
-          <span>✨ 아직 회원이 아니신가요? 1분 회원가입 (+5,000 코인)</span>
+          <span>아직 회원이 아니신가요? 회원가입</span>
         </NuxtLink>
 
         <div class="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
