@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { apiUrl } from '../config/api'
+import { adminFetch } from '../config/api'
 
 interface BookingRow {
   id: string
@@ -104,10 +104,21 @@ const fallbackBookings: BookingRow[] = [
 const fetchBookings = async () => {
   loading.value = true
   try {
-    const res = await fetch(apiUrl('/admin/bookings'))
+    const res = await adminFetch('/admin/bookings')
     const json = await res.json()
-    if (json.data && Array.isArray(json.data) && json.data.length > 0) {
-      bookings.value = json.data
+    const rawList = json.bookings || json.data
+    if (rawList && Array.isArray(rawList) && rawList.length > 0) {
+      bookings.value = rawList.map((b: any) => ({
+        id: b.id,
+        booking_code: b.booking_number || b.booking_code || b.id,
+        domain_type: b.domain_type || 'HOTEL',
+        primary_contact_name: b.customer_name || b.primary_contact_name || '고객',
+        status: b.status,
+        final_amount_krw: b.total_minor ? Math.round(b.total_minor) : (b.final_amount_krw || 0),
+        created_at: b.created_at,
+        confirmation_number: b.confirmation_number,
+        voucher_url: b.voucher_url
+      }))
       loading.value = false
       return
     }
@@ -131,9 +142,8 @@ const triggerStatusChange = async (targetStatus: string, defaultReason: string) 
   const reason = operatorReason.value || defaultReason
 
   try {
-    await fetch(apiUrl(`/admin/bookings/${selectedBooking.value.id}/transition`), {
+    await adminFetch(`/admin/bookings/${selectedBooking.value.id}/transition`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         target_status: targetStatus,
         reason: reason,

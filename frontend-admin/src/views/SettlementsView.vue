@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { apiUrl } from '../config/api'
+import { adminFetch } from '../config/api'
 
 const DEFAULT_AUDIT_LOGS = [
   {
@@ -41,11 +41,12 @@ const loading = ref(false)
 const fetchAuditLogs = async () => {
   loading.value = true
   try {
-    const res = await fetch(apiUrl('/admin/audit-logs'))
+    const res = await adminFetch('/admin/audit-logs')
     if (res.ok) {
       const json = await res.json()
-      if (json.data && json.data.length > 0) {
-        auditLogs.value = json.data
+      const list = json.logs || json.data
+      if (list && list.length > 0) {
+        auditLogs.value = list
       }
     }
   } catch (e) {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { apiUrl } from '../config/api'
+import { adminFetch } from '../config/api'
 
 const DEFAULT_NOTICES = [
   {
@@ -21,11 +21,12 @@ const loading = ref(false)
 const fetchNotices = async () => {
   loading.value = true
   try {
-    const res = await fetch(apiUrl('/admin/notices'))
+    const res = await adminFetch('/admin/notices')
     if (res.ok) {
       const json = await res.json()
-      if (json.data && json.data.length > 0) {
-        notices.value = json.data
+      const list = json.notices || json.data
+      if (list && list.length > 0) {
+        notices.value = list
       }
     }
   } catch (e) {
