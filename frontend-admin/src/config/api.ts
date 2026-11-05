@@ -1,4 +1,9 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
+  (typeof window !== 'undefined' && (window.location.host.startsWith('ota-admin') || window.location.host.startsWith('admin.'))
+    ? 'https://ota-hub.dnjstjqppk.workers.dev/api/v1'
+    : (typeof window !== 'undefined' && window.location.origin.includes('localhost')
+      ? 'http://localhost:8787/api/v1'
+      : '/api/v1'))
 
 export const apiUrl = (path: string = ''): string => {
   if (!path) return API_BASE_URL
@@ -23,7 +28,8 @@ export async function adminFetch(path: string, options: RequestInit = {}): Promi
     if (typeof window !== 'undefined' && !window.location.pathname.endsWith('/login')) {
       localStorage.removeItem('getfortrip_admin_token')
       localStorage.removeItem('getfortrip_admin_user')
-      window.location.href = '/admin/login'
+      const loginPath = window.location.pathname.startsWith('/admin') ? '/admin/login' : '/login'
+      window.location.href = loginPath
     }
   }
   return res

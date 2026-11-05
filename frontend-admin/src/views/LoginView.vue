@@ -23,7 +23,7 @@ const handleLogin = async () => {
   errorMessage.value = ''
 
   try {
-    const resp = await fetch(apiUrl('/admin/login'), {
+    const resp = await fetch(apiUrl('/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.value.trim(), password: password.value })

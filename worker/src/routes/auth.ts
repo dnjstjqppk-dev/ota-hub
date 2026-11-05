@@ -48,7 +48,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     return json({ success: true, token: s.token, user: publicUser(u) }, 201, { "Set-Cookie": s.cookie });
   }
 
-  if (path === "/api/v1/auth/login" && method === "POST") {
+  if ((path === "/api/v1/auth/login" || path === "/api/v1/admin/login") && method === "POST") {
     await rateLimit(request, env, "login", 20, 900);
     const body = await readJson(request);
     const email = str(body.email, 254).toLowerCase();

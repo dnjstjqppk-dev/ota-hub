@@ -42,6 +42,12 @@ const fetchSettlements = async () => {
   }
 }
 
+const handleDownload = () => {
+  if (typeof window !== 'undefined') {
+    window.alert('세금계산서 발행 완료 건입니다.')
+  }
+}
+
 onMounted(() => {
   fetchSettlements()
 })
@@ -117,22 +123,20 @@ onMounted(() => {
                 정산 명세서를 불러오는 중입니다...
               </td>
             </tr>
-            <tr v-else-if="batches.length === 0">
-              <tr class="hover:bg-slate-50/80 transition">
-                <td class="p-3.5 font-bold text-slate-800">2026-10-01 ~ 2026-10-31</td>
-                <td class="p-3.5 font-bold text-slate-900">18,500,000원</td>
-                <td class="p-3.5 font-bold text-rose-600">-1,850,000원 (10%)</td>
-                <td class="p-3.5 font-black text-blue-600">16,650,000원</td>
-                <td class="p-3.5">
-                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">지급 완료</span>
-                </td>
-                <td class="p-3.5 text-slate-500 font-mono">2026-11-05 10:00</td>
-                <td class="p-3.5 text-right">
-                  <button @click="alert('세금계산서 발행 완료 건입니다.')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[11px] transition">
-                    명세서 다운로드
-                  </button>
-                </td>
-              </tr>
+            <tr v-else-if="batches.length === 0" class="hover:bg-slate-50/80 transition">
+              <td class="p-3.5 font-bold text-slate-800">2026-10-01 ~ 2026-10-31</td>
+              <td class="p-3.5 font-bold text-slate-900">18,500,000원</td>
+              <td class="p-3.5 font-bold text-rose-600">-1,850,000원 (10%)</td>
+              <td class="p-3.5 font-black text-blue-600">16,650,000원</td>
+              <td class="p-3.5">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">지급 완료</span>
+              </td>
+              <td class="p-3.5 text-slate-500 font-mono">2026-11-05 10:00</td>
+              <td class="p-3.5 text-right">
+                <button @click="handleDownload" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[11px] transition">
+                  명세서 다운로드
+                </button>
+              </td>
             </tr>
             <tr
               v-else
