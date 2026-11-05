@@ -198,3 +198,4 @@ export const externalSupplierRegistry: Record<string, ExternalAdapterSpec> = {
   AIRALO_ESIM: airaloEsimAdapter,
   CHUBB_INSURANCE: chubbInsuranceAdapter
 };
+

@@ -70,3 +70,4 @@ export async function handleFeatureFlags(request: Request, env: Env, url: URL): 
 
   return null;
 }
+

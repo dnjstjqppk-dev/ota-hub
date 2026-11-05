@@ -13,7 +13,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   // 1. Partner Registration (Onboarding application)
   // -------------------------------------------------------------------------
   if (path === "/api/v1/partner/register" && method === "POST") {
-    await rateLimit(request, env, "partner_register", 5, 3600);
+    await rateLimit(request, env, "partner_register", 30, 3600);
     const b = await readJson(request);
     const email = str(b.email, 254).toLowerCase();
     const companyName = str(b.companyName, 200);

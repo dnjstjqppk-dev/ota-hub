@@ -798,7 +798,7 @@ async function runVerificationSuite() {
     }
 
     // Pick first draft and publish
-    const targetDraft = hist.items.find((i: any) => i.status !== 'PUBLISHED') || hist.items[0];
+    const targetDraft = hist.items.find((i) => i.status !== 'PUBLISHED') || hist.items[0];
     if (targetDraft) {
       const pubRes = await fetch(`${BASE_URL}/api/v1/admin/ingest/${targetDraft.id}/publish`, {
         method: 'POST',

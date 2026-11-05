@@ -453,3 +453,4 @@ export async function publishIngestedProduct(
     domain_type: domainType
   };
 }
+

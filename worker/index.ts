@@ -51,7 +51,7 @@ async function health(env: Env): Promise<Response> {
 async function route(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
   if (path === "/api/v1/health") return health(env);
-  for (const h of [handleAuth, handleBookings, handleAdmin, handlePartner, handleUser, handleAffiliate, handleFeatureFlags, handleUrlIngest, handleCatalog]) {
+  for (const h of [handleAuth, handleBookings, handleFeatureFlags, handleUrlIngest, handleAdmin, handlePartner, handleUser, handleAffiliate, handleCatalog]) {
     const r = await h(request, env, url);
     if (r) return r;
   }
