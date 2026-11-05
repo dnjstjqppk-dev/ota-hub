@@ -95,16 +95,18 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
   // 5. Partner Extranet Settlements: GET /api/v1/partner/marketplace/settlements
   if (path === '/api/v1/partner/marketplace/settlements' && method === 'GET') {
     const partner = await requirePartner(request, env);
+    const pId = partner.partnerId || partner.id;
+    const companyName = partner.companyName || 'GetForTrip 공인 파트너';
     const rows = await env.DB.prepare(`
       SELECT * FROM marketplace_order_settlements
       WHERE seller_id = ?
       ORDER BY created_at DESC LIMIT 100
-    `).bind(partner.id).all();
+    `).bind(pId).all();
 
     return json({
       success: true,
-      partner_id: partner.id,
-      company_name: partner.company_name,
+      partner_id: pId,
+      company_name: companyName,
       settlements: rows.results || []
     });
   }
@@ -112,6 +114,8 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
   // 6. Partner 3P Product Registration with Marketplace Attribution: POST /api/v1/partner/marketplace/products
   if (path === '/api/v1/partner/marketplace/products' && method === 'POST') {
     const partner = await requirePartner(request, env);
+    const pId = partner.partnerId || partner.id;
+    const companyName = partner.companyName || 'GetForTrip 공인 파트너';
 
     // Feature Flag Guard: check PARTNER_SELF_PRODUCT_REGISTRATION
     const isSelfRegEnabled = await isFeatureEnabled(env, 'PARTNER_SELF_PRODUCT_REGISTRATION');
@@ -138,13 +142,13 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
       await env.DB.prepare(`
         INSERT INTO hotels (id, partner_id, name_ko, name_en, city, country, address, base_price_krw, created_at)
         VALUES (?, ?, ?, ?, ?, '대한민국', '파트너 지정 주소', ?, ?)
-      `).bind(newDomainItemId, partner.id, title, title, city, retailPrice, now).run();
+      `).bind(newDomainItemId, pId, title, title, city, retailPrice, now).run();
     } else {
       newDomainItemId = newId('act');
       await env.DB.prepare(`
         INSERT INTO activities (id, partner_id, title, category, city, country, price_krw, description, created_at)
         VALUES (?, ?, ?, 'EXPERIENCE', ?, '대한민국', ?, ?, ?)
-      `).bind(newDomainItemId, partner.id, title, city, retailPrice, `${title} - 파트너 직등록 상품`, now).run();
+      `).bind(newDomainItemId, pId, title, city, retailPrice, `${title} - 파트너 직등록 상품`, now).run();
     }
 
     // 2. Insert into unified marketplace_catalog_items with 3P Partner Attribution
@@ -160,10 +164,10 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
       mktId,
       domain,
       newDomainItemId,
-      `sup_${partner.id}`,
-      `PARTNER:${partner.id}`,
-      partner.id,
-      partner.company_name,
+      `sup_${pId}`,
+      `PARTNER:${pId}`,
+      pId,
+      companyName,
       retailPrice,
       commissionBps,
       sellerPayout,
@@ -179,8 +183,8 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
         item_id: newDomainItemId,
         domain_type: domain,
         merchant_model: '3P',
-        seller_id: partner.id,
-        seller_name: partner.company_name,
+        seller_id: pId,
+        seller_name: companyName,
         retail_price_krw: retailPrice,
         commission_rate_bps: commissionBps,
         seller_payout_krw: sellerPayout

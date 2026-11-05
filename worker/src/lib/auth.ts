@@ -57,17 +57,17 @@ export async function requireAdmin(request: Request, env: Env): Promise<AuthUser
   return { ...u, role: "ADMIN" };
 }
 
-export async function requirePartner(request: Request, env: Env): Promise<AuthUser & { partnerId: string }> {
+export async function requirePartner(request: Request, env: Env): Promise<AuthUser & { partnerId: string; companyName?: string }> {
   const u = await getAuthUser(request, env);
   if (!u) throw new HttpError(401, "UNAUTHORIZED", "파트너 로그인이 필요합니다.");
   if (u.role !== "PARTNER" && u.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "파트너 권한이 없습니다.");
   const p = await env.DB.prepare(
-    "SELECT p.id, p.is_active, COALESCE(pr.status, 'ACTIVE') AS profile_status FROM partners p LEFT JOIN partner_profiles pr ON pr.partner_id = p.id WHERE p.id = ?"
+    "SELECT p.id, p.company_name, p.is_active, COALESCE(pr.status, 'ACTIVE') AS profile_status FROM partners p LEFT JOIN partner_profiles pr ON pr.partner_id = p.id WHERE p.id = ?"
   ).bind(u.id).first<any>();
   if (!p || p.is_active !== 1 || (p.profile_status !== "ACTIVE" && u.role !== "ADMIN")) {
     throw new HttpError(403, "PARTNER_SUSPENDED", "승인 대기 중이거나 비활성화된 파트너 계정입니다.");
   }
-  return { ...u, partnerId: u.id };
+  return { ...u, partnerId: u.id, companyName: p?.company_name || 'GetForTrip 입점 파트너' };
 }
 
 /**
