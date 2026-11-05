@@ -268,9 +268,9 @@ onMounted(async () => {
                 무료 취소
               </span>
             </div>
-            <div class="absolute bottom-3 right-3 bg-trip-blue text-white px-2.5 py-1 rounded-xl text-xs font-black shadow-lg flex items-center gap-1">
+            <div v-if="h.rating" class="absolute bottom-3 right-3 bg-trip-blue text-white px-2.5 py-1 rounded-xl text-xs font-black shadow-lg flex items-center gap-1">
               <span>⭐</span>
-              <span>{{ h.rating?.toFixed(1) || '4.8' }}</span>
+              <span>{{ Number(h.rating).toFixed(1) }}</span>
             </div>
           </div>
 

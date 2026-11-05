@@ -20,8 +20,52 @@ function parseJson<T>(s: unknown, fallback: T): T {
   }
 }
 
+/** "ICN", "ICN (인천)", "인천 (ICN)" -> "ICN". */
+function airportCode(v: unknown): string | null {
+  const m = String(v ?? "").toUpperCase().match(/\b([A-Z]{3})\b/);
+  return m ? m[1] : null;
+}
+
+export interface RatePlan {
+  id: string;
+  name_ko: string;
+  meal: "NONE" | "BREAKFAST";
+  price_krw: number;
+  free_cancellation: boolean;
+}
+
+/**
+ * Sellable rate plans of a hotel room, exactly as the catalog defines them.
+ * A room without explicit `rate_plans` sells one plan at its base price; meal
+ * inclusion then follows the room's `breakfast_included` (else the hotel's
+ * `free_breakfast`) flag. Nothing is invented
+ * here: a plan that is not in the catalog cannot be quoted.
+ */
+export function hotelRatePlans(hotel: { free_breakfast?: unknown; free_cancellation?: unknown }, room: any): RatePlan[] {
+  const roomFree = Boolean(room?.free_cancellation ?? hotel.free_cancellation);
+  const raw = Array.isArray(room?.rate_plans) ? room.rate_plans : [];
+  const plans = raw
+    .filter((p: any) => p && typeof p.id === "string" && Number.isFinite(Number(p.price_krw)) && Number(p.price_krw) > 0)
+    .map((p: any): RatePlan => ({
+      id: p.id,
+      name_ko: String(p.name_ko || p.name || p.id),
+      meal: p.meal === "BREAKFAST" ? "BREAKFAST" : "NONE",
+      price_krw: Number(p.price_krw),
+      free_cancellation: Boolean(p.free_cancellation ?? roomFree),
+    }));
+  if (plans.length) return plans;
+  const breakfast = Boolean(room?.breakfast_included ?? hotel.free_breakfast);
+  return [{
+    id: breakfast ? "BREAKFAST_INCLUDED" : "ROOM_ONLY",
+    name_ko: breakfast ? "조식 포함" : "룸 온리 (식사 불포함)",
+    meal: breakfast ? "BREAKFAST" : "NONE",
+    price_krw: Number(room?.base_price_krw),
+    free_cancellation: roomFree,
+  }];
+}
+
 /** Load a product from the server's own catalog. Throws 404 if absent. */
-export async function loadProduct(env: Env, domain: Domain, itemId: string, unitId: string | null): Promise<CatalogProduct> {
+export async function loadProduct(env: Env, domain: Domain, itemId: string, unitId: string | null, ratePlanId: string | null = null): Promise<CatalogProduct> {
   const db = env.DB;
   const notFound = () => new HttpError(404, "PRODUCT_NOT_FOUND", "상품을 찾을 수 없습니다.");
   switch (domain) {
@@ -31,13 +75,17 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
       const rooms = parseJson<any[]>(h.rooms_json, []);
       const room = unitId ? rooms.find((r) => r.id === unitId) : null;
       if (!room) throw new HttpError(400, "ROOM_REQUIRED", "객실 유형을 선택해주세요.");
+      const plans = hotelRatePlans(h, room);
+      const plan = ratePlanId ? plans.find((p) => p.id === ratePlanId) : plans[0];
+      if (!plan) throw new HttpError(400, "RATE_PLAN_NOT_FOUND", "선택한 요금제는 이 객실에서 판매하지 않습니다. 요금제를 다시 선택해주세요.");
       return {
-        domain, itemId, unitId: room.id, supplierId: h.partner_id || "ptn_htl_01", currency: "KRW",
-        title: `${h.name_ko} · ${room.name_ko || room.name}`,
-        unitPriceMajor: Number(room.base_price_krw),
+        domain, itemId, unitId: room.id, ratePlanId: plan.id, supplierId: h.partner_id || "ptn_htl_01", currency: "KRW",
+        title: `${h.name_ko} · ${room.name_ko || room.name} · ${plan.name_ko}`,
+        unitPriceMajor: plan.price_krw,
+        // Inventory is per room type; every rate plan of the room sells from the same allotment.
         capacity: Number.isInteger(room.available_inventory) ? room.available_inventory : null,
         maxOccupancy: Number(room.max_occupancy) || 2,
-        freeCancellation: Boolean(room.free_cancellation ?? h.free_cancellation),
+        freeCancellation: plan.free_cancellation,
         instantConfirmation: true,
         departureClock: null,
       };
@@ -50,6 +98,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
         title: `${f.airline_name} ${f.flight_number} ${f.departure_airport}→${f.arrival_airport}`,
         unitPriceMajor: Number(f.base_price_krw), capacity: Number(f.available_seats) || 0, maxOccupancy: null,
         freeCancellation: false, instantConfirmation: false, departureClock: f.departure_time || null,
+        route: airportCode(f.departure_airport) && airportCode(f.arrival_airport) ? { from: airportCode(f.departure_airport)!, to: airportCode(f.arrival_airport)! } : null,
       };
     }
     case "TRAIN": {

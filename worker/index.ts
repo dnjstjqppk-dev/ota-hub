@@ -18,6 +18,7 @@ import { handleUser } from "./src/routes/user.ts";
 import { handleAdmin } from "./src/routes/admin.ts";
 import { handleAffiliate } from "./src/routes/affiliate.ts";
 import { runMaintenance } from "./src/services/booking-service.ts";
+import { sitemap } from "./src/routes/seo.ts";
 
 export type { Env };
 
@@ -54,6 +55,18 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   return json({ error: "요청하신 API를 찾을 수 없습니다.", code: "NOT_FOUND" }, 404);
 }
 
+async function spaShell(env: Env, url: URL, request: Request): Promise<Response | null> {
+  let r = await env.ASSETS.fetch(new Request(`${url.origin}/200.html`, { method: "GET", headers: request.headers }));
+  if (r.status === 307 || r.status === 308) {
+    const loc = r.headers.get("Location");
+    if (loc) r = await env.ASSETS.fetch(new Request(new URL(loc, url.origin).toString(), { method: "GET", headers: request.headers }));
+  }
+  if (r.status !== 200) return null;
+  const h = new Headers(r.headers);
+  h.set("Cache-Control", "no-cache");
+  return new Response(request.method === "HEAD" ? null : r.body, { status: 200, headers: h });
+}
+
 async function serveAssets(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
   if (path === "/admin") return Response.redirect(`${url.origin}/admin/`, 301);
@@ -63,7 +76,13 @@ async function serveAssets(request: Request, env: Env, url: URL): Promise<Respon
     const idx = await env.ASSETS.fetch(new Request(`${url.origin}/admin/index.html`, request));
     if (idx.status === 200) return idx;
   }
-  const res = await env.ASSETS.fetch(request);
+  let res = await env.ASSETS.fetch(request);
+  // Client-side routes that were not prerendered (new products, unknown ids) get Nuxt's SPA shell.
+  // Never the prerendered home page (index.html): Nuxt would hydrate it as "/" and show the home page.
+  if (res.status === 404 && (request.method === "GET" || request.method === "HEAD") && !/\.[A-Za-z0-9]{1,8}$/.test(path)) {
+    const shell = await spaShell(env, url, request);
+    if (shell) res = shell;
+  }
   if (res.status === 307) return new Response(null, { status: 301, headers: { Location: res.headers.get("Location") || "/", ...SECURITY_HEADERS } });
   const h = new Headers(res.headers);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) if (!h.has(k)) h.set(k, v);
@@ -75,12 +94,7 @@ export default {
     const url = new URL(request.url);
     const isApi = url.pathname.startsWith("/api/") || url.pathname.startsWith("/out/");
     if (!isApi) {
-      if (url.pathname === "/sitemap.xml") {
-        const site = env.PUBLIC_SITE_URL || "https://getfortrip.com";
-        const paths = ["", "/hotels", "/flights", "/trains", "/cars", "/transfers", "/things-to-do", "/packages", "/help"];
-        const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${paths.map((p) => `  <url><loc>${site}${p}</loc></url>`).join("\n")}\n</urlset>`;
-        return new Response(body, { headers: { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600", ...SECURITY_HEADERS } });
-      }
+      if (url.pathname === "/sitemap.xml") return sitemap(env);
       return serveAssets(request, env, url);
     }
     if (request.method === "OPTIONS") return preflight(request, env);

@@ -5,6 +5,18 @@ declare const process: {
 
 export default defineNuxtConfig({
   ssr: true,
+  // Private, query-driven pages render client-side only. A prerendered copy would hydrate with the
+  // build-time route (no query string), so e.g. /checkout?domain=... or the PG return URL lost its params.
+  routeRules: {
+    '/checkout': { ssr: false },
+    '/checkout/**': { ssr: false },
+    '/booking/**': { ssr: false },
+    '/my': { ssr: false },
+    '/my/**': { ssr: false },
+    '/reset-password': { ssr: false },
+    '/login': { ssr: false },
+    '/register': { ssr: false }
+  },
   nitro: {
     preset: 'static',
     prerender: {

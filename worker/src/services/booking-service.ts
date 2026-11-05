@@ -9,7 +9,7 @@
  */
 import type { Env } from "../env.ts";
 import { flag } from "../env.ts";
-import { computeQuote, computeCancellation, isDomain, QuoteError, type CancellationPolicy, type Domain, type Promotion, type QuoteParams } from "../domain/pricing.ts";
+import { computeQuote, computeRoundTripQuote, computeCancellation, isDomain, QuoteError, type CancellationPolicy, type Domain, type CatalogProduct, type LegResult, type Promotion, type QuoteParams, type QuoteResult } from "../domain/pricing.ts";
 import { assertTransition, CUSTOMER_CANCELLABLE, STATUS_LABEL_KO, type BookingStatus } from "../domain/state-machine.ts";
 import * as L from "../domain/ledger.ts";
 import { convertMinor } from "../domain/money.ts";
@@ -140,6 +140,37 @@ function holdQuantity(domain: Domain, params: QuoteParams): number {
   return 1;
 }
 
+interface HoldTarget { itemId: string; unitKey: string; date: string; capacity: number }
+
+/** Inventory to hold for an order: every capacity-managed product, on each of its service dates. */
+function holdTargets(domain: Domain, product: CatalogProduct, inbound: CatalogProduct | null, q: { serviceStart: string; serviceEnd: string; legs?: LegResult[] }): HoldTarget[] {
+  const out: HoldTarget[] = [];
+  if (inbound && q.legs) {
+    for (const [prod, leg] of [[product, q.legs[0]], [inbound, q.legs[1]]] as const) {
+      if (prod.capacity !== null) out.push({ itemId: prod.itemId, unitKey: prod.unitId || "default", date: leg.serviceDate, capacity: prod.capacity });
+    }
+    return out;
+  }
+  if (product.capacity === null) return out;
+  for (const d of holdDates(domain, q.serviceStart, q.serviceEnd)) out.push({ itemId: product.itemId, unitKey: product.unitId || "default", date: d, capacity: product.capacity });
+  return out;
+}
+
+/** Load the inbound leg of a round-trip flight order, if the params ask for one. */
+async function loadInbound(env: Env, domain: Domain, params: QuoteParams): Promise<CatalogProduct | null> {
+  if (domain !== "FLIGHT" || !params.returnItemId) return null;
+  if (!params.returnDate) throw new HttpError(400, "RETURN_DATE_REQUIRED", "오는 날을 선택해주세요.");
+  return loadProduct(env, "FLIGHT", params.returnItemId, null);
+}
+
+function priceOrder(product: CatalogProduct, inbound: CatalogProduct | null, params: QuoteParams, promo: Promotion | null): QuoteResult & { legs?: [LegResult, LegResult] } {
+  try {
+    return inbound ? computeRoundTripQuote(product, inbound, params, promo, new Date()) : computeQuote(product, params, promo, new Date());
+  } catch (e) {
+    quoteErr(e);
+  }
+}
+
 const ACTIVE_HOLD_SUM = "SELECT COALESCE(SUM(quantity), 0) FROM inventory_holds WHERE item_id = ? AND unit_key = ? AND service_date = ? AND (status = 'COMMITTED' OR (status = 'HELD' AND expires_at > ?))";
 
 async function availableUnits(env: Env, itemId: string, unitKey: string, date: string, capacity: number): Promise<number> {
@@ -175,6 +206,9 @@ function parseParams(body: any): QuoteParams {
     startDate: str(body.startDate, 10),
     endDate: body.endDate ? str(body.endDate, 10) : null,
     rooms: body.rooms === undefined ? undefined : Number(body.rooms),
+    ratePlanId: body.ratePlanId ? str(body.ratePlanId, 60) : null,
+    returnItemId: body.returnItemId ? str(body.returnItemId, 100) : null,
+    returnDate: body.returnDate ? str(body.returnDate, 10) : null,
     travelers: { adults: Number(body.travelers?.adults ?? 1), children: Number(body.travelers?.children ?? 0), infants: Number(body.travelers?.infants ?? 0) },
   };
 }
@@ -192,7 +226,8 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
   if (!isDomain(domain)) throw new HttpError(400, "INVALID_DOMAIN", "상품 유형이 올바르지 않습니다.");
   const itemId = str(body.itemId, 100);
   if (!itemId) throw new HttpError(400, "ITEM_REQUIRED", "상품을 선택해주세요.");
-  const product = await loadProduct(env, domain, itemId, body.unitId ? str(body.unitId, 100) : null);
+  const params = parseParams(body);
+  const product = await loadProduct(env, domain, itemId, body.unitId ? str(body.unitId, 100) : null, domain === "HOTEL" ? params.ratePlanId ?? null : null);
   const supplier = await loadSupplier(env, product.supplierId);
   const b = bookabilityOf(env, supplier);
   if (!b.bookable) {
@@ -202,21 +237,15 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
   if (!entity) throw new HttpError(503, "SALES_NOT_ENABLED", "판매 주체(사업자) 정보가 활성화되지 않아 결제를 받을 수 없습니다.");
   if (!getPaymentProvider(env)) throw new HttpError(503, "PAYMENTS_DISABLED", "현재 온라인 결제가 활성화되어 있지 않습니다. (PG 계약/설정 대기)");
 
-  const params = parseParams(body);
+  const inbound = await loadInbound(env, domain, params);
   const promo = await loadPromotion(env, body.promotionCode ? str(body.promotionCode, 40) : null);
-  let q;
-  try {
-    q = computeQuote(product, params, promo, new Date());
-  } catch (e) {
-    quoteErr(e);
-  }
+  const q = priceOrder(product, inbound, params, promo);
+  const title = inbound ? `왕복 · ${product.title} / ${inbound.title}` : product.title;
 
-  if (product.capacity !== null) {
-    const need = holdQuantity(domain, params);
-    for (const d of holdDates(domain, q.serviceStart, q.serviceEnd)) {
-      if ((await availableUnits(env, itemId, product.unitId || "default", d, product.capacity)) < need) {
-        throw new HttpError(409, "SOLD_OUT", `${d} 일정의 잔여 재고가 부족합니다.`);
-      }
+  const need = holdQuantity(domain, params);
+  for (const t of holdTargets(domain, product, inbound, q)) {
+    if ((await availableUnits(env, t.itemId, t.unitKey, t.date, t.capacity)) < need) {
+      throw new HttpError(409, "SOLD_OUT", `${t.date} 일정의 잔여 재고가 부족합니다.`);
     }
   }
 
@@ -240,13 +269,15 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
       display_currency, display_total_minor, fx_rate_snapshot, promotion_code, lines_json, params_json, cancellation_policy_json, service_start, service_end, priced_units, expires_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'KRW', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
-    id, user.id, domain, itemId, product.unitId, product.supplierId, product.title, q.baseMinor, q.taxMinor, q.feeMinor, q.discountMinor, q.totalMinor,
+    id, user.id, domain, itemId, product.unitId, product.supplierId, title, q.baseMinor, q.taxMinor, q.feeMinor, q.discountMinor, q.totalMinor,
     fxRate ? displayCurrency : "KRW", displayTotal, fxRate, q.promotionCode, JSON.stringify(q.lines), JSON.stringify(params), JSON.stringify(q.cancellationPolicy),
     q.serviceStart, q.serviceEnd, q.pricedUnits, expiresAt,
   ).run();
 
   return {
-    quoteId: id, expiresAt, domain, itemId, unitId: product.unitId, title: product.title, currency: "KRW",
+    quoteId: id, expiresAt, domain, itemId, unitId: product.unitId, title, currency: "KRW",
+    roundTrip: Boolean(inbound), returnItemId: inbound?.itemId ?? null, legs: q.legs ?? null,
+    ratePlanId: product.ratePlanId ?? null,
     lines: q.lines, baseMinor: q.baseMinor, taxMinor: q.taxMinor, feeMinor: q.feeMinor, discountMinor: q.discountMinor, totalMinor: q.totalMinor,
     display: fxRate ? { currency: displayCurrency, totalMinor: displayTotal, fxRateToKrw: fxRate, note: "표시용 환산 금액이며 실제 결제는 KRW로 청구됩니다." } : null,
     serviceStart: q.serviceStart, serviceEnd: q.serviceEnd, cancellationPolicy: q.cancellationPolicy,
@@ -309,6 +340,22 @@ function validateTravelers(raw: any[], q: { domain_type: string; params: QuotePa
   return out;
 }
 
+/**
+ * Order lines persisted as booking_items. A round trip is one booking (one PNR) with one item per leg;
+ * the order total is allocated to legs pro rata to their fare so item totals sum exactly to the booking total.
+ */
+function itemRows(quote: any, product: CatalogProduct, inbound: CatalogProduct | null, legs?: [LegResult, LegResult]) {
+  if (!inbound || !legs) {
+    return [{ itemId: quote.item_id, unitId: quote.unit_id, title: quote.title, start: quote.service_start, end: quote.service_end, totalMinor: quote.total_minor }];
+  }
+  const fareSum = legs[0].baseMinor + legs[1].baseMinor;
+  const outTotal = Math.round((quote.total_minor * legs[0].baseMinor) / fareSum);
+  return [
+    { itemId: product.itemId, unitId: product.unitId, title: `가는 편 · ${product.title}`, start: legs[0].serviceDate, end: legs[0].serviceDate, totalMinor: outTotal },
+    { itemId: inbound.itemId, unitId: inbound.unitId, title: `오는 편 · ${inbound.title}`, start: legs[1].serviceDate, end: legs[1].serviceDate, totalMinor: quote.total_minor - outTotal },
+  ];
+}
+
 export async function createBooking(env: Env, user: AuthUser, body: any, idemKey: string | null) {
   if (!idemKey || !/^[A-Za-z0-9_-]{16,80}$/.test(idemKey)) {
     throw new HttpError(400, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key 헤더가 필요합니다.");
@@ -323,16 +370,12 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
 
   // Price revalidation against the live catalog before taking money.
   const params: QuoteParams = JSON.parse(quote.params_json);
-  const product = await loadProduct(env, quote.domain_type, quote.item_id, quote.unit_id);
+  const product = await loadProduct(env, quote.domain_type, quote.item_id, quote.unit_id, params.ratePlanId ?? null);
+  const inbound = await loadInbound(env, quote.domain_type, params);
   const supplier = (await loadSupplier(env, product.supplierId)) as SupplierRow;
   const bk = bookabilityOf(env, supplier);
   if (!bk.bookable) throw new HttpError(409, "NOT_DIRECTLY_BOOKABLE", "이 상품은 현재 직접 예약할 수 없습니다.", { reason: bk.reason });
-  let fresh;
-  try {
-    fresh = computeQuote(product, params, await loadPromotion(env, quote.promotion_code), new Date());
-  } catch (e) {
-    quoteErr(e);
-  }
+  const fresh = priceOrder(product, inbound, params, await loadPromotion(env, quote.promotion_code));
   if (fresh.totalMinor !== quote.total_minor) {
     await env.DB.prepare("UPDATE quotes SET status = 'EXPIRED' WHERE id = ?").bind(quote.id).run();
     throw new HttpError(409, "PRICE_CHANGED", "가격이 변경되었습니다. 변경된 금액을 확인해주세요.", { previousTotalMinor: quote.total_minor, newTotalMinor: fresh.totalMinor });
@@ -374,10 +417,12 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
       lockExpires, quote.id, entity.id, supplier.id, quote.total_minor, idemKey, quote.service_start, quote.service_end,
       quote.cancellation_policy_json, bk.mode === "SIMULATED" ? "SANDBOX" : "LIVE", supplier.transaction_model,
     ),
-    db.prepare(
-      `INSERT INTO booking_items (id, booking_id, domain_type, item_id, unit_id, supplier_id, title, service_start, service_end, quantity, total_minor, params_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(newId("bki"), id, quote.domain_type, quote.item_id, quote.unit_id, supplier.id, quote.title, quote.service_start, quote.service_end, quote.priced_units, quote.total_minor, quote.params_json),
+    ...itemRows(quote, product, inbound, fresh.legs).map((it) =>
+      db.prepare(
+        `INSERT INTO booking_items (id, booking_id, domain_type, item_id, unit_id, supplier_id, title, service_start, service_end, quantity, total_minor, params_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(newId("bki"), id, quote.domain_type, it.itemId, it.unitId, supplier.id, it.title, it.start, it.end, quote.priced_units, it.totalMinor, quote.params_json),
+    ),
     db.prepare("UPDATE quotes SET status = 'CONSUMED' WHERE id = ?").bind(quote.id),
     db.prepare("INSERT INTO booking_status_history (id, booking_id, from_status, to_status, actor_type, actor_id, reason) VALUES (?, ?, NULL, 'AWAITING_PAYMENT', 'CUSTOMER', ?, 'BOOKING_CREATED')")
       .bind(newId("bsh"), id, user.id),
@@ -391,17 +436,14 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
       ).bind(newId("btr"), id, t.type, t.lastNameEn, t.firstNameEn, t.birthDate, t.gender, t.nationality, enc, t.passportExpiry, i === 0 ? 1 : 0),
     );
   }
-  if (product.capacity !== null) {
-    const qty = holdQuantity(quote.domain_type, params);
-    const unitKey = product.unitId || "default";
-    for (const d of holdDates(quote.domain_type, quote.service_start, quote.service_end)) {
-      stmts.push(
-        db.prepare(
-          `INSERT INTO inventory_holds (id, booking_id, domain_type, item_id, unit_key, service_date, quantity, status, expires_at)
-           SELECT ?, ?, ?, ?, ?, ?, CASE WHEN ? - (${ACTIVE_HOLD_SUM}) >= ? THEN ? ELSE 0 END, 'HELD', ?`,
-        ).bind(newId("hld"), id, quote.domain_type, quote.item_id, unitKey, d, product.capacity, quote.item_id, unitKey, d, nowIso(), qty, qty, lockExpires),
-      );
-    }
+  const qty = holdQuantity(quote.domain_type, params);
+  for (const t of holdTargets(quote.domain_type, product, inbound, { serviceStart: quote.service_start, serviceEnd: quote.service_end, legs: fresh.legs })) {
+    stmts.push(
+      db.prepare(
+        `INSERT INTO inventory_holds (id, booking_id, domain_type, item_id, unit_key, service_date, quantity, status, expires_at)
+         SELECT ?, ?, ?, ?, ?, ?, CASE WHEN ? - (${ACTIVE_HOLD_SUM}) >= ? THEN ? ELSE 0 END, 'HELD', ?`,
+      ).bind(newId("hld"), id, quote.domain_type, t.itemId, t.unitKey, t.date, t.capacity, t.itemId, t.unitKey, t.date, nowIso(), qty, qty, lockExpires),
+    );
   }
   try {
     await runBatch(db, stmts);

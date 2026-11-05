@@ -172,3 +172,12 @@ export async function decryptField(blob: string, keyB64: string): Promise<string
 export function maskPassport(p: string): string {
   return p.length <= 3 ? "***" : `${p.slice(0, 1)}${"*".repeat(Math.max(0, p.length - 3))}${p.slice(-2)}`;
 }
+
+/** Public display name: "김민지" -> "김*지", "Kim Minji" -> "K*******i", "이수" -> "이*". */
+export function maskName(name: unknown): string {
+  const chars = Array.from(String(name ?? "").trim());
+  if (chars.length === 0) return "여행자";
+  if (chars.length === 1) return `${chars[0]}*`;
+  if (chars.length === 2) return `${chars[0]}*`;
+  return `${chars[0]}${"*".repeat(chars.length - 2)}${chars[chars.length - 1]}`;
+}

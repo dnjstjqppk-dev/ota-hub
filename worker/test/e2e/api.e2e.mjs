@@ -332,6 +332,93 @@ test("catalog: products report bookability honestly; unknown ids 404", async () 
   assert.equal((await api("GET", "/api/v1/trains/does-not-exist")).status, 404);
 });
 
+test("hotel rate plans: API exposes catalog plans; unknown plan rejected; plan stored on the quote", async () => {
+  const h = (await api("GET", "/api/v1/hotels/htl_seoul_01")).data.data;
+  const room = h.rooms.find((r) => r.id === HOTEL.unitId);
+  assert.ok(Array.isArray(room.rate_plans) && room.rate_plans.length >= 1);
+  const plan = room.rate_plans[0];
+  assert.equal(plan.price_krw, room.base_price_krw);
+  const ok = (await quote(A.token, { ratePlanId: plan.id })).data.quote;
+  assert.equal(ok.ratePlanId, plan.id);
+  assert.ok(ok.title.includes(plan.name_ko));
+  const bad = await quote(A.token, { ratePlanId: "NOT_A_PLAN" });
+  assert.equal(bad.status, 400);
+  assert.equal(bad.data.code, "RATE_PLAN_NOT_FOUND");
+  // The plan survives into booking re-validation (same price, no PRICE_CHANGED).
+  const b = await book(A.token, ok);
+  assert.equal(b.status, 201, JSON.stringify(b.data));
+  assert.equal(b.data.booking.totalMinor, ok.totalMinor);
+});
+
+test("round-trip flight: one booking, one PNR, two legs with holds on each date", async () => {
+  const pax = (fn) => ({ type: "ADULT", lastNameEn: "CHOI", firstNameEn: fn, birthDate: "1990-04-04", passportNumber: "M5556667", passportExpiry: day(900) });
+  const body = { domain: "FLIGHT", itemId: "flt_ke703", returnItemId: "flt_ke704_ret", startDate: day(60), returnDate: day(64), travelers: { adults: 1 } };
+  const r = await api("POST", "/api/v1/quotes", { token: A.token, body });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  const q = r.data.quote;
+  assert.equal(q.roundTrip, true);
+  assert.equal(q.serviceStart, day(60));
+  assert.equal(q.serviceEnd, day(64));
+  const one = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: day(60), travelers: { adults: 1 } } })).data.quote;
+  const back = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke704_ret", startDate: day(64), travelers: { adults: 1 } } })).data.quote;
+  assert.equal(q.totalMinor, one.totalMinor + back.totalMinor);
+
+  const b = (await book(A.token, q, { travelers: [pax("YUNA")] })).data.booking;
+  assert.equal(b.items.length, 2);
+  assert.equal(b.items.reduce((s, i) => s + i.total_minor, 0), b.totalMinor);
+  const holds = sql(`SELECT item_id, service_date FROM inventory_holds WHERE booking_id = '${b.id}' ORDER BY service_date`);
+  assert.deepEqual(holds.map((h) => [h.item_id, h.service_date]), [["flt_ke703", day(60)], ["flt_ke704_ret", day(64)]]);
+
+  const paid = (await pay(A.token, b)).data.booking;
+  assert.equal(paid.status, "TICKETED");
+  assert.equal(paid.items[0].pnr, paid.items[1].pnr);
+  assert.match(paid.items[0].pnr, /^[A-Z0-9]{6}$/);
+});
+
+test("round-trip flight: wrong direction, return before departure, missing return date are rejected", async () => {
+  const base = { domain: "FLIGHT", itemId: "flt_ke703", startDate: day(61), travelers: { adults: 1 } };
+  const wrong = await api("POST", "/api/v1/quotes", { token: A.token, body: { ...base, returnItemId: "flt_ke723", returnDate: day(65) } });
+  assert.equal(wrong.data.code, "ROUND_TRIP_ROUTE_MISMATCH");
+  const early = await api("POST", "/api/v1/quotes", { token: A.token, body: { ...base, returnItemId: "flt_ke704_ret", returnDate: day(59) } });
+  assert.equal(early.data.code, "INVALID_RETURN_DATE");
+  const none = await api("POST", "/api/v1/quotes", { token: A.token, body: { ...base, returnItemId: "flt_ke704_ret" } });
+  assert.equal(none.data.code, "RETURN_DATE_REQUIRED");
+});
+
+test("reviews: verified only from own fulfilled booking, once per booking; names masked; summary", async () => {
+  const { p } = await fullHotelBooking(A.token, {});
+  const bk = p.data.booking;
+  assert.equal(bk.status, "VOUCHER_ISSUED");
+  const list = (await api("GET", "/api/v1/bookings", { token: A.token })).data.bookings;
+  assert.equal(list.find((x) => x.id === bk.id).itemId, HOTEL.itemId);
+
+  const other = await api("POST", "/api/v1/reviews", { token: B.token, body: { targetId: HOTEL.itemId, bookingId: bk.id, rating: 5, comment: "not my booking" } });
+  assert.equal(other.data.code, "REVIEW_BOOKING_NOT_ELIGIBLE");
+  const wrongItem = await api("POST", "/api/v1/reviews", { token: A.token, body: { targetId: "htl_seoul_02", bookingId: bk.id, rating: 5, comment: "wrong product" } });
+  assert.equal(wrongItem.data.code, "REVIEW_BOOKING_NOT_ELIGIBLE");
+
+  const ok = await api("POST", "/api/v1/reviews", { token: A.token, body: { targetId: HOTEL.itemId, bookingId: bk.id, rating: 4, comment: "깨끗하고 위치가 좋았습니다" } });
+  assert.equal(ok.status, 201);
+  assert.equal(ok.data.verifiedStay, true);
+  const dup = await api("POST", "/api/v1/reviews", { token: A.token, body: { targetId: HOTEL.itemId, bookingId: bk.id, rating: 5, comment: "second try" } });
+  assert.equal(dup.data.code, "ALREADY_REVIEWED");
+
+  const g = (await api("GET", `/api/v1/reviews?domain=HOTEL&targetId=${HOTEL.itemId}`)).data;
+  const mine = g.reviews.find((r) => r.id === ok.data.reviewId);
+  assert.equal(mine.verified_stay, true);
+  assert.ok(mine.user_name.includes("*"), "reviewer name must be masked");
+  assert.ok(!g.reviews.some((r) => "user_id" in r || "booking_id" in r));
+  assert.ok(g.summary.count >= 1 && g.summary.verifiedCount >= 1 && g.summary.average >= 1);
+});
+
+test("sitemap: dynamic, includes catalog detail pages", async () => {
+  const res = await fetch(BASE + "/sitemap.xml");
+  assert.equal(res.status, 200);
+  const xml = await res.text();
+  assert.ok(xml.includes("/hotels/detail/htl_seoul_01</loc>"));
+  assert.ok(xml.includes("/flights/detail/flt_ke703</loc>"));
+});
+
 test("ledger: every journal balanced; no payment/refund/deposit mismatch (run last)", async () => {
   const r = await api("GET", "/api/v1/admin/reconciliation", { token: ADMIN });
   assert.equal(r.status, 200);

@@ -147,7 +147,10 @@ const selectFlight = (f: any) => {
   } else {
     const outId = selectedOutboundFlight.value?.id || f.id
     const retId = selectedOutboundFlight.value ? f.id : ''
-    router.push(`/flights/booking?flightId=${outId}${retId ? `&returnId=${retId}` : ''}`)
+    const query: Record<string, string> = { domain: 'FLIGHT', itemId: outId }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(targetDate.value)) query.startDate = targetDate.value
+    if (retId) query.returnItemId = retId
+    router.push({ path: '/checkout', query })
   }
 }
 

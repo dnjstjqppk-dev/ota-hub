@@ -45,19 +45,20 @@ const saveProfile = () => {
         개인정보 보호 정책에 따라 회원 프로필 및 계정 설정은 본인 인증 후 안전하게 접근 가능합니다.
       </p>
       <div class="pt-4 flex justify-center gap-3">
-        <button
-          @click="authStore.loginAsDemo()"
+        <NuxtLink
+          to="/login"
           class="px-5 py-2.5 bg-trip-blue text-white text-xs font-black rounded-xl hover:bg-blue-600 shadow-sm transition"
         >
-          데모 회원으로 즉시 체험
-        </button>
+          로그인
+        </NuxtLink>
       </div>
     </div>
 
     <!-- 로그인 회원 프로필 폼 -->
     <div v-else class="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-sm space-y-6">
       <div class="flex items-center gap-4 border-b border-slate-100 pb-6">
-        <img :src="authStore.user.avatarUrl" class="w-16 h-16 rounded-full border-2 border-slate-200 object-cover" />
+        <img v-if="authStore.user.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-16 h-16 rounded-full border-2 border-slate-200 object-cover" />
+        <span v-else class="w-16 h-16 rounded-full bg-trip-blue text-white text-xl font-black flex items-center justify-center" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
         <div>
           <h2 class="text-base font-black text-slate-900">{{ authStore.user.fullName }}</h2>
           <span class="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black border border-amber-200">

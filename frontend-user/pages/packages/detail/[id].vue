@@ -1,208 +1,67 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useCurrencyStore } from '~/stores/currency'
-import { useApiUrl } from '~/composables/useApi'
+import { formatKrw } from '~/composables/useApi'
+import { useCatalogDetail, jsonLdScript } from '~/composables/useCatalogDetail'
 
 const route = useRoute()
-const currencyStore = useCurrencyStore()
+const id = String(route.params.id || route.query.id || '')
+const { item: p, state, reload } = useCatalogDetail('/packages', id)
 
+const details = computed<any>(() => {
+  try { return JSON.parse(p.value?.details_json || '{}') || {} } catch { return {} }
+})
+const features = computed<string[]>(() => (Array.isArray(details.value.features) ? details.value.features.filter((f: unknown) => typeof f === 'string') : []))
+const price = computed(() => Number(p.value?.bundle_price_krw ?? p.value?.total_package_krw) || null)
+const original = computed(() => Number(p.value?.original_price_krw ?? p.value?.total_original_krw) || null)
 
-const fallbackPackage = {
-  id: 'pkg_tokyo_4d3n',
-  title: '[항공+호텔 결합] 도쿄 롯폰기 하얏트 럭셔리 에어텔 4일 (대한항공 직항 왕복 + 5성급 3박)',
-  city: '도쿄',
-  country: '일본',
-  duration_nights: 3,
-  duration_days: 4,
-  airline_name: '대한항공 (Korean Air)',
-  flight_outbound: 'KE703 (ICN 10:10 → NRT 12:35)',
-  flight_inbound: 'KE704 (NRT 13:55 → ICN 16:30)',
-  free_baggage: '위탁수하물 23kg 무료',
-  hotel_name: '그랜드 하얏트 도쿄 롯폰기 힐스 (Grand Hyatt Tokyo)',
-  hotel_star: 5,
-  room_name: '디럭스 킹 룸 (시티뷰, 조식 뷔페 2인 매일 포함)',
-  original_price_krw: 1400000,
-  bundle_price_krw: 1150000,
-  savings_percentage: 18,
-  badge: '베스트셀러 에어텔',
-  hero_image_url: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800',
-  gallery: [
-    'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800',
-    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800'
-  ],
-  itinerary: [
-    { day: 'Day 1', title: '인천 출발 → 도쿄 나리타 도착 & 호텔 체크인', desc: '대한항공 전용기 탑승 후 나리타 도착. 전용 리무진 버스로 롯폰기 힐스 이동 후 그랜드 하얏트 체크인 및 자유 일정.' },
-    { day: 'Day 2', title: '도쿄 도심 명소 탐방 (긴자, 시부야 스카이, 모리 미술관)', desc: '호텔 조식 뷔페 후 롯폰기 힐스 전망대 및 긴자 쇼핑 거리 자유 관람.' },
-    { day: 'Day 3', title: '오다이바 또는 디즈니랜드 1일 자유 투어', desc: '전 일정 개별 맞춤 자유 여행. 호텔 라운지 및 피트니스/사우나 무료 이용.' },
-    { day: 'Day 4', title: '호텔 체크아웃 → 나리타 공항 이동 → 인천 귀국', desc: '여유로운 조식 후 12:00 레이트 체크아웃. 공항 이동 후 KE704 탑승하여 인천 도착.' }
-  ]
-}
-
-import { getPackageById } from '~/data/packageCatalog'
-
-const pkgId = (route.params.id || route.query.id || 'pkg_tokyo_4d3n') as string
-const pkg = ref<any>(getPackageById(pkgId) || fallbackPackage)
-const loading = ref(false)
-
-onMounted(async () => {
-  const currentId = (route.params.id || route.query.id || 'pkg_tokyo_4d3n') as string
-  const catalogPkg = getPackageById(currentId) || fallbackPackage
-  pkg.value = catalogPkg
-
-  try {
-    const res = await fetch(useApiUrl(`/packages/${currentId}`), { signal: AbortSignal.timeout(1500) })
-    if (res.ok) {
-      const json = await res.json()
-      if (json.data) pkg.value = { ...catalogPkg, ...json.data }
-    }
-  } catch (e) {
-    // Keep verified package data
+useHead(() => {
+  const x = p.value
+  if (!x) return { title: '항공+호텔' }
+  return {
+    title: x.title,
+    script: [jsonLdScript({
+      '@context': 'https://schema.org',
+      '@type': 'TouristTrip',
+      name: x.title,
+      ...(x.hero_image_url || x.thumbnail_url ? { image: x.hero_image_url || x.thumbnail_url } : {}),
+      ...(x.destination_city ? { itinerary: { '@type': 'Place', name: x.destination_city } } : {})
+    })]
   }
 })
 </script>
 
 <template>
-  <div v-if="loading" class="max-w-6xl mx-auto px-4 py-24 text-center text-slate-400 font-bold">
-    패키지 상세 구성 및 결합 할인 내역을 불러오는 중입니다...
-  </div>
-
-  <div v-else-if="pkg" class="max-w-6xl mx-auto px-4 py-8 space-y-8">
-    <!-- 상단 브레드크럼 -->
-    <div>
-      <div class="flex items-center gap-2 text-xs text-slate-400 mb-2">
-        <NuxtLink to="/" class="hover:underline">홈</NuxtLink> <span>›</span>
-        <NuxtLink to="/packages" class="hover:underline">항공+호텔</NuxtLink> <span>›</span>
-        <NuxtLink to="/packages/list" class="hover:underline">패키지 목록</NuxtLink> <span>›</span>
-        <span class="text-slate-800 font-bold">{{ pkg.city }} 에어텔</span>
+  <DetailShell :state="state" list-path="/packages" list-label="항공+호텔 둘러보기" @retry="reload">
+    <template v-if="p">
+      <nav class="mb-3 text-xs text-slate-400"><NuxtLink to="/" class="hover:underline">홈</NuxtLink> › <NuxtLink to="/packages" class="hover:underline">항공+호텔</NuxtLink> › {{ p.destination_city }}</nav>
+      <div class="grid gap-6 md:grid-cols-[1fr_320px]">
+        <div class="space-y-6">
+          <section class="overflow-hidden rounded-3xl border border-slate-200 bg-white" data-testid="package-detail">
+            <img v-if="p.hero_image_url || p.thumbnail_url" :src="p.hero_image_url || p.thumbnail_url" :alt="p.title" class="h-64 w-full object-cover md:h-80" />
+            <div class="p-6 md:p-8">
+              <span v-if="p.badge" class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">{{ p.badge }}</span>
+              <h1 class="mt-2 text-2xl font-black text-slate-900">{{ p.title }}</h1>
+              <p class="mt-1 text-sm text-slate-600">목적지 {{ p.destination_city }}</p>
+              <p v-if="original && price && original > price" class="mt-3 text-sm text-slate-600">
+                개별 정가 합계 <span class="line-through">{{ formatKrw(original) }}</span> → 패키지가 <strong class="text-slate-900">{{ formatKrw(price) }}</strong>
+                <span v-if="p.savings_percentage" class="font-semibold text-rose-600"> ({{ p.savings_percentage }}% 할인, 공급사 제공 정가 기준)</span>
+              </p>
+              <div v-if="features.length" class="mt-6">
+                <h2 class="text-sm font-bold text-slate-900">포함 구성</h2>
+                <ul class="mt-2 space-y-1 text-sm text-slate-700"><li v-for="f in features" :key="f">✓ {{ f }}</li></ul>
+              </div>
+              <div v-if="p.flight_id || p.hotel_id" class="mt-6 flex flex-wrap gap-2 text-xs">
+                <NuxtLink v-if="p.flight_id" :to="`/flights/detail/${p.flight_id}`" class="rounded-lg border border-slate-300 px-3 py-1.5 font-semibold">포함 항공편 보기</NuxtLink>
+                <NuxtLink v-if="p.hotel_id" :to="`/hotels/detail/${p.hotel_id}`" class="rounded-lg border border-slate-300 px-3 py-1.5 font-semibold">포함 호텔 보기</NuxtLink>
+              </div>
+              <p class="mt-6 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">1인 기준 요금이며 출발일과 인원은 예약 단계에서 선택합니다. 패키지는 환불 불가 상품이며, 여행자 전원의 영문 성명이 필요합니다.</p>
+            </div>
+          </section>
+          <ReviewsSection domain="PACKAGE" :target-id="p.id" />
+        </div>
+        <DetailBookingCard :item="p" domain="PACKAGE" :price-krw="price" unit-label="1인" cancellation="NON_REFUNDABLE" :alert-label="p.title" />
       </div>
-
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div class="flex items-center gap-2 mb-1">
-            <span class="px-2.5 py-0.5 bg-rose-50 text-rose-700 text-xs font-bold rounded-full">
-              {{ pkg.badge }}
-            </span>
-            <span class="text-xs text-slate-400">• {{ pkg.duration_nights }}박 {{ pkg.duration_days }}일 일정</span>
-            <span class="px-2 py-0.5 bg-amber-50 text-amber-800 text-xs font-bold rounded">
-              ⚡ {{ pkg.savings_percentage }}% 절약
-            </span>
-          </div>
-          <h1 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
-            {{ pkg.title }}
-          </h1>
-        </div>
-
-        <div class="text-right">
-          <div class="text-xs text-slate-400 line-through">
-            개별가: {{ currencyStore.formatKRW(pkg.original_price_krw) }}
-          </div>
-          <div class="text-3xl font-black text-rose-600 font-mono">
-            {{ currencyStore.formatKRW(pkg.bundle_price_krw) }}
-          </div>
-          <div class="text-[11px] text-slate-400">1인 기준 항공+호텔 총 결합가</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 사진 갤러리 -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 h-80 rounded-3xl overflow-hidden shadow-sm">
-      <img :src="pkg.hero_image_url" class="md:col-span-2 w-full h-full object-cover" />
-      <div class="hidden md:grid grid-rows-2 gap-3 h-full">
-        <img v-for="(img, idx) in pkg.gallery.slice(1, 3)" :key="idx" :src="img" class="w-full h-full object-cover" />
-      </div>
-    </div>
-
-    <!-- 결합 포함 내역 (Air+Hotel Bundle Details) -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <!-- 항공편 내역 -->
-      <div class="bg-white rounded-3xl border border-slate-200 p-6 space-y-4 shadow-sm">
-        <div class="flex items-center gap-3">
-          <span class="text-2xl">✈️</span>
-          <div>
-            <span class="text-xs font-bold text-slate-400 block">포함 항공편</span>
-            <h3 class="font-black text-slate-900 text-base">{{ pkg.airline_name }} 직항 왕복</h3>
-          </div>
-        </div>
-        <div class="space-y-2 text-xs bg-slate-50 p-4 rounded-2xl">
-          <div class="flex justify-between">
-            <span class="text-slate-500">가는 편</span>
-            <span class="font-mono font-bold text-slate-900">{{ pkg.flight_outbound }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-500">오는 편</span>
-            <span class="font-mono font-bold text-slate-900">{{ pkg.flight_inbound }}</span>
-          </div>
-          <div class="flex justify-between pt-2 border-t border-slate-200">
-            <span class="text-slate-500">수하물</span>
-            <span class="font-bold text-emerald-600">✓ {{ pkg.free_baggage }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 호텔 내역 -->
-      <div class="bg-white rounded-3xl border border-slate-200 p-6 space-y-4 shadow-sm">
-        <div class="flex items-center gap-3">
-          <span class="text-2xl">🏨</span>
-          <div>
-            <span class="text-xs font-bold text-slate-400 block">포함 호텔 ({{ pkg.duration_nights }}박)</span>
-            <h3 class="font-black text-slate-900 text-base">{{ pkg.hotel_name }}</h3>
-          </div>
-        </div>
-        <div class="space-y-2 text-xs bg-slate-50 p-4 rounded-2xl">
-          <div class="flex justify-between">
-            <span class="text-slate-500">객실 유형</span>
-            <span class="font-bold text-slate-900">{{ pkg.room_name }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-500">성급 및 위치</span>
-            <span class="text-slate-700">★ {{ pkg.hotel_star }}성급 · 도심 중심 롯폰기 힐스</span>
-          </div>
-          <div class="flex justify-between pt-2 border-t border-slate-200">
-            <span class="text-slate-500">조식 혜택</span>
-            <span class="font-bold text-emerald-600">✓ 2인 조식 뷔페 무료</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 일자별 추천 일정표 (Trip-style Timeline) -->
-    <div class="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 space-y-6 shadow-sm">
-      <h2 class="text-xl font-black text-slate-900">추천 여행 일정 ({{ pkg.duration_days }}일 코스)</h2>
-      <div class="space-y-6">
-        <div v-for="it in pkg.itinerary" :key="it.day" class="flex gap-4 items-start">
-          <div class="w-16 flex-shrink-0">
-            <span class="px-2.5 py-1 bg-rose-50 text-rose-700 font-mono font-black text-xs rounded-lg">
-              {{ it.day }}
-            </span>
-          </div>
-          <div class="space-y-1">
-            <h4 class="text-sm font-bold text-slate-900">{{ it.title }}</h4>
-            <p class="text-xs text-slate-600 leading-relaxed">{{ it.desc }}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 하단 결합 예약 CTA 바 -->
-    <div class="bg-white rounded-3xl border border-slate-200 p-6 flex items-center justify-between gap-4 shadow-sm">
-      <div>
-        <div class="text-xs text-slate-400 line-through">
-          개별가: {{ currencyStore.formatKRW(pkg.original_price_krw) }}
-        </div>
-        <div class="text-2xl md:text-3xl font-black text-rose-600 font-mono">
-          {{ currencyStore.formatKRW(pkg.bundle_price_krw) }}
-        </div>
-      </div>
-
-      <NuxtLink
-        :to="`/packages/booking?packageId=${pkg.id}`"
-        class="px-8 py-4 bg-rose-600 hover:bg-rose-700 text-white font-black text-sm rounded-2xl shadow-lg transition"
-      >
-        항공+호텔 결합 예약하기 →
-      </NuxtLink>
-    </div>
-  </div>
+    </template>
+  </DetailShell>
 </template>
-

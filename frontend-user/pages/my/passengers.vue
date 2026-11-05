@@ -24,7 +24,6 @@ const isSaving = ref(false)
 const deletingId = ref<string | null>(null)
 const loadError = ref('')
 let sessionVersion = 0
-const isDemo = () => authStore.user?.id === 'usr-demo-vip' && authStore.token === 'demo_jwt_token_sample_2026'
 
 const loadPassengers = async () => {
   const version = ++sessionVersion
@@ -36,7 +35,7 @@ const loadPassengers = async () => {
   isLoading.value = false
   newP.value = { nameKo: '', nameEn: '', gender: 'MALE', birth: '', passportNumber: '', passportExpiry: '', nationality: 'KOR' }
   if (authStore.isLoggedIn && authStore.user) {
-    if (!isDemo()) {
+    {
       isLoading.value = true
       try {
         if (!authStore.token) throw new Error('로그인이 필요합니다.')
@@ -68,42 +67,6 @@ const loadPassengers = async () => {
       } finally {
         if (version === sessionVersion) isLoading.value = false
       }
-      return
-    }
-
-    if (isDemo()) {
-      try {
-        const stored = localStorage.getItem(`passengers_${authStore.user.id}`)
-        const parsed = stored ? JSON.parse(stored) : null
-        if (Array.isArray(parsed)) {
-          passengers.value = parsed
-          return
-        }
-      } catch {}
-      passengers.value = [
-        {
-          id: 'p-01',
-          nameKo: '김여행',
-          nameEn: 'KIM YEOHAENG',
-          gender: 'MALE',
-          birth: '1990-05-15',
-          passportNumber: 'M88192049',
-          passportExpiry: '2031-10-12',
-          nationality: '대한민국 (KOR)',
-          isPrimary: true
-        },
-        {
-          id: 'p-02',
-          nameKo: '이수진',
-          nameEn: 'LEE SOOJIN',
-          gender: 'FEMALE',
-          birth: '1992-08-20',
-          passportNumber: 'M44910293',
-          passportExpiry: '2029-05-18',
-          nationality: '대한민국 (KOR)',
-          isPrimary: false
-        }
-      ]
     }
   }
 }
@@ -142,11 +105,11 @@ const addPassenger = async () => {
   const newItem = {
     id: 'p-' + crypto.randomUUID(),
     ...draft,
-    isPrimary: isDemo() && passengers.value.length === 0
+    isPrimary: false
   }
   isSaving.value = true
   try {
-  if (!isDemo()) {
+  {
     if (!authStore.token) throw new Error('로그인이 필요합니다.')
     const parts = draft.nameEn.split(' ')
     const lastName = parts[0]
@@ -174,7 +137,6 @@ const addPassenger = async () => {
     newItem.id = json.id
   }
   if (version !== sessionVersion) return
-  if (isDemo()) localStorage.setItem(`passengers_${authStore.user.id}`, JSON.stringify([...passengers.value, newItem]))
   passengers.value.push(newItem)
   isAddModalOpen.value = false
   newP.value = { nameKo: '', nameEn: '', gender: 'MALE', birth: '', passportNumber: '', passportExpiry: '', nationality: 'KOR' }
@@ -192,7 +154,7 @@ const deletePassenger = async (id: string) => {
   if (confirm('이 여행자 정보를 삭제하시겠습니까?')) {
     deletingId.value = id
     try {
-    if (!isDemo()) {
+    {
       if (!authStore.token) throw new Error('로그인이 필요합니다.')
       const res = await fetch(useApiUrl(`/user/passengers/${encodeURIComponent(id)}`), {
         method: 'DELETE',
@@ -202,7 +164,6 @@ const deletePassenger = async (id: string) => {
     }
     if (version !== sessionVersion) return
     const remaining = passengers.value.filter(p => p.id !== id)
-    if (isDemo()) localStorage.setItem(`passengers_${authStore.user.id}`, JSON.stringify(remaining))
     passengers.value = remaining
     } catch {
       if (version === sessionVersion) alert('여행자 정보를 삭제하지 못했습니다. 다시 시도해 주세요.')

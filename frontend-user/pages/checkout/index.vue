@@ -19,12 +19,15 @@ const q = route.query as Record<string, string>
 const domain = String(q.domain || '').toUpperCase()
 const itemId = String(q.itemId || '')
 const unitId = q.unitId ? String(q.unitId) : null
+const ratePlanId = domain === 'HOTEL' && q.ratePlanId ? String(q.ratePlanId) : undefined
+const returnItemId = domain === 'FLIGHT' && q.returnItemId ? String(q.returnItemId) : undefined
 const needsEnd = domain === 'HOTEL' || domain === 'CAR'
 const today = new Date().toISOString().slice(0, 10)
 const plusDays = (d: string, n: number) => new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10)
 
 const startDate = ref(q.startDate || plusDays(today, 14))
 const endDate = ref(q.endDate || plusDays(startDate.value, domain === 'CAR' ? 3 : 1))
+const returnDate = ref(q.returnDate || plusDays(startDate.value, 3))
 const rooms = ref(Number(q.rooms || 1))
 const adults = ref(Number(q.adults || (domain === 'HOTEL' ? 2 : 1)))
 const children = ref(Number(q.children || 0))
@@ -79,7 +82,7 @@ async function getQuote() {
   busy.value = true
   const r = await apiFetch('/quotes', {
     method: 'POST',
-    body: { domain, itemId, unitId, startDate: startDate.value, endDate: needsEnd ? endDate.value : null, rooms: domain === 'HOTEL' ? rooms.value : undefined, travelers: { adults: adults.value, children: children.value, infants: infants.value }, promotionCode: promotionCode.value || undefined }
+    body: { domain, itemId, unitId, ratePlanId, returnItemId, returnDate: returnItemId ? returnDate.value : undefined, startDate: startDate.value, endDate: needsEnd ? endDate.value : null, rooms: domain === 'HOTEL' ? rooms.value : undefined, travelers: { adults: adults.value, children: children.value, infants: infants.value }, promotionCode: promotionCode.value || undefined }
   })
   busy.value = false
   if (r.status === 401) return goLogin()
@@ -154,8 +157,24 @@ onMounted(async () => {
   timer = setInterval(() => (now.value = Date.now()), 1000)
   await auth.initAuth()
   if (!auth.isLoggedIn) return goLogin()
+  // On a direct page load the session is restored only now; prefill contact fields the user left empty.
+  if (!contact.value.name) contact.value.name = auth.user?.fullName || ''
+  if (!contact.value.email) contact.value.email = auth.user?.email || ''
+  if (!contact.value.phone) contact.value.phone = auth.user?.phoneNumber || ''
   if (!DOMAIN_LABEL[domain] || !itemId) { error.value = '잘못된 상품 정보입니다.'; return }
+  if (q.bookingId) await resumeBooking(String(q.bookingId))
 })
+
+/** Re-enter the payment step for an existing booking that is still awaiting payment (e.g. after a declined card). */
+async function resumeBooking(id: string) {
+  const r = await apiFetch(`/bookings/${encodeURIComponent(id)}`)
+  if (r.status === 401) return goLogin()
+  if (!r.ok || r.data.booking?.status !== 'AWAITING_PAYMENT') return router.replace(`/booking/result?bookingId=${encodeURIComponent(id)}`)
+  booking.value = r.data.booking
+  const pc = await apiFetch('/payments/config')
+  payConfig.value = pc.data
+  step.value = 'payment'
+}
 onBeforeUnmount(() => clearInterval(timer))
 </script>
 
@@ -183,12 +202,16 @@ onBeforeUnmount(() => clearInterval(timer))
     <div v-else class="grid md:grid-cols-[1fr_340px] gap-6">
       <section class="space-y-4">
         <!-- Step 1: details -->
-        <div class="rounded-2xl border border-slate-200 bg-white p-5 md:p-6">
-          <h1 class="text-base font-bold text-slate-900">{{ DOMAIN_LABEL[domain] || '상품' }} 예약</h1>
+        <div v-if="!booking || quote" class="rounded-2xl border border-slate-200 bg-white p-5 md:p-6">
+          <h1 class="text-base font-bold text-slate-900">{{ DOMAIN_LABEL[domain] || '상품' }}{{ returnItemId ? ' 왕복' : '' }} 예약</h1>
           <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
             <label class="col-span-2 sm:col-span-1">
-              <span class="block text-xs font-semibold text-slate-600 mb-1">{{ domain === 'HOTEL' ? '체크인' : domain === 'CAR' ? '대여일' : '이용일' }}</span>
+              <span class="block text-xs font-semibold text-slate-600 mb-1">{{ domain === 'HOTEL' ? '체크인' : domain === 'CAR' ? '대여일' : domain === 'FLIGHT' ? '가는 날' : '이용일' }}</span>
               <input v-model="startDate" type="date" :min="today" :disabled="!!quote" class="w-full rounded-lg border border-slate-300 px-3 py-2" data-testid="start-date" />
+            </label>
+            <label v-if="returnItemId" class="col-span-2 sm:col-span-1">
+              <span class="block text-xs font-semibold text-slate-600 mb-1">오는 날</span>
+              <input v-model="returnDate" type="date" :min="startDate" :disabled="!!quote" class="w-full rounded-lg border border-slate-300 px-3 py-2" data-testid="return-date" />
             </label>
             <label v-if="needsEnd" class="col-span-2 sm:col-span-1">
               <span class="block text-xs font-semibold text-slate-600 mb-1">{{ domain === 'HOTEL' ? '체크아웃' : '반납일' }}</span>
@@ -266,6 +289,7 @@ onBeforeUnmount(() => clearInterval(timer))
         <!-- Step 3: payment -->
         <div v-if="step === 'payment' && booking" class="rounded-2xl border border-slate-200 bg-white p-5 md:p-6" data-testid="payment-step">
           <h2 class="text-base font-bold text-slate-900">결제</h2>
+          <p v-if="!quote" class="mt-1 text-sm text-slate-700">{{ booking.title }} · {{ booking.serviceStart }}</p>
           <p class="mt-1 text-xs text-slate-600">예약번호 <strong data-testid="booking-number">{{ booking.bookingNumber }}</strong> · 결제 가능 시간 <strong>{{ mmss(paySecondsLeft) }}</strong></p>
           <p class="mt-2 text-xs text-slate-500">결제가 완료되어도 공급사 확정 전까지는 예약이 확정되지 않습니다. 확정 실패 시 전액 환불됩니다.</p>
           <div v-if="payConfig?.provider === 'sandbox'" class="mt-4 text-xs">

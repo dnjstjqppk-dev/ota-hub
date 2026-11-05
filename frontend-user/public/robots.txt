@@ -1,2 +1,10 @@
 User-Agent: *
-Disallow:
+Disallow: /my/
+Disallow: /checkout
+Disallow: /booking/
+Disallow: /partner/
+Disallow: /admin/
+Disallow: /reset-password
+Disallow: /api/
+
+Sitemap: https://getfortrip.com/sitemap.xml

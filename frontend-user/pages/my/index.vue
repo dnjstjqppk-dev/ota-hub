@@ -2,17 +2,39 @@
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '~/stores/auth'
 import { useCurrencyStore } from '~/stores/currency'
-import { getUserBookings, type BookingRecord } from '~/data/initialBookings'
+import { apiFetch } from '~/composables/useApi'
 
 const authStore = useAuthStore()
 const currencyStore = useCurrencyStore()
 
 const activeTab = ref<'bookings' | 'coupons' | 'passengers' | 'payments'>('bookings')
 
-const upcomingBookings = ref<BookingRecord[]>([])
+const DOMAIN_LABEL: Record<string, string> = { HOTEL: '숙소', FLIGHT: '항공권', TRAIN: '기차', CAR: '렌터카', TRANSFER: '공항 이동', ACTIVITY: '투어·티켓', PACKAGE: '패키지' }
+const badgeOf = (s: string) =>
+  ['VOUCHER_ISSUED', 'TICKETED', 'COMPLETED'].includes(s) ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : ['FAILED', 'EXPIRED', 'MANUAL_REVIEW_REQUIRED'].includes(s) ? 'bg-red-50 text-red-700 border-red-200'
+      : ['CANCELLED', 'REFUNDED'].includes(s) ? 'bg-slate-100 text-slate-600 border-slate-200'
+        : 'bg-blue-50 text-blue-700 border-blue-200'
 
-onMounted(() => {
-  upcomingBookings.value = getUserBookings()
+// Server is the only source of booking truth (GET /bookings for the signed-in user).
+const upcomingBookings = ref<any[]>([])
+
+onMounted(async () => {
+  await authStore.initAuth()
+  if (!authStore.isLoggedIn) return
+  const r = await apiFetch('/bookings')
+  if (!r.ok) return
+  upcomingBookings.value = (r.data.bookings || []).map((b: any) => ({
+    id: b.id,
+    domainName: DOMAIN_LABEL[b.domain] || b.domain,
+    badgeClass: badgeOf(b.status),
+    statusLabel: b.statusLabel,
+    pnr: null,
+    title: b.title,
+    schedule: b.serviceEnd && b.serviceEnd !== b.serviceStart ? `${b.serviceStart} → ${b.serviceEnd}` : b.serviceStart,
+    roomInfo: b.bookingNumber,
+    amountKrw: b.totalMinor
+  }))
 })
 
 const coupons = ref([
@@ -216,21 +238,19 @@ const savedCards = ref([
               <span :class="['px-2.5 py-0.5 rounded-full text-[10px] font-black border', b.badgeClass]">
                 {{ b.statusLabel }}
               </span>
-              <span class="text-xs text-slate-400 font-mono font-bold">예약코드: {{ b.id }}</span>
+              <span class="text-xs text-slate-400 font-mono font-bold">예약번호: {{ b.roomInfo }}</span>
               <span v-if="b.pnr" class="text-xs text-blue-600 font-mono font-bold">PNR: {{ b.pnr }}</span>
             </div>
 
             <h3 class="text-base font-black text-slate-900">{{ b.title }}</h3>
             <p class="text-xs text-slate-600 flex items-center gap-2">
               <span>🗓️ {{ b.schedule }}</span>
-              <span class="text-slate-300">|</span>
-              <span class="text-slate-500">{{ b.roomInfo }}</span>
             </p>
           </div>
 
           <div class="flex md:flex-col items-center md:items-end justify-between border-t md:border-t-0 pt-3 md:pt-0 border-slate-100 gap-3">
             <div class="text-right">
-              <span class="text-[10px] text-slate-400 block">결제 완료 금액</span>
+              <span class="text-[10px] text-slate-400 block">예약 금액</span>
               <span class="text-lg font-black text-trip-blue font-mono">₩{{ b.amountKrw.toLocaleString() }}</span>
             </div>
 
@@ -377,12 +397,6 @@ const savedCards = ref([
         </p>
       </div>
       <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-        <button
-          @click="authStore.loginAsDemo()"
-          class="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition"
-        >
-          체험 계정으로 빠른 로그인 ⚡
-        </button>
         <NuxtLink
           to="/login"
           class="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"

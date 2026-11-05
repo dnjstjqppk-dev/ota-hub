@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
@@ -9,26 +9,66 @@ const currencyStore = useCurrencyStore()
 
 import { getHotelById } from '~/data/hotelCatalog'
 
-const hotelId = (route.params.id || route.query.hotelId || route.query.id || 'htl_tokyo_01') as string
-const hotel = ref<any>(getHotelById(hotelId) || getHotelById('htl_tokyo_01'))
-const loading = ref(false)
+const hotelId = String(route.params.id || route.query.hotelId || route.query.id || '')
+// Static catalog is only a first paint; never substitute a different hotel for an unknown id.
+const hotel = ref<any>(hotelId ? getHotelById(hotelId) || null : null)
+const loading = ref(!hotel.value)
+const notFound = ref(false)
+// Rate plans (price, meal, cancellation) only come from the live API.
+const ratesState = ref<'loading' | 'ok' | 'unavailable'>('loading')
+
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null)
+const overallScore = computed(() => num(hotel.value?.score_overall) ?? num(hotel.value?.rating))
+const subScores = computed(() =>
+  [['청결도', 'score_cleanliness'], ['위치', 'score_location'], ['서비스', 'score_service'], ['부대시설', 'score_facilities']]
+    .map(([label, k]) => ({ label, value: num(hotel.value?.[k]) }))
+    .filter((x): x is { label: string; value: number } => x.value !== null)
+)
+const minRoomPrice = computed(() => {
+  const prices = (hotel.value?.rooms || []).map((r: any) => Number(r.base_price_krw)).filter((n: number) => n > 0)
+  return prices.length ? Math.min(...prices) : null
+})
+
+// Structured data for search engines. Only catalog facts; no ratings (those must come from real, verified reviews).
+useHead(() => {
+  const h = hotel.value
+  if (!h) return {}
+  const ld: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'Hotel',
+    name: h.name_ko || h.name,
+    ...(h.name_en ? { alternateName: h.name_en } : {}),
+    ...(h.address ? { address: { '@type': 'PostalAddress', streetAddress: h.address, ...(h.city ? { addressLocality: h.city } : {}) } } : {}),
+    ...(h.thumbnail_url || h.image_url ? { image: h.thumbnail_url || h.image_url } : {}),
+    ...(Number(h.star_rating) > 0 ? { starRating: { '@type': 'Rating', ratingValue: Number(h.star_rating) } } : {}),
+    ...(minRoomPrice.value ? { priceRange: `₩${minRoomPrice.value.toLocaleString('ko-KR')}~ (1박, 세금 별도)` } : {}),
+  }
+  return {
+    title: h.name_ko || h.name,
+    script: [{ type: 'application/ld+json', innerHTML: JSON.stringify(ld).replace(/</g, '\\u003c') }],
+  }
+})
 
 onMounted(async () => {
-  const currentId = (route.params.id || route.query.hotelId || route.query.id || 'htl_tokyo_01') as string
-  const catalogHotel = getHotelById(currentId) || getHotelById('htl_tokyo_01')
-  hotel.value = catalogHotel
-
+  if (!hotelId) { loading.value = false; notFound.value = true; return }
   try {
-    const res = await fetch(useApiUrl(`/hotels/${currentId}`), { signal: AbortSignal.timeout(1500) })
+    const res = await fetch(useApiUrl(`/hotels/${encodeURIComponent(hotelId)}`), { signal: AbortSignal.timeout(5000) })
     if (res.ok) {
       const json = await res.json()
       if (json.data) {
-        hotel.value = { ...catalogHotel, ...json.data }
+        hotel.value = { ...(hotel.value || {}), ...json.data }
+        ratesState.value = 'ok'
       }
+    } else if (res.status === 404) {
+      hotel.value = null
+      notFound.value = true
     }
   } catch (e) {
-    // Keep verified catalog data
+    // Network failure: keep the static first paint but do not offer bookable rates.
   }
+  if (ratesState.value !== 'ok') ratesState.value = 'unavailable'
+  if (!hotel.value) notFound.value = true
+  loading.value = false
 })
 </script>
 
@@ -57,6 +97,9 @@ onMounted(async () => {
 
       <h1 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">{{ hotel.name_ko || hotel.name }}</h1>
       <p class="text-xs md:text-sm text-slate-400 font-medium mt-1">{{ hotel.name_en }} · {{ hotel.address }}</p>
+      <div class="mt-3">
+        <PriceAlertButton domain="HOTEL" :item-id="hotel.id" :label="hotel.name_ko || hotel.name" :current-price="minRoomPrice" />
+      </div>
     </div>
 
     <!-- 2. 모자이크 사진 갤러리 그리드 (Trip-style 1+2 레이아웃) -->
@@ -67,41 +110,22 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 3. 상세 평점 breakdown 카드 (Trip-style) -->
-    <div class="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+    <!-- 3. 평점 카드: 카탈로그 값이 있을 때만 표시 (임의 기본값·가상 후기 문구 없음) -->
+    <div v-if="overallScore !== null" class="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
       <div class="flex items-center gap-6">
         <div class="w-20 h-20 bg-trip-blue text-white rounded-2xl flex flex-col items-center justify-center font-black shadow-md flex-shrink-0">
-          <span class="text-3xl font-mono">{{ hotel.score_overall?.toFixed(1) || hotel.rating?.toFixed(1) || '4.8' }}</span>
-          <span class="text-[10px] tracking-wider text-blue-100 uppercase">최고 인기</span>
+          <span class="text-3xl font-mono">{{ overallScore.toFixed(1) }}</span>
+          <span class="text-[10px] tracking-wider text-blue-100">/ 5.0</span>
         </div>
-
         <div>
-          <div class="text-base font-black text-slate-900">
-            고객 후기 {{ hotel.review_count || 1280 }}개 분석 완료
-          </div>
-          <div class="text-xs text-slate-500 mt-1">
-            "지하철역 도보 3분 거리로 접근성이 매우 뛰어나며 침구가 청결하고 프론트 직원이 매우 친절합니다."
-          </div>
+          <div class="text-base font-black text-slate-900">종합 평점</div>
+          <div v-if="hotel.review_count" class="text-xs text-slate-500 mt-1">평가 {{ Number(hotel.review_count).toLocaleString('ko-KR') }}건 기준</div>
         </div>
       </div>
-
-      <!-- 세부 항목별 평점 -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full md:w-auto text-center border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6">
-        <div class="space-y-1">
-          <div class="text-xs text-slate-400 font-bold">청결도</div>
-          <div class="text-sm font-black text-slate-800 font-mono">⭐ {{ hotel.score_cleanliness?.toFixed(1) || '4.9' }}</div>
-        </div>
-        <div class="space-y-1">
-          <div class="text-xs text-slate-400 font-bold">위치 편의성</div>
-          <div class="text-sm font-black text-slate-800 font-mono">⭐ {{ hotel.score_location?.toFixed(1) || '5.0' }}</div>
-        </div>
-        <div class="space-y-1">
-          <div class="text-xs text-slate-400 font-bold">서비스 친절도</div>
-          <div class="text-sm font-black text-slate-800 font-mono">⭐ {{ hotel.score_service?.toFixed(1) || '4.8' }}</div>
-        </div>
-        <div class="space-y-1">
-          <div class="text-xs text-slate-400 font-bold">부대시설</div>
-          <div class="text-sm font-black text-slate-800 font-mono">⭐ {{ hotel.score_facilities?.toFixed(1) || '4.7' }}</div>
+      <div v-if="subScores.length" class="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full md:w-auto text-center border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6">
+        <div v-for="sc in subScores" :key="sc.label" class="space-y-1">
+          <div class="text-xs text-slate-400 font-bold">{{ sc.label }}</div>
+          <div class="text-sm font-black text-slate-800 font-mono">⭐ {{ sc.value.toFixed(1) }}</div>
         </div>
       </div>
     </div>
@@ -134,57 +158,34 @@ onMounted(async () => {
             <div class="space-y-3">
               <div class="text-xs font-bold text-slate-400">선택 가능한 요금제 옵션</div>
 
-              <!-- 서브 플랜 1: 기본 플랜 (룸 온리) -->
-              <div class="p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
+              <!-- 요금제는 서버 카탈로그(rate_plans)가 정의한 것만 노출. 가격·식사·취소 조건 모두 서버 값. -->
+              <p v-if="ratesState !== 'ok'" class="p-4 rounded-2xl bg-slate-50 text-xs text-slate-500">
+                {{ ratesState === 'loading' ? '실시간 요금을 확인하고 있습니다…' : '지금은 실시간 요금을 확인할 수 없습니다. 잠시 후 다시 시도해주세요.' }}
+              </p>
+              <div
+                v-for="plan in (ratesState === 'ok' ? room.rate_plans || [] : [])"
+                :key="plan.id"
+                class="p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50"
+                :data-testid="`rate-plan-${room.id}-${plan.id}`"
+              >
                 <div class="space-y-1">
-                  <div class="font-bold text-sm text-slate-800 flex items-center gap-2">
-                    <span>룸 온리 (Room Only)</span>
-                    <span class="text-[10px] px-2 py-0.5 bg-slate-200 text-slate-700 rounded font-bold">특가</span>
-                  </div>
-                  <div class="text-xs text-slate-400 space-y-0.5">
-                    <div>• 식사 불포함</div>
-                    <div class="text-emerald-600 font-semibold">• 체크인 2일 전 18:00까지 무료 취소</div>
+                  <div class="font-bold text-sm text-slate-800">{{ plan.name_ko }}</div>
+                  <div class="text-xs text-slate-500 space-y-0.5">
+                    <div>• {{ plan.meal === 'BREAKFAST' ? '조식 포함' : '식사 불포함' }}</div>
+                    <div v-if="plan.free_cancellation" class="text-emerald-600 font-semibold">• 무료 취소 가능 (정확한 기한은 예약 단계에서 확인)</div>
+                    <div v-else class="text-rose-600 font-semibold">• 환불 불가</div>
                   </div>
                 </div>
 
                 <div class="text-right flex items-center justify-between sm:justify-end gap-4">
                   <div>
                     <div class="text-xl font-black text-slate-900 font-mono">
-                      {{ currencyStore.formatKRW(room.base_price_krw) }}
+                      {{ currencyStore.formatKRW(plan.price_krw) }}
                     </div>
-                    <div class="text-[10px] text-slate-400">1박 / 세금 포함</div>
+                    <div class="text-[10px] text-slate-400">1박 · 세금 별도</div>
                   </div>
                   <NuxtLink
-                    :to="`/hotels/booking?hotelId=${hotel.id}&roomId=${room.id}&rate=ROOM_ONLY`"
-                    class="px-5 py-2.5 bg-trip-blue hover:bg-blue-600 text-white text-xs font-black rounded-xl shadow-md transition whitespace-nowrap"
-                  >
-                    예약하기
-                  </NuxtLink>
-                </div>
-              </div>
-
-              <!-- 서브 플랜 2: 조식 포함 + 무료 취소 플랜 -->
-              <div class="p-4 rounded-2xl border-2 border-blue-500/30 bg-blue-50/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div class="space-y-1">
-                  <div class="font-bold text-sm text-trip-navy flex items-center gap-2">
-                    <span>🍳 뷔페 조식 2인 포함 + 무료 취소</span>
-                    <span class="text-[10px] px-2 py-0.5 bg-blue-600 text-white rounded font-bold">인기 1위</span>
-                  </div>
-                  <div class="text-xs text-slate-500 space-y-0.5">
-                    <div class="text-blue-700 font-bold">• 1층 레스토랑 인터내셔널 모닝 뷔페</div>
-                    <div class="text-emerald-600 font-semibold">• 당일 오후 14:00까지 위약금 0원 무료 취소</div>
-                  </div>
-                </div>
-
-                <div class="text-right flex items-center justify-between sm:justify-end gap-4">
-                  <div>
-                    <div class="text-xl font-black text-trip-blue font-mono">
-                      {{ currencyStore.formatKRW(room.base_price_krw + 35000) }}
-                    </div>
-                    <div class="text-[10px] text-slate-400">1박 / 조식 & 세금 포함</div>
-                  </div>
-                  <NuxtLink
-                    :to="`/hotels/booking?hotelId=${hotel.id}&roomId=${room.id}&rate=BREAKFAST_INCLUDED`"
+                    :to="{ path: '/checkout', query: { domain: 'HOTEL', itemId: hotel.id, unitId: room.id, ratePlanId: plan.id } }"
                     class="px-5 py-2.5 bg-trip-blue hover:bg-blue-600 text-white text-xs font-black rounded-xl shadow-md transition whitespace-nowrap"
                   >
                     예약하기
@@ -194,16 +195,14 @@ onMounted(async () => {
             </div>
 
             <div class="text-xs text-slate-400 flex items-center gap-2 pt-2">
-              <span>⚡ 즉시 확정</span>
-              <span>•</span>
-              <span>호텔 현장 결제 옵션 지원</span>
-              <span>•</span>
-              <span>getfortrip 보상 적립 대상</span>
+              <span>최종 결제 금액은 예약 단계에서 서버가 계산합니다 (세금 10% 포함)</span>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    <ReviewsSection domain="HOTEL" :target-id="hotel.id" />
 
     <!-- 5. 호텔 정책 & 부대시설 안내 -->
     <div class="bg-white rounded-3xl border border-slate-200/90 p-8 space-y-6">
@@ -232,5 +231,9 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+  </div>
+  <div v-else-if="notFound" class="max-w-xl mx-auto px-4 py-24 text-center">
+    <p class="text-sm font-semibold text-slate-700">요청하신 호텔을 찾을 수 없습니다.</p>
+    <NuxtLink to="/hotels/list" class="mt-4 inline-block rounded-xl bg-trip-blue px-4 py-2.5 text-sm font-semibold text-white">호텔 목록으로</NuxtLink>
   </div>
 </template>

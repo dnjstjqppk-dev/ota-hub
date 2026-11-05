@@ -1,7 +1,7 @@
 import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { rateLimit, requireUser } from "../lib/auth.ts";
-import { decryptField, encryptField, maskPassport, newId } from "../lib/crypto.ts";
+import { decryptField, encryptField, maskName, maskPassport, newId } from "../lib/crypto.ts";
 
 const NAME_EN = /^[A-Z][A-Z' -]{0,48}$/;
 
@@ -130,9 +130,17 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     const targetId = str(url.searchParams.get("targetId") || url.searchParams.get("target_id"), 100);
     const domain = str(url.searchParams.get("domain") || "HOTEL", 20).toUpperCase();
     const rows = targetId
-      ? await db.prepare("SELECT id, user_name, domain_type, target_id, rating, comment, verified_stay, created_at FROM reviews WHERE target_id = ? AND domain_type = ? ORDER BY created_at DESC LIMIT 50").bind(targetId, domain).all()
-      : await db.prepare("SELECT id, user_name, domain_type, target_id, rating, comment, verified_stay, created_at FROM reviews ORDER BY created_at DESC LIMIT 50").all();
-    return json({ success: true, reviews: rows.results, count: rows.results.length });
+      ? await db.prepare("SELECT id, user_name, domain_type, target_id, rating, comment, verified_stay, created_at FROM reviews WHERE target_id = ? AND domain_type = ? ORDER BY verified_stay DESC, created_at DESC LIMIT 50").bind(targetId, domain).all<any>()
+      : await db.prepare("SELECT id, user_name, domain_type, target_id, rating, comment, verified_stay, created_at FROM reviews ORDER BY created_at DESC LIMIT 50").all<any>();
+    const summary = targetId
+      ? await db.prepare("SELECT COUNT(*) AS count, ROUND(AVG(rating), 1) AS average, SUM(CASE WHEN verified_stay = 1 THEN 1 ELSE 0 END) AS verified FROM reviews WHERE target_id = ? AND domain_type = ?").bind(targetId, domain).first<any>()
+      : null;
+    // Reviewer names are public: show a masked name only.
+    const reviews = (rows.results || []).map((r: any) => ({ ...r, user_name: maskName(r.user_name), verified_stay: r.verified_stay === 1 }));
+    return json({
+      success: true, reviews, count: reviews.length,
+      summary: summary ? { count: Number(summary.count || 0), average: summary.average === null ? null : Number(summary.average), verifiedCount: Number(summary.verified || 0) } : null,
+    });
   }
   if (path === "/api/v1/reviews" && method === "POST") {
     const u = await requireUser(request, env);
@@ -146,8 +154,14 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     const bookingId = str(b.bookingId || b.booking_id, 64);
     let verified = 0;
     if (bookingId) {
-      const bk = await db.prepare("SELECT user_id, item_id, status FROM bookings WHERE id = ?").bind(bookingId).first<any>();
-      if (bk && bk.user_id === u.id && bk.item_id === targetId && ["VOUCHER_ISSUED", "TICKETED", "COMPLETED"].includes(bk.status)) verified = 1;
+      // A booking may back exactly one review, and only the customer's own fulfilled booking of this product.
+      const bk = await db.prepare("SELECT user_id, item_id, domain_type, status FROM bookings WHERE id = ?").bind(bookingId).first<any>();
+      const eligible = bk && bk.user_id === u.id && bk.item_id === targetId && bk.domain_type === domain && ["VOUCHER_ISSUED", "TICKETED", "COMPLETED"].includes(bk.status);
+      if (!eligible) throw new HttpError(400, "REVIEW_BOOKING_NOT_ELIGIBLE", "이용 완료된 본인 예약에 대해서만 인증 후기를 작성할 수 있습니다.");
+      if (await db.prepare("SELECT id FROM reviews WHERE booking_id = ?").bind(bookingId).first()) {
+        throw new HttpError(409, "ALREADY_REVIEWED", "이 예약에 대한 후기를 이미 작성했습니다.");
+      }
+      verified = 1;
     }
     const id = newId("rev");
     await db.prepare("INSERT INTO reviews (id, user_id, user_name, domain_type, target_id, booking_id, rating, comment, verified_stay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")

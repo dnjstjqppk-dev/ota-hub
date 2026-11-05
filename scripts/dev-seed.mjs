@@ -39,6 +39,7 @@ const hash = await pbkdf2Hash(adminPassword);
 
 console.log("1/3 loading catalog seed (local) ...");
 d1(["--file", "database/seed_catalogs_remote.sql"]);
+d1(["--file", "database/seed_transfers.sql"]);
 
 const sql = `
 UPDATE suppliers SET adapter = 'simulator', integration_status = 'NOT_INTEGRATED', notes = 'LOCAL DEV: simulator adapter' ;

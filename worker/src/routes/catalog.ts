@@ -6,7 +6,7 @@
  */
 import type { Env } from "../env.ts";
 import { json } from "../lib/http.ts";
-import { supplierBookabilityMap, type Bookability } from "../services/catalog.ts";
+import { hotelRatePlans, supplierBookabilityMap, type Bookability } from "../services/catalog.ts";
 
 const PRICE_NOTICE = "참고 가격 (공급사 실시간 검증 전)";
 
@@ -304,7 +304,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
         ...row,
         images,
         amenities,
-        rooms,
+        rooms: (Array.isArray(rooms) ? rooms : []).map((r: any) => ({ ...r, rate_plans: hotelRatePlans(row, r) })),
         free_cancellation: Boolean(row.free_cancellation),
         free_breakfast: Boolean(row.free_breakfast),
       };

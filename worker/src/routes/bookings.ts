@@ -27,14 +27,14 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
   if (path === "/api/v1/bookings" && method === "GET") {
     const user = await requireUser(request, env);
     const rows = await env.DB.prepare(
-      `SELECT id, booking_number, domain_type, title, status, total_minor, total_price, currency, payment_status, service_start, service_end, created_at
+      `SELECT id, booking_number, domain_type, item_id, title, status, total_minor, total_price, currency, payment_status, service_start, service_end, created_at
        FROM bookings WHERE user_id = ? ORDER BY created_at DESC LIMIT 100`,
     ).bind(user.id).all<any>();
     const { STATUS_LABEL_KO } = await import("../domain/state-machine.ts");
     return json({
       success: true,
       bookings: (rows.results || []).map((r: any) => ({
-        id: r.id, bookingNumber: r.booking_number, domain: r.domain_type, title: r.title, status: r.status,
+        id: r.id, bookingNumber: r.booking_number, domain: r.domain_type, itemId: r.item_id, title: r.title, status: r.status,
         statusLabel: (STATUS_LABEL_KO as any)[r.status] || r.status,
         totalMinor: r.total_minor ?? Math.round(Number(r.total_price || 0)), currency: r.currency,
         paymentStatus: r.payment_status, serviceStart: r.service_start, serviceEnd: r.service_end, createdAt: r.created_at,

@@ -47,3 +47,20 @@ test("ledger journals always balance; cancel-after-confirm nets customer deposit
   assert.equal(deposits, 0);
   assert.equal(L.cancellationFeeRetained("b", 0), null);
 });
+
+test("public reviewer names are masked", async () => {
+  const { maskName } = await import("../../src/lib/crypto.ts");
+  assert.equal(maskName("김민지"), "김*지");
+  assert.equal(maskName("이수"), "이*");
+  assert.equal(maskName("Kim Minji"), "K*******i");
+  assert.equal(maskName(""), "여행자");
+  assert.equal(maskName(null), "여행자");
+});
+
+test("sitemap: absolute, de-duplicated, XML-escaped URLs", async () => {
+  const { buildSitemap } = await import("../../src/routes/seo.ts");
+  const xml = buildSitemap("https://getfortrip.com/", ["", "/hotels", "/hotels", "/a&b"]);
+  assert.equal((xml.match(/<url>/g) || []).length, 3);
+  assert.ok(xml.includes("<loc>https://getfortrip.com</loc>"));
+  assert.ok(xml.includes("<loc>https://getfortrip.com/a&amp;b</loc>"));
+});

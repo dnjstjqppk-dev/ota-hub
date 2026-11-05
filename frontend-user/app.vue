@@ -29,32 +29,9 @@ useHead({
   ]
 })
 
-onMounted(async () => {
+onMounted(() => {
+  // initAuth restores the session and verifies the token with /auth/me (logs out on 401).
   authStore.initAuth()
-  if (authStore.token && authStore.token !== 'demo_jwt_token_sample_2026') {
-    try {
-      const res = await fetch('/api/v1/auth/me', {
-        headers: { Authorization: `Bearer ${authStore.token}` }
-      })
-      if (res.ok) {
-        const data = await res.json()
-        authStore.user = {
-          id: data.id,
-          email: data.email,
-          fullName: data.fullName || data.full_name,
-          phoneNumber: data.phoneNumber || data.phone_number,
-          tier: data.tier || 'SILVER',
-          tripCoins: data.tripCoins ?? data.trip_coins ?? 0,
-          avatarUrl: data.avatarUrl || data.avatar_url,
-        }
-        localStorage.setItem('getfortrip_user', JSON.stringify(authStore.user))
-      } else if (res.status === 401) {
-        authStore.logout()
-      }
-    } catch (e) {
-      // Offline fallback
-    }
-  }
 })
 </script>
 

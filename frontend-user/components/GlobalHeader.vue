@@ -43,7 +43,7 @@ const closeDrawer = () => {
   <header class="bg-white border-b border-trip-border sticky top-0 z-40 shadow-sm">
     <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
       <!-- 좌측: 모바일 햄버거 메뉴 + 브랜드 로고 -->
-      <div class="flex items-center gap-3 lg:gap-8 flex-shrink-0">
+      <div class="flex items-center gap-3 lg:gap-8 min-w-0 flex-1">
         <!-- 모바일 햄버거 버튼 -->
         <button
           @click="isMobileDrawerOpen = true"
@@ -60,7 +60,7 @@ const closeDrawer = () => {
         </NuxtLink>
 
         <!-- 데스크톱 GNB 카테고리 네비게이션 -->
-        <nav class="hidden md:flex items-center gap-2 lg:gap-4 text-xs font-bold text-trip-navy whitespace-nowrap overflow-x-auto py-1">
+        <nav class="hidden md:flex min-w-0 items-center gap-2 lg:gap-4 text-xs font-bold text-trip-navy whitespace-nowrap overflow-x-auto py-1">
           <NuxtLink to="/hotels" class="hover:text-trip-blue transition whitespace-nowrap flex-shrink-0">호텔</NuxtLink>
           <NuxtLink to="/flights" class="hover:text-trip-blue transition whitespace-nowrap flex-shrink-0">항공권</NuxtLink>
           <NuxtLink to="/trains" class="hover:text-trip-blue transition whitespace-nowrap flex-shrink-0">기차표</NuxtLink>
@@ -83,7 +83,7 @@ const closeDrawer = () => {
       <!-- 우측 다통화 / 마이 / 회원 상태 -->
       <div class="flex items-center gap-2 lg:gap-3 text-xs font-semibold flex-shrink-0 whitespace-nowrap">
         <!-- 다통화 선택기 -->
-        <div class="relative flex-shrink-0">
+        <div class="relative flex-shrink-0 hidden sm:block">
           <button
             @click="showCurrencyDropdown = !showCurrencyDropdown"
             class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-trip-blue text-trip-navy font-bold transition whitespace-nowrap text-xs"
@@ -165,7 +165,7 @@ const closeDrawer = () => {
         <NuxtLink v-if="authStore.isLoggedIn && authStore.user" to="/rewards" class="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-700 font-bold whitespace-nowrap flex-shrink-0" title="getfortrip 멤버십 리워드">
           <span class="w-2 h-2 rounded-full bg-amber-500"></span>
           <span>{{ authStore.user.tier }}</span>
-          <span class="text-amber-800 font-mono">{{ authStore.user.tripCoins.toLocaleString() }}G</span>
+          <span class="text-amber-800 font-mono">{{ Number(authStore.user.tripCoins ?? 0).toLocaleString() }}G</span>
         </NuxtLink>
 
         <!-- 내 예약 링크 (데스크톱) -->
@@ -175,7 +175,8 @@ const closeDrawer = () => {
 
         <!-- 사용자 프로필 링크 -->
         <NuxtLink v-if="authStore.isLoggedIn && authStore.user" to="/my" class="flex items-center gap-1.5 pl-1.5 sm:pl-2 sm:border-l sm:border-slate-200 flex-shrink-0 whitespace-nowrap hover:opacity-80 transition group" title="사용자 콘솔 (마이페이지)">
-          <img :src="authStore.user.avatarUrl" class="w-8 h-8 rounded-full border border-slate-200 object-cover flex-shrink-0 group-hover:border-trip-blue transition" />
+          <img v-if="authStore.user.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-8 h-8 rounded-full border border-slate-200 object-cover flex-shrink-0 group-hover:border-trip-blue transition" />
+          <span v-else class="w-8 h-8 text-xs rounded-full bg-trip-blue text-white font-black flex items-center justify-center flex-shrink-0" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
           <span class="hidden md:inline font-bold text-trip-navy text-xs whitespace-nowrap group-hover:text-trip-blue transition">{{ authStore.user.fullName }}</span>
         </NuxtLink>
         <NuxtLink v-else to="/my" class="flex items-center gap-1.5 pl-1.5 sm:pl-2 sm:border-l sm:border-slate-200 flex-shrink-0 whitespace-nowrap hover:opacity-80 transition group text-xs font-bold text-slate-700 hover:text-trip-blue" title="로그인 및 마이페이지">
@@ -202,7 +203,8 @@ const closeDrawer = () => {
           </div>
 
           <NuxtLink v-if="authStore.isLoggedIn && authStore.user" to="/my" @click="closeDrawer" class="flex items-center gap-3 pt-2">
-            <img :src="authStore.user.avatarUrl" class="w-12 h-12 rounded-full border-2 border-amber-400 object-cover" />
+            <img v-if="authStore.user.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-12 h-12 rounded-full border-2 border-amber-400 object-cover" />
+            <span v-else class="w-12 h-12 text-base rounded-full bg-trip-blue text-white font-black flex items-center justify-center flex-shrink-0" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
             <div class="space-y-0.5">
               <div class="font-black text-sm flex items-center gap-1.5">
                 <span>{{ authStore.user.fullName }} 님</span>
@@ -211,7 +213,7 @@ const closeDrawer = () => {
                 </span>
               </div>
               <div class="text-[11px] text-amber-300 font-mono">
-                보유 코인: {{ authStore.user.tripCoins.toLocaleString() }}G
+                보유 코인: {{ Number(authStore.user.tripCoins ?? 0).toLocaleString() }}G
               </div>
             </div>
           </NuxtLink>

@@ -29,12 +29,17 @@ export const useAuthStore = defineStore('auth', {
       try {
         const storedUser = localStorage.getItem('getfortrip_user')
         const storedToken = localStorage.getItem('getfortrip_token')
+        if (storedToken === 'demo_jwt_token_sample_2026') {
+          this.logout()
+          return
+        }
         if (storedUser && storedToken) {
-          this.user = JSON.parse(storedUser)
+          const parsed = JSON.parse(storedUser) || {}
+          this.user = { ...parsed, tripCoins: Number(parsed.tripCoins ?? 0) || 0 }
           this.token = storedToken
           this.isLoggedIn = true
           // Verify and synchronize live profile/coins with server
-          if (storedToken !== 'demo_jwt_token_sample_2026') {
+          {
             const res = await fetch(useApiUrl('/auth/me'), {
               headers: { Authorization: `Bearer ${storedToken}` }
             })
@@ -63,23 +68,11 @@ export const useAuthStore = defineStore('auth', {
         console.warn('Failed to restore auth from localStorage', e)
       }
     },
-    loginAsDemo() {
-      const demoUser: UserProfile = {
-        id: 'usr-demo-vip',
-        email: 'vip@getfortrip.com',
-        fullName: '김여행 (VIP 체험)',
-        phoneNumber: '010-1234-5678',
-        phone: '010-1234-5678',
-        tier: 'DIAMOND',
-        tripCoins: 28500,
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'
-      }
-      this.login(demoUser, 'demo_jwt_token_sample_2026')
-    },
     login(userObj: UserProfile, token: string = '') {
       this.user = {
         ...userObj,
-        phone: userObj.phone || userObj.phoneNumber || ''
+        phone: userObj.phone || userObj.phoneNumber || '',
+        tripCoins: Number(userObj.tripCoins ?? 0) || 0
       }
       this.isLoggedIn = true
       this.token = token

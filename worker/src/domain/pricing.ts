@@ -19,6 +19,8 @@ export interface CatalogProduct {
   itemId: string;
   /** Sub-unit such as a hotel room type id. */
   unitId: string | null;
+  /** Hotel rate plan id (price/meal/cancellation variant of a room). Does not split inventory. */
+  ratePlanId?: string | null;
   title: string;
   supplierId: string;
   currency: "KRW";
@@ -31,6 +33,8 @@ export interface CatalogProduct {
   instantConfirmation: boolean;
   /** Clock time "HH:MM" for scheduled products (flights / trains). */
   departureClock: string | null;
+  /** FLIGHT: origin / destination airport codes, used to validate round trips. */
+  route?: { from: string; to: string } | null;
 }
 
 export interface Travelers {
@@ -45,6 +49,11 @@ export interface QuoteParams {
   /** Service end date YYYY-MM-DD (check-out, drop-off). Required for HOTEL and CAR. */
   endDate?: string | null;
   rooms?: number;
+  /** HOTEL only: catalog rate plan id; omitted means the room's first plan. */
+  ratePlanId?: string | null;
+  /** FLIGHT round trip: inbound flight id and its date. */
+  returnItemId?: string | null;
+  returnDate?: string | null;
   travelers: Travelers;
 }
 
@@ -176,15 +185,15 @@ export function promotionDiscount(promo: Promotion | null, subtotalMinor: number
   return Math.max(0, Math.min(discount, subtotalMinor));
 }
 
-/**
- * Compute a quote. `now` is injected for determinism in tests.
- */
-export function computeQuote(
-  product: CatalogProduct,
-  rawParams: QuoteParams,
-  promo: Promotion | null,
-  now: Date,
-): QuoteResult {
+interface PricedLines {
+  lines: QuoteLine[];
+  pricedUnits: number;
+  startMs: number;
+  endMs: number;
+}
+
+/** Base (pre-tax) price lines of one product for the given parameters. Validates dates and occupancy. */
+function priceLines(product: CatalogProduct, rawParams: QuoteParams, now: Date): PricedLines {
   const travelers = normalizeTravelers(rawParams.travelers);
   const startMs = parseDate("이용 시작", rawParams.startDate);
   const todayMs = Date.parse(now.toISOString().slice(0, 10) + "T00:00:00Z");
@@ -252,8 +261,13 @@ export function computeQuote(
     }
   }
 
+  return { lines, pricedUnits, startMs, endMs };
+}
+
+/** Tax, service fee and (one) promotion over the combined base lines. */
+function finalizeQuote(domain: Domain, lines: QuoteLine[], promo: Promotion | null, now: Date) {
   const baseMinor = assertMinor(lines.reduce((s, l) => s + l.amountMinor, 0));
-  const taxMinor = percentOf(baseMinor, TAX_BPS[product.domain]);
+  const taxMinor = percentOf(baseMinor, TAX_BPS[domain]);
   const feeMinor = percentOf(baseMinor, SERVICE_FEE_BPS);
   if (taxMinor > 0) lines.push({ code: "TAX", label: "세금 및 봉사료", quantity: 1, unitMinor: taxMinor, amountMinor: taxMinor });
   if (feeMinor > 0) lines.push({ code: "SERVICE_FEE", label: "서비스 수수료", quantity: 1, unitMinor: feeMinor, amountMinor: feeMinor });
@@ -265,23 +279,82 @@ export function computeQuote(
   }
   const totalMinor = assertMinor(subtotal - discountMinor);
   if (totalMinor <= 0) throw new QuoteError("INVALID_TOTAL", "결제 금액이 0원 이하가 될 수 없습니다.");
+  return { baseMinor, taxMinor, feeMinor, discountMinor, totalMinor, promotionCode: discountMinor > 0 ? promo!.code : null };
+}
 
-  const serviceStart = new Date(startMs).toISOString().slice(0, 10);
-  const serviceEnd = new Date(endMs).toISOString().slice(0, 10);
+const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
+/**
+ * Compute a quote. `now` is injected for determinism in tests.
+ */
+export function computeQuote(
+  product: CatalogProduct,
+  rawParams: QuoteParams,
+  promo: Promotion | null,
+  now: Date,
+): QuoteResult {
+  const p = priceLines(product, rawParams, now);
+  const lines = [...p.lines];
+  const f = finalizeQuote(product.domain, lines, promo, now);
   return {
     currency: "KRW",
     lines,
-    baseMinor,
-    taxMinor,
-    feeMinor,
-    discountMinor,
-    totalMinor,
-    pricedUnits,
-    serviceStart,
-    serviceEnd,
-    cancellationPolicy: cancellationPolicyFor(product, startMs),
-    promotionCode: discountMinor > 0 ? promo!.code : null,
+    ...f,
+    pricedUnits: p.pricedUnits,
+    serviceStart: isoDay(p.startMs),
+    serviceEnd: isoDay(p.endMs),
+    cancellationPolicy: cancellationPolicyFor(product, p.startMs),
+  };
+}
+
+export interface LegResult {
+  itemId: string;
+  serviceDate: string;
+  baseMinor: number;
+}
+
+/**
+ * Round-trip flight: two legs priced from the catalog, combined into one order.
+ * Tax/fee are applied to the combined fare and a promotion is applied once.
+ * Both legs must be from the same supplier (one PNR) and fly the reverse route.
+ */
+export function computeRoundTripQuote(
+  outbound: CatalogProduct,
+  inbound: CatalogProduct,
+  rawParams: QuoteParams,
+  promo: Promotion | null,
+  now: Date,
+): QuoteResult & { legs: [LegResult, LegResult] } {
+  if (outbound.domain !== "FLIGHT" || inbound.domain !== "FLIGHT") throw new QuoteError("ROUND_TRIP_FLIGHT_ONLY", "왕복 예약은 항공권에만 적용됩니다.");
+  if (outbound.supplierId !== inbound.supplierId) {
+    throw new QuoteError("ROUND_TRIP_SUPPLIER_MISMATCH", "가는 편과 오는 편의 판매 공급사가 달라 한 번에 예약할 수 없습니다. 각각 편도로 예약해주세요.");
+  }
+  if (outbound.route && inbound.route && (outbound.route.from !== inbound.route.to || outbound.route.to !== inbound.route.from)) {
+    throw new QuoteError("ROUND_TRIP_ROUTE_MISMATCH", "오는 편은 가는 편의 역방향 노선이어야 합니다.");
+  }
+  const out = priceLines(outbound, rawParams, now);
+  const ret = priceLines(inbound, { ...rawParams, startDate: rawParams.returnDate || "" }, now);
+  if (ret.startMs < out.startMs) throw new QuoteError("INVALID_RETURN_DATE", "오는 날은 가는 날과 같거나 이후여야 합니다.");
+  const tag = (l: QuoteLine, code: string, label: string): QuoteLine => ({ ...l, code: `${code}_${l.code}`, label: `${label} · ${l.label}` });
+  const lines = [...out.lines.map((l) => tag(l, "OUT", "가는 편")), ...ret.lines.map((l) => tag(l, "RET", "오는 편"))];
+  const f = finalizeQuote("FLIGHT", lines, promo, now);
+  // The stricter policy of the two legs governs the whole order; the clock starts at departure.
+  const outPolicy = cancellationPolicyFor(outbound, out.startMs);
+  const retPolicy = cancellationPolicyFor(inbound, ret.startMs);
+  const cancellationPolicy = outPolicy.type === "NON_REFUNDABLE" || retPolicy.type === "NON_REFUNDABLE" ? (outPolicy.type === "NON_REFUNDABLE" ? outPolicy : retPolicy) : outPolicy;
+  const sum = (ls: QuoteLine[]) => ls.reduce((s, l) => s + l.amountMinor, 0);
+  return {
+    currency: "KRW",
+    lines,
+    ...f,
+    pricedUnits: out.pricedUnits,
+    serviceStart: isoDay(out.startMs),
+    serviceEnd: isoDay(ret.startMs),
+    cancellationPolicy,
+    legs: [
+      { itemId: outbound.itemId, serviceDate: isoDay(out.startMs), baseMinor: sum(out.lines) },
+      { itemId: inbound.itemId, serviceDate: isoDay(ret.startMs), baseMinor: sum(ret.lines) },
+    ],
   };
 }
 

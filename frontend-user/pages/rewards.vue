@@ -10,7 +10,8 @@ const authStore = useAuthStore()
     <div v-if="authStore.isLoggedIn && authStore.user" class="bg-gradient-to-r from-slate-900 via-trip-navy to-slate-800 rounded-3xl p-8 text-white space-y-6 shadow-2xl relative overflow-hidden">
       <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div class="flex items-center gap-4">
-          <img :src="authStore.user.avatarUrl" class="w-16 h-16 rounded-full border-2 border-amber-400 object-cover" />
+          <img v-if="authStore.user.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-16 h-16 rounded-full border-2 border-amber-400 object-cover" />
+        <span v-else class="w-16 h-16 rounded-full bg-trip-blue text-white text-xl font-black flex items-center justify-center" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
           <div>
             <div class="flex items-center gap-2">
               <h1 class="text-2xl font-black">{{ authStore.user.fullName }} 님</h1>
@@ -62,9 +63,6 @@ const authStore = useAuthStore()
         <NuxtLink to="/login" class="px-6 py-3 bg-trip-blue hover:bg-blue-600 text-white font-black rounded-xl text-xs shadow-md transition w-full sm:w-auto">
           로그인 및 혜택 확인
         </NuxtLink>
-        <button @click="authStore.loginAsDemo()" class="px-6 py-3 bg-white/10 hover:bg-white/20 text-amber-300 border border-amber-400/30 font-bold rounded-xl text-xs transition w-full sm:w-auto">
-          데모 계정으로 즉시 체험
-        </button>
       </div>
     </div>
 
