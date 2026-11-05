@@ -27,7 +27,9 @@ async function api(method, path, { token, body, headers = {} } = {}) {
 
 function sql(command) {
   const isWin = process.platform === "win32";
-  const args = ["wrangler", "d1", "execute", "ota_local", "--local", "-c", "wrangler.local.jsonc", "--json", "--command", command];
+  // E2E_PERSIST_TO: run against an isolated local D1 (same value as `wrangler dev --persist-to`).
+  const persist = process.env.E2E_PERSIST_TO ? ["--persist-to", process.env.E2E_PERSIST_TO] : [];
+  const args = ["wrangler", "d1", "execute", "ota_local", "--local", "-c", "wrangler.local.jsonc", ...persist, "--json", "--command", command];
   const out = execFileSync(isWin ? "cmd.exe" : "npx", isWin ? ["/c", "npx", ...args] : args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   return JSON.parse(out)[0].results;
 }
@@ -428,4 +430,28 @@ test("ledger: every journal balanced; no payment/refund/deposit mismatch (run la
   assert.deepEqual(r.data.refundMismatch, []);
   assert.deepEqual(r.data.strandedDeposits, []);
   assert.equal(r.data.ok, true);
+});
+
+test("autocomplete: places carry codes/ids, typos and 초성 match, wildcards escaped, city codes expand", async () => {
+  const s = async (q, domain) => (await api("GET", `/api/v1/search/suggest?q=${encodeURIComponent(q)}&domain=${domain}`)).data;
+  const icn = await s("ICN", "flights");
+  assert.equal(icn.data[0].id, "apt_ICN");
+  assert.equal(icn.data[0].code, "ICN");
+  assert.equal(icn.meta.degraded, false);
+
+  assert.equal((await s("tokio", "hotels")).data[0].id, "cty_TYO");
+  assert.equal((await s("ㄷㅋ", "hotels")).data[0].id, "cty_TYO");
+  for (const it of (await s("", "trains")).data) assert.equal(it.place_type, "STATION");
+  assert.equal((await s("100%_", "all")).count, 0, "LIKE wildcards must be escaped");
+
+  const hotel = (await s("하얏트", "hotels")).data.find((x) => x.kind === "product");
+  assert.ok(hotel && hotel.target_url === `/hotels/detail/${encodeURIComponent(hotel.id)}`);
+  for (const it of (await s("도쿄", "all")).data) assert.ok(!("count_info" in it), "no fabricated count labels");
+
+  const port = (await s("부산항", "cruise")).data.find((x) => x.place_type === "PORT");
+  assert.equal(port.target_url, null);
+
+  const f = (await api("GET", "/api/v1/flights?origin=ICN&dest=TYO")).data;
+  const arr = (f.flights || f.data || []).map((x) => x.arrival_airport);
+  assert.ok(arr.length > 0 && arr.every((a) => a === "NRT" || a === "HND"), `TYO must expand to NRT/HND, got ${arr}`);
 });

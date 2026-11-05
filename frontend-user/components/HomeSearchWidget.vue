@@ -1,369 +1,185 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+/**
+ * Home search console (design system "Horizon").
+ * One tab per bookable product line; every place field is a SearchAutocomplete backed by
+ * /search/suggest. Dates default relative to today (set on the client so prerendered HTML
+ * never ships a stale date) and are validated before navigating.
+ */
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import SearchAutocomplete from './SearchAutocomplete.vue'
 
-type TabType = 'hotels' | 'flights' | 'trains' | 'cars' | 'transfers' | 'activities' | 'packages'
-const activeTab = ref<TabType>('hotels')
-
-// 1. 숙소 상태값
-const hotelCity = ref('도쿄')
-const checkIn = ref('2026-11-01')
-const checkOut = ref('2026-11-03')
-const guests = ref({ adults: 2, rooms: 1 })
-
-// 2. 항공권 상태값
-const flightOrigin = ref('인천국제공항 (ICN)')
-const flightDest = ref('도쿄 하네다 (HND)')
-const flightDate = ref('2026-11-01')
-
-// 3. 기차표 상태값
-const trainDepart = ref('서울역 (Seoul)')
-const trainArrival = ref('부산역 (Busan)')
-const trainDate = ref('2026-11-01')
-
-// 4. 렌터카 상태값
-const carPickupLocation = ref('제주공항 렌터카 셔틀 스테이션')
-const carPickupDate = ref('2026-11-01')
-const carReturnDate = ref('2026-11-03')
-
-// 5. 공항 픽업 상태값
-const transferAirport = ref('인천국제공항 T1/T2')
-const transferHotel = ref('명동 롯데호텔 서울')
-
-// 6. 투어·티켓 / 액티비티 / eSIM 상태값
-const activityKeyword = ref('유니버설 스튜디오 재팬 (USJ)')
-
-// 7. 항공+호텔 패키지 상태값
-const packageDest = ref('도쿄 (Tokyo)')
+type Tab = 'hotels' | 'flights' | 'packages' | 'activities' | 'trains' | 'cars' | 'transfers'
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: 'hotels', label: '호텔', icon: 'hotel' },
+  { id: 'flights', label: '항공권', icon: 'flight' },
+  { id: 'packages', label: '항공+호텔', icon: 'package' },
+  { id: 'activities', label: '투어·티켓', icon: 'ticket' },
+  { id: 'trains', label: '기차', icon: 'train' },
+  { id: 'cars', label: '렌터카', icon: 'car' },
+  { id: 'transfers', label: '공항 이동', icon: 'transfer' }
+]
 
 const router = useRouter()
+const tab = ref<Tab>('hotels')
+const errors = ref<Record<string, string>>({})
 
-const handleSearch = () => {
-  if (activeTab.value === 'hotels') {
-    router.push({
-      path: '/hotels/list',
-      query: {
-        city: hotelCity.value,
-        checkIn: checkIn.value,
-        checkOut: checkOut.value,
-        adults: guests.value.adults,
-        rooms: guests.value.rooms
-      }
-    })
-  } else if (activeTab.value === 'flights') {
-    router.push({
-      path: '/flights/search',
-      query: {
-        origin: flightOrigin.value,
-        dest: flightDest.value,
-        date: flightDate.value
-      }
-    })
-  } else if (activeTab.value === 'trains') {
-    router.push({
-      path: '/trains/search',
-      query: {
-        dep: trainDepart.value,
-        arr: trainArrival.value,
-        date: trainDate.value
-      }
-    })
-  } else if (activeTab.value === 'cars') {
-    router.push({
-      path: '/cars/list',
-      query: {
-        city: carPickupLocation.value,
-        pickupDate: carPickupDate.value,
-        returnDate: carReturnDate.value
-      }
-    })
-  } else if (activeTab.value === 'transfers') {
-    router.push({
-      path: '/transfers/list',
-      query: {
-        airport: transferAirport.value,
-        destination: transferHotel.value
-      }
-    })
-  } else if (activeTab.value === 'activities') {
-    router.push({
-      path: '/things-to-do',
-      query: {
-        q: activityKeyword.value
-      }
-    })
-  } else if (activeTab.value === 'packages') {
-    router.push({
-      path: '/packages/list',
-      query: {
-        dest: packageDest.value
-      }
-    })
+const f = reactive({
+  city: '', checkIn: '', checkOut: '',
+  adults: 2, children: 0, rooms: 1,
+  origin: '', dest: '', flightDate: '',
+  pkgOrigin: '', pkgDest: '',
+  keyword: '',
+  dep: '', arr: '', trainDate: '',
+  carPlace: '', carFrom: '', carTo: '',
+  airport: '', area: '', transferDate: ''
+})
+
+const today = ref('')
+function iso(d: Date) { return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) }
+function plus(days: number) { const d = new Date(); d.setDate(d.getDate() + days); return iso(d) }
+
+onMounted(() => {
+  today.value = plus(0)
+  f.checkIn = plus(14); f.checkOut = plus(16)
+  f.flightDate = plus(14); f.trainDate = plus(14); f.transferDate = plus(14)
+  f.carFrom = plus(14); f.carTo = plus(17)
+})
+
+const nights = computed(() => {
+  if (!f.checkIn || !f.checkOut) return 0
+  return Math.round((Date.parse(f.checkOut) - Date.parse(f.checkIn)) / 86400000)
+})
+
+function swap(a: 'origin' | 'dep', b: 'dest' | 'arr') { const t = f[a]; f[a] = f[b]; f[b] = t }
+
+// ------------------------------------------------------------------ submit
+function need(field: string, value: string, msg: string) { if (!value.trim()) errors.value[field] = msg }
+function notPast(field: string, value: string) { if (value && today.value && value < today.value) errors.value[field] = '오늘 이후 날짜를 선택해 주세요.' }
+
+function submit() {
+  errors.value = {}
+  const t = tab.value
+  if (t === 'hotels') {
+    need('city', f.city, '목적지를 입력해 주세요.')
+    notPast('checkIn', f.checkIn)
+    if (nights.value < 1) errors.value.checkOut = '체크아웃은 체크인 다음 날 이후여야 해요.'
+    else if (nights.value > 30) errors.value.checkOut = '최대 30박까지 검색할 수 있어요.'
+  } else if (t === 'flights') {
+    need('origin', f.origin, '출발지를 입력해 주세요.'); need('dest', f.dest, '도착지를 입력해 주세요.')
+    if (f.origin && f.origin.trim() === f.dest.trim()) errors.value.dest = '출발지와 도착지가 같아요.'
+    notPast('flightDate', f.flightDate)
+  } else if (t === 'packages') {
+    need('pkgDest', f.pkgDest, '여행지를 입력해 주세요.')
+  } else if (t === 'activities') {
+    need('keyword', f.keyword, '도시나 명소를 입력해 주세요.')
+  } else if (t === 'trains') {
+    need('dep', f.dep, '출발역을 입력해 주세요.'); need('arr', f.arr, '도착역을 입력해 주세요.')
+    if (f.dep && f.dep.trim() === f.arr.trim()) errors.value.arr = '출발역과 도착역이 같아요.'
+    notPast('trainDate', f.trainDate)
+  } else if (t === 'cars') {
+    need('carPlace', f.carPlace, '인수 장소를 입력해 주세요.')
+    notPast('carFrom', f.carFrom)
+    if (f.carTo && f.carFrom && f.carTo <= f.carFrom) errors.value.carTo = '반납일은 인수일 이후여야 해요.'
+  } else if (t === 'transfers') {
+    need('airport', f.airport, '공항을 입력해 주세요.')
+    notPast('transferDate', f.transferDate)
   }
+  if (Object.keys(errors.value).length) return
+
+  const go = (path: string, query: Record<string, string | number>) => router.push({ path, query })
+  if (t === 'hotels') go('/hotels/list', { city: f.city, checkIn: f.checkIn, checkOut: f.checkOut, adults: f.adults, children: f.children, rooms: f.rooms })
+  else if (t === 'flights') go('/flights/search', { origin: f.origin, dest: f.dest, date: f.flightDate })
+  else if (t === 'packages') go('/packages/list', { city: f.pkgDest, ...(f.pkgOrigin ? { origin: f.pkgOrigin } : {}) })
+  else if (t === 'activities') go('/things-to-do', { q: f.keyword })
+  else if (t === 'trains') go('/trains/search', { dep: f.dep, arr: f.arr, date: f.trainDate })
+  else if (t === 'cars') go('/cars/list', { city: f.carPlace, pickupDate: f.carFrom, returnDate: f.carTo })
+  else go('/transfers/list', { airport: f.airport, ...(f.area ? { destination: f.area } : {}), date: f.transferDate })
 }
+
+function pickTab(t: Tab) { tab.value = t; errors.value = {} }
+const BOX = 'relative flex min-h-[64px] flex-col justify-center rounded-2xl border bg-surface px-4 py-2.5 transition-colors focus-within:border-primary focus-within:shadow-focus'
+const box = (field: string) => [BOX, errors.value[field] ? 'border-danger' : 'border-line hover:border-line-strong']
+const LABEL = 'mb-0.5 block text-2xs font-semibold uppercase tracking-wide text-ink-subtle'
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto -mt-8 md:-mt-20 relative z-30 px-3 md:px-4">
-    <div class="bg-white rounded-2xl md:rounded-3xl shadow-xl md:shadow-2xl overflow-visible border border-slate-200/80">
-      <!-- 7대 도메인 탭 스위처 -->
-      <div class="flex border-b border-slate-100 bg-slate-50/80 overflow-x-auto scrollbar-none rounded-t-2xl md:rounded-t-3xl">
-        <button
-          v-for="t in [
-            { id: 'hotels', label: '호텔', icon: '🏨' },
-            { id: 'flights', label: '항공권', icon: '✈️' },
-            { id: 'trains', label: '기차표', icon: '🚄' },
-            { id: 'cars', label: '렌터카', icon: '🚗' },
-            { id: 'transfers', label: '공항픽업', icon: '🚐' },
-            { id: 'activities', label: '투어·티켓', icon: '🎟️' },
-            { id: 'packages', label: '항공+호텔', icon: '🏖️' }
-          ]"
-          :key="t.id"
-          @click="activeTab = t.id as TabType"
-          :class="[
-            'flex items-center gap-1.5 md:gap-2 px-3.5 md:px-6 py-3 md:py-4 font-bold text-xs md:text-sm transition-all whitespace-nowrap',
-            activeTab === t.id
-              ? 'bg-white text-blue-600 border-b-2 border-blue-600 shadow-sm'
-              : 'text-slate-600 hover:text-blue-600'
-          ]"
-        >
-          <span class="text-sm md:text-base">{{ t.icon }}</span>
-          <span>{{ t.label }}</span>
-        </button>
-      </div>
-
-      <!-- 동적 검색 폼 영역 -->
-      <div class="p-3.5 md:p-6">
-        <!-- 1. 호텔 (Hotels) 검색 폼 -->
-        <div v-if="activeTab === 'hotels'" class="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4 items-center">
-          <div class="border border-slate-200 rounded-xl md:rounded-2xl p-2.5 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-1">목적지 / 호텔명</label>
-            <SearchAutocomplete
-              v-model="hotelCity"
-              domain="hotels"
-              placeholder="도시, 랜드마크, 호텔명 검색"
-              icon="search"
-              inputClass="w-full font-bold text-slate-900 outline-none text-sm bg-transparent border-none pl-6 pr-2 py-0 focus:ring-0 shadow-none"
-            />
-          </div>
-
-          <div class="border border-slate-200 rounded-xl md:rounded-2xl p-2.5 md:p-3 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-0.5">체크인 - 체크아웃</label>
-            <div class="flex items-center gap-1.5 md:gap-2 text-sm font-bold text-slate-900">
-              <input v-model="checkIn" type="date" class="min-w-0 flex-1 outline-none text-xs font-bold bg-transparent" />
-              <span class="text-slate-400">~</span>
-              <input v-model="checkOut" type="date" class="min-w-0 flex-1 outline-none text-xs font-bold bg-transparent" />
-            </div>
-          </div>
-
-          <div class="border border-slate-200 rounded-xl md:rounded-2xl p-2.5 md:p-3 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-0.5">인원 및 객실</label>
-            <div class="text-xs md:text-sm font-bold text-slate-900">
-              성인 {{ guests.adults }}명, 객실 {{ guests.rooms }}개
-            </div>
-          </div>
-
-          <button
-            @click="handleSearch"
-            type="button"
-            class="h-full min-h-[56px] bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base rounded-2xl flex items-center justify-center gap-2 transition shadow-lg shadow-blue-500/30"
-          >
-            <span>호텔 검색</span>
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          </button>
-        </div>
-
-        <!-- 2. 항공권 (Flights) 검색 폼 -->
-        <div v-else-if="activeTab === 'flights'" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-          <div class="border border-slate-200 rounded-2xl p-2.5 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-1">출발지 (공항/도시)</label>
-            <SearchAutocomplete
-              v-model="flightOrigin"
-              domain="flights"
-              placeholder="출발 공항 또는 도시 (ICN, 서울)"
-              icon="plane"
-              inputClass="w-full font-bold text-slate-900 outline-none text-sm bg-transparent border-none pl-6 pr-2 py-0 focus:ring-0 shadow-none"
-            />
-          </div>
-
-          <div class="border border-slate-200 rounded-2xl p-2.5 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-1">도착지 (공항/도시)</label>
-            <SearchAutocomplete
-              v-model="flightDest"
-              domain="flights"
-              placeholder="도착 공항 또는 도시 (HND, NRT, 도쿄)"
-              icon="plane"
-              inputClass="w-full font-bold text-slate-900 outline-none text-sm bg-transparent border-none pl-6 pr-2 py-0 focus:ring-0 shadow-none"
-            />
-          </div>
-
-          <div class="border border-slate-200 rounded-2xl p-3 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-0.5">출발일</label>
-            <input v-model="flightDate" type="date" class="w-full text-xs font-bold outline-none bg-transparent" />
-          </div>
-
-          <button
-            @click="handleSearch"
-            type="button"
-            class="h-full min-h-[56px] bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base rounded-2xl flex items-center justify-center gap-2 transition shadow-lg shadow-blue-500/30"
-          >
-            <span>항공권 검색</span>
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          </button>
-        </div>
-
-        <!-- 3. 기차표 (Trains) 검색 폼 -->
-        <div v-else-if="activeTab === 'trains'" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-          <div class="border border-slate-200 rounded-2xl p-2.5 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-1">출발역</label>
-            <SearchAutocomplete
-              v-model="trainDepart"
-              domain="trains"
-              placeholder="출발역 (서울역, 도쿄역)"
-              icon="train"
-              inputClass="w-full font-bold text-slate-900 outline-none text-sm bg-transparent border-none pl-6 pr-2 py-0 focus:ring-0 shadow-none"
-            />
-          </div>
-
-          <div class="border border-slate-200 rounded-2xl p-2.5 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-1">도착역</label>
-            <SearchAutocomplete
-              v-model="trainArrival"
-              domain="trains"
-              placeholder="도착역 (부산역, 신오사카역)"
-              icon="train"
-              inputClass="w-full font-bold text-slate-900 outline-none text-sm bg-transparent border-none pl-6 pr-2 py-0 focus:ring-0 shadow-none"
-            />
-          </div>
-
-          <div class="border border-slate-200 rounded-2xl p-3 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-0.5">탑승일</label>
-            <input v-model="trainDate" type="date" class="w-full text-xs font-bold outline-none bg-transparent" />
-          </div>
-
-          <button
-            @click="handleSearch"
-            type="button"
-            class="h-full min-h-[56px] bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base rounded-2xl flex items-center justify-center gap-2 transition shadow-lg shadow-blue-500/30"
-          >
-            <span>열차표 검색</span>
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          </button>
-        </div>
-
-        <!-- 4. 렌터카 (Cars) 검색 폼 -->
-        <div v-else-if="activeTab === 'cars'" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-          <div class="border border-slate-200 rounded-2xl p-2.5 hover:border-blue-500 transition-colors md:col-span-2">
-            <label class="text-[11px] font-bold text-slate-400 block mb-1">인수 지점 (공항 / 주요 역 / 시내)</label>
-            <SearchAutocomplete
-              v-model="carPickupLocation"
-              domain="cars"
-              placeholder="인수 지점 검색 (제주공항, 나리타공항, 후쿠오카공항 등)"
-              icon="car"
-              inputClass="w-full font-bold text-slate-900 outline-none text-sm bg-transparent border-none pl-6 pr-2 py-0 focus:ring-0 shadow-none"
-            />
-          </div>
-
-          <div class="border border-slate-200 rounded-2xl p-3 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-0.5">대여 기간</label>
-            <div class="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-              <input v-model="carPickupDate" type="date" class="outline-none text-[11px] font-bold bg-transparent" />
-              <span>~</span>
-              <input v-model="carReturnDate" type="date" class="outline-none text-[11px] font-bold bg-transparent" />
-            </div>
-          </div>
-
-          <button
-            @click="handleSearch"
-            type="button"
-            class="h-full min-h-[56px] bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base rounded-2xl flex items-center justify-center gap-2 transition shadow-lg shadow-blue-500/30"
-          >
-            <span>렌터카 검색</span>
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          </button>
-        </div>
-
-        <!-- 5. 공항 픽업 (Transfers) 검색 폼 -->
-        <div v-else-if="activeTab === 'transfers'" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-          <div class="border border-slate-200 rounded-2xl p-2.5 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-1">픽업 공항</label>
-            <SearchAutocomplete
-              v-model="transferAirport"
-              domain="flights"
-              placeholder="공항 검색 (인천공항, 김포공항, 하네다공항)"
-              icon="plane"
-              inputClass="w-full font-bold text-slate-900 outline-none text-sm bg-transparent border-none pl-6 pr-2 py-0 focus:ring-0 shadow-none"
-            />
-          </div>
-
-          <div class="border border-slate-200 rounded-2xl p-2.5 hover:border-blue-500 transition-colors">
-            <label class="text-[11px] font-bold text-slate-400 block mb-1">도착지 호텔 / 주소</label>
-            <SearchAutocomplete
-              v-model="transferHotel"
-              domain="hotels"
-              placeholder="도착 호텔 또는 랜드마크 검색"
-              icon="search"
-              inputClass="w-full font-bold text-slate-900 outline-none text-sm bg-transparent border-none pl-6 pr-2 py-0 focus:ring-0 shadow-none"
-            />
-          </div>
-
-          <button
-            @click="handleSearch"
-            type="button"
-            class="h-full min-h-[56px] bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base rounded-2xl flex items-center justify-center gap-2 transition shadow-lg shadow-blue-500/30"
-          >
-            <span>픽업 차량 조회</span>
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          </button>
-        </div>
-
-        <!-- 6. 투어·티켓 / 액티비티 / eSIM (Activities) 검색 폼 -->
-        <div v-else-if="activeTab === 'activities'" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-          <div class="border border-slate-200 rounded-2xl p-2.5 hover:border-blue-500 transition-colors md:col-span-3">
-            <label class="text-[11px] font-bold text-slate-400 block mb-1">명소, 테마파크, 액티비티, 또는 데이터 eSIM</label>
-            <SearchAutocomplete
-              v-model="activityKeyword"
-              domain="things-to-do"
-              placeholder="유니버설 스튜디오, 디즈니랜드, 시부야 스카이, 일본 무제한 eSIM 등"
-              icon="ticket"
-              inputClass="w-full font-bold text-slate-900 outline-none text-sm bg-transparent border-none pl-6 pr-2 py-0 focus:ring-0 shadow-none"
-            />
-          </div>
-
-          <button
-            @click="handleSearch"
-            type="button"
-            class="h-full min-h-[56px] bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base rounded-2xl flex items-center justify-center gap-2 transition shadow-lg shadow-blue-500/30"
-          >
-            <span>티켓 검색</span>
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          </button>
-        </div>
-
-        <!-- 7. 항공+호텔 패키지 (Packages) 검색 폼 -->
-        <div v-else-if="activeTab === 'packages'" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-          <div class="border border-slate-200 rounded-2xl p-2.5 hover:border-blue-500 transition-colors md:col-span-3">
-            <label class="text-[11px] font-bold text-slate-400 block mb-1">패키지 여행 목적지 (항공+호텔 결합 할인)</label>
-            <SearchAutocomplete
-              v-model="packageDest"
-              domain="packages"
-              placeholder="도쿄, 오사카, 다낭, 방콕 등 에어텔 추천 목적지"
-              icon="search"
-              inputClass="w-full font-bold text-slate-900 outline-none text-sm bg-transparent border-none pl-6 pr-2 py-0 focus:ring-0 shadow-none"
-            />
-          </div>
-
-          <button
-            @click="handleSearch"
-            type="button"
-            class="h-full min-h-[56px] bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base rounded-2xl flex items-center justify-center gap-2 transition shadow-lg shadow-blue-500/30"
-          >
-            <span>패키지 찾기</span>
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          </button>
-        </div>
-      </div>
+  <section class="relative rounded-[28px] border border-line bg-surface-raised p-3 shadow-pop sm:p-5" aria-label="여행 검색">
+    <!-- Tabs -->
+    <div class="-mx-1 flex gap-1 overflow-x-auto px-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
+      <button
+        v-for="t in TABS"
+        :key="t.id"
+        type="button"
+        role="tab"
+        :aria-selected="tab === t.id"
+        :class="['flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors', tab === t.id ? 'bg-ink text-ink-inverse' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink']"
+        @click="pickTab(t.id)"
+      >
+        <AppIcon :name="t.icon" :size="18" />{{ t.label }}
+      </button>
     </div>
-  </div>
+
+    <form class="grid gap-2" novalidate @submit.prevent="submit">
+      <!-- Hotels -->
+      <div v-if="tab === 'hotels'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1.6fr_1.3fr_1fr_auto]">
+        <div :class="box('city')">
+          <label :for="'hs-city'" :class="LABEL">목적지</label>
+          <SearchAutocomplete v-model="f.city" input-id="hs-city" domain="hotels" variant="bare" placeholder="도시, 지역, 명소, 호텔명" />
+        </div>
+        <DateRangePicker v-model:start="f.checkIn" v-model:end="f.checkOut" start-label="체크인" end-label="체크아웃" :min="today" :max-range="30" :invalid="!!(errors.checkIn || errors.checkOut)" />
+        <GuestPicker v-model:adults="f.adults" v-model:children="f.children" v-model:rooms="f.rooms" />
+        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink transition-colors hover:bg-primary-hover"><AppIcon name="search" />검색</button>
+      </div>
+
+      <!-- Flights -->
+      <div v-else-if="tab === 'flights'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto_1fr_0.9fr_auto] lg:items-stretch">
+        <div :class="box('origin')"><label for="hs-origin" :class="LABEL">출발</label><SearchAutocomplete v-model="f.origin" input-id="hs-origin" domain="flights" variant="bare" placeholder="도시 또는 공항" /></div>
+        <button type="button" class="mx-auto -my-4 z-10 flex h-10 w-10 rotate-90 items-center justify-center self-center rounded-full border border-line bg-surface text-ink-muted hover:text-primary lg:my-0 lg:rotate-0" aria-label="출발지와 도착지 바꾸기" @click="swap('origin', 'dest')"><AppIcon name="swap" :size="18" /></button>
+        <div :class="box('dest')"><label for="hs-dest" :class="LABEL">도착</label><SearchAutocomplete v-model="f.dest" input-id="hs-dest" domain="flights" variant="bare" placeholder="도시 또는 공항" /></div>
+        <DateRangePicker v-model:start="f.flightDate" mode="single" start-label="가는 날" :min="today" :invalid="!!errors.flightDate" />
+        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />검색</button>
+      </div>
+
+      <!-- Packages -->
+      <div v-else-if="tab === 'packages'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr_auto]">
+        <div :class="box('pkgOrigin')"><label for="hs-porigin" :class="LABEL">출발 (선택)</label><SearchAutocomplete v-model="f.pkgOrigin" input-id="hs-porigin" domain="flights" variant="bare" placeholder="출발 도시 또는 공항" /></div>
+        <div :class="box('pkgDest')"><label for="hs-pdest" :class="LABEL">여행지</label><SearchAutocomplete v-model="f.pkgDest" input-id="hs-pdest" domain="packages" variant="bare" placeholder="도시 또는 국가" /></div>
+        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />검색</button>
+      </div>
+
+      <!-- Activities -->
+      <div v-else-if="tab === 'activities'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto]">
+        <div :class="box('keyword')"><label for="hs-kw" :class="LABEL">어디에서 무엇을 할까요?</label><SearchAutocomplete v-model="f.keyword" input-id="hs-kw" domain="things-to-do" variant="bare" placeholder="도시, 명소, 테마파크, 체험" /></div>
+        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />검색</button>
+      </div>
+
+      <!-- Trains -->
+      <div v-else-if="tab === 'trains'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto_1fr_0.9fr_auto] lg:items-stretch">
+        <div :class="box('dep')"><label for="hs-dep" :class="LABEL">출발역</label><SearchAutocomplete v-model="f.dep" input-id="hs-dep" domain="trains" variant="bare" placeholder="예: 서울역" /></div>
+        <button type="button" class="mx-auto -my-4 z-10 flex h-10 w-10 rotate-90 items-center justify-center self-center rounded-full border border-line bg-surface text-ink-muted hover:text-primary lg:my-0 lg:rotate-0" aria-label="출발역과 도착역 바꾸기" @click="swap('dep', 'arr')"><AppIcon name="swap" :size="18" /></button>
+        <div :class="box('arr')"><label for="hs-arr" :class="LABEL">도착역</label><SearchAutocomplete v-model="f.arr" input-id="hs-arr" domain="trains" variant="bare" placeholder="예: 부산역" /></div>
+        <DateRangePicker v-model:start="f.trainDate" mode="single" start-label="탑승일" :min="today" :invalid="!!errors.trainDate" />
+        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />검색</button>
+      </div>
+
+      <!-- Cars -->
+      <div v-else-if="tab === 'cars'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1.6fr_1.4fr_auto]">
+        <div :class="box('carPlace')"><label for="hs-car" :class="LABEL">인수 장소</label><SearchAutocomplete v-model="f.carPlace" input-id="hs-car" domain="cars" variant="bare" placeholder="공항, 도시 또는 기차역" /></div>
+        <DateRangePicker v-model:start="f.carFrom" v-model:end="f.carTo" start-label="인수" end-label="반납" unit="day" :min="today" :max-range="60" :invalid="!!(errors.carFrom || errors.carTo)" />
+        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />검색</button>
+      </div>
+
+      <!-- Transfers -->
+      <div v-else class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr_0.8fr_auto]">
+        <div :class="box('airport')"><label for="hs-apt" :class="LABEL">공항</label><SearchAutocomplete v-model="f.airport" input-id="hs-apt" domain="flights" variant="bare" placeholder="예: 인천국제공항" /></div>
+        <div :class="box('area')"><label for="hs-area" :class="LABEL">목적지 (선택)</label><SearchAutocomplete v-model="f.area" input-id="hs-area" domain="transfers" variant="bare" placeholder="지역, 호텔, 명소" /></div>
+        <DateRangePicker v-model:start="f.transferDate" mode="single" start-label="이용일" :min="today" :invalid="!!errors.transferDate" />
+        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />검색</button>
+      </div>
+
+      <ul v-if="Object.keys(errors).length" class="space-y-1 px-1 pt-1 text-sm font-medium text-danger" role="alert">
+        <li v-for="(m, k) in errors" :key="k" class="flex items-center gap-1.5"><AppIcon name="close" :size="14" />{{ m }}</li>
+      </ul>
+    </form>
+  </section>
 </template>

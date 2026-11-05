@@ -2,9 +2,87 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #F5F7FA;
-  color: #0F294D;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+/*
+ * getfortrip "Horizon" design tokens (RGB channels, consumed by tailwind.config.js).
+ * Light is the default; `.dark` on <html> switches every semantic token.
+ */
+@layer base {
+  :root {
+    --gft-canvas: 246 248 252;
+    --gft-surface: 255 255 255;
+    --gft-surface-raised: 255 255 255;
+    --gft-surface-sunken: 239 243 250;
+    --gft-ink: 11 25 44;
+    --gft-ink-muted: 72 87 112;
+    --gft-ink-subtle: 118 133 158;
+    --gft-ink-inverse: 255 255 255;
+    --gft-line: 226 232 242;
+    --gft-line-strong: 200 210 226;
+    --gft-primary: 26 107 255;
+    --gft-primary-hover: 15 86 224;
+    --gft-primary-soft: 238 244 255;
+    --gft-primary-ink: 255 255 255;
+    --gft-accent: 255 90 54;
+    --gft-accent-soft: 255 241 236;
+    --gft-success: 14 150 98;
+    --gft-success-soft: 230 248 240;
+    --gft-warning: 196 122 0;
+    --gft-warning-soft: 255 246 224;
+    --gft-danger: 214 48 64;
+    --gft-danger-soft: 253 236 238;
+    color-scheme: light;
+  }
+
+  .dark {
+    --gft-canvas: 6 15 28;
+    --gft-surface: 14 24 41;
+    --gft-surface-raised: 21 33 54;
+    --gft-surface-sunken: 9 18 33;
+    --gft-ink: 234 240 248;
+    --gft-ink-muted: 165 178 200;
+    --gft-ink-subtle: 118 133 158;
+    --gft-ink-inverse: 11 25 44;
+    --gft-line: 34 47 70;
+    --gft-line-strong: 52 68 96;
+    --gft-primary: 92 147 255;
+    --gft-primary-hover: 125 169 255;
+    --gft-primary-soft: 20 38 74;
+    --gft-primary-ink: 6 15 28;
+    --gft-accent: 255 122 92;
+    --gft-accent-soft: 58 26 20;
+    --gft-success: 52 201 140;
+    --gft-success-soft: 12 44 33;
+    --gft-warning: 240 176 64;
+    --gft-warning-soft: 52 38 10;
+    --gft-danger: 255 110 122;
+    --gft-danger-soft: 58 18 24;
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+    font-feature-settings: "tnum" 0, "ss06" 1;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--gft-primary));
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
+@layer components {
+  /* Numbers that line up: prices, dates, booking codes. */
+  .tabular { font-variant-numeric: tabular-nums; }
+}

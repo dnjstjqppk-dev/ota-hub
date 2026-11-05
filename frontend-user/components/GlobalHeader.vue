@@ -1,301 +1,245 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useAuthStore } from '~/stores/auth'
 import { useLocaleStore, type SupportedLocale } from '~/stores/locale'
 import { BRAND } from '~/config/brand'
+import { CATEGORIES, CURRENCIES, DISCOVER_LINKS, LOCALES, SUPPORT_LINKS } from '~/config/navigation'
 
 const route = useRoute()
-const currencyStore = useCurrencyStore()
-const authStore = useAuthStore()
-const localeStore = useLocaleStore()
+const router = useRouter()
+const currency = useCurrencyStore()
+const auth = useAuthStore()
+const locale = useLocaleStore()
 
-const showCurrencyDropdown = ref(false)
-const showLocaleDropdown = ref(false)
-const isMobileDrawerOpen = ref(false)
+type Pop = 'more' | 'region' | 'account' | null
+const pop = ref<Pop>(null)
+const drawer = ref(false)
+const scrolled = ref(false)
+const headerEl = ref<HTMLElement | null>(null)
+
+const primary = CATEGORIES.filter(c => c.primary)
+const secondary = CATEGORIES.filter(c => !c.primary)
+const localeLabel = computed(() => LOCALES.find(l => l.id === locale.activeLocale)?.label || '한국어')
+const initial = computed(() => (auth.user?.fullName || auth.user?.email || '?').trim().charAt(0).toUpperCase())
+const isActive = (to: string) => route.path === to || route.path.startsWith(`${to}/`)
+
+function toggle(p: Exclude<Pop, null>) { pop.value = pop.value === p ? null : p }
+function closeAll() { pop.value = null; drawer.value = false }
+function setLocale(id: string) { locale.setLocale(id as SupportedLocale) }
+function logout() { auth.logout(); closeAll(); router.push('/') }
+
+function onDoc(e: Event) {
+  if (pop.value && headerEl.value && !headerEl.value.contains(e.target as Node)) pop.value = null
+}
+function onKey(e: KeyboardEvent) { if (e.key === 'Escape') closeAll() }
+function onScroll() { scrolled.value = window.scrollY > 4 }
+
+watch(() => route.fullPath, closeAll)
+watch(drawer, (open) => { if (typeof document !== 'undefined') document.documentElement.style.overflow = open ? 'hidden' : '' })
 
 onMounted(() => {
-  currencyStore.fetchRates()
-  localeStore.initLocale()
+  currency.fetchRates()
+  locale.initLocale()
+  document.addEventListener('pointerdown', onDoc)
+  document.addEventListener('keydown', onKey)
+  window.addEventListener('scroll', onScroll, { passive: true })
+  onScroll()
 })
-
-const categories = [
-  { to: '/hotels', label: '호텔', icon: '🏨' },
-  { to: '/flights', label: '항공권', icon: '✈️' },
-  { to: '/trains', label: '기차표', icon: '🚅' },
-  { to: '/cars', label: '렌터카', icon: '🚗' },
-  { to: '/transfers', label: '공항픽업', icon: '🚐' },
-  { to: '/things-to-do', label: '투어·티켓', icon: '🎡' },
-  { to: '/packages', label: '항공+호텔', icon: '🌴', badge: '특가' },
-  { to: '/esim', label: '해외 eSIM', icon: '📱' },
-  { to: '/insurance', label: '여행자보험', icon: '🛡️' },
-  { to: '/trip-best', label: 'getfortrip Best', icon: '🏆' },
-  { to: '/moments', label: '여행 모먼트', icon: '📸' }
-]
-
-const closeDrawer = () => {
-  isMobileDrawerOpen.value = false
-}
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDoc)
+  document.removeEventListener('keydown', onKey)
+  window.removeEventListener('scroll', onScroll)
+  document.documentElement.style.overflow = ''
+})
 </script>
 
 <template>
-  <header class="bg-white border-b border-trip-border sticky top-0 z-40 shadow-sm">
-    <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
-      <!-- 좌측: 모바일 햄버거 메뉴 + 브랜드 로고 -->
-      <div class="flex items-center gap-3 lg:gap-8 min-w-0 flex-1">
-        <!-- 모바일 햄버거 버튼 -->
-        <button
-          @click="isMobileDrawerOpen = true"
-          class="md:hidden p-2 -ml-2 rounded-xl text-slate-700 hover:bg-slate-100 transition flex items-center justify-center focus:outline-none"
-          aria-label="전체 메뉴 열기"
+  <header
+    ref="headerEl"
+    :class="['sticky top-0 z-40 border-b bg-surface/90 backdrop-blur-xl transition-shadow', scrolled ? 'border-line shadow-card' : 'border-transparent']"
+  >
+    <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-ink">본문으로 건너뛰기</a>
+    <div class="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 lg:px-6">
+      <NuxtLink to="/" class="flex shrink-0 items-center" :title="BRAND.name">
+        <img src="/logo.svg" alt="getfortrip" class="h-8 w-auto" width="132" height="32" />
+      </NuxtLink>
+
+      <!-- Desktop navigation -->
+      <nav class="hidden min-w-0 flex-1 items-center gap-1 lg:flex" aria-label="상품 카테고리">
+        <NuxtLink
+          v-for="c in primary"
+          :key="c.key"
+          :to="c.to"
+          :class="['relative rounded-lg px-3 py-2 text-sm font-semibold transition-colors', isActive(c.to) ? 'text-primary' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink']"
         >
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-
-        <NuxtLink to="/" class="flex items-center gap-2 group flex-shrink-0" :title="BRAND.name">
-          <img src="/logo.svg" alt="getfortrip" class="h-8 lg:h-9 w-auto object-contain flex-shrink-0" />
+          {{ c.label }}
+          <span v-if="isActive(c.to)" class="absolute inset-x-3 -bottom-[13px] h-0.5 rounded-full bg-primary" />
         </NuxtLink>
-
-        <!-- 데스크톱 GNB 카테고리 네비게이션 -->
-        <nav class="hidden md:flex min-w-0 items-center gap-2 lg:gap-4 text-xs font-bold text-trip-navy whitespace-nowrap overflow-x-auto py-1">
-          <NuxtLink to="/hotels" class="hover:text-trip-blue transition whitespace-nowrap flex-shrink-0">호텔</NuxtLink>
-          <NuxtLink to="/flights" class="hover:text-trip-blue transition whitespace-nowrap flex-shrink-0">항공권</NuxtLink>
-          <NuxtLink to="/trains" class="hover:text-trip-blue transition whitespace-nowrap flex-shrink-0">기차표</NuxtLink>
-          <NuxtLink to="/cars" class="hover:text-trip-blue transition whitespace-nowrap flex-shrink-0">렌터카</NuxtLink>
-          <NuxtLink to="/transfers" class="hover:text-trip-blue transition whitespace-nowrap flex-shrink-0">공항픽업</NuxtLink>
-          <NuxtLink to="/things-to-do" class="hover:text-trip-blue transition whitespace-nowrap flex-shrink-0">투어·티켓</NuxtLink>
-          <NuxtLink to="/packages" class="hover:text-trip-blue transition flex items-center gap-1 whitespace-nowrap flex-shrink-0">
-            <span>항공+호텔</span>
-            <span class="text-[9px] bg-trip-orange text-white px-1.5 py-0.2 rounded-full font-black">특가</span>
-          </NuxtLink>
-          <NuxtLink to="/esim" class="hover:text-trip-blue transition whitespace-nowrap flex-shrink-0">eSIM</NuxtLink>
-          <NuxtLink to="/insurance" class="hover:text-trip-blue transition whitespace-nowrap flex-shrink-0">여행자보험</NuxtLink>
-          <NuxtLink to="/trip-best" class="hover:text-trip-blue transition text-amber-600 font-extrabold flex items-center gap-1 whitespace-nowrap flex-shrink-0">
-            <span>🏆 Best</span>
-          </NuxtLink>
-          <NuxtLink to="/moments" class="hover:text-trip-blue transition whitespace-nowrap flex-shrink-0">모먼트</NuxtLink>
-        </nav>
-      </div>
-
-      <!-- 우측 다통화 / 마이 / 회원 상태 -->
-      <div class="flex items-center gap-2 lg:gap-3 text-xs font-semibold flex-shrink-0 whitespace-nowrap">
-        <!-- 다통화 선택기 -->
-        <div class="relative flex-shrink-0 hidden sm:block">
+        <div class="relative">
           <button
-            @click="showCurrencyDropdown = !showCurrencyDropdown"
-            class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-trip-blue text-trip-navy font-bold transition whitespace-nowrap text-xs"
+            type="button"
+            :aria-expanded="pop === 'more'"
+            aria-haspopup="menu"
+            class="flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+            @click="toggle('more')"
           >
-            <span>{{ currencyStore.symbol }}</span>
-            <span>{{ currencyStore.activeCurrency }}</span>
-            <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            더보기 <AppIcon name="chevron-down" :size="16" :class="['transition-transform', pop === 'more' && 'rotate-180']" />
           </button>
-
-          <div
-            v-if="showCurrencyDropdown"
-            class="absolute right-0 mt-1 w-36 bg-white border border-trip-border rounded-xl shadow-xl p-1 z-50 space-y-0.5"
-          >
-            <button
-              v-for="curr in ['KRW', 'USD', 'JPY', 'EUR', 'CNY', 'GBP']"
-              :key="curr"
-              @click="currencyStore.setCurrency(curr); showCurrencyDropdown = false"
-              :class="[
-                'w-full text-left px-3 py-2 rounded-lg font-bold flex items-center justify-between text-xs whitespace-nowrap',
-                currencyStore.activeCurrency === curr ? 'bg-blue-50 text-trip-blue' : 'hover:bg-slate-50 text-slate-700'
-              ]"
-            >
-              <span>{{ curr }}</span>
-              <span class="text-slate-400 font-mono">{{ currencyStore.rates[curr] ? `₩${currencyStore.rates[curr]}` : '' }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 언어 선택기 -->
-        <div class="relative flex-shrink-0">
-          <button
-            @click="showLocaleDropdown = !showLocaleDropdown"
-            class="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-slate-200 hover:border-trip-blue text-trip-navy font-bold transition whitespace-nowrap text-xs"
-          >
-            <span>🌐</span>
-            <span>{{ localeStore.activeLocale.toUpperCase() }}</span>
-          </button>
-          <div
-            v-if="showLocaleDropdown"
-            class="absolute right-0 mt-1 w-28 bg-white border border-trip-border rounded-xl shadow-xl p-1 z-50 space-y-0.5"
-          >
-            <button
-              v-for="loc in [
-                { id: 'ko-kr', label: '한국어 (KO)' },
-                { id: 'en-us', label: 'English (EN)' },
-                { id: 'ja-jp', label: '日本語 (JA)' },
-                { id: 'zh-cn', label: '中文 (ZH)' }
-              ]"
-              :key="loc.id"
-              @click="localeStore.setLocale(loc.id as any); showLocaleDropdown = false"
-              :class="[
-                'w-full text-left px-2.5 py-1.5 rounded-lg font-bold text-xs whitespace-nowrap',
-                localeStore.activeLocale === loc.id ? 'bg-blue-50 text-trip-blue' : 'hover:bg-slate-50 text-slate-700'
-              ]"
-            >
-              {{ loc.label }}
-            </button>
-          </div>
-        </div>
-
-        <!-- 위시리스트 (데스크톱) -->
-        <NuxtLink to="/my/wishlist" class="hidden md:inline-flex items-center gap-1 font-bold text-trip-navy hover:text-trip-blue whitespace-nowrap flex-shrink-0" title="위시리스트 & 최저가 알림">
-          <span>❤️</span>
-          <span>위시리스트</span>
-        </NuxtLink>
-
-        <!-- 특가 프로모션 (데스크톱) -->
-        <NuxtLink to="/deals" class="hidden sm:inline-block text-trip-orange font-bold hover:underline whitespace-nowrap flex-shrink-0">
-          🎁 프로모션
-        </NuxtLink>
-
-        <!-- B2B 파트너 센터 (데스크톱) -->
-        <NuxtLink to="/partner/login" class="hidden lg:inline-flex items-center gap-1 text-slate-600 hover:text-trip-blue whitespace-nowrap flex-shrink-0 font-bold" title="공급사 및 파트너사 비즈니스 센터">
-          <span>🏢</span>
-          <span>파트너 센터</span>
-        </NuxtLink>
-
-        <!-- getfortrip 코인 및 등급 배지 (데스크톱) -->
-        <NuxtLink v-if="authStore.isLoggedIn && authStore.user" to="/rewards" class="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-700 font-bold whitespace-nowrap flex-shrink-0" title="getfortrip 멤버십 리워드">
-          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-          <span>{{ authStore.user.tier }}</span>
-          <span class="text-amber-800 font-mono">{{ Number(authStore.user.tripCoins ?? 0).toLocaleString() }}G</span>
-        </NuxtLink>
-
-        <!-- 내 예약 링크 (데스크톱) -->
-        <NuxtLink to="/my/bookings" class="hidden md:inline-block font-bold text-trip-navy hover:text-trip-blue whitespace-nowrap flex-shrink-0">
-          내 예약
-        </NuxtLink>
-
-        <!-- 사용자 프로필 링크 -->
-        <NuxtLink v-if="authStore.isLoggedIn && authStore.user" to="/my" class="flex items-center gap-1.5 pl-1.5 sm:pl-2 sm:border-l sm:border-slate-200 flex-shrink-0 whitespace-nowrap hover:opacity-80 transition group" title="사용자 콘솔 (마이페이지)">
-          <img v-if="authStore.user.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-8 h-8 rounded-full border border-slate-200 object-cover flex-shrink-0 group-hover:border-trip-blue transition" />
-          <span v-else class="w-8 h-8 text-xs rounded-full bg-trip-blue text-white font-black flex items-center justify-center flex-shrink-0" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
-          <span class="hidden md:inline font-bold text-trip-navy text-xs whitespace-nowrap group-hover:text-trip-blue transition">{{ authStore.user.fullName }}</span>
-        </NuxtLink>
-        <NuxtLink v-else to="/my" class="flex items-center gap-1.5 pl-1.5 sm:pl-2 sm:border-l sm:border-slate-200 flex-shrink-0 whitespace-nowrap hover:opacity-80 transition group text-xs font-bold text-slate-700 hover:text-trip-blue" title="로그인 및 마이페이지">
-          <span>👤 로그인</span>
-        </NuxtLink>
-      </div>
-    </div>
-
-    <!-- 모바일 사이드 드로어 네비게이션 (모바일 뷰포트 대응) -->
-    <div
-      v-if="isMobileDrawerOpen"
-      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm transition-opacity md:hidden"
-      @click="closeDrawer"
-    >
-      <div
-        class="fixed top-0 bottom-0 left-0 w-[82vw] max-w-xs bg-white shadow-2xl flex flex-col justify-between overflow-y-auto"
-        @click.stop
-      >
-        <!-- 드로어 헤더: 사용자 프로필 카드 -->
-        <div class="p-5 bg-gradient-to-r from-slate-900 to-blue-950 text-white space-y-3">
-          <div class="flex items-center justify-between">
-            <img src="/logo-white.svg" alt="getfortrip" class="h-6 w-auto" />
-            <button @click="closeDrawer" class="text-slate-300 hover:text-white p-1 text-lg font-bold">✕</button>
-          </div>
-
-          <NuxtLink v-if="authStore.isLoggedIn && authStore.user" to="/my" @click="closeDrawer" class="flex items-center gap-3 pt-2">
-            <img v-if="authStore.user.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-12 h-12 rounded-full border-2 border-amber-400 object-cover" />
-            <span v-else class="w-12 h-12 text-base rounded-full bg-trip-blue text-white font-black flex items-center justify-center flex-shrink-0" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
-            <div class="space-y-0.5">
-              <div class="font-black text-sm flex items-center gap-1.5">
-                <span>{{ authStore.user.fullName }} 님</span>
-                <span class="px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 text-[9px] font-black">
-                  {{ authStore.user.tier }}
-                </span>
-              </div>
-              <div class="text-[11px] text-amber-300 font-mono">
-                보유 코인: {{ Number(authStore.user.tripCoins ?? 0).toLocaleString() }}G
-              </div>
-            </div>
-          </NuxtLink>
-          <div v-else class="pt-2 flex items-center justify-between">
-            <div class="text-xs text-slate-300">로그인하고 회원 혜택을 확인하세요</div>
-            <NuxtLink to="/my" @click="closeDrawer" class="px-3 py-1.5 bg-trip-blue text-white text-xs font-bold rounded-xl hover:bg-blue-600 transition">
-              로그인
+          <div v-if="pop === 'more'" role="menu" class="absolute left-0 top-full mt-2 w-64 animate-pop-in rounded-card border border-line bg-surface-raised p-2 shadow-pop">
+            <NuxtLink v-for="c in secondary" :key="c.key" :to="c.to" role="menuitem" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-ink hover:bg-surface-sunken">
+              <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-soft text-primary"><AppIcon :name="c.icon" :size="18" /></span>{{ c.label }}
+            </NuxtLink>
+            <div class="my-2 h-px bg-line" />
+            <NuxtLink v-for="l in DISCOVER_LINKS" :key="l.to" :to="l.to" role="menuitem" class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink-muted hover:bg-surface-sunken hover:text-ink">
+              <AppIcon :name="l.icon" :size="18" />{{ l.label }}
             </NuxtLink>
           </div>
         </div>
+      </nav>
 
-        <!-- 전체 카테고리 링크 목록 -->
-        <div class="p-4 space-y-1 flex-1">
-          <p class="text-[10px] font-bold text-slate-400 px-3 uppercase mb-2">여행 상품 카테고리</p>
-          <NuxtLink
-            v-for="cat in categories"
-            :key="cat.to"
-            :to="cat.to"
-            @click="closeDrawer"
-            class="flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-slate-50 text-slate-800 font-bold text-xs transition"
+      <div class="ml-auto flex items-center gap-1.5">
+        <!-- Region: currency + language -->
+        <div class="relative hidden sm:block">
+          <button
+            type="button"
+            :aria-expanded="pop === 'region'"
+            class="flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+            @click="toggle('region')"
           >
-            <div class="flex items-center gap-3">
-              <span class="text-base">{{ cat.icon }}</span>
-              <span>{{ cat.label }}</span>
-            </div>
-            <span v-if="cat.badge" class="px-1.5 py-0.2 bg-trip-orange text-white text-[9px] font-black rounded-full">
-              {{ cat.badge }}
-            </span>
-          </NuxtLink>
-
-          <div class="pt-3 border-t border-slate-100 my-2"></div>
-          <p class="text-[10px] font-bold text-slate-400 px-3 uppercase mb-2">고객 서비스 & 제휴</p>
-
-          <NuxtLink to="/my/bookings" @click="closeDrawer" class="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 text-slate-700 text-xs font-bold">
-            <span>📄</span>
-            <span>내 예약 관리</span>
-          </NuxtLink>
-          <NuxtLink to="/my/wishlist" @click="closeDrawer" class="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 text-slate-700 text-xs font-bold">
-            <span>❤️</span>
-            <span>위시리스트 & 최저가 알림</span>
-          </NuxtLink>
-          <NuxtLink to="/deals" @click="closeDrawer" class="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 text-slate-700 text-xs font-bold">
-            <span>🎁</span>
-            <span>타임특가 프로모션</span>
-          </NuxtLink>
-          <NuxtLink to="/partner/login" @click="closeDrawer" class="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 text-blue-600 text-xs font-bold">
-            <span>🏢</span>
-            <span>파트너 센터 로그인 (B2B)</span>
-          </NuxtLink>
-          <NuxtLink to="/help" @click="closeDrawer" class="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 text-slate-700 text-xs font-bold">
-            <span>🎧</span>
-            <span>24/7 고객센터</span>
-          </NuxtLink>
-          <NuxtLink to="/faq" @click="closeDrawer" class="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 text-slate-700 text-xs font-bold">
-            <span>❓</span>
-            <span>자주 묻는 질문 (FAQ)</span>
-          </NuxtLink>
-        </div>
-
-        <!-- 드로어 푸터: 통화 및 고객센터 안내 -->
-        <div class="p-4 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-500 space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="font-bold">통화 변경</span>
-            <div class="flex gap-1">
+            <AppIcon name="globe" :size="18" />
+            <span class="tabular">{{ currency.activeCurrency }}</span>
+            <span class="h-3 w-px bg-line-strong" />
+            <span>{{ localeLabel }}</span>
+          </button>
+          <div v-if="pop === 'region'" class="absolute right-0 top-full mt-2 grid w-80 animate-pop-in grid-cols-2 gap-4 rounded-card border border-line bg-surface-raised p-4 shadow-pop">
+            <div>
+              <p class="mb-2 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">통화</p>
               <button
-                v-for="curr in ['KRW', 'USD', 'JPY']"
-                :key="curr"
-                @click="currencyStore.setCurrency(curr)"
-                :class="[
-                  'px-2 py-1 rounded text-[10px] font-bold',
-                  currencyStore.activeCurrency === curr ? 'bg-slate-900 text-white' : 'bg-white border text-slate-600'
-                ]"
+                v-for="c in CURRENCIES"
+                :key="c"
+                type="button"
+                :class="['flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-sm font-semibold', currency.activeCurrency === c ? 'bg-primary-soft text-primary' : 'text-ink hover:bg-surface-sunken']"
+                @click="currency.setCurrency(c); pop = null"
               >
-                {{ curr }}
+                <span class="tabular">{{ c }}</span>
+                <AppIcon v-if="currency.activeCurrency === c" name="check" :size="16" />
               </button>
             </div>
-          </div>
-          <div class="text-[10px] text-slate-400 text-center pt-2">
-            고객센터 24시간 연중무휴 지원: 1588-0000
+            <div>
+              <p class="mb-2 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">언어</p>
+              <button
+                v-for="l in LOCALES"
+                :key="l.id"
+                type="button"
+                :class="['flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-sm font-semibold', locale.activeLocale === l.id ? 'bg-primary-soft text-primary' : 'text-ink hover:bg-surface-sunken']"
+                @click="setLocale(l.id); pop = null"
+              >
+                {{ l.label }}
+                <AppIcon v-if="locale.activeLocale === l.id" name="check" :size="16" />
+              </button>
+            </div>
+            <p class="col-span-2 border-t border-line pt-3 text-2xs leading-relaxed text-ink-subtle">다른 통화 금액은 참고용 환산값이며, 결제는 원화(KRW)로 진행됩니다.</p>
           </div>
         </div>
+
+        <NuxtLink to="/my/wishlist" class="hidden h-10 w-10 items-center justify-center rounded-xl text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink md:flex" aria-label="위시리스트" title="위시리스트">
+          <AppIcon name="heart" />
+        </NuxtLink>
+        <NuxtLink to="/my/bookings" class="hidden h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink md:flex">
+          <AppIcon name="bookings" :size="18" />내 예약
+        </NuxtLink>
+
+        <!-- Account -->
+        <div v-if="auth.isLoggedIn && auth.user" class="relative hidden md:block">
+          <button type="button" :aria-expanded="pop === 'account'" class="flex h-10 items-center gap-2 rounded-xl pl-1 pr-2 transition-colors hover:bg-surface-sunken" @click="toggle('account')">
+            <img v-if="auth.user.avatarUrl" :src="auth.user.avatarUrl" alt="" class="h-8 w-8 rounded-full object-cover" />
+            <span v-else class="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-ink">{{ initial }}</span>
+            <AppIcon name="chevron-down" :size="16" class="text-ink-subtle" />
+          </button>
+          <div v-if="pop === 'account'" role="menu" class="absolute right-0 top-full mt-2 w-64 animate-pop-in rounded-card border border-line bg-surface-raised p-2 shadow-pop">
+            <div class="px-3 py-2.5">
+              <p class="truncate text-sm font-bold text-ink">{{ auth.user.fullName }}</p>
+              <p class="truncate text-xs text-ink-subtle">{{ auth.user.email }}</p>
+              <NuxtLink to="/rewards" class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-warning-soft px-2.5 py-1 text-2xs font-semibold text-warning">
+                <AppIcon name="coins" :size="14" />{{ auth.user.tier }} · <span class="tabular">{{ Number(auth.user.tripCoins ?? 0).toLocaleString() }}{{ BRAND.coinSymbol }}</span>
+              </NuxtLink>
+            </div>
+            <div class="my-1 h-px bg-line" />
+            <NuxtLink to="/my" role="menuitem" class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink hover:bg-surface-sunken"><AppIcon name="user" :size="18" />마이페이지</NuxtLink>
+            <NuxtLink to="/my/bookings" role="menuitem" class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink hover:bg-surface-sunken"><AppIcon name="bookings" :size="18" />예약 내역</NuxtLink>
+            <NuxtLink to="/my/coupons" role="menuitem" class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink hover:bg-surface-sunken"><AppIcon name="gift" :size="18" />쿠폰함</NuxtLink>
+            <div class="my-1 h-px bg-line" />
+            <button type="button" role="menuitem" class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink-muted hover:bg-surface-sunken hover:text-danger" @click="logout"><AppIcon name="logout" :size="18" />로그아웃</button>
+          </div>
+        </div>
+        <NuxtLink v-else :to="`/login?redirect=${encodeURIComponent(route.fullPath)}`" class="hidden h-10 items-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-ink transition-colors hover:bg-primary-hover md:flex">
+          로그인
+        </NuxtLink>
+
+        <button type="button" class="flex h-10 w-10 items-center justify-center rounded-xl text-ink transition-colors hover:bg-surface-sunken lg:hidden" aria-label="전체 메뉴" :aria-expanded="drawer" @click="drawer = true">
+          <AppIcon name="menu" :size="22" />
+        </button>
       </div>
     </div>
+
+    <!-- Drawer (mobile / tablet) -->
+    <Teleport to="body">
+      <Transition enter-from-class="opacity-0" enter-active-class="transition-opacity duration-200" leave-to-class="opacity-0" leave-active-class="transition-opacity duration-150">
+        <div v-if="drawer" class="fixed inset-0 z-[60] bg-midnight-950/50 backdrop-blur-sm lg:hidden" @click="drawer = false" />
+      </Transition>
+      <Transition enter-from-class="translate-x-full" enter-active-class="transition-transform duration-300 ease-out" leave-to-class="translate-x-full" leave-active-class="transition-transform duration-200 ease-in">
+        <aside v-if="drawer" class="fixed inset-y-0 right-0 z-[61] flex w-[min(88vw,380px)] flex-col bg-surface shadow-pop lg:hidden" aria-label="전체 메뉴" role="dialog" aria-modal="true">
+          <div class="flex h-16 items-center justify-between border-b border-line px-5">
+            <img src="/logo.svg" alt="getfortrip" class="h-7 w-auto" />
+            <button type="button" class="flex h-10 w-10 items-center justify-center rounded-xl text-ink-muted hover:bg-surface-sunken" aria-label="메뉴 닫기" @click="drawer = false"><AppIcon name="close" /></button>
+          </div>
+          <div class="flex-1 overflow-y-auto overscroll-contain px-5 pb-8 pt-5">
+            <div v-if="auth.isLoggedIn && auth.user" class="flex items-center gap-3 rounded-card bg-surface-sunken p-4">
+              <span class="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-base font-bold text-primary-ink">{{ initial }}</span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-bold text-ink">{{ auth.user.fullName }}</p>
+                <p class="text-xs text-ink-muted">{{ auth.user.tier }} · <span class="tabular">{{ Number(auth.user.tripCoins ?? 0).toLocaleString() }}{{ BRAND.coinSymbol }}</span></p>
+              </div>
+              <NuxtLink to="/my" class="text-sm font-semibold text-primary">마이</NuxtLink>
+            </div>
+            <div v-else class="flex items-center justify-between rounded-card bg-primary-soft p-4">
+              <p class="text-sm font-medium text-ink">로그인하고 예약을 관리하세요</p>
+              <NuxtLink :to="`/login?redirect=${encodeURIComponent(route.fullPath)}`" class="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-ink">로그인</NuxtLink>
+            </div>
+
+            <p class="mb-3 mt-6 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">여행 상품</p>
+            <div class="grid grid-cols-3 gap-2">
+              <NuxtLink v-for="c in CATEGORIES" :key="c.key" :to="c.to" :class="['flex flex-col items-center gap-1.5 rounded-xl border px-1 py-3 text-xs font-semibold transition-colors', isActive(c.to) ? 'border-primary bg-primary-soft text-primary' : 'border-line text-ink hover:bg-surface-sunken']">
+                <AppIcon :name="c.icon" :size="22" />{{ c.label }}
+              </NuxtLink>
+            </div>
+
+            <p class="mb-2 mt-6 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">내 여행</p>
+            <NuxtLink to="/my/bookings" class="flex items-center gap-3 rounded-xl px-2 py-2.5 text-sm font-medium text-ink hover:bg-surface-sunken"><AppIcon name="bookings" :size="18" class="text-ink-muted" />예약 내역</NuxtLink>
+            <NuxtLink to="/my/wishlist" class="flex items-center gap-3 rounded-xl px-2 py-2.5 text-sm font-medium text-ink hover:bg-surface-sunken"><AppIcon name="heart" :size="18" class="text-ink-muted" />위시리스트·가격 알림</NuxtLink>
+            <NuxtLink v-for="l in DISCOVER_LINKS" :key="l.to" :to="l.to" class="flex items-center gap-3 rounded-xl px-2 py-2.5 text-sm font-medium text-ink hover:bg-surface-sunken"><AppIcon :name="l.icon" :size="18" class="text-ink-muted" />{{ l.label }}</NuxtLink>
+
+            <p class="mb-2 mt-6 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">고객 지원</p>
+            <NuxtLink v-for="l in SUPPORT_LINKS" :key="l.to" :to="l.to" class="flex items-center gap-3 rounded-xl px-2 py-2.5 text-sm font-medium text-ink hover:bg-surface-sunken"><AppIcon :name="l.icon" :size="18" class="text-ink-muted" />{{ l.label }}</NuxtLink>
+
+            <p class="mb-2 mt-6 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">통화</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button v-for="c in CURRENCIES" :key="c" type="button" :class="['tabular rounded-lg border px-3 py-1.5 text-xs font-semibold', currency.activeCurrency === c ? 'border-primary bg-primary text-primary-ink' : 'border-line text-ink-muted']" @click="currency.setCurrency(c)">{{ c }}</button>
+            </div>
+            <p class="mb-2 mt-4 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">언어</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button v-for="l in LOCALES" :key="l.id" type="button" :class="['rounded-lg border px-3 py-1.5 text-xs font-semibold', locale.activeLocale === l.id ? 'border-primary bg-primary text-primary-ink' : 'border-line text-ink-muted']" @click="setLocale(l.id)">{{ l.label }}</button>
+            </div>
+
+            <a :href="BRAND.partnerConsoleUrl" class="mt-8 flex items-center justify-between rounded-xl border border-line px-4 py-3 text-sm font-semibold text-ink hover:bg-surface-sunken">
+              <span class="flex items-center gap-3"><AppIcon name="briefcase" :size="18" class="text-ink-muted" />파트너 콘솔</span><AppIcon name="external" :size="16" class="text-ink-subtle" />
+            </a>
+            <button v-if="auth.isLoggedIn" type="button" class="mt-2 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-ink-muted hover:text-danger" @click="logout"><AppIcon name="logout" :size="18" />로그아웃</button>
+          </div>
+        </aside>
+      </Transition>
+    </Teleport>
   </header>
 </template>

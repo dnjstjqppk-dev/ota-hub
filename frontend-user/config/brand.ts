@@ -15,6 +15,8 @@ export const BRAND = {
   defaultLocale: 'ko-kr',
   currentDeployUrl: 'https://ota-hub.dnjstjqppk.workers.dev',
   productionDomain: 'https://getfortrip.com',
+  // Independent consoles (separate Workers). The in-app /partner/* pages are legacy.
+  partnerConsoleUrl: 'https://ota-partner.dnjstjqppk.workers.dev',
   koreanLandingUrl: 'https://kr.getfortrip.com/?locale=ko-kr',
   
   // Marketing & SEO Copy

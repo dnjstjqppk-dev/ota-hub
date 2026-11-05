@@ -1,91 +1,61 @@
 <script setup lang="ts">
 import { BRAND } from '~/config/brand'
+import { CATEGORIES, SUPPORT_LINKS } from '~/config/navigation'
+
+const year = new Date().getFullYear()
 </script>
 
 <template>
-  <footer class="bg-trip-navy text-slate-300 pt-16 pb-28 md:pb-12 mt-20 border-t border-slate-800">
-    <div class="max-w-7xl mx-auto px-4 space-y-10">
-      <!-- 브랜드 로고 및 4열 링크 그리드 -->
-      <div class="flex flex-col md:flex-row gap-12 justify-between">
-        <div class="space-y-4 max-w-xs">
+  <footer class="mt-24 border-t border-line bg-surface pb-28 pt-14 md:pb-12">
+    <div class="mx-auto max-w-7xl px-4 lg:px-6">
+      <div class="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
+        <div class="max-w-sm space-y-4">
           <NuxtLink to="/" class="inline-block" :title="BRAND.name">
-            <img src="/logo-white.svg" alt="getfortrip" class="h-9 w-auto" />
+            <img src="/logo.svg" alt="getfortrip" class="h-8 w-auto" width="132" height="32" />
           </NuxtLink>
-          <p class="text-xs text-slate-400 leading-relaxed">
-            {{ BRAND.tagline }}.<br/>
-            전 세계 언제 어디서나 가장 신뢰할 수 있는 스마트 여행 파트너.
-          </p>
-          <div class="text-[11px] text-slate-500 font-mono">
-            공식 도메인: {{ BRAND.plannedDomain }}
-          </div>
+          <p class="text-sm leading-relaxed text-ink-muted">항공권부터 호텔, 현지 이동까지. 결제 전 최종 금액을 확정하고, 공급사 확정이 끝난 예약만 확정으로 안내합니다.</p>
+          <a :href="`mailto:${BRAND.supportEmail}`" class="inline-flex items-center gap-2 text-sm font-semibold text-ink hover:text-primary">
+            <AppIcon name="mail" :size="18" />{{ BRAND.supportEmail }}
+          </a>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-xs flex-1">
-          <div class="space-y-3">
-            <h4 class="text-white font-bold text-sm">getfortrip 소개</h4>
-            <ul class="space-y-2 text-slate-400">
-              <li><NuxtLink to="/about" class="hover:text-white">회사 소개</NuxtLink></li>
-              <li><NuxtLink to="/careers" class="hover:text-white">채용 정보</NuxtLink></li>
-              <li><NuxtLink to="/news" class="hover:text-white">뉴스룸</NuxtLink></li>
-              <li><NuxtLink to="/sustainability" class="hover:text-white">지속 가능 여행</NuxtLink></li>
-            </ul>
-          </div>
+        <nav aria-label="여행 상품">
+          <h2 class="mb-4 text-sm font-bold text-ink">여행 상품</h2>
+          <ul class="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm text-ink-muted md:grid-cols-1">
+            <li v-for="c in CATEGORIES" :key="c.key"><NuxtLink :to="c.to" class="hover:text-primary">{{ c.label }}</NuxtLink></li>
+          </ul>
+        </nav>
 
-          <div class="space-y-3">
-            <h4 class="text-white font-bold text-sm">고객 지원</h4>
-            <ul class="space-y-2 text-slate-400">
-              <li><NuxtLink to="/help" class="hover:text-white">고객센터</NuxtLink></li>
-              <li><NuxtLink to="/refund-policy" class="hover:text-white">취소 및 환불 규정</NuxtLink></li>
-              <li><NuxtLink to="/safety" class="hover:text-white">안전 여행 가이드</NuxtLink></li>
-              <li><NuxtLink to="/faq" class="hover:text-white">자주 묻는 질문 (FAQ)</NuxtLink></li>
-            </ul>
-          </div>
+        <nav aria-label="고객 지원">
+          <h2 class="mb-4 text-sm font-bold text-ink">고객 지원</h2>
+          <ul class="space-y-2.5 text-sm text-ink-muted">
+            <li v-for="l in SUPPORT_LINKS" :key="l.to"><NuxtLink :to="l.to" class="hover:text-primary">{{ l.label }}</NuxtLink></li>
+            <li><NuxtLink to="/my/bookings" class="hover:text-primary">예약 조회</NuxtLink></li>
+            <li><NuxtLink to="/safety" class="hover:text-primary">안전 여행 가이드</NuxtLink></li>
+          </ul>
+        </nav>
 
-          <div class="space-y-3">
-            <h4 class="text-white font-bold text-sm">파트너 및 제휴</h4>
-            <ul class="space-y-2 text-slate-400">
-              <li><NuxtLink to="/partner/login" class="text-blue-400 hover:text-blue-300 font-bold">파트너 센터 로그인</NuxtLink></li>
-              <li><NuxtLink to="/partner" class="hover:text-white">공급사 파트너 포털</NuxtLink></li>
-              <li><NuxtLink to="/partner/api-docs" class="hover:text-white">API 연동 가이드</NuxtLink></li>
-              <li><a href="mailto:partner@getfortrip.com" class="hover:text-white">제휴 및 공급 문의</a></li>
-            </ul>
-          </div>
-
-          <div class="space-y-3">
-            <h4 class="text-white font-bold text-sm">보안 및 결제 인증</h4>
-            <p class="text-slate-400 leading-relaxed text-[11px]">
-              {{ BRAND.name }}은 256비트 SSL/TLS 엔드투엔드 보안 암호화와 글로벌 전자상거래 표준 규격을 준수하여 고객님의 결제 정보를 안전하게 보호합니다.
-            </p>
-            <div class="flex flex-wrap gap-2 pt-2">
-              <span class="px-2 py-1 bg-slate-800 rounded text-[10px] text-slate-300 font-bold">VISA</span>
-              <span class="px-2 py-1 bg-slate-800 rounded text-[10px] text-slate-300 font-bold">Mastercard</span>
-              <span class="px-2 py-1 bg-slate-800 rounded text-[10px] text-slate-300 font-bold">네이버페이</span>
-              <span class="px-2 py-1 bg-slate-800 rounded text-[10px] text-slate-300 font-bold">카카오페이</span>
-              <span class="px-2 py-1 bg-slate-800 rounded text-[10px] text-slate-300 font-bold">토스페이</span>
-            </div>
-          </div>
-        </div>
+        <nav aria-label="회사">
+          <h2 class="mb-4 text-sm font-bold text-ink">getfortrip</h2>
+          <ul class="space-y-2.5 text-sm text-ink-muted">
+            <li><NuxtLink to="/about" class="hover:text-primary">회사 소개</NuxtLink></li>
+            <li><NuxtLink to="/news" class="hover:text-primary">뉴스룸</NuxtLink></li>
+            <li><NuxtLink to="/careers" class="hover:text-primary">채용</NuxtLink></li>
+            <li><a :href="BRAND.partnerConsoleUrl" class="inline-flex items-center gap-1 hover:text-primary">파트너 콘솔 <AppIcon name="external" :size="14" /></a></li>
+          </ul>
+        </nav>
       </div>
 
-      <!-- 공정위 제휴 고지 및 전자상거래 면책 고지 -->
-      <div class="pt-6 border-t border-slate-800/80 text-[11px] text-slate-400 leading-relaxed space-y-2">
-        <p>
-          <strong class="text-slate-300">[통신판매중개 면책 고지]</strong> getforTrip은 통신판매중개자로서 통신판매의 당사자가 아니며, 개별 여행상품 공급사(Agoda, Booking.com, Klook, MyRealTrip, 글로벌 제휴사 등)가 제공하는 상품, 서비스 정보 및 거래에 대하여 당사는 어떠한 법적 책임도 부담하지 않습니다.
-        </p>
-        <p>
-          <strong class="text-slate-300">[공정거래위원회 제휴 고지]</strong> getforTrip은 제휴사의 공식 API 및 딥링크를 제공하며, 고객이 해당 링크를 통해 예약 및 결제를 완료할 경우 제휴사로부터 소정의 수수료를 지급받을 수 있습니다. 고객이 지불하는 결제 금액에는 어떠한 추가 수수료도 가산되지 않습니다.
-        </p>
-      </div>
-
-      <!-- 하단 저작권 및 법적 링크 -->
-      <div class="pt-6 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between text-xs text-slate-500 gap-4">
-        <div>
-          {{ BRAND.copyright }}
+      <div class="mt-12 flex flex-col gap-4 border-t border-line pt-6 text-xs leading-relaxed text-ink-subtle md:flex-row md:items-start md:justify-between">
+        <div class="space-y-1">
+          <p>{{ BRAND.companyName }} · 통신판매업 신고 {{ BRAND.businessLicense }}</p>
+          <p>결제는 토스페이먼츠를 통해 처리되며, getfortrip은 카드 번호를 저장하지 않습니다. 외화 표시는 참고용 환산 금액입니다.</p>
+          <p>© {{ year }} {{ BRAND.companyName }}</p>
         </div>
-        <div class="flex items-center gap-6">
-          <NuxtLink to="/privacy" class="hover:text-slate-300">개인정보 처리방침</NuxtLink>
-          <NuxtLink to="/terms" class="hover:text-slate-300">이용약관</NuxtLink>
-          <NuxtLink to="/cookies" class="hover:text-slate-300">쿠키 설정</NuxtLink>
+        <div class="flex shrink-0 gap-5 font-medium text-ink-muted">
+          <NuxtLink to="/terms" class="hover:text-ink">이용약관</NuxtLink>
+          <NuxtLink to="/privacy" class="font-bold text-ink hover:text-primary">개인정보 처리방침</NuxtLink>
+          <NuxtLink to="/cookies" class="hover:text-ink">쿠키 설정</NuxtLink>
         </div>
       </div>
     </div>

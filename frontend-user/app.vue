@@ -36,9 +36,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-trip-bg font-sans antialiased text-trip-navy pb-16 md:pb-0">
+  <div class="flex min-h-screen flex-col bg-canvas font-sans text-ink antialiased">
     <GlobalHeader />
-    <main class="flex-1">
+    <main id="main" class="flex-1">
       <NuxtPage />
     </main>
     <GlobalFooter />
