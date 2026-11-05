@@ -1,11 +1,7 @@
 import type { Env } from '../env.ts';
 import { HttpError, json, readJson, str } from '../lib/http.ts';
-import { requireAdmin, requirePartner } from '../lib/auth.ts';
-import {
-  getMarketplaceFinancialSummary,
-  getMarketplaceAttribution,
-  type MerchantModel
-} from '../services/marketplace-service.ts';
+import { audit, requireAdmin, requirePartner } from '../lib/auth.ts';
+import { getMarketplaceFinancialSummary } from '../services/marketplace-service.ts';
 import { isFeatureEnabled } from '../services/feature-flag-service.ts';
 import { newId } from '../lib/crypto.ts';
 
@@ -79,11 +75,18 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     const id = settleMatch[1];
     const now = new Date().toISOString();
 
-    await env.DB.prepare(`
+    const before = await env.DB.prepare('SELECT settlement_status FROM marketplace_order_settlements WHERE id = ?').bind(id).first<any>();
+    if (!before) throw new HttpError(404, 'SETTLEMENT_NOT_FOUND', '정산 내역을 찾을 수 없습니다.');
+    // Conditional update: a settlement is paid out at most once, and never after a refund.
+    const r = await env.DB.prepare(`
       UPDATE marketplace_order_settlements
       SET settlement_status = 'SETTLED', settled_at = ?
-      WHERE id = ?
+      WHERE id = ? AND settlement_status IN ('PENDING', 'HELD')
     `).bind(now, id).run();
+    if (!r.meta.changes) {
+      throw new HttpError(409, 'SETTLEMENT_NOT_PAYABLE', `지급할 수 없는 정산 상태입니다. (${before.settlement_status})`);
+    }
+    await audit(env, admin.id, 'MARKETPLACE_SETTLEMENT_PAYOUT', 'SETTLEMENT', id, { from: before.settlement_status, to: 'SETTLED', settled_at: now });
 
     return json({
       success: true,

@@ -1,6 +1,4 @@
 import type { Env } from '../env.ts';
-import { HttpError } from '../lib/http.ts';
-import { audit } from '../lib/auth.ts';
 import { newId } from '../lib/crypto.ts';
 
 export type MerchantModel = '1P' | '3P' | 'CONSIGNMENT';

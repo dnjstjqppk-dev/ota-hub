@@ -716,52 +716,6 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       return json({ success: true, plans: calculated, duration_days: durationDays });
     }
 
-    // 12. Flight Multi-City Search: POST /api/v1/flights/multi-city
-    if (path === "/api/v1/flights/multi-city" && request.method === "POST") {
-      const body = await request.json().catch(() => ({})) as any;
-      const legs = Array.isArray(body.legs) ? body.legs : [];
-      if (legs.length < 2) {
-        return json({ success: false, error: "다구간 검색은 최소 2개 이상의 여정 구간(Legs)이 필요합니다." }, 400);
-      }
-
-      const legResults = [];
-      let totalEstimatedMinor = 0;
-      for (let i = 0; i < legs.length; i++) {
-        const leg = legs[i];
-        const origin = String(leg.origin || "").toUpperCase();
-        const destination = String(leg.destination || "").toUpperCase();
-        const legDate = String(leg.departure_date || "");
-
-        let sql = "SELECT * FROM flights WHERE is_active = 1";
-        const p: unknown[] = [];
-        if (origin) { sql += " AND (departure_airport LIKE ? OR departure_city LIKE ?)"; p.push(`%${origin}%`, `%${origin}%`); }
-        if (destination) { sql += " AND (arrival_airport LIKE ? OR arrival_city LIKE ?)"; p.push(`%${destination}%`, `%${destination}%`); }
-        sql += " LIMIT 5";
-
-        const matches = (await env.DB.prepare(sql).bind(...p).all()).results || [];
-        const chosen = matches[0] as any;
-        if (chosen) {
-          totalEstimatedMinor += Number(chosen.final_price_minor || chosen.price_minor || 0);
-        }
-        legResults.push({
-          leg_index: i + 1,
-          origin,
-          destination,
-          departure_date: legDate,
-          available_flights: matches,
-          selected_estimate: chosen || null
-        });
-      }
-
-      return json({
-        success: true,
-        legs: legResults,
-        total_fare_estimate_minor: Math.round(totalEstimatedMinor * 0.95),
-        currency: "KRW",
-        discount_applied: "MULTI_CITY_BUNDLE_5PCT"
-      });
-    }
-
     // 13. Activity Time Slots & Availability: GET /api/v1/activities/:id/slots
     const slotMatch = path.match(/^\/api\/v1\/activities\/([A-Za-z0-9_]+)\/slots$/);
     if (slotMatch) {

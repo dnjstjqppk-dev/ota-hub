@@ -1,6 +1,6 @@
 import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
-import { audit, jwtSecret, rateLimit, requirePartner } from "../lib/auth.ts";
+import { jwtSecret, rateLimit, requirePartner } from "../lib/auth.ts";
 import { hashPassword, newId, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
 
 export async function handlePartner(request: Request, env: Env, url: URL): Promise<Response | null> {

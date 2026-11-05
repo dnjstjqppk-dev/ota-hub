@@ -57,7 +57,7 @@ export async function requireAdmin(request: Request, env: Env): Promise<AuthUser
   return { ...u, role: "ADMIN" };
 }
 
-export async function requirePartner(request: Request, env: Env): Promise<AuthUser & { partnerId: string; companyName?: string }> {
+export async function requirePartner(request: Request, env: Env): Promise<AuthUser & { partnerId: string; companyName: string }> {
   const u = await getAuthUser(request, env);
   if (!u) throw new HttpError(401, "UNAUTHORIZED", "파트너 로그인이 필요합니다.");
   if (u.role !== "PARTNER" && u.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "파트너 권한이 없습니다.");

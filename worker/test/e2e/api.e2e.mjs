@@ -312,7 +312,8 @@ test("user data: price alerts / coupons / reviews are owner-scoped and verified"
   assert.equal((await api("POST", "/api/v1/user/coupons/claim", { token: A.token, body: { code: "TEST10" } })).status, 200);
   assert.equal((await api("POST", "/api/v1/user/coupons/claim", { token: A.token, body: { code: "TEST10" } })).data.code, "ALREADY_CLAIMED");
   const rv = await api("POST", "/api/v1/reviews", { token: B.token, body: { targetId: "htl_seoul_01", rating: 5, comment: "unverified" } });
-  assert.equal(rv.data.verifiedStay, false);
+  assert.equal(rv.status, 400);
+  assert.equal(rv.data.code, "REVIEW_BOOKING_REQUIRED");
 });
 
 test("affiliate postback: unconfigured partner rejected, cannot touch bookings", async () => {

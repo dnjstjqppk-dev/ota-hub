@@ -151,22 +151,20 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     const rating = Number(b.rating);
     const comment = str(b.comment, 2000);
     if (!targetId || !comment || !Number.isInteger(rating) || rating < 1 || rating > 5) throw new HttpError(400, "INVALID_REVIEW", "상품, 1~5점 평점, 후기 내용을 입력해주세요.");
+    // Only verified reviews are accepted: each must be backed by the customer's own fulfilled booking of this product.
     const bookingId = str(b.bookingId || b.booking_id, 64);
-    let verified = 0;
-    if (bookingId) {
-      // A booking may back exactly one review, and only the customer's own fulfilled booking of this product.
-      const bk = await db.prepare("SELECT user_id, item_id, domain_type, status FROM bookings WHERE id = ?").bind(bookingId).first<any>();
-      const eligible = bk && bk.user_id === u.id && bk.item_id === targetId && bk.domain_type === domain && ["VOUCHER_ISSUED", "TICKETED", "COMPLETED"].includes(bk.status);
-      if (!eligible) throw new HttpError(400, "REVIEW_BOOKING_NOT_ELIGIBLE", "이용 완료된 본인 예약에 대해서만 인증 후기를 작성할 수 있습니다.");
-      if (await db.prepare("SELECT id FROM reviews WHERE booking_id = ?").bind(bookingId).first()) {
-        throw new HttpError(409, "ALREADY_REVIEWED", "이 예약에 대한 후기를 이미 작성했습니다.");
-      }
-      verified = 1;
+    if (!bookingId) throw new HttpError(400, "REVIEW_BOOKING_REQUIRED", "이용 완료된 예약을 선택해야 후기를 작성할 수 있습니다.");
+    const bk = await db.prepare("SELECT user_id, item_id, domain_type, status FROM bookings WHERE id = ?").bind(bookingId).first<any>();
+    const eligible = bk && bk.user_id === u.id && bk.item_id === targetId && bk.domain_type === domain && ["VOUCHER_ISSUED", "TICKETED", "COMPLETED"].includes(bk.status);
+    if (!eligible) throw new HttpError(400, "REVIEW_BOOKING_NOT_ELIGIBLE", "이용 완료된 본인 예약에 대해서만 인증 후기를 작성할 수 있습니다.");
+    // A booking may back exactly one review.
+    if (await db.prepare("SELECT id FROM reviews WHERE booking_id = ?").bind(bookingId).first()) {
+      throw new HttpError(409, "ALREADY_REVIEWED", "이 예약에 대한 후기를 이미 작성했습니다.");
     }
     const id = newId("rev");
-    await db.prepare("INSERT INTO reviews (id, user_id, user_name, domain_type, target_id, booking_id, rating, comment, verified_stay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(id, u.id, u.fullName || "여행자", domain, targetId, bookingId || null, rating, comment, verified).run();
-    return json({ success: true, reviewId: id, verifiedStay: verified === 1 }, 201);
+    await db.prepare("INSERT INTO reviews (id, user_id, user_name, domain_type, target_id, booking_id, rating, comment, verified_stay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)")
+      .bind(id, u.id, u.fullName || "여행자", domain, targetId, bookingId, rating, comment).run();
+    return json({ success: true, reviewId: id, verifiedStay: true }, 201);
   }
 
   // ---------------- Moments ----------------

@@ -167,7 +167,7 @@ export async function handleUrlIngest(request: Request, env: Env, url: URL): Pro
     }
 
     const draft = await scrapeTravelProductUrl(inputUrl);
-    draft.supplier_name = partner.company_name;
+    draft.supplier_name = partner.companyName;
     const saved = await saveIngestedDraft(env, draft, `partner:${partner.id}`);
 
     return json({
