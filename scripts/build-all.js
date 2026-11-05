@@ -52,15 +52,6 @@ try {
   if (!fs.existsSync(adminDist)) throw new Error(`Admin build artifact not found at: ${adminDist}`);
   if (!fs.existsSync(partnerDist)) throw new Error(`Partner build artifact not found at: ${partnerDist}`);
 
-  // Dual-mount self copies for relative & prefixed routing on dedicated worker hosts
-  const adminSelfSub = path.join(adminDist, 'admin');
-  if (!fs.existsSync(adminSelfSub)) fs.mkdirSync(adminSelfSub, { recursive: true });
-  fs.cpSync(adminDist, adminSelfSub, { recursive: true, filter: (src) => !src.includes(path.sep + 'admin') });
-
-  const partnerSelfSub = path.join(partnerDist, 'partner');
-  if (!fs.existsSync(partnerSelfSub)) fs.mkdirSync(partnerSelfSub, { recursive: true });
-  fs.cpSync(partnerDist, partnerSelfSub, { recursive: true, filter: (src) => !src.includes(path.sep + 'partner') });
-  
   fs.cpSync(adminDist, targetAdmin, { recursive: true });
   fs.cpSync(partnerDist, targetPartner, { recursive: true });
   console.log('  ✅ Admin & Partner SPAs integrated into public/ successfully.\n');
