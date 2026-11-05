@@ -842,6 +842,129 @@ async function runVerificationSuite() {
   });
 
   // ---------------------------------------------------------------------------
+  // 38. MARKETPLACE CATALOG MODEL ATTRIBUTION (1P, 3P, CONSIGNMENT)
+  // ---------------------------------------------------------------------------
+  await test("Marketplace Catalog: GET /api/v1/marketplace/catalog?model=1P/3P/CONSIGNMENT returns filtered attribution", async () => {
+    // 1. 1P Direct Sales Filter
+    const p1Res = await fetch(`${BASE_URL}/api/v1/marketplace/catalog?model=1P`);
+    if (!p1Res.ok) throw new Error(`Marketplace 1P query failed: HTTP ${p1Res.status}`);
+    const p1Json = await p1Res.json();
+    if (!p1Json.success || !Array.isArray(p1Json.items) || p1Json.items.length === 0) {
+      throw new Error(`Expected seeded 1P items in catalog: ${JSON.stringify(p1Json)}`);
+    }
+    const all1P = p1Json.items.every((i) => i.merchant_model === '1P');
+    if (!all1P) throw new Error(`Non-1P item returned in 1P catalog filter`);
+
+    // 2. 3P Partner Sales Filter
+    const p3Res = await fetch(`${BASE_URL}/api/v1/marketplace/catalog?model=3P`);
+    if (!p3Res.ok) throw new Error(`Marketplace 3P query failed: HTTP ${p3Res.status}`);
+    const p3Json = await p3Res.json();
+    if (!p3Json.success || !Array.isArray(p3Json.items) || p3Json.items.length === 0) {
+      throw new Error(`Expected seeded 3P items in catalog: ${JSON.stringify(p3Json)}`);
+    }
+    const all3P = p3Json.items.every((i) => i.merchant_model === '3P');
+    if (!all3P) throw new Error(`Non-3P item returned in 3P catalog filter`);
+
+    // 3. Consignment Sales Filter
+    const conRes = await fetch(`${BASE_URL}/api/v1/marketplace/catalog?model=CONSIGNMENT`);
+    if (!conRes.ok) throw new Error(`Marketplace CONSIGNMENT query failed: HTTP ${conRes.status}`);
+    const conJson = await conRes.json();
+    if (!conJson.success || !Array.isArray(conJson.items) || conJson.items.length === 0) {
+      throw new Error(`Expected seeded CONSIGNMENT items in catalog: ${JSON.stringify(conJson)}`);
+    }
+    const allCon = conJson.items.every((i) => i.merchant_model === 'CONSIGNMENT');
+    if (!allCon) throw new Error(`Non-CONSIGNMENT item returned in CONSIGNMENT catalog filter`);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 39. MARKETPLACE ADMIN FINANCIAL SUMMARY & 3-MODEL BREAKDOWN
+  // ---------------------------------------------------------------------------
+  await test("Marketplace Financial Summary: GET /api/v1/admin/marketplace/summary returns 1P/3P/Consignment breakdown", async () => {
+    const res = await fetch(`${BASE_URL}/api/v1/admin/marketplace/summary`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    if (!res.ok) throw new Error(`Marketplace summary failed: HTTP ${res.status}`);
+    const json = await res.json();
+    if (!json.success || !json.summary || !json.summary.model_breakdown) {
+      throw new Error(`Invalid marketplace summary format: ${JSON.stringify(json)}`);
+    }
+    const { model_breakdown, catalog_item_counts } = json.summary;
+    if (!('1P' in model_breakdown) || !('3P' in model_breakdown) || !('CONSIGNMENT' in model_breakdown)) {
+      throw new Error(`Missing 3-tier models in breakdown: ${JSON.stringify(model_breakdown)}`);
+    }
+    if (catalog_item_counts['1P'] < 1 || catalog_item_counts['3P'] < 1 || catalog_item_counts['CONSIGNMENT'] < 1) {
+      throw new Error(`Catalog counts per model must be positive: ${JSON.stringify(catalog_item_counts)}`);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 40. 3P PARTNER PRODUCT REGISTRATION WITH SELLER ATTRIBUTION
+  // ---------------------------------------------------------------------------
+  await test("3P Partner Product Registration: POST /api/v1/partner/marketplace/products registers product with 3P seller attribution", async () => {
+    const res = await fetch(`${BASE_URL}/api/v1/partner/marketplace/products`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${partnerToken}`
+      },
+      body: JSON.stringify({
+        title: `제주 한라산 프라이빗 투어 (${rand})`,
+        domain: 'ACTIVITY',
+        city: '제주',
+        price: 80000
+      })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Partner product registration failed HTTP ${res.status}: ${err}`);
+    }
+    const json = await res.json();
+    if (!json.success || !json.product || json.product.merchant_model !== '3P') {
+      throw new Error(`Invalid 3P product registration response: ${JSON.stringify(json)}`);
+    }
+    if (json.product.retail_price_krw !== 80000 || json.product.seller_payout_krw !== 72000) {
+      throw new Error(`Unexpected margin calculation: ${JSON.stringify(json.product)}`);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 41. MULTI-VENDOR SETTLEMENT LEDGER & PAYOUT APPROVAL
+  // ---------------------------------------------------------------------------
+  await test("Marketplace Settlement Payout: Admin approves payout & Partner views live settlement ledger", async () => {
+    // 1. Admin views all vendor settlements
+    const admRes = await fetch(`${BASE_URL}/api/v1/admin/marketplace/settlements`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    if (!admRes.ok) throw new Error(`Admin settlements failed: HTTP ${admRes.status}`);
+    const admJson = await admRes.json();
+    if (!admJson.success || !Array.isArray(admJson.settlements)) {
+      throw new Error(`Invalid settlements response: ${JSON.stringify(admJson)}`);
+    }
+
+    // 2. Admin approves payout for an existing settlement if present
+    const pending = admJson.settlements.find((s) => s.settlement_status === 'PENDING') || admJson.settlements[0];
+    if (pending) {
+      const settleRes = await fetch(`${BASE_URL}/api/v1/admin/marketplace/settlements/${pending.id}/settle`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      if (!settleRes.ok) throw new Error(`Settlement approval failed: HTTP ${settleRes.status}`);
+      const settleJson = await settleRes.json();
+      if (!settleJson.success) throw new Error(`Settlement approval rejected: ${JSON.stringify(settleJson)}`);
+    }
+
+    // 3. Partner views their own 3P settlement records
+    const ptnRes = await fetch(`${BASE_URL}/api/v1/partner/marketplace/settlements`, {
+      headers: { Authorization: `Bearer ${partnerToken}` }
+    });
+    if (!ptnRes.ok) throw new Error(`Partner marketplace settlements failed: HTTP ${ptnRes.status}`);
+    const ptnJson = await ptnRes.json();
+    if (!ptnJson.success || !Array.isArray(ptnJson.settlements)) {
+      throw new Error(`Invalid partner settlements response: ${JSON.stringify(ptnJson)}`);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // SUMMARY
   // ---------------------------------------------------------------------------
   console.log('\n==============================================================================');

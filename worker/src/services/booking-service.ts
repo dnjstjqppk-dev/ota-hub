@@ -19,6 +19,7 @@ import type { AuthUser } from "../lib/auth.ts";
 import { loadProduct, loadSupplier, bookabilityOf, type SupplierRow } from "./catalog.ts";
 import { adapterFor, type Simulation, type SupplierContext } from "../suppliers/adapter.ts";
 import { getPaymentProvider, requirePaymentProvider } from "../payments/provider.ts";
+import { createOrderSettlement } from "./marketplace-service.ts";
 
 const QUOTE_TTL_MS = 15 * 60_000;
 const PAYMENT_WINDOW_MS = 15 * 60_000;
@@ -656,6 +657,11 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
         ...journalStmts(db, L.fulfilmentRecognized(b.id, b.paid_minor, split), cur),
         notify("FLIGHT_TICKETED"),
       ]);
+      try {
+        await createOrderSettlement(env, b.id, b.domain_type, b.item_id, b.paid_minor);
+      } catch (err) {
+        console.warn("Marketplace settlement creation failed:", err);
+      }
       return mustGet(env, b.id);
     }
     // Ticketing failed after PNR: void the PNR at the supplier, then refund.
@@ -679,6 +685,11 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
     ...journalStmts(db, L.fulfilmentRecognized(b.id, b.paid_minor, split), b),
     notify("BOOKING_CONFIRMED"),
   ]);
+  try {
+    await createOrderSettlement(env, b.id, b.domain_type, b.item_id, b.paid_minor);
+  } catch (err) {
+    console.warn("Marketplace settlement creation failed:", err);
+  }
   return mustGet(env, b.id);
 }
 
