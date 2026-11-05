@@ -14,7 +14,8 @@
     {
       "binding": "DB",
       "database_name": "ota_production",
-      "database_id": "d36231d8-4bfb-42e1-ae51-a019723e5db0"
+      "database_id": "d36231d8-4bfb-42e1-ae51-a019723e5db0",
+      "migrations_dir": "worker/migrations"
     }
   ],
   "assets": {
