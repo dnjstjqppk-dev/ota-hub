@@ -40,25 +40,14 @@ useHead(() => {
 
 <template>
   <DetailShell :state="state" list-path="/cars" list-label="렌터카 검색으로" @retry="reload">
-    <template v-if="c">
-      <nav class="mb-3 text-xs text-slate-400"><NuxtLink to="/" class="hover:underline">홈</NuxtLink> › <NuxtLink to="/cars" class="hover:underline">렌터카</NuxtLink> › {{ c.vehicle_model }}</nav>
-      <div class="grid gap-6 md:grid-cols-[1fr_320px]">
-        <div class="space-y-6">
-          <section class="overflow-hidden rounded-3xl border border-slate-200 bg-white" data-testid="car-detail">
-            <img v-if="c.image_url" :src="c.image_url" :alt="c.vehicle_model" class="h-64 w-full object-cover" />
-            <div class="p-6 md:p-8">
-              <div class="text-xs font-semibold text-slate-500">{{ c.company_name }}</div>
-              <h1 class="mt-1 text-2xl font-black text-slate-900">{{ c.vehicle_model }}</h1>
-              <dl class="mt-5 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                <div v-for="[k, v] in facts" :key="k"><dt class="text-xs text-slate-500">{{ k }}</dt><dd class="font-semibold text-slate-900">{{ v }}</dd></div>
-              </dl>
-              <p class="mt-5 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">대여일과 반납일은 예약 단계에서 선택합니다. 요금은 대여 일수 × 1일 요금에 세금이 더해져 계산됩니다.</p>
-            </div>
-          </section>
-          <ReviewsSection domain="CAR" :target-id="c.id" />
-        </div>
-        <DetailBookingCard :item="c" domain="CAR" :price-krw="c.daily_price_krw" unit-label="1일" cancellation="FREE" :alert-label="`${c.company_name} ${c.vehicle_model}`" />
+    <div v-if="c" class="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div class="min-w-0 space-y-8">
+        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '렌터카', to: '/cars' }, { label: c.vehicle_model }]" :eyebrow="c.company_name" :title="c.vehicle_model" :image="c.image_url || null" image-icon="car" :facts="facts" testid="car-detail">
+          <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">요금은 대여 일수 × 1일 요금에 세금 10%가 더해져 계산돼요. 운전자 자격과 현장 보증금은 렌터카 회사 규정을 따라요.</p>
+        </DetailHero>
+        <ReviewsSection domain="CAR" :target-id="c.id" />
       </div>
-    </template>
+      <DetailBookingCard :item="c" domain="CAR" :price-krw="c.daily_price_krw" unit-label="1일" cancellation="FREE" date-mode="range" start-label="인수일" end-label="반납일" :alert-label="c.company_name + ' ' + c.vehicle_model" />
+    </div>
   </DetailShell>
 </template>

@@ -43,22 +43,14 @@ useHead(() => {
 
 <template>
   <DetailShell :state="state" list-path="/flights" list-label="항공권 검색으로" @retry="reload">
-    <template v-if="f">
-      <nav class="mb-3 text-xs text-slate-400"><NuxtLink to="/" class="hover:underline">홈</NuxtLink> › <NuxtLink to="/flights" class="hover:underline">항공권</NuxtLink> › {{ f.flight_number }}</nav>
-      <div class="grid gap-6 md:grid-cols-[1fr_320px]">
-        <div class="space-y-6">
-          <section class="rounded-3xl border border-slate-200 bg-white p-6 md:p-8" data-testid="flight-detail">
-            <div class="text-xs font-semibold text-slate-500">{{ f.airline_name }} · {{ f.flight_number }}</div>
-            <h1 class="mt-1 text-2xl font-black text-slate-900">{{ f.departure_airport }} → {{ f.arrival_airport }}</h1>
-            <dl class="mt-5 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-              <div v-for="[k, v] in facts" :key="k"><dt class="text-xs text-slate-500">{{ k }}</dt><dd class="font-semibold text-slate-900">{{ v }}</dd></div>
-            </dl>
-            <p class="mt-5 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">항공권은 발권 후 환불이 불가한 운임입니다. 여권 정보(영문 성명·여권번호·만료일)가 예약 단계에서 필요합니다. 왕복은 항공권 검색에서 가는 편과 오는 편을 차례로 선택하세요.</p>
-          </section>
-          <ReviewsSection domain="FLIGHT" :target-id="f.id" />
-        </div>
-        <DetailBookingCard :item="f" domain="FLIGHT" :price-krw="f.base_price_krw" unit-label="성인 1인 편도" cancellation="NON_REFUNDABLE" :alert-label="`${f.departure_airport}-${f.arrival_airport} ${f.flight_number}`" />
+    <div v-if="f" class="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div class="min-w-0 space-y-8">
+        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '항공권', to: '/flights' }, { label: f.flight_number }]" :eyebrow="f.airline_name + ' · ' + f.flight_number" :title="f.departure_airport + ' → ' + f.arrival_airport" :facts="facts" testid="flight-detail">
+          <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">발권 후에는 환불할 수 없는 운임이에요. 예약 단계에서 탑승객 전원의 여권 정보(영문 성명·여권번호·만료일)가 필요해요. 왕복은 항공권 검색에서 가는 편과 오는 편을 차례로 고르면 한 번에 예약돼요.</p>
+        </DetailHero>
+        <ReviewsSection domain="FLIGHT" :target-id="f.id" />
       </div>
-    </template>
+      <DetailBookingCard :item="f" domain="FLIGHT" :price-krw="f.base_price_krw" unit-label="성인 1명 편도" cancellation="NON_REFUNDABLE" start-label="가는 날" people :alert-label="f.departure_airport + '-' + f.arrival_airport + ' ' + f.flight_number" />
+    </div>
   </DetailShell>
 </template>

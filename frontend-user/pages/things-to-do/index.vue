@@ -1,440 +1,130 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
-import { useRoute } from 'vue-router'
+/**
+ * Tours, tickets & experiences (design system "Horizon"). URL = state (keyword, category, filters, sort).
+ * API only. Ratings are supplier-provided and labelled as such; prices are per person.
+ */
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { qOneOf, qStr, useUrlQuery } from '~/composables/useUrlQuery'
 
-const route = useRoute()
-const currencyStore = useCurrencyStore()
+const { route, patch, isSelf } = useUrlQuery()
+const currency = useCurrencyStore()
 
-const city = ref((route.query.city || route.query.q || '') as string)
-const selectedCategory = ref(route.query.category as string || 'ALL')
-const freeCancelOnly = ref(false)
-const instantOnly = ref(false)
-const selectedDuration = ref('')
-const selectedLanguage = ref('')
-const maxPrice = ref(200000)
-const sortBy = ref<'recommended' | 'price_asc' | 'rating_desc'>('recommended')
-const showMobileFilter = ref(false)
+const SORTS = [{ id: 'recommended', label: '추천순' }, { id: 'price_asc', label: '낮은 가격순' }, { id: 'rating_desc', label: '평점 높은순' }] as const
+const CATEGORY_KO: Record<string, string> = { THEME_PARK: '테마파크', DAY_TOUR: '일일 투어', DOCENT_TOUR: '해설 투어', TICKET: '입장권', EXPERIENCE: '체험', CRUISE: '크루즈', SHOW: '공연', ESIM: 'eSIM·데이터' }
 
-const activeFilterCount = computed(() => {
-  let count = 0
-  if (selectedCategory.value !== 'ALL') count++
-  if (freeCancelOnly.value) count++
-  if (instantOnly.value) count++
-  if (selectedDuration.value) count++
-  if (maxPrice.value < 200000) count++
-  return count
-})
-
-import { searchActivityCatalog, type ActivityProperty } from '~/data/activityCatalog'
-
-const activities = ref<ActivityProperty[]>(searchActivityCatalog({
-  city: city.value,
-  category: selectedCategory.value,
-  freeCancel: freeCancelOnly.value,
-  instantOnly: instantOnly.value,
-  maxPrice: maxPrice.value,
-  sortBy: sortBy.value
-}))
-const loading = ref(false)
-
-const categories = [
-  { id: 'ALL', label: '전체 보기' },
-  { id: 'THEME_PARK', label: '테마파크 / 놀이공원' },
-  { id: 'TICKET', label: '명소 / 전망대 티켓' },
-  { id: 'DAY_TOUR', label: '당일 버스 / 밴 투어' },
-  { id: 'DOCENT_TOUR', label: '미술관 / 가이드 도슨트' },
-  { id: 'PASS', label: '교통 패스' },
-  { id: 'ESIM', label: '해외 유심 / eSIM' },
-]
-
-const fetchActivities = async () => {
-  loading.value = true
-  try {
-    const params = new URLSearchParams()
-    if (city.value) {
-      params.append('city', city.value)
-      params.append('q', city.value)
-    }
-    if (selectedCategory.value && selectedCategory.value !== 'ALL') {
-      params.append('category', selectedCategory.value)
-    }
-    if (freeCancelOnly.value) {
-      params.append('freeCancel', 'true')
-      params.append('freeCancelOnly', 'true')
-    }
-    if (instantOnly.value) {
-      params.append('instant', 'true')
-      params.append('instantOnly', 'true')
-    }
-    if (maxPrice.value < 200000) params.append('maxPrice', String(maxPrice.value))
-
-    const res = await fetch(`${useApiUrl('/activities')}?${params.toString()}`, { signal: AbortSignal.timeout(1500) })
-    if (res.ok) {
-      const json = await res.json()
-      if (Array.isArray(json.data) && json.data.length > 0) {
-        activities.value = json.data
-        loading.value = false
-        return
-      }
-    }
-  } catch (e) {
-    // Fall back to verified activity catalog
+const q = computed(() => {
+  const r = route.query
+  return {
+    text: qStr(r.q || r.city || r.query), category: qStr(r.category),
+    instant: qStr(r.instant) === 'true', freeCancel: qStr(r.freeCancel) === 'true',
+    sort: qOneOf(r.sortBy, SORTS.map((s) => s.id), 'recommended')
   }
+})
+const draft = ref('')
+watch(() => q.value.text, (v) => { draft.value = v }, { immediate: true })
+function submit() { patch({ q: draft.value.trim(), city: '', query: '' }) }
 
-  activities.value = searchActivityCatalog({
-    city: city.value,
-    category: selectedCategory.value,
-    freeCancel: freeCancelOnly.value,
-    instantOnly: instantOnly.value,
-    maxPrice: maxPrice.value,
-    sortBy: sortBy.value
-  })
-  loading.value = false
+const items = ref<any[]>([])
+const categories = ref<string[]>([])
+const state = ref<'loading' | 'ready' | 'error'>('loading')
+let ctrl: AbortController | null = null
+async function load() {
+  ctrl?.abort(); ctrl = new AbortController(); const mine = ctrl
+  const x = q.value
+  state.value = 'loading'
+  const timer = setTimeout(() => mine.abort(), 10000)
+  try {
+    const p = new URLSearchParams({ sortBy: x.sort, limit: '100' })
+    if (x.text) p.set('q', x.text)
+    if (x.category) p.set('category', x.category)
+    if (x.instant) p.set('instantOnly', 'true')
+    if (x.freeCancel) p.set('freeCancelOnly', 'true')
+    const res = await fetch(`${useApiUrl('/activities')}?${p}`, { signal: mine.signal })
+    if (!res.ok) throw new Error(String(res.status))
+    const j = await res.json()
+    if (mine !== ctrl) return
+    items.value = Array.isArray(j.data) ? j.data : []
+    // Category chips come from what is actually on sale (never from a fixed list of empty categories).
+    if (!x.category) categories.value = [...new Set(items.value.map((a) => a.category).filter(Boolean))] as string[]
+    state.value = 'ready'
+  } catch { if (mine === ctrl) state.value = 'error' } finally { clearTimeout(timer) }
 }
+const activeCount = computed(() => (q.value.category ? 1 : 0) + (q.value.instant ? 1 : 0) + (q.value.freeCancel ? 1 : 0))
+const RESET = { category: '', instant: '', freeCancel: '' }
 
-watch([city, selectedCategory, freeCancelOnly, instantOnly, maxPrice, sortBy], () => {
-  fetchActivities()
-})
-
-watch(() => [route.query.city, route.query.q], ([newCity, newQ]) => {
-  city.value = ((newCity || newQ || '') as string)
-  fetchActivities()
-})
-
-onMounted(() => {
-  fetchActivities()
-})
+watch(() => route.fullPath, () => { if (isSelf()) load() })
+onMounted(load)
+onBeforeUnmount(() => ctrl?.abort())
+useHead(() => ({
+  title: q.value.text ? `${q.value.text} 투어·티켓` : '투어·티켓·체험',
+  meta: [{ name: 'description', content: '테마파크 입장권, 현지 투어, 체험 상품을 비교하고 예약하세요.' }]
+}))
 </script>
 
 <template>
-  <div class="max-w-7xl mx-auto px-4 py-8 space-y-6">
-    <!-- 상단 타이틀 & 카테고리 탭 (Trip-style) -->
-    <div>
-      <div class="flex items-center gap-2 text-xs text-slate-400 mb-1">
-        <span>홈</span> <span>›</span> <span class="text-slate-800 font-bold">투어 & 액티비티</span>
+  <div class="pb-24 lg:pb-16">
+    <section class="relative overflow-hidden border-b border-line bg-gradient-to-b from-sapphire-50 to-canvas">
+      <div class="mx-auto max-w-7xl px-4 pb-6 pt-8 lg:px-6 lg:pt-12">
+        <nav class="mb-2 flex items-center gap-1 text-xs text-ink-subtle" aria-label="이동 경로"><NuxtLink to="/" class="hover:text-ink">홈</NuxtLink><AppIcon name="chevron-right" :size="12" /><span>투어·티켓</span></nav>
+        <h1 class="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">여행지에서 할 일을 찾아보세요</h1>
+        <form class="mt-5 flex max-w-2xl gap-2" role="search" novalidate @submit.prevent="submit">
+          <div class="field-box flex-1"><label for="td-q" class="field-label">도시·명소·상품</label><SearchAutocomplete v-model="draft" input-id="td-q" domain="things-to-do" variant="bare" placeholder="예: 도쿄, 디즈니랜드, 루브르" @enter="submit" /></div>
+          <button type="submit" class="btn-primary min-h-[52px] rounded-2xl px-6 text-base"><AppIcon name="search" :size="18" /><span class="hidden sm:inline">검색</span></button>
+        </form>
       </div>
-      <h1 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">전 세계 투어 & 액티비티 & 입장권</h1>
-      <p class="text-xs md:text-sm text-slate-500 mt-1">유니버설 스튜디오, 디즈니랜드, 박물관 도슨트 및 즉시 개통되는 글로벌 eSIM</p>
-    </div>
+    </section>
 
-    <!-- 가로 스크롤 카테고리 퀵 바 & 모바일 필터 버튼 -->
-    <div class="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-200 scrollbar-none">
-      <button
-        @click="showMobileFilter = true"
-        :class="[
-          'lg:hidden px-3.5 py-2 rounded-full text-xs font-bold border flex items-center gap-1.5 whitespace-nowrap shadow-sm',
-          activeFilterCount > 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-300'
-        ]"
-      >
-        <span>⚡ 필터</span>
-        <span v-if="activeFilterCount > 0" class="w-4 h-4 rounded-full bg-white text-blue-600 text-[10px] flex items-center justify-center font-black">
-          {{ activeFilterCount }}
-        </span>
-      </button>
+    <div class="mx-auto max-w-7xl px-4 lg:px-6">
+      <div class="flex flex-wrap items-end justify-between gap-3 pb-3 pt-6">
+        <h2 class="text-xl font-bold tracking-tight text-ink">{{ q.text ? `‘${q.text}’ 검색 결과` : '모든 투어·티켓' }} <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ items.length }}개</span></h2>
+        <label class="flex items-center gap-2 text-sm text-ink-muted">
+          <span class="hidden sm:inline">정렬</span>
+          <select :value="q.sort" class="rounded-xl border border-line bg-surface py-2 pl-3 pr-8 text-sm font-semibold text-ink focus:border-primary focus:outline-none" @change="patch({ sortBy: ($event.target as HTMLSelectElement).value === 'recommended' ? '' : ($event.target as HTMLSelectElement).value })">
+            <option v-for="s in SORTS" :key="s.id" :value="s.id">{{ s.label }}</option>
+          </select>
+        </label>
+      </div>
 
-      <button
-        v-for="cat in categories"
-        :key="cat.id"
-        @click="selectedCategory = cat.id"
-        :class="[
-          'px-4 py-2 rounded-full text-xs font-bold transition whitespace-nowrap',
-          selectedCategory === cat.id
-            ? 'bg-blue-600 text-white shadow-sm'
-            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-        ]"
-      >
-        {{ cat.label }}
-      </button>
-    </div>
+      <div class="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <button type="button" class="chip" :aria-pressed="!q.category" @click="patch({ category: '' })">전체</button>
+        <button v-for="c in categories" :key="c" type="button" class="chip" :aria-pressed="q.category === c" @click="patch({ category: q.category === c ? '' : c })">{{ CATEGORY_KO[c] || c }}</button>
+        <span class="mx-1 w-px shrink-0 bg-line" aria-hidden="true" />
+        <button type="button" class="chip" :aria-pressed="q.instant" @click="patch({ instant: q.instant ? '' : 'true' })"><AppIcon name="bolt" :size="14" />즉시 확정</button>
+        <button type="button" class="chip" :aria-pressed="q.freeCancel" @click="patch({ freeCancel: q.freeCancel ? '' : 'true' })">무료 취소</button>
+      </div>
 
-    <!-- 메인 레이아웃: 좌측 패싯 필터 사이드바 + 우측 카드 리스트 -->
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-      <!-- 1. 패싯 필터 사이드바 (Trip-style 12개 다중 조건) -->
-      <aside class="hidden lg:block bg-white p-5 rounded-2xl border border-slate-200 shadow-sm h-fit space-y-6">
-        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-          <span class="font-black text-sm text-slate-900">상세 필터 검색</span>
-          <button
-            @click="selectedCategory = 'ALL'; freeCancelOnly = false; instantOnly = false; selectedDuration = ''; maxPrice = 200000"
-            class="text-[11px] text-blue-600 font-bold hover:underline"
-          >
-            초기화
-          </button>
-        </div>
-
-        <!-- 예약 & 확정 옵션 -->
-        <div>
-          <h4 class="font-bold text-xs text-slate-900 mb-2">예약 및 바우처 혜택</h4>
-          <div class="space-y-2 text-xs">
-            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-              <input v-model="instantOnly" type="checkbox" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
-              <span>⚡ 즉시 확정 (모바일 QR 즉시 발권)</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-              <input v-model="freeCancelOnly" type="checkbox" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
-              <span>✓ 무료 취소 가능</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 소요 시간 필터 -->
-        <div>
-          <h4 class="font-bold text-xs text-slate-900 mb-2">소요 시간</h4>
-          <div class="space-y-2 text-xs">
-            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-              <input type="radio" v-model="selectedDuration" value="" name="dur" class="accent-blue-600" />
-              <span>전체 소요시간</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-              <input type="radio" v-model="selectedDuration" value="UNDER_2H" name="dur" class="accent-blue-600" />
-              <span>2시간 미만 (전망대/간편 입장)</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-              <input type="radio" v-model="selectedDuration" value="HALF_DAY" name="dur" class="accent-blue-600" />
-              <span>반일 투어 (2~4시간)</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-              <input type="radio" v-model="selectedDuration" value="FULL_DAY" name="dur" class="accent-blue-600" />
-              <span>종일 투어 (테마파크/1일 투어)</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-              <input type="radio" v-model="selectedDuration" value="MULTI_DAY" name="dur" class="accent-blue-600" />
-              <span>다일권 / 유심 (3일 이상)</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 가격대 슬라이더 -->
-        <div>
-          <div class="flex justify-between items-center mb-1">
-            <h4 class="font-bold text-xs text-slate-900">최대 가격</h4>
-            <span class="font-mono text-xs font-bold text-blue-600">{{ currencyStore.formatKRW(maxPrice) }}</span>
-          </div>
-          <input
-            v-model.number="maxPrice"
-            type="range"
-            min="5000"
-            max="200000"
-            step="5000"
-            class="w-full accent-blue-600 cursor-pointer"
-          />
-        </div>
-
-        <!-- 가이드 언어 -->
-        <div>
-          <h4 class="font-bold text-xs text-slate-900 mb-2">가이드 언어</h4>
-          <div class="space-y-1 text-xs">
-            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-              <input type="checkbox" checked disabled class="rounded text-blue-600" />
-              <span>🇰🇷 한국어 가이드 / 한국어 지원</span>
-            </label>
-          </div>
-        </div>
-      </aside>
-
-      <!-- 2. 우측 상품 리스트 & 정렬 탭 -->
-      <main class="lg:col-span-3 space-y-4">
-        <!-- 정렬 탭 및 개수 표시 -->
-        <div class="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-xs">
-          <span class="text-slate-500 font-medium">
-            총 <strong class="text-blue-600 font-bold">{{ activities.length }}</strong>개의 투어 & 티켓
-          </span>
-
-          <div class="flex items-center gap-1">
-            <button
-              @click="sortBy = 'recommended'"
-              :class="['px-3 py-1.5 rounded-lg font-bold transition', sortBy === 'recommended' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50']"
-            >
-              추천순
-            </button>
-            <button
-              @click="sortBy = 'price_asc'"
-              :class="['px-3 py-1.5 rounded-lg font-bold transition', sortBy === 'price_asc' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50']"
-            >
-              최저가순
-            </button>
-            <button
-              @click="sortBy = 'rating_desc'"
-              :class="['px-3 py-1.5 rounded-lg font-bold transition', sortBy === 'rating_desc' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50']"
-            >
-              평점 높은순
-            </button>
-          </div>
-        </div>
-
-        <!-- 로딩 -->
-        <div v-if="loading" class="p-20 bg-white rounded-2xl border border-slate-200 text-center text-slate-400 font-bold">
-          투어 및 티켓 데이터를 실시간 조회 중입니다...
-        </div>
-
-        <!-- 상품이 없을 때 -->
-        <div v-else-if="activities.length === 0" class="p-20 bg-white rounded-2xl border border-slate-200 text-center text-slate-400">
-          선택한 필터 조건에 부합하는 상품이 없습니다. 필터를 초기화해 보세요.
-        </div>
-
-        <!-- Trip-style 가로형 카드 리스트 -->
-        <div v-else class="space-y-4">
-          <div
-            v-for="a in activities"
-            :key="a.id"
-            class="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-sm hover:shadow-lg transition flex flex-col md:flex-row group"
-          >
-            <!-- 썸네일 & 배지 -->
-            <div class="md:w-64 h-48 md:h-auto relative flex-shrink-0 overflow-hidden">
-              <img
-                :src="a.thumbnail_url"
-                :alt="a.title"
-                class="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-              />
-              <span class="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                {{ a.category }}
-              </span>
-              <span v-if="a.free_cancellation" class="absolute bottom-3 left-3 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow">
-                무료 취소 가능
-              </span>
-            </div>
-
-            <!-- 본문 정보 -->
-            <div class="p-5 flex-1 flex flex-col justify-between space-y-3">
-              <div>
-                <div class="flex items-center justify-between text-[11px] text-slate-400 font-semibold mb-1">
-                  <span>📍 {{ a.city }}, {{ a.country }}</span>
-                  <span class="text-amber-500 font-bold">★ {{ a.review_score }} ({{ a.review_count?.toLocaleString() }} 후기)</span>
-                </div>
-
-                <NuxtLink :to="`/things-to-do/detail/${a.id}`">
-                  <h3 class="font-black text-slate-900 text-base group-hover:text-blue-600 transition line-clamp-2">
-                    {{ a.title }}
-                  </h3>
-                </NuxtLink>
-
-                <p class="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
-                  {{ a.description }}
+      <ResultsState :state="state" :count="items.length" icon="ticket" :empty-title="q.text ? `‘${q.text}’에 맞는 상품이 없어요` : '조건에 맞는 상품이 없어요'" empty-hint="도시 이름으로 검색하거나 필터를 줄여 보세요." error-title="상품을 불러오지 못했어요" @retry="load">
+        <template #empty-actions>
+          <button v-if="activeCount" type="button" class="btn-primary" @click="patch(RESET)">필터 초기화</button>
+          <button v-if="q.text" type="button" class="btn-secondary" @click="patch({ q: '', city: '', query: '' })">모든 상품 보기</button>
+        </template>
+        <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <li v-for="a in items" :key="a.id">
+            <article class="card group relative flex h-full flex-col overflow-hidden transition-shadow hover:shadow-pop">
+              <SmartImg :src="a.thumbnail_url || a.image_url" :alt="a.title" icon="ticket" img-class="aspect-[4/3] w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+              <div class="flex flex-1 flex-col p-4">
+                <p class="text-xs text-ink-subtle">{{ [a.city, CATEGORY_KO[a.category] || a.category].filter(Boolean).join(' · ') }}</p>
+                <h3 class="mt-1 line-clamp-2 text-sm font-bold leading-snug text-ink"><NuxtLink :to="`/things-to-do/detail/${a.id}`" class="after:absolute after:inset-0 group-hover:text-primary">{{ a.title }}</NuxtLink></h3>
+                <p v-if="Number(a.review_score) > 0" class="mt-1.5 flex items-center gap-1 text-xs text-ink-muted">
+                  <AppIcon name="star" :size="12" stroke="0" class="fill-current text-warning" /><b class="text-ink tabular">{{ Number(a.review_score).toFixed(1) }}</b>
+                  <span v-if="a.review_count" class="tabular">({{ Number(a.review_count).toLocaleString('ko-KR') }})</span>
                 </p>
-
-                <!-- 핵심 특장점 태그 (Highlights) -->
-                <div class="flex flex-wrap gap-1.5 mt-2.5">
-                  <span
-                    v-for="(h, idx) in a.highlights?.slice(0, 3)"
-                    :key="idx"
-                    class="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-semibold rounded-md"
-                  >
-                    ✓ {{ h }}
-                  </span>
+                <ul class="mt-2 flex flex-wrap gap-x-2.5 gap-y-1 text-2xs font-semibold">
+                  <li v-if="Number(a.instant_confirmation)" class="flex items-center gap-0.5 text-success"><AppIcon name="bolt" :size="12" />즉시 확정</li>
+                  <li v-if="Number(a.free_cancellation)" class="flex items-center gap-0.5 text-success"><AppIcon name="check" :size="12" />무료 취소</li>
+                </ul>
+                <div class="mt-auto flex items-end justify-between pt-3">
+                  <span v-if="a.bookable === false" class="text-xs font-semibold text-warning">직접 예약 불가</span>
+                  <p v-if="Number(a.price_krw) > 0" class="ml-auto text-base font-extrabold text-ink tabular">{{ currency.formatKRW(Number(a.price_krw)) }}<span class="text-xs font-medium text-ink-subtle"> /1인</span></p>
                 </div>
               </div>
-
-              <!-- 하단 가격 & CTA -->
-              <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
-                <div class="text-xs">
-                  <span class="text-emerald-600 font-bold">⚡ 모바일 QR 즉시 발권</span>
-                  <div class="text-[10px] text-slate-400">현장 대기 없이 빠른 입장</div>
-                </div>
-
-                <div class="flex items-center gap-3">
-                  <div class="text-right">
-                    <div class="text-[10px] text-slate-400">1인 기준 최저가</div>
-                    <div class="text-xl font-black text-blue-600 font-mono">
-                      {{ currencyStore.formatKRW(a.price_krw) }}
-                    </div>
-                  </div>
-
-                  <NuxtLink
-                    :to="`/things-to-do/detail/${a.id}`"
-                    class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition whitespace-nowrap"
-                  >
-                    상세보기 / 예약
-                  </NuxtLink>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
+            </article>
+          </li>
+        </ul>
+      </ResultsState>
+      <p class="mt-4 text-xs text-ink-subtle">평점은 공급사가 제공한 값이에요.</p>
     </div>
-
-    <!-- 모바일 필터 바텀시트 / 모달 -->
-    <Teleport to="body">
-      <div v-if="showMobileFilter" class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm lg:hidden">
-        <div class="bg-white rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
-          <div class="flex items-center justify-between p-4 border-b border-slate-100">
-            <h3 class="font-black text-base text-slate-900">투어·티켓 상세 필터</h3>
-            <button @click="showMobileFilter = false" class="text-slate-400 p-1 hover:text-slate-700 text-xl font-bold">✕</button>
-          </div>
-          
-          <div class="overflow-y-auto p-5 space-y-6">
-            <!-- 예약 및 바우처 혜택 -->
-            <div>
-              <h4 class="font-bold text-xs text-slate-900 mb-2">예약 및 바우처 혜택</h4>
-              <div class="space-y-2 text-xs">
-                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                  <input v-model="instantOnly" type="checkbox" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
-                  <span>⚡ 즉시 확정 (모바일 QR 즉시 발권)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                  <input v-model="freeCancelOnly" type="checkbox" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
-                  <span>✓ 무료 취소 가능</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- 소요 시간 필터 -->
-            <div class="border-t border-slate-100 pt-4">
-              <h4 class="font-bold text-xs text-slate-900 mb-2">소요 시간</h4>
-              <div class="space-y-2 text-xs">
-                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                  <input type="radio" v-model="selectedDuration" value="" name="m_dur" class="accent-blue-600" />
-                  <span>전체 소요시간</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                  <input type="radio" v-model="selectedDuration" value="UNDER_2H" name="m_dur" class="accent-blue-600" />
-                  <span>2시간 미만 (전망대/간편 입장)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                  <input type="radio" v-model="selectedDuration" value="HALF_DAY" name="m_dur" class="accent-blue-600" />
-                  <span>반일 투어 (2~4시간)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                  <input type="radio" v-model="selectedDuration" value="FULL_DAY" name="m_dur" class="accent-blue-600" />
-                  <span>종일 투어 (테마파크/1일 투어)</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- 최대 가격 -->
-            <div class="border-t border-slate-100 pt-4">
-              <div class="flex justify-between items-center mb-1">
-                <h4 class="font-bold text-xs text-slate-900">최대 가격</h4>
-                <span class="font-mono text-xs font-bold text-blue-600">{{ currencyStore.formatKRW(maxPrice) }}</span>
-              </div>
-              <input
-                v-model.number="maxPrice"
-                type="range"
-                min="5000"
-                max="200000"
-                step="5000"
-                class="w-full accent-blue-600 cursor-pointer"
-              />
-            </div>
-          </div>
-
-          <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center gap-3">
-            <button
-              @click="selectedCategory = 'ALL'; freeCancelOnly = false; instantOnly = false; selectedDuration = ''; maxPrice = 200000"
-              class="w-1/3 py-3 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 bg-white"
-            >
-              초기화
-            </button>
-            <button
-              @click="showMobileFilter = false"
-              class="w-2/3 py-3 rounded-xl bg-blue-600 text-white font-black text-xs shadow-lg shadow-blue-500/30"
-            >
-              적용하기 ({{ activities.length }}개 상품)
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>

@@ -1,172 +1,103 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+/**
+ * Flight + hotel bundle results (design system "Horizon"). URL = state (destination, departure date, travelers).
+ * API only. Prices are per person (server: PER_PERSON); "정가" is the supplier-provided sum of the parts.
+ */
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { fmtDay, qDate, qInt, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 
-const route = useRoute()
-const currencyStore = useCurrencyStore()
+const { route, router, isSelf } = useUrlQuery()
+const currency = useCurrencyStore()
 
-const city = ref((route.query.city || route.query.dest) as string || '도쿄')
-const origin = ref(route.query.origin as string || '서울/인천 (ICN)')
-
-import { searchPackageCatalog, type PackageBundle } from '~/data/packageCatalog'
-
-const packages = ref<PackageBundle[]>(searchPackageCatalog({ city: city.value }))
-const loading = ref(false)
-
-const fetchPackages = async () => {
-  loading.value = true
-  try {
-    const res = await fetch(`${useApiUrl('/packages')}?city=${encodeURIComponent(city.value)}`, { signal: AbortSignal.timeout(1500) })
-    if (res.ok) {
-      const json = await res.json()
-      if (Array.isArray(json.data) && json.data.length > 0) {
-        packages.value = json.data.map((p: any) => ({
-          ...p,
-          hero_image_url: p.hero_image_url || p.thumbnail_url,
-          savings_percentage: p.savings_percentage || p.package_discount_rate || 15,
-          bundle_price_krw: p.bundle_price_krw || p.total_package_krw,
-          original_price_krw: p.original_price_krw || p.total_original_krw,
-          badge: p.badge || '특가 번들',
-          duration_nights: p.duration_nights || 3,
-          duration_days: p.duration_days || 4,
-          flight: p.flight || { airline_name: '대한항공 (KE)', departure_city: '서울/인천', arrival_city: p.destination_city || city.value },
-          hotel: p.hotel || { name_ko: `${p.destination_city || city.value} 5성급 럭셔리 호텔`, city: p.destination_city || city.value }
-        }))
-        loading.value = false
-        return
-      }
-    }
-  } catch (e) {
-    // Keep verified package catalog
-  }
-
-  packages.value = searchPackageCatalog({ city: city.value })
-  loading.value = false
+const q = computed(() => {
+  const r = route.query
+  return { city: qStr(r.city || r.dest), date: qDate(r.date || r.startDate), adults: qInt(r.adults, 2, 1, 9), children: qInt(r.children, 0, 0, 8) }
+})
+const today = ref('')
+const draft = reactive({ city: '', date: '', adults: 2, children: 0 })
+function syncDraft() { Object.assign(draft, { ...q.value }) }
+syncDraft()
+function submit() {
+  router.replace({ query: { ...(draft.city.trim() ? { city: draft.city.trim() } : {}), ...(draft.date ? { date: draft.date } : {}), adults: String(draft.adults), ...(draft.children ? { children: String(draft.children) } : {}) } })
 }
 
-watch(() => [route.query.city, route.query.dest], ([newCity, newDest]) => {
-  const c = newCity || newDest
-  if (c !== undefined) {
-    city.value = (c as string) || ''
-    fetchPackages()
-  }
-})
+const items = ref<any[]>([])
+const state = ref<'loading' | 'ready' | 'error'>('loading')
+let ctrl: AbortController | null = null
+async function load() {
+  ctrl?.abort(); ctrl = new AbortController(); const mine = ctrl
+  state.value = 'loading'
+  const timer = setTimeout(() => mine.abort(), 10000)
+  try {
+    const p = new URLSearchParams()
+    if (q.value.city) p.set('dest', q.value.city)
+    const res = await fetch(`${useApiUrl('/packages')}?${p}`, { signal: mine.signal })
+    if (!res.ok) throw new Error(String(res.status))
+    const j = await res.json()
+    if (mine !== ctrl) return
+    items.value = Array.isArray(j.data) ? j.data : []
+    state.value = 'ready'
+  } catch { if (mine === ctrl) state.value = 'error' } finally { clearTimeout(timer) }
+}
+const price = (p: any) => Number(p.bundle_price_krw ?? p.total_package_krw) || 0
+const original = (p: any) => Number(p.original_price_krw ?? p.total_original_krw) || 0
+function features(p: any): string[] { try { const f = JSON.parse(p.details_json || '{}').features; return Array.isArray(f) ? f.filter((x: unknown) => typeof x === 'string').slice(0, 3) : [] } catch { return [] } }
+function detailLink(p: any) { const x = q.value; return { path: `/packages/detail/${p.id}`, query: { ...(x.date ? { startDate: x.date } : {}), adults: String(x.adults), ...(x.children ? { children: String(x.children) } : {}) } } }
 
-watch(city, () => {
-  fetchPackages()
-})
-
-onMounted(() => {
-  fetchPackages()
-})
+watch(() => route.fullPath, () => { if (!isSelf()) return; syncDraft(); load() })
+onMounted(() => { today.value = todayIso(); load() })
+onBeforeUnmount(() => ctrl?.abort())
+useHead(() => ({ title: q.value.city ? `${q.value.city} 항공+호텔` : '항공+호텔 패키지' }))
 </script>
 
 <template>
-  <div class="max-w-7xl mx-auto px-4 py-8 space-y-6">
-    <!-- 상단 브레드크럼 -->
-    <div class="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
-      <div class="flex items-center gap-4">
-        <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-black text-xl">
-          🏖️
-        </div>
-        <div>
-          <div class="flex items-center gap-2 text-xs text-slate-400">
-            <NuxtLink to="/" class="hover:underline">홈</NuxtLink> <span>›</span>
-            <NuxtLink to="/packages" class="hover:underline">항공+호텔</NuxtLink> <span>›</span>
-            <span class="text-slate-800 font-bold">특가 패키지</span>
-          </div>
-          <div class="text-base font-black text-slate-900 mt-0.5">
-            {{ origin }} 출발 · {{ city }} 결합 패키지
-          </div>
-        </div>
+  <div class="pb-24 lg:pb-16">
+    <section class="border-b border-line bg-surface">
+      <form class="mx-auto grid max-w-7xl gap-2 px-4 py-3 lg:grid-cols-[1.4fr_1fr_1fr_auto] lg:px-6 lg:py-4" novalidate @submit.prevent="submit">
+        <div class="field-box"><label for="pl-city" class="field-label">여행지</label><SearchAutocomplete v-model="draft.city" input-id="pl-city" domain="packages" variant="bare" placeholder="도시 또는 국가" @enter="submit" /></div>
+        <DateRangePicker v-model:start="draft.date" mode="single" start-label="출발일" :min="today" compact />
+        <GuestPicker v-model:adults="draft.adults" v-model:children="draft.children" :show-rooms="false" label="여행자" compact />
+        <button type="submit" class="btn-primary min-h-[52px] rounded-2xl px-7 text-base"><AppIcon name="search" :size="18" />검색</button>
+      </form>
+    </section>
+
+    <div class="mx-auto max-w-7xl px-4 lg:px-6">
+      <div class="pb-3 pt-6">
+        <nav class="mb-1 flex items-center gap-1 text-xs text-ink-subtle" aria-label="이동 경로"><NuxtLink to="/" class="hover:text-ink">홈</NuxtLink><AppIcon name="chevron-right" :size="12" /><NuxtLink to="/packages" class="hover:text-ink">항공+호텔</NuxtLink></nav>
+        <h1 class="text-xl font-bold tracking-tight text-ink sm:text-2xl">{{ q.city ? `${q.city} 항공+호텔` : '모든 항공+호텔 패키지' }} <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ items.length }}개</span></h1>
+        <p v-if="q.date" class="mt-0.5 text-sm text-ink-muted">{{ fmtDay(q.date, true) }} 출발</p>
       </div>
+      <p class="mb-3 flex items-start gap-1.5 text-xs text-ink-subtle"><AppIcon name="check" :size="14" class="mt-px" />표시 요금은 1인 참고가예요. 패키지는 환불할 수 없는 상품이며 최종 금액은 결제 전 확인 화면에서 확정돼요.</p>
 
-      <NuxtLink
-        to="/packages/builder"
-        class="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition shadow-md"
-      >
-        내 맞춤 일정으로 직접 조합하기 🛠️
-      </NuxtLink>
-    </div>
-
-    <!-- 패키지 리스트 카드 -->
-    <div class="space-y-6">
-      <div
-        v-for="pkg in packages"
-        :key="pkg.id"
-        class="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl transition flex flex-col md:flex-row items-stretch"
-      >
-        <img :src="pkg.hero_image_url" class="w-full md:w-80 h-56 md:h-auto object-cover flex-shrink-0" />
-        
-        <div class="p-6 md:p-8 flex-1 flex flex-col justify-between space-y-6">
-          <div class="space-y-3">
-            <div class="flex items-center gap-2">
-              <span class="px-2.5 py-0.5 bg-rose-50 text-rose-700 text-xs font-bold rounded-full">
-                {{ pkg.badge }}
-              </span>
-              <span class="text-xs text-slate-400">• {{ pkg.duration_nights }}박 {{ pkg.duration_days }}일</span>
-              <span class="px-2 py-0.5 bg-amber-50 text-amber-800 text-[11px] font-black rounded">
-                ⚡ {{ pkg.savings_percentage }}% 결합 할인
-              </span>
-            </div>
-
-            <h2 class="text-xl md:text-2xl font-black text-slate-900 leading-tight">
-              {{ pkg.title }}
-            </h2>
-
-            <!-- 포함 구성 -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 pt-2 border-t border-slate-100">
-              <div class="flex items-center gap-2 font-bold text-slate-800">
-                <span>✈️ {{ pkg.airline_name }}</span>
+      <ResultsState :state="state" :count="items.length" icon="package" :empty-title="q.city ? `‘${q.city}’ 패키지가 아직 없어요` : '판매 중인 패키지가 없어요'" empty-hint="항공권과 호텔을 각각 검색해 예약할 수도 있어요." error-title="패키지를 불러오지 못했어요" @retry="load">
+        <template #empty-actions>
+          <NuxtLink v-if="q.city" :to="{ path: '/hotels/list', query: { city: q.city } }" class="btn-primary">{{ q.city }} 호텔 보기</NuxtLink>
+          <button v-if="q.city" type="button" class="btn-secondary" @click="router.replace({ query: {} })">모든 패키지 보기</button>
+        </template>
+        <ul class="grid gap-4 md:grid-cols-2">
+          <li v-for="p in items" :key="p.id">
+            <article class="card group relative flex h-full flex-col overflow-hidden transition-shadow hover:shadow-pop sm:flex-row">
+              <SmartImg :src="p.thumbnail_url || p.hero_image_url" :alt="p.title" icon="package" img-class="aspect-[16/10] w-full shrink-0 object-cover sm:aspect-auto sm:w-48" />
+              <div class="flex flex-1 flex-col p-4">
+                <p class="flex items-center gap-2 text-xs text-ink-subtle"><span>{{ p.destination_city }}</span><span v-if="p.badge" class="rounded-full bg-accent-soft px-2 py-0.5 font-semibold text-accent">{{ p.badge }}</span></p>
+                <h2 class="mt-1 line-clamp-2 font-bold leading-snug text-ink"><NuxtLink :to="detailLink(p)" class="after:absolute after:inset-0 group-hover:text-primary">{{ p.title }}</NuxtLink></h2>
+                <ul v-if="features(p).length" class="mt-2 space-y-1 text-xs text-ink-muted">
+                  <li v-for="f in features(p)" :key="f" class="flex items-start gap-1.5"><AppIcon name="check" :size="12" class="mt-0.5 text-primary" /><span class="line-clamp-1">{{ f }}</span></li>
+                </ul>
+                <div class="mt-auto flex items-end justify-between gap-2 border-t border-line pt-3">
+                  <span v-if="p.bookable === false" class="text-xs font-semibold text-warning">직접 예약 불가</span>
+                  <div class="ml-auto text-right">
+                    <p v-if="original(p) > price(p)" class="text-2xs text-ink-subtle">정가 <span class="line-through tabular">{{ currency.formatKRW(original(p)) }}</span></p>
+                    <p class="text-lg font-extrabold text-ink tabular">{{ currency.formatKRW(price(p)) }}<span class="text-xs font-medium text-ink-subtle"> /1인</span></p>
+                  </div>
+                </div>
               </div>
-              <div class="flex items-center gap-2 font-bold text-slate-800">
-                <span>🏨 {{ pkg.hotel_name }}</span>
-              </div>
-            </div>
-
-            <!-- 특징 혜택 -->
-            <ul class="text-xs space-y-1 text-slate-500 pt-1">
-              <li v-for="feat in pkg.features" :key="feat" class="flex items-center gap-1.5">
-                <span class="text-rose-500 font-bold">✓</span>
-                <span>{{ feat }}</span>
-              </li>
-            </ul>
-          </div>
-
-          <!-- 가격 및 선택 버튼 -->
-          <div class="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div class="text-xs text-slate-400 line-through">
-                개별 구매가: {{ currencyStore.formatKRW(pkg.original_price_krw) }}
-              </div>
-              <div class="flex items-baseline gap-2">
-                <span class="text-2xl md:text-3xl font-black text-rose-600 font-mono">
-                  {{ currencyStore.formatKRW(pkg.bundle_price_krw) }}
-                </span>
-                <span class="text-xs text-slate-400">/ 1인 기준 패키지 총액</span>
-              </div>
-            </div>
-
-            <div class="flex items-center gap-2 w-full sm:w-auto">
-              <NuxtLink
-                :to="`/packages/detail/${pkg.id}`"
-                class="flex-1 sm:flex-initial text-center px-4 sm:px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-2xl transition whitespace-nowrap"
-              >
-                패키지 상세
-              </NuxtLink>
-              <NuxtLink
-                :to="`/packages/booking?packageId=${pkg.id}`"
-                class="flex-1 sm:flex-initial text-center px-5 sm:px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-2xl shadow-lg transition whitespace-nowrap"
-              >
-                결합 예약하기
-              </NuxtLink>
-            </div>
-          </div>
-        </div>
-      </div>
+            </article>
+          </li>
+        </ul>
+      </ResultsState>
     </div>
   </div>
 </template>
-

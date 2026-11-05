@@ -7,7 +7,7 @@
 import type { Env } from "../env.ts";
 import { json } from "../lib/http.ts";
 import { hotelRatePlans, supplierBookabilityMap, type Bookability } from "../services/catalog.ts";
-import { airportsForCityCode, parseDomain, suggest } from "../services/suggest-service.ts";
+import { airportsForCityCode, airportsForPlaceName, parseDomain, suggest } from "../services/suggest-service.ts";
 
 const PRICE_NOTICE = "참고 가격 (공급사 실시간 검증 전)";
 
@@ -147,8 +147,9 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       let q = "SELECT * FROM flights WHERE 1=1";
       const p: any[] = [];
       // A metropolitan city code (TYO, SEL, LON...) searches every airport of that city.
-      const originAirports = originCode ? await airportsForCityCode(env, originCode) : [];
-      const destAirports = destCode ? await airportsForCityCode(env, destCode) : [];
+      // A place name picked from autocomplete ("서울", "인천국제공항") resolves to its airports as well.
+      const originAirports = originCode ? await airportsForCityCode(env, originCode) : cleanOrigin ? await airportsForPlaceName(env, cleanOrigin) : [];
+      const destAirports = destCode ? await airportsForCityCode(env, destCode) : cleanDest ? await airportsForPlaceName(env, cleanDest) : [];
       if (originAirports.length) {
         q += ` AND departure_airport IN (${originAirports.map(() => "?").join(",")})`;
         p.push(...originAirports);
@@ -292,7 +293,12 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
 
       let q = "SELECT * FROM transfers WHERE 1=1";
       const p: any[] = [];
-      if (airportCode || cleanAirport) {
+      // "인천국제공항" / "서울" picked from autocomplete carries no code: resolve it to IATA airport codes.
+      const named = !airportCode && cleanAirport ? await airportsForPlaceName(env, cleanAirport) : [];
+      if (named.length) {
+        q += ` AND airport_code IN (${named.map(() => "?").join(",")})`;
+        p.push(...named);
+      } else if (airportCode || cleanAirport) {
         q += " AND (airport_code = ? OR airport_code LIKE ? OR service_title LIKE ?)";
         p.push(airportCode || cleanAirport, `%${airportCode || cleanAirport}%`, `%${cleanAirport}%`);
       }

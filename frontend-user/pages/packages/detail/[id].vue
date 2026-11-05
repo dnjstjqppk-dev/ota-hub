@@ -33,35 +33,27 @@ useHead(() => {
 
 <template>
   <DetailShell :state="state" list-path="/packages" list-label="항공+호텔 둘러보기" @retry="reload">
-    <template v-if="p">
-      <nav class="mb-3 text-xs text-slate-400"><NuxtLink to="/" class="hover:underline">홈</NuxtLink> › <NuxtLink to="/packages" class="hover:underline">항공+호텔</NuxtLink> › {{ p.destination_city }}</nav>
-      <div class="grid gap-6 md:grid-cols-[1fr_320px]">
-        <div class="space-y-6">
-          <section class="overflow-hidden rounded-3xl border border-slate-200 bg-white" data-testid="package-detail">
-            <img v-if="p.hero_image_url || p.thumbnail_url" :src="p.hero_image_url || p.thumbnail_url" :alt="p.title" class="h-64 w-full object-cover md:h-80" />
-            <div class="p-6 md:p-8">
-              <span v-if="p.badge" class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">{{ p.badge }}</span>
-              <h1 class="mt-2 text-2xl font-black text-slate-900">{{ p.title }}</h1>
-              <p class="mt-1 text-sm text-slate-600">목적지 {{ p.destination_city }}</p>
-              <p v-if="original && price && original > price" class="mt-3 text-sm text-slate-600">
-                개별 정가 합계 <span class="line-through">{{ formatKrw(original) }}</span> → 패키지가 <strong class="text-slate-900">{{ formatKrw(price) }}</strong>
-                <span v-if="p.savings_percentage" class="font-semibold text-rose-600"> ({{ p.savings_percentage }}% 할인, 공급사 제공 정가 기준)</span>
-              </p>
-              <div v-if="features.length" class="mt-6">
-                <h2 class="text-sm font-bold text-slate-900">포함 구성</h2>
-                <ul class="mt-2 space-y-1 text-sm text-slate-700"><li v-for="f in features" :key="f">✓ {{ f }}</li></ul>
-              </div>
-              <div v-if="p.flight_id || p.hotel_id" class="mt-6 flex flex-wrap gap-2 text-xs">
-                <NuxtLink v-if="p.flight_id" :to="`/flights/detail/${p.flight_id}`" class="rounded-lg border border-slate-300 px-3 py-1.5 font-semibold">포함 항공편 보기</NuxtLink>
-                <NuxtLink v-if="p.hotel_id" :to="`/hotels/detail/${p.hotel_id}`" class="rounded-lg border border-slate-300 px-3 py-1.5 font-semibold">포함 호텔 보기</NuxtLink>
-              </div>
-              <p class="mt-6 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">1인 기준 요금이며 출발일과 인원은 예약 단계에서 선택합니다. 패키지는 환불 불가 상품이며, 여행자 전원의 영문 성명이 필요합니다.</p>
-            </div>
-          </section>
-          <ReviewsSection domain="PACKAGE" :target-id="p.id" />
-        </div>
-        <DetailBookingCard :item="p" domain="PACKAGE" :price-krw="price" unit-label="1인" cancellation="NON_REFUNDABLE" :alert-label="p.title" />
+    <div v-if="p" class="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div class="min-w-0 space-y-8">
+        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '항공+호텔', to: '/packages' }, { label: p.destination_city || p.title }]" :title="p.title" :subtitle="p.destination_city ? '목적지 ' + p.destination_city : ''" :image="p.hero_image_url || p.thumbnail_url || null" image-icon="package" :facts="[]" testid="package-detail">
+          <template #badges><span v-if="p.badge" class="mt-3 inline-block rounded-full bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary">{{ p.badge }}</span></template>
+          <p v-if="original && price && original > price" class="mt-4 text-sm text-ink-muted">
+            개별 정가 합계 <span class="line-through">{{ formatKrw(original) }}</span> → 패키지가 <strong class="text-ink">{{ formatKrw(price) }}</strong>
+            <span v-if="p.savings_percentage" class="font-semibold text-accent"> ({{ p.savings_percentage }}% 할인, 공급사 제공 정가 기준)</span>
+          </p>
+          <div v-if="features.length" class="mt-6">
+            <h2 class="text-sm font-bold text-ink">포함 구성</h2>
+            <ul class="mt-2 space-y-1.5 text-sm text-ink"><li v-for="x in features" :key="x" class="flex items-center gap-2"><AppIcon name="check" :size="16" class="text-primary" />{{ x }}</li></ul>
+          </div>
+          <div v-if="p.flight_id || p.hotel_id" class="mt-6 flex flex-wrap gap-2">
+            <NuxtLink v-if="p.flight_id" :to="'/flights/detail/' + p.flight_id" class="btn-secondary px-3.5 py-2"><AppIcon name="flight" :size="16" />포함 항공편 보기</NuxtLink>
+            <NuxtLink v-if="p.hotel_id" :to="'/hotels/detail/' + p.hotel_id" class="btn-secondary px-3.5 py-2"><AppIcon name="hotel" :size="16" />포함 호텔 보기</NuxtLink>
+          </div>
+          <p class="mt-6 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">1인 기준 요금이에요. 패키지는 환불할 수 없는 상품이고, 예약 단계에서 여행자 전원의 영문 성명이 필요해요.</p>
+        </DetailHero>
+        <ReviewsSection domain="PACKAGE" :target-id="p.id" />
       </div>
-    </template>
+      <DetailBookingCard :item="p" domain="PACKAGE" :price-krw="price" unit-label="1인" cancellation="NON_REFUNDABLE" start-label="출발일" people :alert-label="p.title" />
+    </div>
   </DetailShell>
 </template>

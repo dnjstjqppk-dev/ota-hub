@@ -39,22 +39,14 @@ useHead(() => {
 
 <template>
   <DetailShell :state="state" list-path="/trains" list-label="기차표 검색으로" @retry="reload">
-    <template v-if="t">
-      <nav class="mb-3 text-xs text-slate-400"><NuxtLink to="/" class="hover:underline">홈</NuxtLink> › <NuxtLink to="/trains" class="hover:underline">기차</NuxtLink> › {{ t.train_number }}</nav>
-      <div class="grid gap-6 md:grid-cols-[1fr_320px]">
-        <div class="space-y-6">
-          <section class="rounded-3xl border border-slate-200 bg-white p-6 md:p-8" data-testid="train-detail">
-            <div class="text-xs font-semibold text-slate-500">{{ t.train_type }} · {{ t.train_number }}</div>
-            <h1 class="mt-1 text-2xl font-black text-slate-900">{{ t.departure_station }} → {{ t.arrival_station }}</h1>
-            <dl class="mt-5 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-              <div v-for="[k, v] in facts" :key="k"><dt class="text-xs text-slate-500">{{ k }}</dt><dd class="font-semibold text-slate-900">{{ v }}</dd></div>
-            </dl>
-            <p class="mt-5 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">이 열차는 {{ t.seat_class }} 좌석으로 판매됩니다. 아동도 성인과 같은 요금이 적용되며, 탑승자 전원의 영문 성명이 예약 단계에서 필요합니다.</p>
-          </section>
-          <ReviewsSection domain="TRAIN" :target-id="t.id" />
-        </div>
-        <DetailBookingCard :item="t" domain="TRAIN" :price-krw="t.price_krw" unit-label="1인 편도" cancellation="FREE" :alert-label="`${t.departure_station}-${t.arrival_station} ${t.train_number}`" />
+    <div v-if="t" class="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div class="min-w-0 space-y-8">
+        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '기차', to: '/trains' }, { label: t.train_number }]" :eyebrow="t.train_type + ' · ' + t.train_number" :title="t.departure_station + ' → ' + t.arrival_station" :facts="facts" testid="train-detail">
+          <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">{{ t.seat_class }} 좌석으로 판매돼요. 아동도 성인과 같은 요금이 적용되고, 예약 단계에서 탑승객 전원의 영문 성명이 필요해요.</p>
+        </DetailHero>
+        <ReviewsSection domain="TRAIN" :target-id="t.id" />
       </div>
-    </template>
+      <DetailBookingCard :item="t" domain="TRAIN" :price-krw="t.price_krw" unit-label="1인 편도" cancellation="FREE" start-label="탑승일" people :alert-label="t.departure_station + '-' + t.arrival_station + ' ' + t.train_number" />
+    </div>
   </DetailShell>
 </template>

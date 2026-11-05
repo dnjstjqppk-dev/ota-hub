@@ -1,572 +1,330 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+/**
+ * Flight results (design system "Horizon").
+ * URL = state: origin, dest, date, returnDate (round trip when present), passengers, filters, sort and
+ * the chosen outbound flight (`out`). Results come only from the API — no client fallback catalogue and
+ * no invented date-strip prices. Return options are limited to what checkout accepts: same supplier,
+ * exact reverse route (worker/src/domain/pricing.ts computeRoundTripQuote).
+ */
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
-import SearchAutocomplete from '~/components/SearchAutocomplete.vue'
-import { searchFlightCatalog, generateDynamicDateStrip, type FlightOffer } from '~/data/flightCatalog'
+import { addDaysIso, daysBetween, fmtDay, qDate, qInt, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 
-const route = useRoute()
-const router = useRouter()
-const currencyStore = useCurrencyStore()
+const { route, router, patch, isSelf } = useUrlQuery()
+const currency = useCurrencyStore()
 
-const origin = ref((route.query.origin || route.query.dcity || '인천국제공항 (ICN)') as string)
-const dest = ref((route.query.dest || route.query.acity || '도쿄 나리타 (NRT)') as string)
-const targetDate = ref(route.query.date as string || new Date().toISOString().slice(0, 10))
-const tripType = ref<'roundtrip' | 'oneway'>((route.query.tripType as any) || 'roundtrip')
-const currentStep = ref<'outbound' | 'inbound'>('outbound')
-const selectedOutboundFlight = ref<any>(null)
+const SORTS = [{ id: 'cheapest', label: '낮은 가격순' }, { id: 'fastest', label: '짧은 비행시간순' }, { id: 'earliest', label: '이른 출발순' }] as const
+const SLOTS = [
+  { id: 'dawn', label: '새벽', range: '00–06시', from: 0, to: 6 },
+  { id: 'morning', label: '오전', range: '06–12시', from: 6, to: 12 },
+  { id: 'afternoon', label: '오후', range: '12–18시', from: 12, to: 18 },
+  { id: 'evening', label: '저녁', range: '18–24시', from: 18, to: 24 }
+] as const
+const CABIN_KO: Record<string, string> = { ECONOMY: '일반석', PREMIUM_ECONOMY: '프리미엄 일반석', BUSINESS: '비즈니스석', FIRST: '일등석' }
 
-// Dynamic 7-day strip based on active search date (Zero static hardcoding)
-const dynamicDateStrip = computed(() => generateDynamicDateStrip(targetDate.value))
-
-// Facet Filter States (Trip-style)
-const selectedStops = ref<number | null>(null) // null: 전체, 0: 직항, 1: 1회 경유
-const selectedAirlines = ref<string[]>([])
-const selectedTimeSlot = ref<string>('ALL')
-const baggageOnly = ref(false)
-const sortBy = ref<'cheapest' | 'fastest' | 'recommended'>('cheapest')
-const showMobileFilter = ref(false)
-
-const activeFilterCount = computed(() => {
-  let count = 0
-  if (selectedStops.value !== null) count++
-  if (selectedAirlines.value.length > 0) count++
-  if (selectedTimeSlot.value !== 'ALL') count++
-  if (baggageOnly.value) count++
-  return count
+const q = computed(() => {
+  const r = route.query
+  const date = qDate(r.date)
+  const returnDate = date && qDate(r.returnDate) >= date ? qDate(r.returnDate) : ''
+  return {
+    origin: qStr(r.origin || r.dcity), dest: qStr(r.dest || r.acity), date, returnDate,
+    adults: qInt(r.adults, 1, 1, 9), children: qInt(r.children, 0, 0, 8),
+    stops: qStr(r.stops) === '0' ? 0 : null as number | null,
+    slots: qStr(r.slots).split(',').filter((s) => SLOTS.some((x) => x.id === s)),
+    airlines: qStr(r.airlines).split(',').filter(Boolean),
+    bag: qStr(r.bag) === '1',
+    sort: qOneOf(r.sortBy, SORTS.map((s) => s.id), 'cheapest'),
+    out: qStr(r.out)
+  }
 })
+const roundTrip = computed(() => !!q.value.returnDate)
+const step = computed<'outbound' | 'return'>(() => (roundTrip.value && q.value.out ? 'return' : 'outbound'))
 
-// Synchronous initialization prevents empty SSR render
-const flights = ref<any[]>(searchFlightCatalog({
-  origin: origin.value,
-  dest: dest.value,
-  date: targetDate.value,
-  direction: 'OUTBOUND',
-  stops: selectedStops.value,
-  airlines: selectedAirlines.value,
-  timeSlot: selectedTimeSlot.value,
-  baggageOnly: baggageOnly.value,
-  sortBy: sortBy.value
-}))
-const loading = ref(false)
+// ------------------------------------------------------------------ search form (draft)
+const today = ref('')
+const draft = reactive({ origin: '', dest: '', date: '', returnDate: '', trip: 'oneway' as 'oneway' | 'round', adults: 1, children: 0 })
+const formOpen = ref(false)
+const formError = ref('')
+function syncDraft() {
+  const x = q.value
+  Object.assign(draft, { origin: x.origin, dest: x.dest, date: x.date, returnDate: x.returnDate, trip: x.returnDate ? 'round' : 'oneway', adults: x.adults, children: x.children })
+}
+syncDraft()
+function swap() { const t = draft.origin; draft.origin = draft.dest; draft.dest = t }
+function submit() {
+  formError.value = ''
+  if (!draft.origin.trim() || !draft.dest.trim()) { formError.value = '출발지와 도착지를 입력해 주세요.'; return }
+  if (draft.origin.trim() === draft.dest.trim()) { formError.value = '출발지와 도착지가 같아요.'; return }
+  if (!draft.date) { formError.value = '가는 날을 선택해 주세요.'; return }
+  if (draft.trip === 'round' && !draft.returnDate) { formError.value = '오는 날을 선택해 주세요.'; return }
+  formOpen.value = false
+  router.replace({ query: {
+    origin: draft.origin.trim(), dest: draft.dest.trim(), date: draft.date,
+    ...(draft.trip === 'round' ? { returnDate: draft.returnDate } : {}),
+    ...(draft.adults !== 1 ? { adults: String(draft.adults) } : {}), ...(draft.children ? { children: String(draft.children) } : {})
+  } })
+}
 
-const fetchFlights = async () => {
-  loading.value = true
-  const o = currentStep.value === 'outbound' ? origin.value : dest.value
-  const d = currentStep.value === 'outbound' ? dest.value : origin.value
+// ------------------------------------------------------------------ data
+const outbound = ref<any[]>([])
+const returns = ref<any[]>([])
+const state = ref<'loading' | 'ready' | 'error'>('loading')
+let ctrl: AbortController | null = null
 
+async function fetchLeg(from: string, to: string, signal: AbortSignal) {
+  const p = new URLSearchParams({ origin: from, dest: to, limit: '100', sortBy: 'cheapest' })
+  const res = await fetch(`${useApiUrl('/flights')}?${p}`, { signal })
+  if (!res.ok) throw new Error(String(res.status))
+  const j = await res.json()
+  return Array.isArray(j.data) ? j.data : []
+}
+async function load() {
+  ctrl?.abort(); ctrl = new AbortController(); const mine = ctrl
+  const x = q.value
+  if (!x.origin || !x.dest) { outbound.value = []; returns.value = []; state.value = 'ready'; return }
+  state.value = 'loading'
+  const timer = setTimeout(() => mine.abort(), 10000)
   try {
-    const parseCode = (val: string) => {
-      const match = val.match(/\b([A-Z]{3})\b/)
-      return match ? match[1] : val
-    }
-    const oCode = parseCode(o)
-    const dCode = parseCode(d)
-
-    const res = await fetch(`${useApiUrl('/flights')}?origin=${encodeURIComponent(oCode)}&dest=${encodeURIComponent(dCode)}`, { signal: AbortSignal.timeout(1500) })
-    if (res.ok) {
-      const json = await res.json()
-      if (Array.isArray(json.data) && json.data.length > 0) {
-        flights.value = json.data
-        loading.value = false
-        return
-      }
-    }
-  } catch (e) {
-    // Fall back to verified catalog
-  }
-
-  flights.value = searchFlightCatalog({
-    origin: o,
-    dest: d,
-    date: targetDate.value,
-    direction: currentStep.value === 'outbound' ? 'OUTBOUND' : 'RETURN',
-    stops: selectedStops.value,
-    airlines: selectedAirlines.value,
-    timeSlot: selectedTimeSlot.value,
-    baggageOnly: baggageOnly.value,
-    sortBy: sortBy.value
-  })
-  loading.value = false
+    const [o, r] = await Promise.all([fetchLeg(x.origin, x.dest, mine.signal), x.returnDate ? fetchLeg(x.dest, x.origin, mine.signal) : Promise.resolve([])])
+    if (mine !== ctrl) return
+    outbound.value = o; returns.value = r; state.value = 'ready'
+  } catch {
+    if (mine === ctrl) state.value = 'error'
+  } finally { clearTimeout(timer) }
 }
 
-// Client-side faceted filtering & sorting
-const filteredFlights = computed(() => {
-  let list = [...flights.value]
-
-  if (selectedStops.value !== null) {
-    list = list.filter(f => (f.stops || 0) === selectedStops.value)
-  }
-
-  if (selectedAirlines.value.length > 0) {
-    list = list.filter(f => selectedAirlines.value.includes(f.airline_name))
-  }
-
-  if (selectedTimeSlot.value !== 'ALL') {
-    list = list.filter(f => (f.departure_time_slot || f.time_slot || 'MORNING') === selectedTimeSlot.value)
-  }
-
-  if (baggageOnly.value) {
-    list = list.filter(f => (f.free_baggage_kg || 0) >= 20)
-  }
-
-  // Sort
-  if (sortBy.value === 'cheapest') {
-    list.sort((a, b) => a.base_price_krw - b.base_price_krw)
-  } else if (sortBy.value === 'fastest') {
-    list.sort((a, b) => a.duration_minutes - b.duration_minutes)
-  }
-
-  return list
+const chosenOut = computed(() => outbound.value.find((f) => f.id === q.value.out) || null)
+/** Return flights checkout will accept for the chosen outbound flight. */
+const compatibleReturns = computed(() => {
+  const o = chosenOut.value
+  if (!o) return []
+  return returns.value.filter((r) => r.partner_id === o.partner_id && r.departure_airport === o.arrival_airport && r.arrival_airport === o.departure_airport)
 })
+const pool = computed(() => (step.value === 'return' ? compatibleReturns.value : outbound.value))
 
-const availableAirlines = computed(() => {
-  const set = new Set<string>()
-  flights.value.forEach(f => {
-    if (f.airline_name) set.add(f.airline_name)
-  })
-  return Array.from(set)
+const hour = (t: string) => Number(String(t || '').slice(0, 2))
+const filtered = computed(() => {
+  const x = q.value
+  let list = pool.value.filter((f) =>
+    (x.stops === null || Number(f.stops || 0) === x.stops) &&
+    (!x.airlines.length || x.airlines.includes(f.airline_name)) &&
+    (!x.bag || Number(f.free_baggage_kg) > 0) &&
+    (!x.slots.length || x.slots.some((s) => { const sl = SLOTS.find((z) => z.id === s)!; const h = hour(f.departure_time); return h >= sl.from && h < sl.to })))
+  const by = { cheapest: (a: any, b: any) => a.base_price_krw - b.base_price_krw, fastest: (a: any, b: any) => a.duration_minutes - b.duration_minutes, earliest: (a: any, b: any) => String(a.departure_time).localeCompare(String(b.departure_time)) }[x.sort]
+  return [...list].sort(by)
 })
+const airlines = computed(() => [...new Set(pool.value.map((f) => f.airline_name).filter(Boolean))].sort() as string[])
+const activeCount = computed(() => (q.value.stops !== null ? 1 : 0) + (q.value.slots.length ? 1 : 0) + (q.value.airlines.length ? 1 : 0) + (q.value.bag ? 1 : 0))
+function toggleList(key: 'slots' | 'airlines', v: string) {
+  const cur = q.value[key]
+  patch({ [key]: (cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]).join(',') })
+}
+const RESET = { stops: '', slots: '', airlines: '', bag: '' }
 
-const toggleAirline = (name: string) => {
-  const idx = selectedAirlines.value.indexOf(name)
-  if (idx >= 0) {
-    selectedAirlines.value.splice(idx, 1)
-  } else {
-    selectedAirlines.value.push(name)
-  }
+// ------------------------------------------------------------------ helpers
+const pax = computed(() => q.value.adults + q.value.children)
+const hm = (m: number) => `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ''}`
+/**
+ * Next-day arrival marker. Times are local to each airport, so duration cannot be added across time
+ * zones (ICN 09:45 → CDG 16:00 is the same day); an arrival clock earlier than departure means +1.
+ */
+function plusDays(f: any) { return String(f.arrival_time) < String(f.departure_time) ? 1 : 0 }
+const cityOf = (s: string) => String(s || '').replace(/\s*\([^)]*\)/, '')
+
+function choose(f: any) {
+  const x = q.value
+  if (roundTrip.value && step.value === 'outbound') { patch({ out: f.id }, 'push'); window.scrollTo({ top: 0, behavior: 'smooth' }); return }
+  const outId = step.value === 'return' ? x.out : f.id
+  router.push({ path: '/checkout', query: {
+    domain: 'FLIGHT', itemId: outId, startDate: x.date,
+    ...(step.value === 'return' ? { returnItemId: f.id, returnDate: x.returnDate } : {}),
+    adults: String(x.adults), ...(x.children ? { children: String(x.children) } : {})
+  } })
+}
+function detailLink(f: any) {
+  const x = q.value
+  return { path: `/flights/detail/${f.id}`, query: { ...(x.date ? { startDate: step.value === 'return' ? x.returnDate : x.date } : {}), adults: String(x.adults), ...(x.children ? { children: String(x.children) } : {}) } }
 }
 
-const selectFlight = (f: any) => {
-  if (tripType.value === 'roundtrip' && currentStep.value === 'outbound') {
-    selectedOutboundFlight.value = f
-    currentStep.value = 'inbound'
-    fetchFlights()
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  } else {
-    const outId = selectedOutboundFlight.value?.id || f.id
-    const retId = selectedOutboundFlight.value ? f.id : ''
-    const query: Record<string, string> = { domain: 'FLIGHT', itemId: outId }
-    if (/^\d{4}-\d{2}-\d{2}$/.test(targetDate.value)) query.startDate = targetDate.value
-    if (retId) query.returnItemId = retId
-    router.push({ path: '/checkout', query })
-  }
-}
-
-watch([origin, dest, currentStep], () => {
-  fetchFlights()
+// Date strip: navigate ±3 days. No prices — the catalogue has no per-date fares.
+const strip = computed(() => {
+  const base = step.value === 'return' ? q.value.returnDate : q.value.date
+  if (!base) return []
+  return [-3, -2, -1, 0, 1, 2, 3].map((n) => addDaysIso(base, n)).map((d) => ({
+    d, label: fmtDay(d), on: d === base,
+    disabled: (!!today.value && d < today.value) || (step.value === 'return' ? d < q.value.date : !!q.value.returnDate && d > q.value.returnDate)
+  }))
 })
+function pickDay(d: string) { patch(step.value === 'return' ? { returnDate: d } : { date: d }) }
 
-onMounted(() => {
-  fetchFlights()
+const sheet = ref(false)
+watch(() => route.fullPath, () => { if (!isSelf()) return; syncDraft() })
+watch(() => [q.value.origin, q.value.dest, q.value.returnDate ? 1 : 0], () => { if (isSelf()) load() })
+onMounted(() => { today.value = todayIso(); load() })
+onBeforeUnmount(() => ctrl?.abort())
+
+const heading = computed(() => {
+  const x = q.value
+  if (!x.origin || !x.dest) return '항공권 검색'
+  return step.value === 'return' ? `${cityOf(x.dest)} → ${cityOf(x.origin)}` : `${cityOf(x.origin)} → ${cityOf(x.dest)}`
 })
+useHead(() => ({ title: q.value.origin && q.value.dest ? `${cityOf(q.value.origin)}→${cityOf(q.value.dest)} 항공권` : '항공권 검색' }))
 </script>
 
 <template>
-  <div class="max-w-7xl mx-auto px-4 py-8 space-y-6">
-    <!-- 1. 검색 상단 바 (Trip-style 인터랙티브 바) -->
-    <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-      <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-        <div class="w-full sm:w-64">
-          <label class="text-[10px] font-bold text-slate-400 block mb-1">출발지 (공항/도시)</label>
-          <SearchAutocomplete
-            v-model="origin"
-            domain="flights"
-            placeholder="출발 공항 / 도시"
-            icon="plane"
-            inputClass="w-full pl-9 pr-6 py-2.5 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-        </div>
-
-        <span class="text-slate-400 hidden sm:inline text-lg mt-4">✈️</span>
-
-        <div class="w-full sm:w-64">
-          <label class="text-[10px] font-bold text-slate-400 block mb-1">도착지 (공항/도시)</label>
-          <SearchAutocomplete
-            v-model="dest"
-            domain="flights"
-            placeholder="도착 공항 / 도시"
-            icon="plane"
-            inputClass="w-full pl-9 pr-6 py-2.5 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-        </div>
-
-        <button
-          @click="fetchFlights"
-          type="button"
-          class="w-full sm:w-auto px-6 py-2.5 mt-0 sm:mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition whitespace-nowrap"
-        >
-          항공편 재검색
-        </button>
-      </div>
-
-      <span class="text-xs font-bold text-blue-600 flex-shrink-0">조회된 항공편 {{ flights.length }}개</span>
-    </div>
-
-    <!-- 왕복 항공권 단계 표시 (가는 편 / 오는 편) -->
-    <div v-if="tripType === 'roundtrip'" class="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
-      <div class="flex items-center gap-3">
-        <span class="px-2.5 py-1 rounded-lg font-black text-white" :class="currentStep === 'outbound' ? 'bg-blue-600' : 'bg-emerald-600'">
-          {{ currentStep === 'outbound' ? '1단계: 가는 편 선택' : '2단계: 오는 편 선택' }}
-        </span>
-        <div v-if="selectedOutboundFlight" class="font-bold text-slate-800">
-          ✓ 선택된 가는 편: {{ selectedOutboundFlight.airline_name }} {{ selectedOutboundFlight.flight_number }}
-          ({{ new Date(selectedOutboundFlight.departure_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }})
-        </div>
-        <div v-else class="text-slate-600 font-medium">
-          원하시는 가는 편 항공권을 먼저 선택해주세요.
-        </div>
-      </div>
-      <button
-        v-if="currentStep === 'inbound'"
-        @click="currentStep = 'outbound'; selectedOutboundFlight = null; fetchFlights()"
-        class="text-blue-600 font-bold hover:underline whitespace-nowrap self-start sm:self-auto"
-      >
-        ← 가는 편 다시 선택
-      </button>
-    </div>
-
-    <!-- 2. 7일 전후 최저가 캘린더 바 (Trip-style: 동적 실시간 날짜) -->
-    <div class="flex overflow-x-auto gap-2 bg-white p-3 rounded-2xl border border-slate-200 text-center text-xs scrollbar-none">
-      <div
-        v-for="day in dynamicDateStrip"
-        :key="day.dateStr"
-        @click="targetDate = day.dateStr; fetchFlights()"
-        :class="['min-w-[80px] flex-1 p-2 rounded-xl transition cursor-pointer flex-shrink-0 sm:flex-shrink', day.isSelected ? 'bg-blue-50 border border-blue-600 font-bold text-blue-600' : 'hover:bg-slate-50 text-slate-600']"
-      >
-        <div class="flex items-center justify-center gap-1">
-          <span>{{ day.label }} ({{ day.dayOfWeek }})</span>
-          <span v-if="day.isToday" class="text-[9px] px-1 bg-rose-500 text-white font-black rounded">오늘</span>
-        </div>
-        <div class="font-mono mt-1 font-bold">{{ currencyStore.formatKRW(day.priceKRW) }}</div>
-      </div>
-    </div>
-
-    <!-- 모바일 전용 퀵 필터 칩 바 (Trip-style) -->
-    <div class="lg:hidden flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
-      <button
-        @click="showMobileFilter = true"
-        :class="[
-          'px-3.5 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 whitespace-nowrap shadow-sm',
-          activeFilterCount > 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-300'
-        ]"
-      >
-        <span>⚡ 상세 필터</span>
-        <span v-if="activeFilterCount > 0" class="w-4 h-4 rounded-full bg-white text-blue-600 text-[10px] flex items-center justify-center font-black">
-          {{ activeFilterCount }}
-        </span>
-      </button>
-
-      <button
-        @click="selectedStops = selectedStops === 0 ? null : 0"
-        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedStops === 0 ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
-      >
-        직항만
-      </button>
-
-      <button
-        @click="selectedTimeSlot = selectedTimeSlot === 'MORNING' ? 'ALL' : 'MORNING'"
-        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedTimeSlot === 'MORNING' ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
-      >
-        🌅 오전 출발
-      </button>
-
-      <button
-        @click="baggageOnly = !baggageOnly"
-        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', baggageOnly ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
-      >
-        🧳 무료 수하물
-      </button>
-
-      <button
-        @click="sortBy = 'cheapest'"
-        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', sortBy === 'cheapest' ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
-      >
-        최저가순
-      </button>
-    </div>
-
-    <!-- 3. 메인 그리드: 좌측 패싯 필터 사이드바 + 우측 항공권 리스트 -->
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-      <!-- 좌측 패싯 필터 사이드바 (Trip-style) -->
-      <aside class="hidden lg:block bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-fit space-y-6">
-        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-          <h3 class="font-black text-sm text-slate-900">항공권 필터</h3>
-          <button
-            @click="selectedStops = null; selectedAirlines = []; selectedTimeSlot = 'ALL'; baggageOnly = false"
-            class="text-[11px] text-blue-600 font-bold hover:underline"
-          >
-            초기화
-          </button>
-        </div>
-
-        <!-- 경유 여부 (Stops) -->
-        <div>
-          <h4 class="font-bold text-xs text-slate-900 mb-2.5">경유 횟수</h4>
-          <div class="space-y-2 text-xs">
-            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-              <input type="radio" :checked="selectedStops === null" @change="selectedStops = null" name="stops" class="accent-blue-600" />
-              <span>전체 구간</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-              <input type="radio" :checked="selectedStops === 0" @change="selectedStops = 0" name="stops" class="accent-blue-600" />
-              <span>직항만 보기 (Non-stop)</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-              <input type="radio" :checked="selectedStops === 1" @change="selectedStops = 1" name="stops" class="accent-blue-600" />
-              <span>1회 경유</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 출발 시간대 필터 -->
-        <div class="border-t border-slate-100 pt-5">
-          <h4 class="font-bold text-xs text-slate-900 mb-2.5">출발 시간대</h4>
-          <div class="grid grid-cols-2 gap-2 text-xs">
-            <button
-              v-for="slot in [
-                { id: 'ALL', label: '전체 시간' },
-                { id: 'MORNING', label: '오전 (06~12시)' },
-                { id: 'AFTERNOON', label: '오후 (12~18시)' },
-                { id: 'EVENING', label: '야간 (18~24시)' }
-              ]"
-              :key="slot.id"
-              @click="selectedTimeSlot = slot.id"
-              :class="[
-                'p-2 rounded-xl font-bold border transition text-[11px] text-center',
-                selectedTimeSlot === slot.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-              ]"
-            >
-              {{ slot.label }}
-            </button>
-          </div>
-        </div>
-
-        <!-- 항공사 필터 -->
-        <div v-if="availableAirlines.length" class="border-t border-slate-100 pt-5">
-          <h4 class="font-bold text-xs text-slate-900 mb-2.5">항공사 선택</h4>
-          <div class="space-y-2 text-xs">
-            <label
-              v-for="airline in availableAirlines"
-              :key="airline"
-              class="flex items-center gap-2 cursor-pointer font-medium text-slate-700"
-            >
-              <input
-                type="checkbox"
-                :checked="selectedAirlines.includes(airline)"
-                @change="toggleAirline(airline)"
-                class="rounded text-blue-600 focus:ring-blue-500"
-              />
-              <span>{{ airline }}</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 수하물 필터 -->
-        <div class="border-t border-slate-100 pt-5">
-          <h4 class="font-bold text-xs text-slate-900 mb-2.5">수하물 규정</h4>
-          <label class="flex items-center gap-2 text-xs font-semibold cursor-pointer text-slate-700">
-            <input v-model="baggageOnly" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500" />
-            <span>🧳 무료 위탁수하물 포함만 (20kg+)</span>
-          </label>
-        </div>
-      </aside>
-
-      <!-- 우측 항공편 리스트 영역 -->
-      <main class="lg:col-span-3 space-y-4">
-        <!-- 정렬 탭 -->
-        <div class="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-xs">
-          <span class="text-slate-500 font-medium">
-            총 <strong class="text-blue-600 font-bold">{{ filteredFlights.length }}</strong>개의 운항편
+  <div class="pb-24 lg:pb-16">
+    <!-- Search bar -->
+    <section class="border-b border-line bg-surface">
+      <div class="mx-auto max-w-7xl px-4 py-3 lg:px-6 lg:py-4">
+        <button v-if="!formOpen" type="button" class="flex w-full items-center gap-3 rounded-2xl border border-line bg-canvas px-4 py-2.5 text-left lg:hidden" @click="formOpen = true">
+          <AppIcon name="flight" class="text-ink-subtle" />
+          <span class="min-w-0 flex-1">
+            <span class="block truncate font-bold text-ink">{{ q.origin && q.dest ? `${cityOf(q.origin)} → ${cityOf(q.dest)}` : '어디로 떠나세요?' }}</span>
+            <span class="block truncate text-xs text-ink-muted">{{ q.date ? fmtDay(q.date) : '날짜 미정' }}{{ q.returnDate ? ` – ${fmtDay(q.returnDate)} 왕복` : ' 편도' }} · {{ pax }}명</span>
           </span>
+          <span class="text-sm font-semibold text-primary">변경</span>
+        </button>
 
-          <div class="flex items-center gap-1">
-            <button
-              @click="sortBy = 'cheapest'"
-              :class="['px-3 py-1.5 rounded-lg font-bold transition', sortBy === 'cheapest' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50']"
-            >
-              최저가순
-            </button>
-            <button
-              @click="sortBy = 'fastest'"
-              :class="['px-3 py-1.5 rounded-lg font-bold transition', sortBy === 'fastest' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50']"
-            >
-              최단 비행시간순
-            </button>
-            <button
-              @click="sortBy = 'recommended'"
-              :class="['px-3 py-1.5 rounded-lg font-bold transition', sortBy === 'recommended' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50']"
-            >
-              추천순
-            </button>
+        <form :class="['space-y-2 lg:block', formOpen ? 'block' : 'hidden']" novalidate @submit.prevent="submit">
+          <div class="flex gap-1" role="radiogroup" aria-label="여정">
+            <button v-for="t in [{ id: 'oneway', label: '편도' }, { id: 'round', label: '왕복' }]" :key="t.id" type="button" role="radio" :aria-checked="draft.trip === t.id" :aria-pressed="draft.trip === t.id" class="chip py-1.5" @click="draft.trip = t.id as any">{{ t.label }}</button>
+          </div>
+          <div class="grid gap-2 lg:grid-cols-[1fr_auto_1fr_1.25fr_0.9fr_auto] lg:items-stretch">
+            <div class="field-box"><label for="fs-origin" class="field-label">출발</label><SearchAutocomplete v-model="draft.origin" input-id="fs-origin" domain="flights" variant="bare" placeholder="도시 또는 공항" /></div>
+            <button type="button" class="z-10 mx-auto -my-4 flex h-10 w-10 rotate-90 items-center justify-center self-center rounded-full border border-line bg-surface text-ink-muted hover:text-primary lg:my-0 lg:rotate-0" aria-label="출발지와 도착지 바꾸기" @click="swap"><AppIcon name="swap" :size="18" /></button>
+            <div class="field-box"><label for="fs-dest" class="field-label">도착</label><SearchAutocomplete v-model="draft.dest" input-id="fs-dest" domain="flights" variant="bare" placeholder="도시 또는 공항" /></div>
+            <DateRangePicker v-if="draft.trip === 'round'" v-model:start="draft.date" v-model:end="draft.returnDate" start-label="가는 날" end-label="오는 날" unit="day" :min="today" :max-range="180" compact />
+            <DateRangePicker v-else v-model:start="draft.date" mode="single" start-label="가는 날" :min="today" compact />
+            <GuestPicker v-model:adults="draft.adults" v-model:children="draft.children" :show-rooms="false" label="탑승객" compact />
+            <div class="flex gap-2">
+              <button v-if="formOpen" type="button" class="btn-secondary lg:hidden" @click="formOpen = false; syncDraft()">취소</button>
+              <button type="submit" class="btn-primary min-h-[52px] flex-1 rounded-2xl px-7 text-base"><AppIcon name="search" :size="18" />검색</button>
+            </div>
+          </div>
+          <p v-if="formError" class="text-sm font-medium text-danger" role="alert">{{ formError }}</p>
+        </form>
+      </div>
+    </section>
+
+    <div class="mx-auto max-w-7xl px-4 lg:px-6">
+      <!-- Heading -->
+      <div class="flex flex-wrap items-end justify-between gap-3 pb-3 pt-6">
+        <div>
+          <nav class="mb-1 flex items-center gap-1 text-xs text-ink-subtle" aria-label="이동 경로"><NuxtLink to="/" class="hover:text-ink">홈</NuxtLink><AppIcon name="chevron-right" :size="12" /><NuxtLink to="/flights" class="hover:text-ink">항공권</NuxtLink></nav>
+          <p v-if="roundTrip" class="mb-1 text-xs font-bold uppercase tracking-wide text-primary">{{ step === 'return' ? '2/2 오는 편 선택' : '1/2 가는 편 선택' }}</p>
+          <h1 class="text-xl font-bold tracking-tight text-ink sm:text-2xl">{{ heading }} <span v-if="state === 'ready' && q.origin" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ filtered.length }}편</span></h1>
+        </div>
+        <label class="flex items-center gap-2 text-sm text-ink-muted">
+          <span class="hidden sm:inline">정렬</span>
+          <select :value="q.sort" class="rounded-xl border border-line bg-surface py-2 pl-3 pr-8 text-sm font-semibold text-ink focus:border-primary focus:outline-none" @change="patch({ sortBy: ($event.target as HTMLSelectElement).value === 'cheapest' ? '' : ($event.target as HTMLSelectElement).value })">
+            <option v-for="s in SORTS" :key="s.id" :value="s.id">{{ s.label }}</option>
+          </select>
+        </label>
+      </div>
+
+      <!-- Chosen outbound (round trip, step 2) -->
+      <div v-if="step === 'return' && chosenOut" class="card mb-4 flex flex-wrap items-center justify-between gap-3 border-primary/40 bg-primary-soft/50 p-4">
+        <div class="flex items-center gap-3 text-sm">
+          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-ink"><AppIcon name="check" :size="16" /></span>
+          <div>
+            <p class="font-semibold text-ink">가는 편 · {{ fmtDay(q.date, true) }} · {{ chosenOut.airline_name }} {{ chosenOut.flight_number }}</p>
+            <p class="text-ink-muted tabular">{{ chosenOut.departure_time }} {{ chosenOut.departure_airport }} → {{ chosenOut.arrival_time }} {{ chosenOut.arrival_airport }} · {{ currency.formatKRW(chosenOut.base_price_krw) }}</p>
           </div>
         </div>
+        <button type="button" class="text-sm font-semibold text-primary hover:underline" @click="router.back()">가는 편 다시 고르기</button>
+      </div>
+      <p v-else-if="step === 'return' && state === 'ready' && !chosenOut" class="card mb-4 p-4 text-sm text-ink" role="alert">
+        선택한 가는 편을 찾을 수 없어요. <button type="button" class="font-semibold text-primary hover:underline" @click="patch({ out: '' })">가는 편부터 다시 고르기</button>
+      </p>
 
-        <div v-if="loading" class="p-16 text-center text-slate-400 font-bold bg-white rounded-2xl border border-slate-200">
-          항공편을 실시간으로 조회 중입니다...
-        </div>
+      <!-- Date strip -->
+      <div v-if="strip.length" class="-mx-4 mb-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <button v-for="s in strip" :key="s.d" type="button" :aria-pressed="s.on" :disabled="s.disabled" class="seg min-w-[84px] flex-1 py-2.5 disabled:pointer-events-none disabled:opacity-30" @click="pickDay(s.d)">{{ s.label }}</button>
+      </div>
 
-        <div v-else-if="filteredFlights.length === 0" class="p-16 bg-white rounded-2xl border border-slate-200 text-center text-slate-400">
-          선택한 필터 조건에 부합하는 항공편이 없습니다.
-        </div>
+      <!-- Phone filter chips -->
+      <div class="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
+        <button type="button" class="chip" :aria-pressed="activeCount > 0" @click="sheet = true"><AppIcon name="menu" :size="16" />필터<span v-if="activeCount" class="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1 text-2xs text-primary-ink">{{ activeCount }}</span></button>
+        <button type="button" class="chip" :aria-pressed="q.stops === 0" @click="patch({ stops: q.stops === 0 ? '' : '0' })">직항</button>
+        <button type="button" class="chip" :aria-pressed="q.slots.includes('morning')" @click="toggleList('slots', 'morning')">오전 출발</button>
+        <button type="button" class="chip" :aria-pressed="q.bag" @click="patch({ bag: q.bag ? '' : '1' })">위탁 수하물 포함</button>
+      </div>
 
-        <!-- Trip-style 항공편 카드 -->
-        <div
-          v-for="f in filteredFlights"
-          :key="f.id"
-          class="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-lg transition flex flex-col md:flex-row items-center justify-between gap-6"
-        >
-          <!-- 항공사 & 시간 정보 -->
-          <div class="flex items-center gap-8 w-full md:w-auto">
-            <div class="w-24">
-              <div class="font-black text-slate-900 text-sm">{{ f.airline_name }}</div>
-              <div class="text-[11px] font-mono text-slate-400">{{ f.flight_number }}</div>
-              <span class="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded">
-                {{ f.cabin_class }}
-              </span>
+      <div class="grid gap-6 lg:grid-cols-[272px_1fr]">
+        <aside class="hidden lg:block" aria-label="필터">
+          <div class="card sticky top-24 p-5">
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="font-bold text-ink">필터</h2>
+              <button v-if="activeCount" type="button" class="text-sm font-semibold text-primary hover:underline" @click="patch(RESET)">초기화</button>
             </div>
+            <FlightFilterPanel :q="q" :slots="SLOTS" :airlines="airlines" @patch="patch" @toggle="toggleList" />
+          </div>
+        </aside>
 
-            <div class="flex items-center gap-6 text-center flex-1">
-              <div>
-                <div class="text-xl font-black text-slate-900 font-mono">
-                  {{ new Date(f.departure_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
-                </div>
-                <div class="text-xs text-slate-500 font-bold">{{ f.departure_airport }}</div>
-              </div>
+        <div class="min-w-0">
+          <p class="mb-3 flex items-start gap-1.5 text-xs text-ink-subtle">
+            <AppIcon name="check" :size="14" class="mt-px" />표시 요금은 성인 1명·편도 참고가예요. 탑승객 수와 날짜를 반영한 최종 금액은 결제 전 확인 화면에서 확정돼요. 항공권은 발권 후 환불이 불가해요.
+          </p>
 
-              <div class="space-y-1">
-                <span class="text-[10px] text-slate-400 font-semibold">
-                  {{ Math.floor(f.duration_minutes / 60) }}시간 {{ f.duration_minutes % 60 }}분
-                </span>
-                <div class="w-24 h-0.5 bg-slate-300 relative">
-                  <div class="w-2 h-2 rounded-full bg-blue-600 absolute right-0 -top-0.5"></div>
-                </div>
-                <span :class="['text-[10px] font-bold', (f.stops || 0) === 0 ? 'text-emerald-600' : 'text-amber-600']">
-                  {{ (f.stops || 0) === 0 ? '직항' : (f.stops || 1) + '회 경유' }}
-                </span>
-              </div>
-
-              <div>
-                <div class="text-xl font-black text-slate-900 font-mono">
-                  {{ new Date(f.arrival_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
-                </div>
-                <div class="text-xs text-slate-500 font-bold">{{ f.arrival_airport }}</div>
-              </div>
-            </div>
-
-            <div class="hidden lg:block text-xs text-slate-500 space-y-0.5">
-              <div>🧳 무료 위탁수하물 {{ f.free_baggage_kg || 23 }}kg</div>
-              <div class="text-[11px] text-emerald-600 font-bold">잔여 {{ f.available_seats }}석</div>
-            </div>
+          <div v-if="!q.origin || !q.dest" class="card px-6 py-12 text-center">
+            <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-soft text-primary"><AppIcon name="flight" /></span>
+            <p class="mt-4 font-bold text-ink">출발지와 도착지를 입력해 주세요</p>
+            <p class="mt-1 text-sm text-ink-muted">도시를 고르면 그 도시의 모든 공항을 함께 찾아요. 예: 서울 → 도쿄</p>
           </div>
 
-          <!-- 가격 & 선택 버튼 -->
-          <div class="text-right flex items-center justify-between md:justify-end gap-4 w-full md:w-auto pt-3 md:pt-0 border-t md:border-t-0 border-slate-100">
-            <div>
-              <div class="text-2xl font-black text-blue-600 font-mono">
-                {{ currencyStore.formatKRW(f.base_price_krw) }}
-              </div>
-              <div class="text-[10px] text-slate-400">유류할증료/세금 포함</div>
-            </div>
-            <div class="flex items-center gap-2">
-              <NuxtLink
-                :to="`/flights/detail/${f.id}`"
-                class="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition whitespace-nowrap"
-              >
-                상세 / 운임선택
-              </NuxtLink>
-              <button
-                @click="selectFlight(f)"
-                type="button"
-                class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition whitespace-nowrap"
-              >
-                {{ tripType === 'roundtrip' && currentStep === 'outbound' ? '가는 편 선택 →' : '예약하기' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-
-    <!-- 모바일 필터 바텀시트 / 모달 -->
-    <Teleport to="body">
-      <div v-if="showMobileFilter" class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm lg:hidden">
-        <div class="bg-white rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
-          <div class="flex items-center justify-between p-4 border-b border-slate-100">
-            <h3 class="font-black text-base text-slate-900">항공권 상세 필터</h3>
-            <button @click="showMobileFilter = false" class="text-slate-400 p-1 hover:text-slate-700 text-xl font-bold">✕</button>
-          </div>
-          
-          <div class="overflow-y-auto p-5 space-y-6">
-            <!-- 경유 횟수 -->
-            <div>
-              <h4 class="font-bold text-xs text-slate-900 mb-2.5">경유 횟수</h4>
-              <div class="space-y-2 text-xs">
-                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                  <input type="radio" :checked="selectedStops === null" @change="selectedStops = null" name="m_stops" class="accent-blue-600" />
-                  <span>전체 구간</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                  <input type="radio" :checked="selectedStops === 0" @change="selectedStops = 0" name="m_stops" class="accent-blue-600" />
-                  <span>직항만 (Non-stop)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                  <input type="radio" :checked="selectedStops === 1" @change="selectedStops = 1" name="m_stops" class="accent-blue-600" />
-                  <span>1회 경유 이하</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- 출발 시간대 -->
-            <div class="border-t border-slate-100 pt-4">
-              <h4 class="font-bold text-xs text-slate-900 mb-2.5">출발 시간대</h4>
-              <div class="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  v-for="slot in [
-                    { id: 'ALL', label: '전체 시간' },
-                    { id: 'MORNING', label: '오전 (06:00~12:00)' },
-                    { id: 'AFTERNOON', label: '오후 (12:00~18:00)' },
-                    { id: 'NIGHT', label: '야간 (18:00~24:00)' }
-                  ]"
-                  :key="slot.id"
-                  @click="selectedTimeSlot = slot.id"
-                  :class="[
-                    'p-2 rounded-xl font-bold border transition text-[11px] text-center',
-                    selectedTimeSlot === slot.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                  ]"
-                >
-                  {{ slot.label }}
-                </button>
-              </div>
-            </div>
-
-            <!-- 수하물 조건 -->
-            <div class="border-t border-slate-100 pt-4">
-              <h4 class="font-bold text-xs text-slate-900 mb-2">수하물 옵션</h4>
-              <label class="flex items-center gap-2 text-xs font-semibold cursor-pointer text-slate-700">
-                <input v-model="baggageOnly" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500" />
-                <span>🧳 무료 위탁수하물 포함만</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center gap-3">
-            <button
-              @click="selectedStops = null; selectedAirlines = []; selectedTimeSlot = 'ALL'; baggageOnly = false"
-              class="w-1/3 py-3 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 bg-white"
-            >
-              초기화
-            </button>
-            <button
-              @click="showMobileFilter = false"
-              class="w-2/3 py-3 rounded-xl bg-blue-600 text-white font-black text-xs shadow-lg shadow-blue-500/30"
-            >
-              적용하기 ({{ filteredFlights.length }}개 항공편)
-            </button>
-          </div>
+          <ResultsState v-else :state="state" :count="filtered.length" icon="flight" :empty-title="step === 'return' ? '이 가는 편과 함께 예약할 수 있는 오는 편이 없어요' : '조건에 맞는 항공편이 없어요'" :empty-hint="step === 'return' ? '왕복은 같은 판매처의 역방향 노선만 한 번에 예약할 수 있어요. 다른 가는 편을 고르거나 편도로 각각 예약해 주세요.' : '필터를 줄이거나 날짜·공항을 바꿔 보세요.'" error-title="항공편을 불러오지 못했어요" @retry="load">
+            <template #empty-actions>
+              <button v-if="activeCount" type="button" class="btn-primary" @click="patch(RESET)">필터 초기화</button>
+              <button v-if="step === 'return'" type="button" class="btn-secondary" @click="router.back()">가는 편 다시 고르기</button>
+            </template>
+            <ul class="space-y-3">
+              <li v-for="f in filtered" :key="f.id">
+                <article class="card group relative flex flex-col gap-4 p-4 transition-shadow hover:shadow-pop sm:p-5 md:flex-row md:items-center">
+                  <div class="flex min-w-0 flex-1 items-center gap-4">
+                    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-xs font-bold text-ink-muted" aria-hidden="true">{{ f.airline_code || '✈' }}</span>
+                    <div class="grid min-w-0 flex-1 grid-cols-[auto_1fr_auto] items-center gap-3 sm:gap-5">
+                      <div class="text-left">
+                        <p class="text-lg font-bold text-ink tabular">{{ f.departure_time }}</p>
+                        <p class="text-xs font-semibold text-ink-muted">{{ f.departure_airport }}</p>
+                      </div>
+                      <div class="text-center">
+                        <p class="text-xs text-ink-subtle">{{ hm(Number(f.duration_minutes)) }}</p>
+                        <div class="relative my-1 h-px bg-line-strong"><span class="absolute -top-1 right-0 h-2 w-2 rounded-full bg-primary" /></div>
+                        <p :class="['text-xs font-semibold', Number(f.stops || 0) === 0 ? 'text-success' : 'text-warning']">{{ Number(f.stops || 0) === 0 ? '직항' : `${f.stops}회 경유` }}</p>
+                      </div>
+                      <div class="text-right">
+                        <p class="text-lg font-bold text-ink tabular">{{ f.arrival_time }}<sup v-if="plusDays(f)" class="ml-0.5 text-2xs font-bold text-warning">+{{ plusDays(f) }}</sup></p>
+                        <p class="text-xs font-semibold text-ink-muted">{{ f.arrival_airport }}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted md:w-44 md:flex-col md:items-start">
+                    <span class="font-semibold text-ink">{{ f.airline_name }} <span class="font-normal text-ink-subtle">{{ f.flight_number }}</span></span>
+                    <span>{{ CABIN_KO[f.cabin_class] || f.cabin_class }}<template v-if="Number(f.free_baggage_kg) > 0"> · 위탁 {{ f.free_baggage_kg }}kg</template></span>
+                    <span v-if="Number(f.available_seats) > 0 && Number(f.available_seats) <= 5" class="font-semibold text-warning">잔여 {{ f.available_seats }}석</span>
+                    <span v-if="f.bookable === false" class="font-semibold text-warning">현재 직접 예약 불가</span>
+                  </div>
+                  <div class="flex items-center justify-between gap-3 border-t border-line pt-3 md:flex-col md:items-end md:border-0 md:pt-0">
+                    <div class="text-left md:text-right">
+                      <p class="text-xl font-extrabold text-ink tabular">{{ currency.formatKRW(f.base_price_krw) }}</p>
+                      <p class="text-2xs text-ink-subtle">성인 1명 편도 참고가</p>
+                    </div>
+                    <div class="flex gap-2">
+                      <NuxtLink :to="detailLink(f)" class="btn-secondary px-3.5">상세</NuxtLink>
+                      <button v-if="f.bookable !== false" type="button" class="btn-primary" :disabled="!q.date" @click="choose(f)">{{ roundTrip && step === 'outbound' ? '가는 편 선택' : '선택' }}</button>
+                    </div>
+                  </div>
+                </article>
+              </li>
+            </ul>
+          </ResultsState>
         </div>
       </div>
-    </Teleport>
+    </div>
+
+    <FilterSheet :open="sheet" :apply-label="state === 'loading' ? '검색 중…' : `항공편 ${filtered.length}개 보기`" @close="sheet = false" @reset="patch(RESET)">
+      <FlightFilterPanel :q="q" :slots="SLOTS" :airlines="airlines" @patch="patch" @toggle="toggleList" />
+    </FilterSheet>
   </div>
 </template>

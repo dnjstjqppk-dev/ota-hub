@@ -44,37 +44,29 @@ useHead(() => {
 
 <template>
   <DetailShell :state="state" list-path="/things-to-do" list-label="투어·티켓 둘러보기" @retry="reload">
-    <template v-if="a">
-      <nav class="mb-3 text-xs text-slate-400"><NuxtLink to="/" class="hover:underline">홈</NuxtLink> › <NuxtLink to="/things-to-do" class="hover:underline">투어·티켓</NuxtLink> › {{ a.city }}</nav>
-      <div class="grid gap-6 md:grid-cols-[1fr_320px]">
-        <div class="space-y-6">
-          <section class="overflow-hidden rounded-3xl border border-slate-200 bg-white" data-testid="activity-detail">
-            <img v-if="a.image_url || a.thumbnail_url" :src="a.image_url || a.thumbnail_url" :alt="a.title" class="h-64 w-full object-cover md:h-80" />
-            <div class="p-6 md:p-8">
-              <h1 class="text-2xl font-black text-slate-900">{{ a.title }}</h1>
-              <p v-if="a.review_score" class="mt-1 text-sm text-slate-600">
-                <span class="text-amber-500">★ {{ Number(a.review_score).toFixed(1) }}</span>
-                <span v-if="a.review_count"> · 평가 {{ Number(a.review_count).toLocaleString('ko-KR') }}건</span>
-                <span class="text-xs text-slate-400"> (공급사 제공 평점)</span>
-              </p>
-              <dl class="mt-5 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                <div v-for="[k, v] in facts" :key="k"><dt class="text-xs text-slate-500">{{ k }}</dt><dd class="font-semibold text-slate-900">{{ v }}</dd></div>
-              </dl>
-              <div v-if="highlights.length" class="mt-6">
-                <h2 class="text-sm font-bold text-slate-900">상품 소개</h2>
-                <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700"><li v-for="h in highlights" :key="h">{{ h }}</li></ul>
-              </div>
-              <div v-if="a.included?.length" class="mt-6">
-                <h2 class="text-sm font-bold text-slate-900">포함 사항</h2>
-                <ul class="mt-2 space-y-1 text-sm text-slate-700"><li v-for="i in a.included" :key="i">✓ {{ i }}</li></ul>
-              </div>
-              <p class="mt-6 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">이용일과 인원은 예약 단계에서 선택합니다. 아동도 성인과 같은 요금이 적용됩니다.</p>
-            </div>
-          </section>
-          <ReviewsSection domain="ACTIVITY" :target-id="a.id" />
-        </div>
-        <DetailBookingCard :item="a" domain="ACTIVITY" :price-krw="a.price_krw" unit-label="1인" :cancellation="a.free_cancellation ? 'FREE' : 'NON_REFUNDABLE'" :alert-label="a.title" />
+    <div v-if="a" class="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div class="min-w-0 space-y-8">
+        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '투어·티켓', to: '/things-to-do' }, { label: a.city || a.title }]" :title="a.title" :image="a.image_url || a.thumbnail_url || null" image-icon="ticket" :facts="facts" testid="activity-detail">
+          <template #badges>
+            <p v-if="a.review_score" class="mt-2 flex items-center gap-1.5 text-sm text-ink-muted">
+              <span class="rounded-lg bg-primary px-2 py-0.5 text-sm font-bold text-primary-ink tabular">{{ Number(a.review_score).toFixed(1) }}</span>
+              <span v-if="a.review_count">평가 {{ Number(a.review_count).toLocaleString('ko-KR') }}건</span>
+              <span class="text-xs text-ink-subtle">· 공급사 제공 평점</span>
+            </p>
+          </template>
+          <div v-if="highlights.length" class="mt-6">
+            <h2 class="text-sm font-bold text-ink">상품 소개</h2>
+            <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-ink"><li v-for="h in highlights" :key="h">{{ h }}</li></ul>
+          </div>
+          <div v-if="a.included?.length" class="mt-6">
+            <h2 class="text-sm font-bold text-ink">포함 사항</h2>
+            <ul class="mt-2 space-y-1.5 text-sm text-ink"><li v-for="i in a.included" :key="i" class="flex items-center gap-2"><AppIcon name="check" :size="16" class="text-primary" />{{ i }}</li></ul>
+          </div>
+          <p class="mt-6 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">아동도 성인과 같은 요금이 적용돼요.</p>
+        </DetailHero>
+        <ReviewsSection domain="ACTIVITY" :target-id="a.id" />
       </div>
-    </template>
+      <DetailBookingCard :item="a" domain="ACTIVITY" :price-krw="a.price_krw" unit-label="1인" :cancellation="a.free_cancellation ? 'FREE' : 'NON_REFUNDABLE'" people :alert-label="a.title" />
+    </div>
   </DetailShell>
 </template>

@@ -38,25 +38,14 @@ useHead(() => {
 
 <template>
   <DetailShell :state="state" list-path="/transfers" list-label="공항 이동 검색으로" @retry="reload">
-    <template v-if="t">
-      <nav class="mb-3 text-xs text-slate-400"><NuxtLink to="/" class="hover:underline">홈</NuxtLink> › <NuxtLink to="/transfers" class="hover:underline">공항 이동</NuxtLink> › {{ t.service_title }}</nav>
-      <div class="grid gap-6 md:grid-cols-[1fr_320px]">
-        <div class="space-y-6">
-          <section class="overflow-hidden rounded-3xl border border-slate-200 bg-white" data-testid="transfer-detail">
-            <img v-if="t.image_url" :src="t.image_url" :alt="t.service_title" class="h-64 w-full object-cover" />
-            <div class="p-6 md:p-8">
-              <div class="text-xs font-semibold text-slate-500">{{ t.vehicle_class }}</div>
-              <h1 class="mt-1 text-2xl font-black text-slate-900">{{ t.service_title }}</h1>
-              <dl class="mt-5 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                <div v-for="[k, v] in facts" :key="k"><dt class="text-xs text-slate-500">{{ k }}</dt><dd class="font-semibold text-slate-900">{{ v }}</dd></div>
-              </dl>
-              <p class="mt-5 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">차량 1대 편도 요금입니다. 탑승 인원이 최대 인원을 넘으면 예약할 수 없습니다.</p>
-            </div>
-          </section>
-          <ReviewsSection domain="TRANSFER" :target-id="t.id" />
-        </div>
-        <DetailBookingCard :item="t" domain="TRANSFER" :price-krw="t.price_krw" unit-label="차량 1대 편도" cancellation="FREE" :alert-label="`${t.airport_code} ${t.service_title}`" />
+    <div v-if="t" class="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div class="min-w-0 space-y-8">
+        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '공항 이동', to: '/transfers' }, { label: t.service_title }]" :eyebrow="t.vehicle_class" :title="t.service_title" :image="t.image_url || null" image-icon="transfer" :facts="facts" testid="transfer-detail">
+          <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">차량 1대 편도 요금이에요. 탑승 인원이 최대 인원을 넘으면 예약할 수 없어요.</p>
+        </DetailHero>
+        <ReviewsSection domain="TRANSFER" :target-id="t.id" />
       </div>
-    </template>
+      <DetailBookingCard :item="t" domain="TRANSFER" :price-krw="t.price_krw" unit-label="차량 1대 편도" cancellation="FREE" people :max-people="Number(t.max_passengers) || 9" :alert-label="t.airport_code + ' ' + t.service_title" />
+    </div>
   </DetailShell>
 </template>

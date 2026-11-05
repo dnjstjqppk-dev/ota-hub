@@ -1,509 +1,156 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+/**
+ * Car rental results (design system "Horizon"). URL = state (pickup place, rental period, filters, sort).
+ * API only; dates are never defaulted to a hard-coded day. Price is per vehicle per day, tax (10%) extra.
+ */
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
-import SearchAutocomplete from '~/components/SearchAutocomplete.vue'
+import { daysBetween, fmtDay, qDate, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 
-const route = useRoute()
-const currencyStore = useCurrencyStore()
+const { route, router, patch, isSelf } = useUrlQuery()
+const currency = useCurrencyStore()
 
-const city = ref((route.query.city || route.query.loc || route.query.location || '제주') as string)
-const pickupDate = ref(route.query.pickupDate as string || '2026-11-01')
-const returnDate = ref(route.query.returnDate as string || '2026-11-03')
+const SORTS = [{ id: 'price_asc', label: '낮은 가격순' }, { id: 'price_desc', label: '높은 가격순' }, { id: 'seats', label: '좌석 많은순' }] as const
+const TYPES = [{ id: '', label: '전체' }, { id: 'COMPACT', label: '소형' }, { id: 'SEDAN', label: '세단' }, { id: 'SUV', label: 'SUV' }, { id: 'VAN', label: '승합·밴' }, { id: 'LUXURY', label: '고급' }, { id: 'EV', label: '전기차' }]
+const TYPE_KO: Record<string, string> = Object.fromEntries(TYPES.filter((t) => t.id).map((t) => [t.id, t.label]))
 
-// Faceted Filters (Car Rental standard)
-const selectedCategory = ref<string>('ALL') // ALL, COMPACT, SEDAN, SUV, VAN, ELECTRIC
-const selectedTransmission = ref<string>('ALL') // ALL, AUTO, MANUAL
-const selectedCompany = ref<string>('ALL')
-const superCdwOnly = ref(false)
-const freeCancelOnly = ref(false)
-const sortBy = ref<'recommended' | 'price_asc' | 'seats_desc'>('recommended')
-const showMobileFilter = ref(false)
-
-const activeFilterCount = computed(() => {
-  let count = 0
-  if (selectedCategory.value !== 'ALL') count++
-  if (selectedTransmission.value !== 'ALL') count++
-  if (superCdwOnly.value) count++
-  if (freeCancelOnly.value) count++
-  return count
+const q = computed(() => {
+  const r = route.query
+  const from = qDate(r.pickupDate || r.startDate)
+  const to = qDate(r.returnDate || r.endDate)
+  return {
+    city: qStr(r.city || r.loc || r.location), from, to: from && to > from ? to : '',
+    type: qOneOf(r.vehicleType, TYPES.map((t) => t.id), ''),
+    auto: qStr(r.transmission) === 'AUTO',
+    sort: qOneOf(r.sortBy, SORTS.map((s) => s.id), 'price_asc')
+  }
 })
+const days = computed(() => (q.value.from && q.value.to ? daysBetween(q.value.from, q.value.to) : 0))
 
-const cars = ref<any[]>([])
-const loading = ref(false)
-
-const fallbackCars = [
-  {
-    id: 'car_avante_01',
-    company_name: '롯데렌터카 (Lotte Rent-a-Car)',
-    vehicle_model: '현대 더 뉴 아반떼 (2025/2026)',
-    vehicle_category: 'SEDAN',
-    seats: 5,
-    luggage_large: 2,
-    luggage_small: 2,
-    transmission: 'AUTO',
-    fuel_type: 'GASOLINE',
-    pickup_city: '제주',
-    pickup_location_name: '제주국제공항 렌터카하우스 셔틀 1구역',
-    daily_price_krw: 48000,
-    insurance_super_cdw: true,
-    unlimited_mileage: true,
-    free_cancellation_hours: 48,
-    min_driver_age: 21,
-    image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800'
-  },
-  {
-    id: 'car_yaris_01',
-    company_name: 'Times Car Rental Japan',
-    vehicle_model: 'Toyota Yaris Hybrid',
-    vehicle_category: 'COMPACT',
-    seats: 5,
-    luggage_large: 2,
-    luggage_small: 1,
-    transmission: 'AUTO',
-    fuel_type: 'HYBRID',
-    pickup_city: '도쿄',
-    pickup_location_name: '도쿄 나리타 국제공항 제1터미널 카운터',
-    daily_price_krw: 62000,
-    insurance_super_cdw: true,
-    unlimited_mileage: true,
-    free_cancellation_hours: 48,
-    min_driver_age: 21,
-    image_url: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800'
-  },
-  {
-    id: 'car_tucson_01',
-    company_name: 'SK렌터카 (SK Rent-a-Car)',
-    vehicle_model: '현대 디 올 뉴 투싼 1.6T',
-    vehicle_category: 'SUV',
-    seats: 5,
-    luggage_large: 3,
-    luggage_small: 2,
-    transmission: 'AUTO',
-    fuel_type: 'GASOLINE',
-    pickup_city: '제주',
-    pickup_location_name: '제주국제공항 셔틀 탑승장 2구역',
-    daily_price_krw: 65000,
-    insurance_super_cdw: true,
-    unlimited_mileage: true,
-    free_cancellation_hours: 48,
-    min_driver_age: 21,
-    image_url: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=800'
-  },
-  {
-    id: 'car_carnival_01',
-    company_name: '롯데렌터카 (Lotte Rent-a-Car)',
-    vehicle_model: '기아 더 뉴 카니발 9인승',
-    vehicle_category: 'VAN',
-    seats: 9,
-    luggage_large: 4,
-    luggage_small: 4,
-    transmission: 'AUTO',
-    fuel_type: 'DIESEL',
-    pickup_city: '제주',
-    pickup_location_name: '제주공항 지점',
-    daily_price_krw: 95000,
-    insurance_super_cdw: true,
-    unlimited_mileage: true,
-    free_cancellation_hours: 48,
-    min_driver_age: 26,
-    image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800'
-  }
-]
-
-const fetchCars = async () => {
-  loading.value = true
-  try {
-    const params = new URLSearchParams()
-    if (city.value) {
-      params.append('city', city.value)
-      params.append('loc', city.value)
-    }
-    const res = await fetch(`${useApiUrl('/cars')}?${params.toString()}`)
-    const json = await res.json()
-    if (Array.isArray(json?.data) && json.data.length > 0) {
-      cars.value = json.data.map((c: any) => ({
-        ...c,
-        vehicle_category: c.vehicle_category || c.vehicle_type || 'SEDAN',
-        luggage_large: c.luggage_large ?? (c.vehicle_type === 'VAN' ? 4 : c.vehicle_type === 'SUV' ? 3 : 2),
-        luggage_small: c.luggage_small ?? 2,
-        insurance_super_cdw: c.insurance_super_cdw ?? (c.insurance_included === 1 || c.insurance_included === true),
-        unlimited_mileage: c.unlimited_mileage ?? true,
-        free_cancellation_hours: c.free_cancellation_hours ?? 48,
-        pickup_location_name: c.pickup_location_name || c.pickup_location || '공항 렌터카 하우스'
-      }))
-      loading.value = false
-      return
-    }
-  } catch (e) {
-    // Keep fallback
-  }
-
-  const filteredFallback = fallbackCars.filter(c => {
-    if (!city.value) return true
-    return c.pickup_city.includes(city.value) || city.value.includes(c.pickup_city) || c.pickup_location_name.includes(city.value)
-  })
-  cars.value = filteredFallback.length > 0 ? filteredFallback : fallbackCars
-  loading.value = false
+const today = ref('')
+const draft = reactive({ city: '', from: '', to: '' })
+const formOpen = ref(false)
+function syncDraft() { Object.assign(draft, { city: q.value.city, from: q.value.from, to: q.value.to }) }
+syncDraft()
+function submit() {
+  formOpen.value = false
+  patch({ city: draft.city.trim(), loc: '', location: '', pickupDate: draft.from && draft.to ? draft.from : '', returnDate: draft.from && draft.to ? draft.to : '' })
 }
 
-watch(() => [route.query.city, route.query.loc, route.query.location], ([newCity, newLoc, newLocation]) => {
-  const val = newCity || newLoc || newLocation
-  if (val) {
-    city.value = val as string
-    fetchCars()
-  }
-})
+const items = ref<any[]>([])
+const state = ref<'loading' | 'ready' | 'error'>('loading')
+let ctrl: AbortController | null = null
+async function load() {
+  ctrl?.abort(); ctrl = new AbortController(); const mine = ctrl
+  const x = q.value
+  state.value = 'loading'
+  const timer = setTimeout(() => mine.abort(), 10000)
+  try {
+    const p = new URLSearchParams({ sortBy: x.sort === 'seats' ? 'seats_desc' : x.sort })
+    if (x.city) p.set('city', x.city)
+    if (x.type) p.set('vehicleType', x.type)
+    if (x.auto) p.set('transmission', 'AUTO')
+    const res = await fetch(`${useApiUrl('/cars')}?${p}`, { signal: mine.signal })
+    if (!res.ok) throw new Error(String(res.status))
+    const j = await res.json()
+    if (mine !== ctrl) return
+    const list = Array.isArray(j.data) ? j.data : []
+    // Sort client-side as well so the order always matches what the card shows.
+    const by = { price_asc: (a: any, b: any) => a.daily_price_krw - b.daily_price_krw, price_desc: (a: any, b: any) => b.daily_price_krw - a.daily_price_krw, seats: (a: any, b: any) => b.seats - a.seats }[x.sort]
+    items.value = [...list].sort(by)
+    state.value = 'ready'
+  } catch { if (mine === ctrl) state.value = 'error' } finally { clearTimeout(timer) }
+}
+const activeCount = computed(() => (q.value.type ? 1 : 0) + (q.value.auto ? 1 : 0))
+const RESET = { vehicleType: '', transmission: '' }
 
-watch(city, () => {
-  fetchCars()
-})
+function stayQuery() { return q.value.from && q.value.to ? { startDate: q.value.from, endDate: q.value.to } : {} }
+function detailLink(c: any) { return { path: `/cars/detail/${c.id}`, query: stayQuery() } }
+function book(c: any) { router.push({ path: '/checkout', query: { domain: 'CAR', itemId: c.id, ...stayQuery() } }) }
 
-const filteredCars = computed(() => {
-  let list = [...cars.value]
-
-  if (selectedCategory.value !== 'ALL') {
-    list = list.filter(c => c.vehicle_category === selectedCategory.value)
-  }
-  if (selectedTransmission.value !== 'ALL') {
-    list = list.filter(c => c.transmission === selectedTransmission.value)
-  }
-  if (superCdwOnly.value) {
-    list = list.filter(c => c.insurance_super_cdw)
-  }
-  if (freeCancelOnly.value) {
-    list = list.filter(c => (c.free_cancellation_hours || 0) > 0)
-  }
-
-  if (sortBy.value === 'price_asc') {
-    list.sort((a, b) => a.daily_price_krw - b.daily_price_krw)
-  } else if (sortBy.value === 'seats_desc') {
-    list.sort((a, b) => b.seats - a.seats)
-  }
-
-  return list
-})
-
-onMounted(() => {
-  fetchCars()
-})
+watch(() => route.fullPath, () => { if (!isSelf()) return; syncDraft(); load() })
+onMounted(() => { today.value = todayIso(); load() })
+onBeforeUnmount(() => ctrl?.abort())
+useHead(() => ({ title: q.value.city ? `${q.value.city} 렌터카` : '렌터카 검색' }))
 </script>
 
 <template>
-  <div class="max-w-7xl mx-auto px-4 py-8 space-y-6">
-    <!-- 상단 브레드크럼 & 검색 요약 바 -->
-    <div class="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
-      <div class="flex items-center gap-4">
-        <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xl">
-          🚗
-        </div>
-        <div>
-          <div class="flex items-center gap-2 text-xs text-slate-400">
-            <NuxtLink to="/" class="hover:underline">홈</NuxtLink> <span>›</span>
-            <NuxtLink to="/cars" class="hover:underline">렌터카</NuxtLink> <span>›</span>
-            <span class="text-slate-800 font-bold">차량 검색</span>
-          </div>
-          <div class="text-base font-black text-slate-900 mt-0.5">
-            {{ city }} 렌터카 예약 ({{ pickupDate }} ~ {{ returnDate }})
-          </div>
-        </div>
-      </div>
-
-      <div class="flex items-center gap-3 w-full md:w-auto">
-        <div class="w-64">
-          <SearchAutocomplete
-            v-model="city"
-            domain="cars"
-            icon="car"
-            placeholder="인수 도시 / 지점 변경"
-            inputClass="w-full pl-10 pr-3 py-2 text-xs font-bold text-slate-800 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-        </div>
-        <NuxtLink
-          to="/cars"
-          class="px-4 py-2 border border-slate-200 hover:border-blue-500 rounded-xl text-xs font-bold text-slate-700 transition whitespace-nowrap"
-        >
-          검색 조건 변경
-        </NuxtLink>
-      </div>
-    </div>
-
-    <!-- 모바일 전용 퀵 필터 칩 바 (Trip-style) -->
-    <div class="lg:hidden flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
-      <button
-        @click="showMobileFilter = true"
-        :class="[
-          'px-3.5 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 whitespace-nowrap shadow-sm',
-          activeFilterCount > 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-300'
-        ]"
-      >
-        <span>⚡ 렌터카 필터</span>
-        <span v-if="activeFilterCount > 0" class="w-4 h-4 rounded-full bg-white text-blue-600 text-[10px] flex items-center justify-center font-black">
-          {{ activeFilterCount }}
-        </span>
-      </button>
-
-      <button
-        @click="selectedCategory = selectedCategory === 'COMPACT' ? 'ALL' : 'COMPACT'"
-        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedCategory === 'COMPACT' ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
-      >
-        경차/소형
-      </button>
-
-      <button
-        @click="selectedCategory = selectedCategory === 'SEDAN' ? 'ALL' : 'SEDAN'"
-        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedCategory === 'SEDAN' ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
-      >
-        세단
-      </button>
-
-      <button
-        @click="selectedCategory = selectedCategory === 'SUV' ? 'ALL' : 'SUV'"
-        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedCategory === 'SUV' ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
-      >
-        SUV
-      </button>
-
-      <button
-        @click="superCdwOnly = !superCdwOnly"
-        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', superCdwOnly ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
-      >
-        완전자차 0원
-      </button>
-
-      <button
-        @click="freeCancelOnly = !freeCancelOnly"
-        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', freeCancelOnly ? 'bg-blue-50 text-blue-600 border-blue-600' : 'bg-white text-slate-600 border-slate-200']"
-      >
-        무료 취소
-      </button>
-    </div>
-
-    <!-- 메인 레이아웃 (좌측 Trip-style 패싯 필터 + 우측 차량 카드 리스트) -->
-    <div class="flex flex-col lg:flex-row gap-8 items-start">
-      <!-- 1. 패싯 필터 사이드바 -->
-      <aside class="hidden lg:block w-full lg:w-64 bg-white rounded-2xl border border-slate-200 p-5 space-y-6 flex-shrink-0 shadow-sm">
-        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
-          <span class="font-black text-sm text-slate-900">상세 필터</span>
-          <button
-            @click="selectedCategory = 'ALL'; selectedTransmission = 'ALL'; superCdwOnly = false; freeCancelOnly = false;"
-            class="text-xs text-blue-600 hover:underline font-bold"
-          >
-            초기화
-          </button>
-        </div>
-
-        <!-- 차종 필터 -->
-        <div class="space-y-2.5">
-          <label class="text-xs font-black text-slate-700 block">차량 크기 / 차종</label>
-          <div class="space-y-1.5 text-xs text-slate-600">
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="radio" value="ALL" v-model="selectedCategory" class="text-blue-600 focus:ring-0" />
-              <span>전체 보기</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="radio" value="COMPACT" v-model="selectedCategory" class="text-blue-600 focus:ring-0" />
-              <span>경차 / 소형차 (Compact)</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="radio" value="SEDAN" v-model="selectedCategory" class="text-blue-600 focus:ring-0" />
-              <span>준중형 / 중형 세단 (Sedan)</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="radio" value="SUV" v-model="selectedCategory" class="text-blue-600 focus:ring-0" />
-              <span>SUV / CUV</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="radio" value="VAN" v-model="selectedCategory" class="text-blue-600 focus:ring-0" />
-              <span>승합 / 패밀리 밴 (Van)</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 변속기 필터 -->
-        <div class="space-y-2.5 pt-4 border-t border-slate-100">
-          <label class="text-xs font-black text-slate-700 block">변속기 (기어)</label>
-          <div class="space-y-1.5 text-xs text-slate-600">
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="radio" value="ALL" v-model="selectedTransmission" class="text-blue-600 focus:ring-0" />
-              <span>전체</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="radio" value="AUTO" v-model="selectedTransmission" class="text-blue-600 focus:ring-0" />
-              <span>오토 (자동변속기)</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="radio" value="MANUAL" v-model="selectedTransmission" class="text-blue-600 focus:ring-0" />
-              <span>수동 (수동변속기)</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 안심 보장 혜택 -->
-        <div class="space-y-2.5 pt-4 border-t border-slate-100">
-          <label class="text-xs font-black text-slate-700 block">안심 보장 혜택</label>
-          <div class="space-y-2 text-xs text-slate-600">
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="checkbox" v-model="superCdwOnly" class="rounded text-blue-600 focus:ring-0" />
-              <span class="font-bold text-emerald-700">✓ 완전자차 (면책금 0원)</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="checkbox" v-model="freeCancelOnly" class="rounded text-blue-600 focus:ring-0" />
-              <span>무료 취소 보장</span>
-            </label>
-          </div>
-        </div>
-      </aside>
-
-      <!-- 2. 우측 렌터카 상품 목록 -->
-      <main class="flex-1 space-y-4 w-full">
-        <!-- 정렬 바 -->
-        <div class="bg-white rounded-2xl border border-slate-200 p-3.5 flex items-center justify-between text-xs shadow-sm">
-          <span class="font-bold text-slate-600">
-            검색 결과 <strong class="text-blue-600">{{ filteredCars.length }}</strong>대
+  <div class="pb-24 lg:pb-16">
+    <section class="border-b border-line bg-surface">
+      <div class="mx-auto max-w-7xl px-4 py-3 lg:px-6 lg:py-4">
+        <button v-if="!formOpen" type="button" class="flex w-full items-center gap-3 rounded-2xl border border-line bg-canvas px-4 py-2.5 text-left lg:hidden" @click="formOpen = true">
+          <AppIcon name="car" class="text-ink-subtle" />
+          <span class="min-w-0 flex-1">
+            <span class="block truncate font-bold text-ink">{{ q.city || '모든 인수 장소' }}</span>
+            <span class="block truncate text-xs text-ink-muted">{{ days ? `${fmtDay(q.from)} – ${fmtDay(q.to)} · ${days}일` : '대여 기간 미정' }}</span>
           </span>
-
-          <div class="flex items-center gap-1">
-            <button
-              @click="sortBy = 'recommended'"
-              :class="['px-3 py-1.5 rounded-lg font-bold transition', sortBy === 'recommended' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50']"
-            >
-              추천순
-            </button>
-            <button
-              @click="sortBy = 'price_asc'"
-              :class="['px-3 py-1.5 rounded-lg font-bold transition', sortBy === 'price_asc' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50']"
-            >
-              최저가순
-            </button>
-            <button
-              @click="sortBy = 'seats_desc'"
-              :class="['px-3 py-1.5 rounded-lg font-bold transition', sortBy === 'seats_desc' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50']"
-            >
-              탑승인원순
-            </button>
+          <span class="text-sm font-semibold text-primary">변경</span>
+        </button>
+        <form :class="['grid gap-2 lg:grid lg:grid-cols-[1.4fr_1.4fr_auto]', formOpen ? 'grid' : 'hidden']" novalidate @submit.prevent="submit">
+          <div class="field-box"><label for="cl-city" class="field-label">인수 장소</label><SearchAutocomplete v-model="draft.city" input-id="cl-city" domain="cars" variant="bare" placeholder="공항, 도시 또는 기차역" @enter="submit" /></div>
+          <DateRangePicker v-model:start="draft.from" v-model:end="draft.to" start-label="인수" end-label="반납" unit="day" :min="today" :max-range="60" compact />
+          <div class="flex gap-2">
+            <button v-if="formOpen" type="button" class="btn-secondary lg:hidden" @click="formOpen = false; syncDraft()">취소</button>
+            <button type="submit" class="btn-primary min-h-[52px] flex-1 rounded-2xl px-7 text-base"><AppIcon name="search" :size="18" />검색</button>
           </div>
-        </div>
-
-        <!-- 렌터카 카드 리스트 -->
-        <div
-          v-for="car in filteredCars"
-          :key="car.id"
-          class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm hover:shadow-lg transition flex flex-col md:flex-row items-center justify-between gap-6"
-        >
-          <div class="flex flex-col sm:flex-row items-center gap-6 w-full md:w-auto">
-            <img :src="car.image_url" class="w-44 h-32 object-cover rounded-2xl border border-slate-100 flex-shrink-0" />
-            <div class="space-y-2 text-center sm:text-left">
-              <span class="text-xs font-bold text-slate-400">{{ car.company_name }}</span>
-              <h3 class="text-lg font-black text-slate-900">{{ car.vehicle_model }}</h3>
-              
-              <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 text-xs text-slate-600">
-                <span class="bg-slate-100 px-2.5 py-0.5 rounded font-medium">👥 {{ car.seats }}인승</span>
-                <span class="bg-slate-100 px-2.5 py-0.5 rounded font-medium">⚙️ {{ car.transmission === 'AUTO' ? '자동' : '수동' }}</span>
-                <span class="bg-slate-100 px-2.5 py-0.5 rounded font-medium">🧳 대형 {{ car.luggage_large }}개</span>
-              </div>
-
-              <div class="flex items-center justify-center sm:justify-start gap-2 text-xs">
-                <span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">
-                  ✓ 슈퍼자차 포함 (면책금 0원)
-                </span>
-                <span class="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded">
-                  무제한 주행거리
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 요금 및 상세/예약 버튼 -->
-          <div class="text-right flex items-center justify-between md:justify-end gap-3 w-full md:w-auto pt-4 md:pt-0 border-t md:border-t-0 border-slate-100">
-            <div>
-              <span class="text-[11px] text-slate-400">1일 기준 요금</span>
-              <div class="text-2xl font-black text-blue-600 font-mono">
-                {{ currencyStore.formatKRW(car.daily_price_krw) }}
-              </div>
-              <div class="text-[10px] text-slate-400">자차보험 & 세금 포함</div>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <NuxtLink
-                :to="`/cars/detail/${car.id}`"
-                class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition whitespace-nowrap"
-              >
-                차량 상세
-              </NuxtLink>
-              <NuxtLink
-                :to="`/cars/booking?carId=${car.id}`"
-                class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition whitespace-nowrap"
-              >
-                대여 예약
-              </NuxtLink>
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-
-    <!-- 모바일 필터 바텀시트 / 모달 -->
-    <Teleport to="body">
-      <div v-if="showMobileFilter" class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm lg:hidden">
-        <div class="bg-white rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
-          <div class="flex items-center justify-between p-4 border-b border-slate-100">
-            <h3 class="font-black text-base text-slate-900">렌터카 상세 필터</h3>
-            <button @click="showMobileFilter = false" class="text-slate-400 p-1 hover:text-slate-700 text-xl font-bold">✕</button>
-          </div>
-          
-          <div class="overflow-y-auto p-5 space-y-6">
-            <!-- 차종 필터 -->
-            <div class="space-y-2.5">
-              <label class="text-xs font-black text-slate-700 block">차량 크기 / 차종</label>
-              <div class="space-y-1.5 text-xs text-slate-600">
-                <label v-for="cat in [
-                  { id: 'ALL', label: '전체 보기' },
-                  { id: 'COMPACT', label: '경차 / 소형차 (Compact)' },
-                  { id: 'SEDAN', label: '준중형 / 중형 세단 (Sedan)' },
-                  { id: 'SUV', label: 'SUV / CUV' },
-                  { id: 'VAN', label: '승합 / 패밀리 밴 (Van)' }
-                ]" :key="cat.id" class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-                  <input type="radio" :value="cat.id" v-model="selectedCategory" name="m_car_cat" class="text-blue-600 focus:ring-0" />
-                  <span>{{ cat.label }}</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- 보험 및 혜택 옵션 -->
-            <div class="space-y-2.5 pt-4 border-t border-slate-100">
-              <label class="text-xs font-black text-slate-700 block">보험 및 편의 옵션</label>
-              <div class="space-y-2 text-xs text-slate-600">
-                <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-                  <input type="checkbox" v-model="superCdwOnly" class="rounded text-blue-600 focus:ring-0" />
-                  <span>완전자차 보장 포함 (면책금 0원)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-                  <input type="checkbox" v-model="freeCancelOnly" class="rounded text-blue-600 focus:ring-0" />
-                  <span>무료 취소 가능 차량만</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center gap-3">
-            <button
-              @click="selectedCategory = 'ALL'; selectedTransmission = 'ALL'; superCdwOnly = false; freeCancelOnly = false;"
-              class="w-1/3 py-3 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 bg-white"
-            >
-              초기화
-            </button>
-            <button
-              @click="showMobileFilter = false"
-              class="w-2/3 py-3 rounded-xl bg-blue-600 text-white font-black text-xs shadow-lg shadow-blue-500/30"
-            >
-              적용하기 ({{ filteredCars.length }}대 차량)
-            </button>
-          </div>
-        </div>
+        </form>
       </div>
-    </Teleport>
+    </section>
+
+    <div class="mx-auto max-w-7xl px-4 lg:px-6">
+      <div class="flex flex-wrap items-end justify-between gap-3 pb-3 pt-6">
+        <div>
+          <nav class="mb-1 flex items-center gap-1 text-xs text-ink-subtle" aria-label="이동 경로"><NuxtLink to="/" class="hover:text-ink">홈</NuxtLink><AppIcon name="chevron-right" :size="12" /><NuxtLink to="/cars" class="hover:text-ink">렌터카</NuxtLink></nav>
+          <h1 class="text-xl font-bold tracking-tight text-ink sm:text-2xl">{{ q.city ? `${q.city} 렌터카` : '모든 렌터카' }} <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ items.length }}대</span></h1>
+          <p v-if="days" class="mt-0.5 text-sm text-ink-muted">{{ fmtDay(q.from, true) }} – {{ fmtDay(q.to, true) }} · {{ days }}일</p>
+        </div>
+        <label class="flex items-center gap-2 text-sm text-ink-muted">
+          <span class="hidden sm:inline">정렬</span>
+          <select :value="q.sort" class="rounded-xl border border-line bg-surface py-2 pl-3 pr-8 text-sm font-semibold text-ink focus:border-primary focus:outline-none" @change="patch({ sortBy: ($event.target as HTMLSelectElement).value === 'price_asc' ? '' : ($event.target as HTMLSelectElement).value })">
+            <option v-for="s in SORTS" :key="s.id" :value="s.id">{{ s.label }}</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <button v-for="t in TYPES" :key="t.id" type="button" class="chip" :aria-pressed="q.type === t.id" @click="patch({ vehicleType: t.id })">{{ t.label }}</button>
+        <button type="button" class="chip" :aria-pressed="q.auto" @click="patch({ transmission: q.auto ? '' : 'AUTO' })">자동 변속기</button>
+      </div>
+
+      <p class="mb-3 flex items-start gap-1.5 text-xs text-ink-subtle"><AppIcon name="check" :size="14" class="mt-px" />표시 요금은 차량 1대·1일 참고가이며 세금 10%가 별도로 붙어요. 최종 금액은 결제 전 확인 화면에서 확정돼요.</p>
+      <ResultsState :state="state" :count="items.length" icon="car" :empty-title="q.city ? `‘${q.city}’에서 조건에 맞는 차량이 없어요` : '조건에 맞는 차량이 없어요'" empty-hint="다른 인수 장소로 검색하거나 차종 조건을 줄여 보세요." error-title="렌터카 목록을 불러오지 못했어요" @retry="load">
+        <template #empty-actions>
+          <button v-if="activeCount" type="button" class="btn-primary" @click="patch(RESET)">필터 초기화</button>
+          <button v-if="q.city" type="button" class="btn-secondary" @click="patch({ city: '' })">모든 인수 장소 보기</button>
+        </template>
+        <ul class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <li v-for="c in items" :key="c.id">
+            <article class="card group relative flex h-full flex-col overflow-hidden transition-shadow hover:shadow-pop">
+              <SmartImg :src="c.image_url" :alt="c.vehicle_model" icon="car" img-class="aspect-[16/10] w-full object-cover" />
+              <div class="flex flex-1 flex-col p-4">
+                <p class="text-xs text-ink-subtle">{{ c.company_name }}</p>
+                <h2 class="mt-0.5 font-bold leading-snug text-ink"><NuxtLink :to="detailLink(c)" class="after:absolute after:inset-0 group-hover:text-primary">{{ c.vehicle_model }}</NuxtLink></h2>
+                <ul class="mt-2 flex flex-wrap gap-1.5 text-xs text-ink-muted">
+                  <li v-if="TYPE_KO[c.vehicle_type]" class="rounded-md bg-surface-sunken px-2 py-0.5">{{ TYPE_KO[c.vehicle_type] }}</li>
+                  <li v-if="c.seats" class="rounded-md bg-surface-sunken px-2 py-0.5">{{ c.seats }}인승</li>
+                  <li v-if="c.transmission" class="rounded-md bg-surface-sunken px-2 py-0.5">{{ c.transmission === 'AUTO' ? '자동' : '수동' }}</li>
+                </ul>
+                <p v-if="c.pickup_location" class="mt-2 flex items-start gap-1 text-xs text-ink-muted"><AppIcon name="map-pin" :size="14" class="mt-px text-ink-subtle" /><span class="line-clamp-2">{{ c.pickup_location }}</span></p>
+                <p v-if="c.insurance_included" class="mt-1.5 flex items-center gap-1 text-xs font-semibold text-success"><AppIcon name="shield" :size="14" />기본 보험 포함</p>
+                <div class="mt-auto flex items-end justify-between gap-2 border-t border-line pt-3">
+                  <div>
+                    <p class="text-lg font-extrabold text-ink tabular">{{ currency.formatKRW(c.daily_price_krw) }}<span class="text-xs font-medium text-ink-subtle"> /일</span></p>
+                    <p v-if="days" class="text-2xs text-ink-subtle tabular">{{ days }}일 약 {{ currency.formatKRW(c.daily_price_krw * days) }} + 세금</p>
+                  </div>
+                  <button v-if="c.bookable !== false && days" type="button" class="btn-primary relative z-[1]" @click="book(c)">선택</button>
+                  <span v-else-if="c.bookable === false" class="text-xs font-semibold text-warning">직접 예약 불가</span>
+                </div>
+              </div>
+            </article>
+          </li>
+        </ul>
+      </ResultsState>
+    </div>
   </div>
 </template>
-

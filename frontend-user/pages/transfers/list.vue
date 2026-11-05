@@ -1,328 +1,150 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+/**
+ * Airport transfer results (design system "Horizon"). URL = state (airport, destination, date, passengers).
+ * API only. Price is per vehicle, one way; vehicles too small for the party are hidden (the quote API
+ * rejects them with OCCUPANCY_EXCEEDED) and the page says so.
+ */
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
-import { MASTER_TRANSFER_CATALOG, searchTransferCatalog } from '~/data/transferCatalog'
+import { fmtDay, qDate, qInt, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 
-const route = useRoute()
-const currencyStore = useCurrencyStore()
+const { route, router, patch, isSelf } = useUrlQuery()
+const currency = useCurrencyStore()
 
-const airport = ref(route.query.airport as string || '인천국제공항 (ICN)')
-const destination = ref(route.query.destination as string || '서울 명동')
-const date = ref(route.query.date as string || '2026-11-01')
-const passengers = ref(Number(route.query.passengers) || 2)
-
-// Facet Filter States (Airport Transfers standard)
-const selectedTier = ref<string>('ALL') // ALL, ECONOMY_SEDAN, COMFORT_SEDAN, BUSINESS_VAN, LUXURY_FIRST
-const minBags = ref(0)
-const sortBy = ref<'recommended' | 'price_asc' | 'capacity_desc'>('recommended')
-const showMobileFilter = ref(false)
-
-const activeFilterCount = computed(() => {
-  let count = 0
-  if (selectedTier.value !== 'ALL') count++
-  if (minBags.value > 0) count++
-  return count
-})
-
-const vehicles = ref<any[]>(MASTER_TRANSFER_CATALOG)
-const loading = ref(false)
-
-const fetchTransfers = async () => {
-  loading.value = true
-  try {
-    const params = new URLSearchParams()
-    if (airport.value) params.append('airport', airport.value)
-    if (destination.value) params.append('destination', destination.value)
-    const res = await fetch(`${useApiUrl('/transfers')}?${params.toString()}`)
-    const json = await res.json()
-    vehicles.value = json.data && json.data.length ? json.data : MASTER_TRANSFER_CATALOG
-  } catch (e) {
-    vehicles.value = MASTER_TRANSFER_CATALOG
-  } finally {
-    loading.value = false
+const SORTS = [{ id: 'price_asc', label: '낮은 가격순' }, { id: 'price_desc', label: '높은 가격순' }, { id: 'capacity', label: '탑승 인원 많은순' }] as const
+const q = computed(() => {
+  const r = route.query
+  return {
+    airport: qStr(r.airport), destination: qStr(r.destination || r.dest), date: qDate(r.date || r.startDate),
+    adults: qInt(r.adults || r.passengers, 2, 1, 9), children: qInt(r.children, 0, 0, 8),
+    sort: qOneOf(r.sortBy, SORTS.map((s) => s.id), 'price_asc')
   }
+})
+const pax = computed(() => q.value.adults + q.value.children)
+
+const today = ref('')
+const draft = reactive({ airport: '', destination: '', date: '', adults: 2, children: 0 })
+const formOpen = ref(false)
+const formError = ref('')
+function syncDraft() { const x = q.value; Object.assign(draft, { airport: x.airport, destination: x.destination, date: x.date, adults: x.adults, children: x.children }) }
+syncDraft()
+function submit() {
+  formError.value = ''
+  if (!draft.airport.trim()) { formError.value = '공항을 입력해 주세요.'; return }
+  formOpen.value = false
+  router.replace({ query: { airport: draft.airport.trim(), ...(draft.destination.trim() ? { destination: draft.destination.trim() } : {}), ...(draft.date ? { date: draft.date } : {}), adults: String(draft.adults), ...(draft.children ? { children: String(draft.children) } : {}) } })
 }
 
-watch(() => [route.query.airport, route.query.destination], ([newAirport, newDest]) => {
-  if (newAirport) airport.value = newAirport as string
-  if (newDest) destination.value = newDest as string
-  fetchTransfers()
+const items = ref<any[]>([])
+const state = ref<'loading' | 'ready' | 'error'>('loading')
+let ctrl: AbortController | null = null
+async function load() {
+  ctrl?.abort(); ctrl = new AbortController(); const mine = ctrl
+  const x = q.value
+  state.value = 'loading'
+  const timer = setTimeout(() => mine.abort(), 10000)
+  try {
+    const p = new URLSearchParams()
+    if (x.airport) p.set('airport', x.airport)
+    if (x.destination) p.set('destination', x.destination)
+    const res = await fetch(`${useApiUrl('/transfers')}?${p}`, { signal: mine.signal })
+    if (!res.ok) throw new Error(String(res.status))
+    const j = await res.json()
+    if (mine !== ctrl) return
+    items.value = Array.isArray(j.data) ? j.data : []
+    state.value = 'ready'
+  } catch { if (mine === ctrl) state.value = 'error' } finally { clearTimeout(timer) }
+}
+const fits = computed(() => items.value.filter((t) => !Number(t.max_passengers) || Number(t.max_passengers) >= pax.value))
+const hiddenBySize = computed(() => items.value.length - fits.value.length)
+const sorted = computed(() => {
+  const by = { price_asc: (a: any, b: any) => a.price_krw - b.price_krw, price_desc: (a: any, b: any) => b.price_krw - a.price_krw, capacity: (a: any, b: any) => b.max_passengers - a.max_passengers }[q.value.sort]
+  return [...fits.value].sort(by)
 })
 
-const filteredVehicles = computed(() => {
-  let list = [...vehicles.value]
+function paxQuery() { const x = q.value; return { adults: String(x.adults), ...(x.children ? { children: String(x.children) } : {}) } }
+function detailLink(t: any) { return { path: `/transfers/detail/${t.id}`, query: { ...(q.value.date ? { startDate: q.value.date } : {}), ...paxQuery() } } }
+function book(t: any) { router.push({ path: '/checkout', query: { domain: 'TRANSFER', itemId: t.id, startDate: q.value.date, ...paxQuery() } }) }
 
-  if (selectedTier.value !== 'ALL') {
-    list = list.filter(v => v.vehicle_tier === selectedTier.value)
-  }
-  if (minBags.value > 0) {
-    list = list.filter(v => v.max_luggage >= minBags.value)
-  }
-
-  if (sortBy.value === 'price_asc') {
-    list.sort((a, b) => a.price_krw - b.price_krw)
-  } else if (sortBy.value === 'capacity_desc') {
-    list.sort((a, b) => b.max_passengers - a.max_passengers)
-  }
-
-  return list
-})
-
-onMounted(() => {
-  fetchTransfers()
-})
+watch(() => route.fullPath, () => { if (isSelf()) syncDraft() })
+watch(() => [q.value.airport, q.value.destination], () => { if (isSelf()) load() })
+onMounted(() => { today.value = todayIso(); load() })
+onBeforeUnmount(() => ctrl?.abort())
+useHead(() => ({ title: q.value.airport ? `${q.value.airport} 공항 이동` : '공항 이동 검색' }))
 </script>
 
 <template>
-  <div class="max-w-7xl mx-auto px-4 py-8 space-y-6">
-    <!-- 상단 브레드크럼 & 검색 요약 바 -->
-    <div class="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
-      <div class="flex items-center gap-4">
-        <div class="w-10 h-10 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center font-black text-xl">
-          🚐
-        </div>
-        <div>
-          <div class="flex items-center gap-2 text-xs text-slate-400">
-            <NuxtLink to="/" class="hover:underline">홈</NuxtLink> <span>›</span>
-            <NuxtLink to="/transfers" class="hover:underline">공항픽업</NuxtLink> <span>›</span>
-            <span class="text-slate-800 font-bold">차량 검색</span>
-          </div>
-          <div class="text-base font-black text-slate-900 mt-0.5">
-            {{ airport }} → {{ destination }} ({{ date }})
-          </div>
-        </div>
-      </div>
-
-      <NuxtLink
-        to="/transfers"
-        class="px-4 py-2 border border-slate-200 hover:border-cyan-500 rounded-xl text-xs font-bold text-slate-700 transition"
-      >
-        일정 / 목적지 재설정
-      </NuxtLink>
-    </div>
-
-    <!-- 모바일 전용 퀵 필터 칩 바 (Trip-style) -->
-    <div class="lg:hidden flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
-      <button
-        @click="showMobileFilter = true"
-        :class="[
-          'px-3.5 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 whitespace-nowrap shadow-sm',
-          activeFilterCount > 0 ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white text-slate-700 border-slate-300'
-        ]"
-      >
-        <span>⚡ 픽업 필터</span>
-        <span v-if="activeFilterCount > 0" class="w-4 h-4 rounded-full bg-white text-cyan-600 text-[10px] flex items-center justify-center font-black">
-          {{ activeFilterCount }}
-        </span>
-      </button>
-
-      <button
-        @click="selectedTier = selectedTier === 'COMFORT_SEDAN' ? 'ALL' : 'COMFORT_SEDAN'"
-        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedTier === 'COMFORT_SEDAN' ? 'bg-cyan-50 text-cyan-600 border-cyan-600' : 'bg-white text-slate-600 border-slate-200']"
-      >
-        세단 (3인)
-      </button>
-
-      <button
-        @click="selectedTier = selectedTier === 'BUSINESS_VAN' ? 'ALL' : 'BUSINESS_VAN'"
-        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedTier === 'BUSINESS_VAN' ? 'bg-cyan-50 text-cyan-600 border-cyan-600' : 'bg-white text-slate-600 border-slate-200']"
-      >
-        밴 (6인)
-      </button>
-
-      <button
-        @click="selectedTier = selectedTier === 'LUXURY_FIRST' ? 'ALL' : 'LUXURY_FIRST'"
-        :class="['px-3 py-2 rounded-xl text-xs font-bold border whitespace-nowrap transition', selectedTier === 'LUXURY_FIRST' ? 'bg-cyan-50 text-cyan-600 border-cyan-600' : 'bg-white text-slate-600 border-slate-200']"
-      >
-        VIP 럭셔리
-      </button>
-    </div>
-
-    <!-- 메인 레이아웃 (좌측 필터 + 우측 차량 목록) -->
-    <div class="flex flex-col lg:flex-row gap-8 items-start">
-      <!-- 1. 패싯 필터 사이드바 -->
-      <aside class="hidden lg:block w-full lg:w-64 bg-white rounded-2xl border border-slate-200 p-5 space-y-6 flex-shrink-0 shadow-sm">
-        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
-          <span class="font-black text-sm text-slate-900">차량 등급 필터</span>
-          <button
-            @click="selectedTier = 'ALL'; minBags = 0;"
-            class="text-xs text-cyan-600 hover:underline font-bold"
-          >
-            초기화
-          </button>
-        </div>
-
-        <div class="space-y-2.5">
-          <label class="text-xs font-black text-slate-700 block">차량 등급 (Vehicle Class)</label>
-          <div class="space-y-1.5 text-xs text-slate-600">
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="radio" value="ALL" v-model="selectedTier" class="text-cyan-600 focus:ring-0" />
-              <span>전체 차량</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="radio" value="COMFORT_SEDAN" v-model="selectedTier" class="text-cyan-600 focus:ring-0" />
-              <span>컴포트 세단 (3인/3수하물)</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="radio" value="BUSINESS_VAN" v-model="selectedTier" class="text-cyan-600 focus:ring-0" />
-              <span>비즈니스 밴 (6인/6수하물)</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-              <input type="radio" value="LUXURY_FIRST" v-model="selectedTier" class="text-cyan-600 focus:ring-0" />
-              <span>VIP 럭셔리 퍼스트</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 혜택 확인 -->
-        <div class="space-y-2 pt-4 border-t border-slate-100 text-xs text-slate-600">
-          <div class="flex items-center gap-2 text-emerald-700 font-bold">
-            <span>✓ 항공편 지연 무료 대기</span>
-          </div>
-          <div class="flex items-center gap-2 text-cyan-700 font-bold">
-            <span>✓ 입국장 피켓 네임보드 영접</span>
-          </div>
-          <div class="flex items-center gap-2 text-slate-600">
-            <span>✓ 통행료/유류비 일체 포함</span>
-          </div>
-        </div>
-      </aside>
-
-      <!-- 2. 우측 픽업 차량 목록 -->
-      <main class="flex-1 space-y-4 w-full">
-        <!-- 정렬 바 -->
-        <div class="bg-white rounded-2xl border border-slate-200 p-3.5 flex items-center justify-between text-xs shadow-sm">
-          <span class="font-bold text-slate-600">
-            이용 가능한 차량 <strong class="text-cyan-600">{{ filteredVehicles.length }}</strong>대
+  <div class="pb-24 lg:pb-16">
+    <section class="border-b border-line bg-surface">
+      <div class="mx-auto max-w-7xl px-4 py-3 lg:px-6 lg:py-4">
+        <button v-if="!formOpen" type="button" class="flex w-full items-center gap-3 rounded-2xl border border-line bg-canvas px-4 py-2.5 text-left lg:hidden" @click="formOpen = true">
+          <AppIcon name="transfer" class="text-ink-subtle" />
+          <span class="min-w-0 flex-1">
+            <span class="block truncate font-bold text-ink">{{ q.airport ? `${q.airport}${q.destination ? ` → ${q.destination}` : ''}` : '공항을 선택하세요' }}</span>
+            <span class="block truncate text-xs text-ink-muted">{{ q.date ? fmtDay(q.date) : '날짜 미정' }} · {{ pax }}명</span>
           </span>
-
-          <div class="flex items-center gap-1">
-            <button
-              @click="sortBy = 'recommended'"
-              :class="['px-3 py-1.5 rounded-lg font-bold transition', sortBy === 'recommended' ? 'bg-cyan-50 text-cyan-600' : 'text-slate-500 hover:bg-slate-50']"
-            >
-              추천순
-            </button>
-            <button
-              @click="sortBy = 'price_asc'"
-              :class="['px-3 py-1.5 rounded-lg font-bold transition', sortBy === 'price_asc' ? 'bg-cyan-50 text-cyan-600' : 'text-slate-500 hover:bg-slate-50']"
-            >
-              최저가순
-            </button>
-            <button
-              @click="sortBy = 'capacity_desc'"
-              :class="['px-3 py-1.5 rounded-lg font-bold transition', sortBy === 'capacity_desc' ? 'bg-cyan-50 text-cyan-600' : 'text-slate-500 hover:bg-slate-50']"
-            >
-              탑승정원순
-            </button>
-          </div>
-        </div>
-
-        <!-- 차량 카드 목록 -->
-        <div
-          v-for="v in filteredVehicles"
-          :key="v.id"
-          class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm hover:shadow-lg transition flex flex-col md:flex-row items-center justify-between gap-6"
-        >
-          <div class="flex flex-col sm:flex-row items-center gap-6 w-full md:w-auto">
-            <img :src="v.image_url" class="w-44 h-32 object-cover rounded-2xl border border-slate-100 flex-shrink-0" />
-            <div class="space-y-2 text-center sm:text-left">
-              <span class="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-xs font-bold rounded">
-                {{ v.vehicle_name || '프라이빗 픽업 전용' }}
-              </span>
-              <h3 class="text-lg font-black text-slate-900">{{ v.vehicle_model_example }}</h3>
-              
-              <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 text-xs text-slate-600">
-                <span class="bg-slate-100 px-2.5 py-0.5 rounded font-medium">👥 최대 {{ v.max_passengers }}명</span>
-                <span class="bg-slate-100 px-2.5 py-0.5 rounded font-medium">🧳 수하물 {{ v.max_luggage }}개</span>
-                <span class="bg-slate-100 px-2.5 py-0.5 rounded font-medium">⏱️ {{ v.free_waiting_mins }}분 무료 대기</span>
-              </div>
-
-              <div class="flex items-center justify-center sm:justify-start gap-2 text-xs">
-                <span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">
-                  ✓ 항공편 실시간 추적 포함
-                </span>
-                <span class="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded">
-                  기사 피켓 영접 포함
-                </span>
-              </div>
+          <span class="text-sm font-semibold text-primary">변경</span>
+        </button>
+        <form :class="['lg:block', formOpen ? 'block' : 'hidden']" novalidate @submit.prevent="submit">
+          <div class="grid gap-2 lg:grid-cols-[1fr_1fr_0.9fr_0.9fr_auto]">
+            <div class="field-box"><label for="tl-apt" class="field-label">공항</label><SearchAutocomplete v-model="draft.airport" input-id="tl-apt" domain="flights" variant="bare" placeholder="예: 인천국제공항" /></div>
+            <div class="field-box"><label for="tl-dest" class="field-label">목적지 (선택)</label><SearchAutocomplete v-model="draft.destination" input-id="tl-dest" domain="transfers" variant="bare" placeholder="지역, 호텔, 명소" /></div>
+            <DateRangePicker v-model:start="draft.date" mode="single" start-label="이용일" :min="today" compact />
+            <GuestPicker v-model:adults="draft.adults" v-model:children="draft.children" :show-rooms="false" label="탑승 인원" compact />
+            <div class="flex gap-2">
+              <button v-if="formOpen" type="button" class="btn-secondary lg:hidden" @click="formOpen = false; syncDraft()">취소</button>
+              <button type="submit" class="btn-primary min-h-[52px] flex-1 rounded-2xl px-7 text-base"><AppIcon name="search" :size="18" />검색</button>
             </div>
           </div>
-
-          <!-- 요금 및 버튼 -->
-          <div class="text-right flex items-center justify-between md:justify-end gap-3 w-full md:w-auto pt-4 md:pt-0 border-t md:border-t-0 border-slate-100">
-            <div>
-              <span class="text-[11px] text-slate-400">차량 1대당 확정 요금</span>
-              <div class="text-2xl font-black text-cyan-600 font-mono">
-                {{ currencyStore.formatKRW(v.price_krw) }}
-              </div>
-              <div class="text-[10px] text-slate-400">통행료/유류비 일체 포함</div>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <NuxtLink
-                :to="`/transfers/detail/${v.id}`"
-                class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition whitespace-nowrap"
-              >
-                상세 정보
-              </NuxtLink>
-              <NuxtLink
-                :to="`/transfers/booking?vehicleId=${v.id}&price=${v.price_krw}`"
-                class="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-black rounded-xl shadow-md transition whitespace-nowrap"
-              >
-                예약하기
-              </NuxtLink>
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-
-    <!-- 모바일 필터 바텀시트 / 모달 -->
-    <Teleport to="body">
-      <div v-if="showMobileFilter" class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm lg:hidden">
-        <div class="bg-white rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
-          <div class="flex items-center justify-between p-4 border-b border-slate-100">
-            <h3 class="font-black text-base text-slate-900">공항픽업 차량 필터</h3>
-            <button @click="showMobileFilter = false" class="text-slate-400 p-1 hover:text-slate-700 text-xl font-bold">✕</button>
-          </div>
-          
-          <div class="overflow-y-auto p-5 space-y-6">
-            <div class="space-y-2.5">
-              <label class="text-xs font-black text-slate-700 block">차량 등급 (Vehicle Class)</label>
-              <div class="space-y-1.5 text-xs text-slate-600">
-                <label v-for="tier in [
-                  { id: 'ALL', label: '전체 차량' },
-                  { id: 'COMFORT_SEDAN', label: '컴포트 세단 (3인/3수하물)' },
-                  { id: 'BUSINESS_VAN', label: '비즈니스 밴 (6인/6수하물)' },
-                  { id: 'LUXURY_FIRST', label: 'VIP 럭셔리 퍼스트' }
-                ]" :key="tier.id" class="flex items-center gap-2 cursor-pointer hover:text-slate-900">
-                  <input type="radio" :value="tier.id" v-model="selectedTier" name="m_trf_tier" class="text-cyan-600 focus:ring-0" />
-                  <span>{{ tier.label }}</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center gap-3">
-            <button
-              @click="selectedTier = 'ALL'; minBags = 0;"
-              class="w-1/3 py-3 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 bg-white"
-            >
-              초기화
-            </button>
-            <button
-              @click="showMobileFilter = false"
-              class="w-2/3 py-3 rounded-xl bg-cyan-600 text-white font-black text-xs shadow-lg shadow-cyan-500/30"
-            >
-              적용하기 ({{ filteredVehicles.length }}대 차량)
-            </button>
-          </div>
-        </div>
+          <p v-if="formError" class="mt-2 text-sm font-medium text-danger" role="alert">{{ formError }}</p>
+        </form>
       </div>
-    </Teleport>
+    </section>
+
+    <div class="mx-auto max-w-7xl px-4 lg:px-6">
+      <div class="flex flex-wrap items-end justify-between gap-3 pb-3 pt-6">
+        <div>
+          <nav class="mb-1 flex items-center gap-1 text-xs text-ink-subtle" aria-label="이동 경로"><NuxtLink to="/" class="hover:text-ink">홈</NuxtLink><AppIcon name="chevron-right" :size="12" /><NuxtLink to="/transfers" class="hover:text-ink">공항 이동</NuxtLink></nav>
+          <h1 class="text-xl font-bold tracking-tight text-ink sm:text-2xl">{{ q.airport ? `${q.airport} 출발 공항 이동` : '모든 공항 이동' }} <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ sorted.length }}개</span></h1>
+          <p v-if="q.date" class="mt-0.5 text-sm text-ink-muted">{{ fmtDay(q.date, true) }} 이용 · {{ pax }}명</p>
+        </div>
+        <label class="flex items-center gap-2 text-sm text-ink-muted">
+          <span class="hidden sm:inline">정렬</span>
+          <select :value="q.sort" class="rounded-xl border border-line bg-surface py-2 pl-3 pr-8 text-sm font-semibold text-ink focus:border-primary focus:outline-none" @change="patch({ sortBy: ($event.target as HTMLSelectElement).value === 'price_asc' ? '' : ($event.target as HTMLSelectElement).value })">
+            <option v-for="s in SORTS" :key="s.id" :value="s.id">{{ s.label }}</option>
+          </select>
+        </label>
+      </div>
+
+      <p class="mb-3 flex items-start gap-1.5 text-xs text-ink-subtle"><AppIcon name="check" :size="14" class="mt-px" />표시 요금은 차량 1대 편도 참고가이며 세금 10%가 별도로 붙어요. 최종 금액은 결제 전 확인 화면에서 확정돼요.</p>
+      <p v-if="state === 'ready' && hiddenBySize" class="mb-3 rounded-xl bg-surface-sunken px-4 py-2.5 text-sm text-ink-muted">{{ pax }}명이 탈 수 없는 소형 차량 {{ hiddenBySize }}대는 목록에서 뺐어요.</p>
+
+      <ResultsState :state="state" :count="sorted.length" icon="transfer" :empty-title="hiddenBySize ? `${pax}명이 함께 탈 수 있는 차량이 없어요` : '조건에 맞는 공항 이동 상품이 없어요'" :empty-hint="hiddenBySize ? '인원을 나눠 두 대로 예약하거나 인원을 줄여 보세요.' : '공항 이름을 확인하거나 목적지 없이 검색해 보세요.'" error-title="공항 이동 상품을 불러오지 못했어요" @retry="load">
+        <template #empty-actions><button v-if="q.destination" type="button" class="btn-secondary" @click="patch({ destination: '', dest: '' })">목적지 없이 보기</button></template>
+        <ul class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <li v-for="t in sorted" :key="t.id">
+            <article class="card group relative flex h-full flex-col overflow-hidden transition-shadow hover:shadow-pop">
+              <SmartImg :src="t.image_url" :alt="t.service_title" icon="transfer" img-class="aspect-[16/10] w-full object-cover" />
+              <div class="flex flex-1 flex-col p-4">
+                <p class="text-xs font-semibold text-primary">{{ t.airport_code }} 출발</p>
+                <h2 class="mt-0.5 font-bold leading-snug text-ink"><NuxtLink :to="detailLink(t)" class="after:absolute after:inset-0 group-hover:text-primary">{{ t.service_title }}</NuxtLink></h2>
+                <p v-if="t.destination_area" class="mt-2 flex items-start gap-1 text-xs text-ink-muted"><AppIcon name="map-pin" :size="14" class="mt-px text-ink-subtle" /><span class="line-clamp-2">{{ t.destination_area }}</span></p>
+                <ul class="mt-2 flex flex-wrap gap-1.5 text-xs text-ink-muted">
+                  <li v-if="t.max_passengers" class="flex items-center gap-1 rounded-md bg-surface-sunken px-2 py-0.5"><AppIcon name="users" :size="12" />최대 {{ t.max_passengers }}명</li>
+                  <li v-if="t.max_luggage" class="flex items-center gap-1 rounded-md bg-surface-sunken px-2 py-0.5"><AppIcon name="briefcase" :size="12" />수하물 {{ t.max_luggage }}개</li>
+                  <li v-if="Number(t.flight_tracking)" class="rounded-md bg-surface-sunken px-2 py-0.5">항공편 추적</li>
+                </ul>
+                <div class="mt-auto flex items-end justify-between gap-2 border-t border-line pt-3">
+                  <div><p class="text-lg font-extrabold text-ink tabular">{{ currency.formatKRW(t.price_krw) }}</p><p class="text-2xs text-ink-subtle">차량 1대 편도</p></div>
+                  <button v-if="t.bookable !== false && q.date" type="button" class="btn-primary relative z-[1]" @click="book(t)">선택</button>
+                  <span v-else-if="t.bookable === false" class="text-xs font-semibold text-warning">직접 예약 불가</span>
+                </div>
+              </div>
+            </article>
+          </li>
+        </ul>
+      </ResultsState>
+    </div>
   </div>
 </template>
-

@@ -276,6 +276,24 @@ export async function airportsForCityCode(env: Env, code: string): Promise<strin
     .map((p) => p.row.code as string);
 }
 
+/**
+ * Airports for free text typed or picked in a flight search box: a city name ("서울", "Tokyo"),
+ * an airport name ("인천국제공항") or one of their aliases, matched exactly after normalisation.
+ * City → its airports, airport → itself. Empty when nothing matches exactly (caller falls back to LIKE).
+ */
+export async function airportsForPlaceName(env: Env, text: string): Promise<string[]> {
+  const key = normalize(text);
+  if (!key) return [];
+  const data = await loadPlaces(env);
+  if (!data) return [];
+  const hit = data.index.find((p) => (p.row.place_type === "CITY" || p.row.place_type === "AIRPORT") && p.keys.includes(key));
+  if (!hit) return [];
+  if (hit.row.place_type === "AIRPORT") return hit.row.code ? [hit.row.code] : [];
+  return data.index
+    .filter((p) => p.row.place_type === "AIRPORT" && p.row.parent_id === hit.row.id && p.row.code)
+    .map((p) => p.row.code as string);
+}
+
 type ProductQuery = { domains: SuggestDomain[]; sql: string; params: (q: string) => unknown[]; map: (r: any) => Omit<Suggestion, "score" | "domain"> & { domain?: string } };
 
 const PRODUCT_QUERIES: ProductQuery[] = [

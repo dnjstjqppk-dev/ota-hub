@@ -454,4 +454,13 @@ test("autocomplete: places carry codes/ids, typos and 초성 match, wildcards es
   const f = (await api("GET", "/api/v1/flights?origin=ICN&dest=TYO")).data;
   const arr = (f.flights || f.data || []).map((x) => x.arrival_airport);
   assert.ok(arr.length > 0 && arr.every((a) => a === "NRT" || a === "HND"), `TYO must expand to NRT/HND, got ${arr}`);
+
+  // Names picked from autocomplete (no code in the text) must resolve too: 서울 → ICN/GMP, 도쿄 → NRT/HND.
+  const byName = (await api("GET", `/api/v1/flights?origin=${encodeURIComponent("서울")}&dest=${encodeURIComponent("도쿄")}`)).data.data || [];
+  assert.ok(byName.length > 0, "city names must find flights");
+  assert.ok(byName.every((x) => ["ICN", "GMP"].includes(x.departure_airport) && ["NRT", "HND"].includes(x.arrival_airport)));
+  const byAirport = (await api("GET", `/api/v1/flights?origin=${encodeURIComponent("인천국제공항")}&dest=${encodeURIComponent("방콕")}`)).data.data || [];
+  assert.ok(byAirport.length > 0 && byAirport.every((x) => x.departure_airport === "ICN" && x.arrival_airport === "BKK"));
+  const tf = (await api("GET", `/api/v1/transfers?airport=${encodeURIComponent("인천국제공항")}`)).data.data || [];
+  assert.ok(tf.length > 0 && tf.every((x) => x.airport_code === "ICN"), "transfer airport names must resolve to codes");
 });
