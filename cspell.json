@@ -109,6 +109,8 @@
     "worker/worker-configuration.d.ts",
     "worker-configuration.d.ts",
     "scripts/check-branding.js",
+    "**/*.svg",
+    "**/*.toml",
     "package-lock.json",
     "*.lock"
   ]

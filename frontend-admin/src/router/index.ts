@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import DashboardView from '../views/DashboardView.vue'
 import CatalogView from '../views/CatalogView.vue'
 import PricingView from '../views/PricingView.vue'
@@ -13,7 +13,7 @@ import LoginView from '../views/LoginView.vue'
 import FeatureFlagsView from '../views/FeatureFlagsView.vue'
 import UrlIngestionView from '../views/UrlIngestionView.vue'
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'Login',
