@@ -19,15 +19,17 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'transfers', label: '공항 이동', icon: 'transfer' }
 ]
 
+const props = withDefaults(defineProps<{ initialTab?: Tab; fixed?: boolean }>(), { initialTab: 'hotels', fixed: false })
 const router = useRouter()
-const tab = ref<Tab>('hotels')
+const tab = ref<Tab>(props.initialTab)
 const errors = ref<Record<string, string>>({})
 
 const f = reactive({
   city: '', checkIn: '', checkOut: '',
   adults: 2, children: 0, rooms: 1,
-  origin: '', dest: '', flightDate: '',
-  pkgOrigin: '', pkgDest: '',
+  origin: '', dest: '', flightDate: '', returnDate: '', trip: 'round' as 'round' | 'oneway',
+  pax: 1, paxChildren: 0,
+  pkgDest: '', pkgDate: '',
   keyword: '',
   dep: '', arr: '', trainDate: '',
   carPlace: '', carFrom: '', carTo: '',
@@ -41,7 +43,7 @@ function plus(days: number) { const d = new Date(); d.setDate(d.getDate() + days
 onMounted(() => {
   today.value = plus(0)
   f.checkIn = plus(14); f.checkOut = plus(16)
-  f.flightDate = plus(14); f.trainDate = plus(14); f.transferDate = plus(14)
+  f.flightDate = plus(14); f.returnDate = plus(18); f.trainDate = plus(14); f.transferDate = plus(14); f.pkgDate = plus(14)
   f.carFrom = plus(14); f.carTo = plus(17)
 })
 
@@ -68,6 +70,7 @@ function submit() {
     need('origin', f.origin, '출발지를 입력해 주세요.'); need('dest', f.dest, '도착지를 입력해 주세요.')
     if (f.origin && f.origin.trim() === f.dest.trim()) errors.value.dest = '출발지와 도착지가 같아요.'
     notPast('flightDate', f.flightDate)
+    if (f.trip === 'round' && (!f.returnDate || f.returnDate < f.flightDate)) errors.value.returnDate = '오는 날은 가는 날과 같거나 이후여야 해요.'
   } else if (t === 'packages') {
     need('pkgDest', f.pkgDest, '여행지를 입력해 주세요.')
   } else if (t === 'activities') {
@@ -87,11 +90,12 @@ function submit() {
   if (Object.keys(errors.value).length) return
 
   const go = (path: string, query: Record<string, string | number>) => router.push({ path, query })
-  if (t === 'hotels') go('/hotels/list', { city: f.city, checkIn: f.checkIn, checkOut: f.checkOut, adults: f.adults, children: f.children, rooms: f.rooms })
-  else if (t === 'flights') go('/flights/search', { origin: f.origin, dest: f.dest, date: f.flightDate })
-  else if (t === 'packages') go('/packages/list', { city: f.pkgDest, ...(f.pkgOrigin ? { origin: f.pkgOrigin } : {}) })
+  if (t === 'hotels') return go('/hotels/list', { city: f.city, checkIn: f.checkIn, checkOut: f.checkOut, adults: f.adults, children: f.children, rooms: f.rooms })
+  const pax = { adults: f.pax, ...(f.paxChildren ? { children: f.paxChildren } : {}) }
+  if (t === 'flights') go('/flights/search', { origin: f.origin, dest: f.dest, date: f.flightDate, ...(f.trip === 'round' ? { returnDate: f.returnDate } : {}), ...pax })
+  else if (t === 'packages') go('/packages/list', { city: f.pkgDest, ...(f.pkgDate ? { date: f.pkgDate } : {}), ...pax })
   else if (t === 'activities') go('/things-to-do', { q: f.keyword })
-  else if (t === 'trains') go('/trains/search', { dep: f.dep, arr: f.arr, date: f.trainDate })
+  else if (t === 'trains') go('/trains/search', { dep: f.dep, arr: f.arr, date: f.trainDate, ...pax })
   else if (t === 'cars') go('/cars/list', { city: f.carPlace, pickupDate: f.carFrom, returnDate: f.carTo })
   else go('/transfers/list', { airport: f.airport, ...(f.area ? { destination: f.area } : {}), date: f.transferDate })
 }
@@ -105,7 +109,7 @@ const LABEL = 'mb-0.5 block text-2xs font-semibold uppercase tracking-wide text-
 <template>
   <section class="relative rounded-[28px] border border-line bg-surface-raised p-3 shadow-pop sm:p-5" aria-label="여행 검색">
     <!-- Tabs -->
-    <div class="-mx-1 flex gap-1 overflow-x-auto px-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
+    <div v-if="!fixed" class="-mx-1 flex gap-1 overflow-x-auto px-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
       <button
         v-for="t in TABS"
         :key="t.id"
@@ -132,18 +136,26 @@ const LABEL = 'mb-0.5 block text-2xs font-semibold uppercase tracking-wide text-
       </div>
 
       <!-- Flights -->
-      <div v-else-if="tab === 'flights'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto_1fr_0.9fr_auto] lg:items-stretch">
+      <div v-else-if="tab === 'flights'" class="grid gap-2">
+        <div class="flex gap-1" role="radiogroup" aria-label="여정">
+          <button v-for="o in [{ id: 'round', label: '왕복' }, { id: 'oneway', label: '편도' }]" :key="o.id" type="button" role="radio" :aria-checked="f.trip === o.id" :aria-pressed="f.trip === o.id" class="chip py-1.5" @click="f.trip = o.id as any">{{ o.label }}</button>
+        </div>
+        <div class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto_1fr_1.3fr_0.9fr_auto] lg:items-stretch">
         <div :class="box('origin')"><label for="hs-origin" :class="LABEL">출발</label><SearchAutocomplete v-model="f.origin" input-id="hs-origin" domain="flights" variant="bare" placeholder="도시 또는 공항" /></div>
         <button type="button" class="mx-auto -my-4 z-10 flex h-10 w-10 rotate-90 items-center justify-center self-center rounded-full border border-line bg-surface text-ink-muted hover:text-primary lg:my-0 lg:rotate-0" aria-label="출발지와 도착지 바꾸기" @click="swap('origin', 'dest')"><AppIcon name="swap" :size="18" /></button>
         <div :class="box('dest')"><label for="hs-dest" :class="LABEL">도착</label><SearchAutocomplete v-model="f.dest" input-id="hs-dest" domain="flights" variant="bare" placeholder="도시 또는 공항" /></div>
-        <DateRangePicker v-model:start="f.flightDate" mode="single" start-label="가는 날" :min="today" :invalid="!!errors.flightDate" />
+        <DateRangePicker v-if="f.trip === 'round'" v-model:start="f.flightDate" v-model:end="f.returnDate" start-label="가는 날" end-label="오는 날" unit="day" :min="today" :max-range="180" :invalid="!!(errors.flightDate || errors.returnDate)" />
+        <DateRangePicker v-else v-model:start="f.flightDate" mode="single" start-label="가는 날" :min="today" :invalid="!!errors.flightDate" />
+        <GuestPicker v-model:adults="f.pax" v-model:children="f.paxChildren" :show-rooms="false" label="탑승객" />
         <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />검색</button>
+        </div>
       </div>
 
       <!-- Packages -->
-      <div v-else-if="tab === 'packages'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr_auto]">
-        <div :class="box('pkgOrigin')"><label for="hs-porigin" :class="LABEL">출발 (선택)</label><SearchAutocomplete v-model="f.pkgOrigin" input-id="hs-porigin" domain="flights" variant="bare" placeholder="출발 도시 또는 공항" /></div>
+      <div v-else-if="tab === 'packages'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1.4fr_1fr_1fr_auto]">
         <div :class="box('pkgDest')"><label for="hs-pdest" :class="LABEL">여행지</label><SearchAutocomplete v-model="f.pkgDest" input-id="hs-pdest" domain="packages" variant="bare" placeholder="도시 또는 국가" /></div>
+        <DateRangePicker v-model:start="f.pkgDate" mode="single" start-label="출발일" :min="today" />
+        <GuestPicker v-model:adults="f.pax" v-model:children="f.paxChildren" :show-rooms="false" label="여행자" />
         <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />검색</button>
       </div>
 
@@ -154,11 +166,12 @@ const LABEL = 'mb-0.5 block text-2xs font-semibold uppercase tracking-wide text-
       </div>
 
       <!-- Trains -->
-      <div v-else-if="tab === 'trains'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto_1fr_0.9fr_auto] lg:items-stretch">
+      <div v-else-if="tab === 'trains'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto_1fr_0.9fr_0.9fr_auto] lg:items-stretch">
         <div :class="box('dep')"><label for="hs-dep" :class="LABEL">출발역</label><SearchAutocomplete v-model="f.dep" input-id="hs-dep" domain="trains" variant="bare" placeholder="예: 서울역" /></div>
         <button type="button" class="mx-auto -my-4 z-10 flex h-10 w-10 rotate-90 items-center justify-center self-center rounded-full border border-line bg-surface text-ink-muted hover:text-primary lg:my-0 lg:rotate-0" aria-label="출발역과 도착역 바꾸기" @click="swap('dep', 'arr')"><AppIcon name="swap" :size="18" /></button>
         <div :class="box('arr')"><label for="hs-arr" :class="LABEL">도착역</label><SearchAutocomplete v-model="f.arr" input-id="hs-arr" domain="trains" variant="bare" placeholder="예: 부산역" /></div>
         <DateRangePicker v-model:start="f.trainDate" mode="single" start-label="탑승일" :min="today" :invalid="!!errors.trainDate" />
+        <GuestPicker v-model:adults="f.pax" v-model:children="f.paxChildren" :show-rooms="false" label="승객" />
         <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />검색</button>
       </div>
 
