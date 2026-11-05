@@ -224,6 +224,26 @@ function quoteErr(e: unknown): never {
 export async function createQuote(env: Env, user: AuthUser, body: any) {
   const domain = str(body.domain, 20).toUpperCase();
   if (!isDomain(domain)) throw new HttpError(400, "INVALID_DOMAIN", "상품 유형이 올바르지 않습니다.");
+
+  // Feature Flag Guard: check domain availability
+  const flagByDomain: Record<string, string> = {
+    FLIGHT: 'FLIGHT_BOOKING',
+    HOTEL: 'HOTEL_BOOKING',
+    ACTIVITY: 'ACTIVITY_BOOKING',
+    CAR: 'CAR_RENTAL',
+    PACKAGE: 'PACKAGE_TOUR',
+    TRAIN: 'TRANSIT_TICKETS',
+    TRANSFER: 'TRANSIT_TICKETS'
+  };
+  const requiredFlag = flagByDomain[domain];
+  if (requiredFlag) {
+    const { isFeatureEnabled } = await import("./feature-flag-service.ts");
+    const enabled = await isFeatureEnabled(env, requiredFlag);
+    if (!enabled) {
+      throw new HttpError(503, "FEATURE_DISABLED", `${domain} 예약 서비스가 운영 정책에 따라 일시 중단되었습니다. (Feature Flag OFF)`);
+    }
+  }
+
   const itemId = str(body.itemId, 100);
   if (!itemId) throw new HttpError(400, "ITEM_REQUIRED", "상품을 선택해주세요.");
   const params = parseParams(body);
@@ -365,6 +385,25 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
 
   const quote = await env.DB.prepare("SELECT * FROM quotes WHERE id = ?").bind(str(body.quoteId, 64)).first<any>();
   if (!quote || quote.user_id !== user.id) throw new HttpError(404, "QUOTE_NOT_FOUND", "견적을 찾을 수 없습니다. 다시 조회해주세요.");
+
+  // Feature Flag Guard: check domain availability on booking creation
+  const flagByDomain: Record<string, string> = {
+    FLIGHT: 'FLIGHT_BOOKING',
+    HOTEL: 'HOTEL_BOOKING',
+    ACTIVITY: 'ACTIVITY_BOOKING',
+    CAR: 'CAR_RENTAL',
+    PACKAGE: 'PACKAGE_TOUR',
+    TRAIN: 'TRANSIT_TICKETS',
+    TRANSFER: 'TRANSIT_TICKETS'
+  };
+  const requiredFlag = flagByDomain[quote.domain_type];
+  if (requiredFlag) {
+    const { isFeatureEnabled } = await import("./feature-flag-service.ts");
+    const enabled = await isFeatureEnabled(env, requiredFlag);
+    if (!enabled) {
+      throw new HttpError(503, "FEATURE_DISABLED", `${quote.domain_type} 예약 서비스가 운영 정책에 따라 일시 중단되었습니다. (Feature Flag OFF)`);
+    }
+  }
   if (quote.status === "CONSUMED") throw new HttpError(409, "QUOTE_ALREADY_USED", "이미 예약에 사용된 견적입니다. 다시 조회해주세요.");
   if (quote.status !== "ACTIVE" || quote.expires_at <= nowIso()) throw new HttpError(409, "QUOTE_EXPIRED", "견적 유효시간이 지났습니다. 가격을 다시 확인해주세요.");
 

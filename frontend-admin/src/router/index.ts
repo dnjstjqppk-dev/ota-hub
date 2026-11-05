@@ -10,6 +10,8 @@ import SettlementsView from '../views/SettlementsView.vue'
 import PartnersView from '../views/PartnersView.vue'
 import UsersView from '../views/UsersView.vue'
 import LoginView from '../views/LoginView.vue'
+import FeatureFlagsView from '../views/FeatureFlagsView.vue'
+import UrlIngestionView from '../views/UrlIngestionView.vue'
 
 const routes = [
   {
@@ -38,6 +40,18 @@ const routes = [
     path: '/catalog',
     name: 'Catalog',
     component: CatalogView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/url-ingest',
+    name: 'UrlIngest',
+    component: UrlIngestionView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/feature-flags',
+    name: 'FeatureFlags',
+    component: FeatureFlagsView,
     meta: { requiresAuth: true }
   },
   {

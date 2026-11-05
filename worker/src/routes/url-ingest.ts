@@ -1,0 +1,181 @@
+import type { Env } from '../env.ts';
+import { HttpError, json, readJson, str } from '../lib/http.ts';
+import { requireAdmin, requirePartner } from '../lib/auth.ts';
+import {
+  scrapeTravelProductUrl,
+  saveIngestedDraft,
+  publishIngestedProduct
+} from '../services/url-ingest-service.ts';
+import { isFeatureEnabled } from '../services/feature-flag-service.ts';
+
+export async function handleUrlIngest(request: Request, env: Env, url: URL): Promise<Response | null> {
+  const path = url.pathname;
+  const method = request.method;
+
+  // Verify feature flag: URL_PRODUCT_INGESTION
+  if (path.startsWith('/api/v1/admin/ingest') || path.startsWith('/api/v1/partner/ingest')) {
+    const isIngestEnabled = await isFeatureEnabled(env, 'URL_PRODUCT_INGESTION');
+    if (!isIngestEnabled) {
+      throw new HttpError(503, 'FEATURE_DISABLED', 'URL 상품 자동 수집 기능이 관리자에 의해 비활성화되어 있습니다.');
+    }
+  }
+
+  // 1. Admin Scrape & Create Draft: POST /api/v1/admin/ingest/url
+  if (path === '/api/v1/admin/ingest/url' && method === 'POST') {
+    const admin = await requireAdmin(request, env);
+    const body = await readJson(request);
+    const inputUrl = str(body.url, 2000);
+    if (!inputUrl) {
+      throw new HttpError(400, 'URL_REQUIRED', '수집할 여행 상품 URL을 입력해주세요.');
+    }
+
+    const draft = await scrapeTravelProductUrl(inputUrl);
+    const saved = await saveIngestedDraft(env, draft, admin.id);
+
+    // If AUTO_PRODUCT_PUBLISH flag is turned ON, automatically publish!
+    const isAutoPublish = await isFeatureEnabled(env, 'AUTO_PRODUCT_PUBLISH');
+    let publishResult = null;
+    if (isAutoPublish) {
+      publishResult = await publishIngestedProduct(env, saved.id, admin.id);
+    }
+
+    return json({
+      success: true,
+      draft: saved,
+      auto_published: isAutoPublish,
+      publish_result: publishResult
+    }, 201);
+  }
+
+  // 2. Admin Ingestion History: GET /api/v1/admin/ingest/history
+  if (path === '/api/v1/admin/ingest/history' && method === 'GET') {
+    await requireAdmin(request, env);
+    const status = url.searchParams.get('status');
+    const domain = url.searchParams.get('domain');
+
+    let sql = 'SELECT * FROM url_product_ingestions WHERE 1=1';
+    const params: unknown[] = [];
+    if (status) {
+      sql += ' AND status = ?';
+      params.push(status);
+    }
+    if (domain) {
+      sql += ' AND domain_type = ?';
+      params.push(domain);
+    }
+    sql += ' ORDER BY created_at DESC LIMIT 50';
+
+    const rows = await env.DB.prepare(sql).bind(...params).all();
+    const items = (rows.results || []).map((r: any) => ({
+      ...r,
+      image_urls: JSON.parse(r.image_urls || '[]'),
+      options: JSON.parse(r.options_json || '[]'),
+      inclusions: JSON.parse(r.inclusions_json || '[]'),
+      exclusions: JSON.parse(r.exclusions_json || '[]'),
+      terms: JSON.parse(r.terms_json || '[]')
+    }));
+
+    return json({
+      success: true,
+      items
+    });
+  }
+
+  // 3. Admin Get Single Ingestion Draft: GET /api/v1/admin/ingest/:id
+  const getDraftMatch = path.match(/^\/api\/v1\/admin\/ingest\/([A-Za-z0-9_]+)$/);
+  if (getDraftMatch && method === 'GET') {
+    await requireAdmin(request, env);
+    const id = getDraftMatch[1];
+    const r = await env.DB.prepare('SELECT * FROM url_product_ingestions WHERE id = ?')
+      .bind(id)
+      .first<any>();
+
+    if (!r) throw new HttpError(404, 'DRAFT_NOT_FOUND', '수집 내역을 찾을 수 없습니다.');
+
+    return json({
+      success: true,
+      draft: {
+        ...r,
+        image_urls: JSON.parse(r.image_urls || '[]'),
+        options: JSON.parse(r.options_json || '[]'),
+        inclusions: JSON.parse(r.inclusions_json || '[]'),
+        exclusions: JSON.parse(r.exclusions_json || '[]'),
+        terms: JSON.parse(r.terms_json || '[]')
+      }
+    });
+  }
+
+  // 4. Admin Update Draft: PATCH /api/v1/admin/ingest/:id
+  const updateDraftMatch = path.match(/^\/api\/v1\/admin\/ingest\/([A-Za-z0-9_]+)$/);
+  if (updateDraftMatch && method === 'PATCH') {
+    await requireAdmin(request, env);
+    const id = updateDraftMatch[1];
+    const b = await readJson(request);
+
+    const now = new Date().toISOString();
+    await env.DB.prepare(`
+      UPDATE url_product_ingestions SET
+        title = COALESCE(?, title),
+        summary = COALESCE(?, summary),
+        description = COALESCE(?, description),
+        price_minor = COALESCE(?, price_minor),
+        domain_type = COALESCE(?, domain_type),
+        city = COALESCE(?, city),
+        country = COALESCE(?, country),
+        cancellation_policy = COALESCE(?, cancellation_policy),
+        status = COALESCE(?, status),
+        updated_at = ?
+      WHERE id = ?
+    `).bind(
+      b.title || null,
+      b.summary || null,
+      b.description || null,
+      typeof b.price_minor === 'number' ? b.price_minor : null,
+      b.domain_type || null,
+      b.city || null,
+      b.country || null,
+      b.cancellation_policy || null,
+      b.status || null,
+      now,
+      id
+    ).run();
+
+    return json({ success: true, message: '수집 상품 정보가 수정되었습니다.' });
+  }
+
+  // 5. Admin Publish Ingested Product: POST /api/v1/admin/ingest/:id/publish
+  const publishMatch = path.match(/^\/api\/v1\/admin\/ingest\/([A-Za-z0-9_]+)\/publish$/);
+  if (publishMatch && method === 'POST') {
+    const admin = await requireAdmin(request, env);
+    const id = publishMatch[1];
+    const res = await publishIngestedProduct(env, id, admin.id);
+    return json({
+      success: true,
+      message: '수집된 상품이 공식 카탈로그에 정상 등록되었습니다.',
+      published_item_id: res.published_item_id,
+      domain_type: res.domain_type
+    });
+  }
+
+  // 6. Partner Ingest URL: POST /api/v1/partner/ingest/url
+  if (path === '/api/v1/partner/ingest/url' && method === 'POST') {
+    const partner = await requirePartner(request, env);
+    const body = await readJson(request);
+    const inputUrl = str(body.url, 2000);
+    if (!inputUrl) {
+      throw new HttpError(400, 'URL_REQUIRED', '수집할 외부 상품 URL을 입력해주세요.');
+    }
+
+    const draft = await scrapeTravelProductUrl(inputUrl);
+    draft.supplier_name = partner.company_name;
+    const saved = await saveIngestedDraft(env, draft, `partner:${partner.id}`);
+
+    return json({
+      success: true,
+      draft: saved,
+      message: '외부 상품 정보가 성공적으로 수집되어 파트너 임시 등록 목록에 저장되었습니다.'
+    }, 201);
+  }
+
+  return null;
+}

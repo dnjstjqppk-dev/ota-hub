@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { apiUrl } from '../config/api'
 
 interface ProductRow {
@@ -21,6 +21,11 @@ const newCity = ref('서울')
 const newPrice = ref(120000)
 const submitLoading = ref(false)
 
+// URL Ingestion for Partners
+const importUrl = ref('')
+const isImporting = ref(false)
+const importMessage = ref('')
+
 const fetchProducts = async () => {
   loading.value = true
   try {
@@ -36,6 +41,37 @@ const fetchProducts = async () => {
     console.error('Failed to load products', e)
   } finally {
     loading.value = false
+  }
+}
+
+const handleImportUrl = async () => {
+  if (!importUrl.value.trim()) return
+  isImporting.value = true
+  importMessage.value = ''
+  try {
+    const token = localStorage.getItem('getfortrip_partner_token')
+    const res = await fetch(apiUrl('/partner/ingest/url'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ url: importUrl.value.trim() })
+    })
+
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'URL 수집에 실패했습니다.')
+
+    const draft = data.draft
+    newTitle.value = draft.title || ''
+    newDomain.value = draft.domain_type || 'ACTIVITY'
+    newPrice.value = draft.price_minor || 50000
+    newCity.value = draft.city || '서울'
+    importMessage.value = '✅ URL에서 상품명, 요금, 카테고리를 자동 추출했습니다.'
+  } catch (err: any) {
+    importMessage.value = `⚠️ 수집 실패: ${err.message}`
+  } finally {
+    isImporting.value = false
   }
 }
 
@@ -61,13 +97,15 @@ const handleCreateProduct = async () => {
     if (res.ok) {
       isModalOpen.value = false
       newTitle.value = ''
+      importUrl.value = ''
+      importMessage.value = ''
       await fetchProducts()
     } else {
       const err = await res.json()
-      alert(err.error || '상품 등록에 실패했습니다.')
+      window.alert(err.error || '상품 등록에 실패했습니다.')
     }
   } catch (e: any) {
-    alert(e.message || '오류가 발생했습니다.')
+    window.alert(e.message || '오류가 발생했습니다.')
   } finally {
     submitLoading.value = false
   }
@@ -92,7 +130,7 @@ onMounted(() => {
           귀사에서 GetForTrip 플랫폼에 공급 중인 상품 목록과 기본 요금을 관리합니다.
         </p>
       </div>
-      <div>
+      <div class="flex gap-2">
         <button
           @click="isModalOpen = true"
           class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md shadow-blue-500/20 transition flex items-center gap-1.5"
@@ -118,45 +156,47 @@ onMounted(() => {
               <th class="p-3.5 text-right">관리</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-100 font-medium">
+          <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
             <tr v-if="loading">
-              <td colspan="7" class="p-8 text-center text-slate-400 font-bold">
-                상품 목록을 불러오는 중입니다...
-              </td>
+              <td colspan="7" class="p-8 text-center text-slate-400">데이터를 불러오는 중입니다...</td>
             </tr>
             <tr v-else-if="products.length === 0">
-              <td colspan="7" class="p-8 text-center text-slate-400 font-bold">
-                등록된 공급 상품이 없습니다. 신규 상품을 등록해보세요.
-              </td>
+              <td colspan="7" class="p-8 text-center text-slate-400">등록된 파트너 공급 상품이 없습니다.</td>
             </tr>
             <tr
-              v-else
               v-for="p in products"
               :key="p.id"
               class="hover:bg-slate-50/80 transition"
             >
               <td class="p-3.5 font-mono text-slate-400">{{ p.id }}</td>
               <td class="p-3.5">
-                <span class="px-2 py-0.5 rounded font-black text-[10px] bg-slate-100 text-slate-700">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
                   {{ p.domain_type }}
                 </span>
               </td>
-              <td class="p-3.5 font-bold text-slate-900">{{ p.title }}</td>
-              <td class="p-3.5 text-slate-600">{{ p.city }}</td>
-              <td class="p-3.5 font-bold text-blue-600">
-                {{ (p.base_price_krw || 0).toLocaleString() }}원
+              <td class="p-3.5 font-bold text-slate-900 max-w-xs truncate" :title="p.title">
+                {{ p.title }}
+              </td>
+              <td class="p-3.5">{{ p.city }}</td>
+              <td class="p-3.5 font-bold text-slate-900">
+                ₩{{ (p.base_price_krw || 0).toLocaleString() }}
               </td>
               <td class="p-3.5">
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                  판매 중
+                <span
+                  :class="[
+                    'px-2 py-0.5 rounded text-[10px] font-bold',
+                    p.is_active === 1 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
+                  ]"
+                >
+                  {{ p.is_active === 1 ? '판매중' : '판매중지' }}
                 </span>
               </td>
-              <td class="p-3.5 text-right">
+              <td class="p-3.5 text-right space-x-2">
                 <router-link
                   to="/inventory"
-                  class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[11px] transition inline-block"
+                  class="px-2.5 py-1 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded font-bold"
                 >
-                  재고/캘린더 조정
+                  재고/가격 캘린더
                 </router-link>
               </td>
             </tr>
@@ -174,6 +214,31 @@ onMounted(() => {
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-base font-black text-slate-900">신규 공급 상품 등록</h3>
           <button @click="isModalOpen = false" class="text-slate-400 hover:text-slate-600 font-bold text-sm">✕</button>
+        </div>
+
+        <!-- URL Quick Import Box -->
+        <div class="p-3.5 bg-blue-50/60 rounded-xl border border-blue-100 text-xs space-y-2">
+          <div class="flex items-center justify-between font-bold text-blue-900">
+            <span>🌐 외부 상품 URL로 자동 추출</span>
+            <span class="text-[10px] text-blue-600 font-normal">오픈마켓/홈페이지 연동</span>
+          </div>
+          <div class="flex gap-2">
+            <input
+              v-model="importUrl"
+              type="url"
+              placeholder="https://... 외부 상품 URL 입력"
+              class="flex-1 px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-xs outline-none"
+            />
+            <button
+              type="button"
+              @click="handleImportUrl"
+              :disabled="isImporting || !importUrl.trim()"
+              class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs disabled:opacity-50"
+            >
+              {{ isImporting ? '추출중...' : '추출' }}
+            </button>
+          </div>
+          <p v-if="importMessage" class="text-[11px] font-medium text-blue-800">{{ importMessage }}</p>
         </div>
 
         <form @submit.prevent="handleCreateProduct" class="space-y-4 text-xs">
@@ -243,4 +308,3 @@ onMounted(() => {
     </div>
   </div>
 </template>
-

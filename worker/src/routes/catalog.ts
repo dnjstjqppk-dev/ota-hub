@@ -690,5 +690,111 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       const res = await env.DB.prepare("SELECT * FROM fx_rates").all();
       return json({ success: true, rates: res.results });
     }
+    // 10. eSIM Plans Catalog: GET /api/v1/esim/plans
+    if (path === "/api/v1/esim/plans") {
+      const countryCode = url.searchParams.get("country");
+      let sql = "SELECT * FROM esim_plans WHERE is_active = 1";
+      const params: unknown[] = [];
+      if (countryCode) {
+        sql += " AND country_code = ?";
+        params.push(countryCode.toUpperCase());
+      }
+      sql += " ORDER BY country_name, price_minor ASC";
+      const rows = await env.DB.prepare(sql).bind(...params).all();
+      return json({ success: true, plans: rows.results });
+    }
+
+    // 11. Travel Insurance Plans: GET /api/v1/insurance/plans
+    if (path === "/api/v1/insurance/plans") {
+      const durationDays = Math.max(1, Math.min(90, parseInt(url.searchParams.get("days") || "5", 10)));
+      const rows = await env.DB.prepare("SELECT * FROM travel_insurance_plans WHERE is_active = 1 ORDER BY daily_rate_minor ASC").all();
+      const calculated = (rows.results || []).map((p: any) => ({
+        ...p,
+        total_price_minor: p.daily_rate_minor * durationDays,
+        duration_days: durationDays
+      }));
+      return json({ success: true, plans: calculated, duration_days: durationDays });
+    }
+
+    // 12. Flight Multi-City Search: POST /api/v1/flights/multi-city
+    if (path === "/api/v1/flights/multi-city" && request.method === "POST") {
+      const body = await request.json().catch(() => ({})) as any;
+      const legs = Array.isArray(body.legs) ? body.legs : [];
+      if (legs.length < 2) {
+        return json({ success: false, error: "다구간 검색은 최소 2개 이상의 여정 구간(Legs)이 필요합니다." }, 400);
+      }
+
+      const legResults = [];
+      let totalEstimatedMinor = 0;
+      for (let i = 0; i < legs.length; i++) {
+        const leg = legs[i];
+        const origin = String(leg.origin || "").toUpperCase();
+        const destination = String(leg.destination || "").toUpperCase();
+        const legDate = String(leg.departure_date || "");
+
+        let sql = "SELECT * FROM flights WHERE is_active = 1";
+        const p: unknown[] = [];
+        if (origin) { sql += " AND (departure_airport LIKE ? OR departure_city LIKE ?)"; p.push(`%${origin}%`, `%${origin}%`); }
+        if (destination) { sql += " AND (arrival_airport LIKE ? OR arrival_city LIKE ?)"; p.push(`%${destination}%`, `%${destination}%`); }
+        sql += " LIMIT 5";
+
+        const matches = (await env.DB.prepare(sql).bind(...p).all()).results || [];
+        const chosen = matches[0] as any;
+        if (chosen) {
+          totalEstimatedMinor += Number(chosen.final_price_minor || chosen.price_minor || 0);
+        }
+        legResults.push({
+          leg_index: i + 1,
+          origin,
+          destination,
+          departure_date: legDate,
+          available_flights: matches,
+          selected_estimate: chosen || null
+        });
+      }
+
+      return json({
+        success: true,
+        legs: legResults,
+        total_fare_estimate_minor: Math.round(totalEstimatedMinor * 0.95),
+        currency: "KRW",
+        discount_applied: "MULTI_CITY_BUNDLE_5PCT"
+      });
+    }
+
+    // 13. Activity Time Slots & Availability: GET /api/v1/activities/:id/slots
+    const slotMatch = path.match(/^\/api\/v1\/activities\/([A-Za-z0-9_]+)\/slots$/);
+    if (slotMatch) {
+      const activityId = slotMatch[1];
+      const targetDate = url.searchParams.get("date") || new Date().toISOString().slice(0, 10);
+      const rows = await env.DB.prepare(
+        "SELECT * FROM activity_time_slots WHERE activity_id = ? AND slot_date = ? AND is_closed = 0 ORDER BY start_time ASC"
+      ).bind(activityId, targetDate).all();
+
+      let slots = rows.results;
+      if (!slots || slots.length === 0) {
+        slots = [
+          { id: `slot_${activityId}_0900`, activity_id: activityId, slot_date: targetDate, start_time: "09:30", end_time: "11:30", max_capacity: 30, booked_count: 8, price_adult_minor: 25000, price_child_minor: 18000, is_closed: 0 },
+          { id: `slot_${activityId}_1330`, activity_id: activityId, slot_date: targetDate, start_time: "13:30", end_time: "15:30", max_capacity: 30, booked_count: 14, price_adult_minor: 25000, price_child_minor: 18000, is_closed: 0 },
+          { id: `slot_${activityId}_1600`, activity_id: activityId, slot_date: targetDate, start_time: "16:00", end_time: "18:00", max_capacity: 30, booked_count: 5, price_adult_minor: 28000, price_child_minor: 20000, is_closed: 0 }
+        ];
+      }
+
+      return json({ success: true, activity_id: activityId, date: targetDate, slots });
+    }
+
+    // 14. External Supplier Registry Status: GET /api/v1/suppliers/registry
+    if (path === "/api/v1/suppliers/registry") {
+      const { externalSupplierRegistry } = await import("../suppliers/external-adapters.ts");
+      const list = Object.values(externalSupplierRegistry).map(s => ({
+        supplierCode: s.supplierCode,
+        supplierName: s.supplierName,
+        category: s.category,
+        contractStatus: s.contractStatus,
+        apiDocsUrl: s.apiDocsUrl,
+        supportedMethods: s.supportedMethods
+      }));
+      return json({ success: true, suppliers: list });
+    }
   return null;
 }

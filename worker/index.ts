@@ -18,6 +18,8 @@ import { handleUser } from "./src/routes/user.ts";
 import { handleAdmin } from "./src/routes/admin.ts";
 import { handlePartner } from "./src/routes/partner.ts";
 import { handleAffiliate } from "./src/routes/affiliate.ts";
+import { handleFeatureFlags } from "./src/routes/feature-flags.ts";
+import { handleUrlIngest } from "./src/routes/url-ingest.ts";
 import { runMaintenance } from "./src/services/booking-service.ts";
 import { sitemap } from "./src/routes/seo.ts";
 
@@ -49,7 +51,7 @@ async function health(env: Env): Promise<Response> {
 async function route(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
   if (path === "/api/v1/health") return health(env);
-  for (const h of [handleAuth, handleBookings, handleAdmin, handlePartner, handleUser, handleAffiliate, handleCatalog]) {
+  for (const h of [handleAuth, handleBookings, handleAdmin, handlePartner, handleUser, handleAffiliate, handleFeatureFlags, handleUrlIngest, handleCatalog]) {
     const r = await h(request, env, url);
     if (r) return r;
   }

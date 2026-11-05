@@ -13,6 +13,8 @@ const navItems = [
   { path: '/dashboard', label: '통합 대시보드', icon: '📊' },
   { path: '/bookings', label: '예약/발권 OMS', icon: '✈️' },
   { path: '/catalog', label: '상품/인벤토리 관리', icon: '📦' },
+  { path: '/url-ingest', label: 'URL 상품 자동 수집', icon: '🌐' },
+  { path: '/feature-flags', label: '기능 ON/OFF 관리', icon: '🚩' },
   { path: '/partners', label: '파트너/공급사 관리', icon: '🤝' },
   { path: '/users', label: '회원/권한 관리', icon: '👥' },
   { path: '/pricing', label: '가격/환율/마크업', icon: '💱' },
