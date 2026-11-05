@@ -7,6 +7,8 @@ import PromotionsView from '../views/PromotionsView.vue'
 import CommunityView from '../views/CommunityView.vue'
 import SupportView from '../views/SupportView.vue'
 import SettlementsView from '../views/SettlementsView.vue'
+import PartnersView from '../views/PartnersView.vue'
+import UsersView from '../views/UsersView.vue'
 import LoginView from '../views/LoginView.vue'
 
 const routes = [
@@ -27,21 +29,33 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/bookings',
+    name: 'Bookings',
+    component: BookingOmsView,
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/catalog',
     name: 'Catalog',
     component: CatalogView,
     meta: { requiresAuth: true }
   },
   {
-    path: '/pricing',
-    name: 'Pricing',
-    component: PricingView,
+    path: '/partners',
+    name: 'Partners',
+    component: PartnersView,
     meta: { requiresAuth: true }
   },
   {
-    path: '/bookings',
-    name: 'Bookings',
-    component: BookingOmsView,
+    path: '/users',
+    name: 'Users',
+    component: UsersView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/pricing',
+    name: 'Pricing',
+    component: PricingView,
     meta: { requiresAuth: true }
   },
   {
@@ -74,8 +88,11 @@ const routes = [
   }
 ]
 
+// Support both standalone host (e.g. ota-admin.workers.dev -> '/') and path mount (e.g. ota-hub/admin/)
+const basePath = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin') ? '/admin/' : '/'
+
 const router = createRouter({
-  history: createWebHistory('/admin/'),
+  history: createWebHistory(basePath),
   routes
 })
 
@@ -85,10 +102,8 @@ router.beforeEach((to, _from, next) => {
   const isPublic = to.meta.public === true
 
   if (!isPublic && !token) {
-    // Unauthenticated user trying to access protected route
     next({ path: '/login', query: { redirect: to.fullPath } })
   } else if (to.path === '/login' && token) {
-    // Authenticated user trying to access login page
     next({ path: '/dashboard' })
   } else {
     next()

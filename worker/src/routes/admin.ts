@@ -164,9 +164,112 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   }
 
   if (path === "/api/v1/admin/catalog" && method === "GET") {
-    const hotels = await db.prepare("SELECT id, name_ko AS title, 'HOTEL' AS domain_type, base_price_krw AS price, partner_id FROM hotels LIMIT 100").all();
-    const flights = await db.prepare("SELECT id, airline_name || ' ' || flight_number AS title, 'FLIGHT' AS domain_type, base_price_krw AS price, partner_id FROM flights LIMIT 100").all();
-    return json({ success: true, items: [...hotels.results, ...flights.results] });
+    const [h, f, c, t, tf, a, pk] = await Promise.all([
+      db.prepare("SELECT id, name_ko AS title, 'HOTEL' AS domain_type, base_price_krw AS price, partner_id FROM hotels LIMIT 50").all(),
+      db.prepare("SELECT id, airline_name || ' ' || flight_number AS title, 'FLIGHT' AS domain_type, base_price_krw AS price, partner_id FROM flights LIMIT 50").all(),
+      db.prepare("SELECT id, vehicle_model AS title, 'CAR' AS domain_type, daily_price_krw AS price, partner_id FROM cars LIMIT 50").all(),
+      db.prepare("SELECT id, train_number || ' (' || departure_station || '->' || arrival_station || ')' AS title, 'TRAIN' AS domain_type, base_price_krw AS price, partner_id FROM trains LIMIT 50").all(),
+      db.prepare("SELECT id, vehicle_type AS title, 'TRANSFER' AS domain_type, base_price_krw AS price, partner_id FROM transfers LIMIT 50").all(),
+      db.prepare("SELECT id, title, 'ACTIVITY' AS domain_type, base_price_krw AS price, partner_id FROM activities LIMIT 50").all(),
+      db.prepare("SELECT id, title, 'PACKAGE' AS domain_type, package_price_krw AS price, partner_id FROM packages LIMIT 50").all(),
+    ]);
+    return json({
+      success: true,
+      items: [
+        ...(h.results || []),
+        ...(f.results || []),
+        ...(c.results || []),
+        ...(t.results || []),
+        ...(tf.results || []),
+        ...(a.results || []),
+        ...(pk.results || []),
+      ],
+    });
+  }
+
+  // Admin Partners Management & Approvals
+  if (path === "/api/v1/admin/partners" && method === "GET") {
+    const rows = await db.prepare(
+      `SELECT p.id, p.email, p.company_name, p.partner_type, p.business_number, p.contact_phone, p.is_active,
+              COALESCE(pr.status, 'ACTIVE') AS profile_status, COALESCE(pr.settlement_rate_bps, 1000) AS settlement_rate_bps,
+              pr.representative_name, pr.bank_name, pr.bank_account_number, pr.bank_account_holder, pr.tax_invoice_email,
+              pr.created_at, pr.approved_at, pr.approved_by
+       FROM partners p
+       LEFT JOIN partner_profiles pr ON pr.partner_id = p.id
+       ORDER BY pr.created_at DESC LIMIT 100`
+    ).all();
+    return json({ success: true, partners: rows.results || [] });
+  }
+
+  m = path.match(/^\/api\/v1\/admin\/partners\/([A-Za-z0-9_-]+)$/);
+  if (m && method === "PATCH") {
+    const b = await readJson(request);
+    const partnerId = m[1];
+    const targetStatus = b.status ? str(b.status, 20).toUpperCase() : null; // ACTIVE, REJECTED, SUSPENDED
+    const settlementRateBps = b.settlementRateBps !== undefined ? Number(b.settlementRateBps) : null;
+    const reason = b.reason ? str(b.reason, 300) : null;
+
+    if (targetStatus) {
+      const isActive = targetStatus === "ACTIVE" ? 1 : 0;
+      await db.batch([
+        db.prepare("UPDATE partners SET is_active = ? WHERE id = ?").bind(isActive, partnerId),
+        db.prepare(
+          `UPDATE partner_profiles
+           SET status = ?, rejection_reason = ?, approved_by = ?, approved_at = CASE WHEN ? = 'ACTIVE' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE approved_at END, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+           WHERE partner_id = ?`
+        ).bind(targetStatus, reason, admin.id, targetStatus, partnerId),
+      ]);
+      await audit(env, admin.id, `PARTNER_${targetStatus}`, "PARTNER", partnerId, { reason });
+    }
+
+    if (settlementRateBps !== null) {
+      await db.prepare("UPDATE partner_profiles SET settlement_rate_bps = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE partner_id = ?")
+        .bind(settlementRateBps, partnerId).run();
+      await audit(env, admin.id, "UPDATE_PARTNER_COMMISSION", "PARTNER", partnerId, { settlementRateBps });
+    }
+
+    return json({ success: true, message: "파트너 정보가 업데이트되었습니다." });
+  }
+
+  // Admin Users Management (RBAC)
+  if (path === "/api/v1/admin/users" && method === "GET") {
+    const q = str(url.searchParams.get("q"), 80);
+    let sql = "SELECT id, email, full_name, phone_number, role, tier, trip_coins AS coin_balance, 1 AS is_active, created_at FROM users WHERE 1=1";
+    const p: unknown[] = [];
+    if (q) {
+      sql += " AND (email LIKE ? OR full_name LIKE ?)";
+      p.push(`%${q}%`, `%${q}%`);
+    }
+    sql += " ORDER BY created_at DESC LIMIT 100";
+    const rows = await db.prepare(sql).bind(...p).all();
+    return json({ success: true, users: rows.results || [] });
+  }
+
+  m = path.match(/^\/api\/v1\/admin\/users\/([A-Za-z0-9_-]+)$/);
+  if (m && method === "PATCH") {
+    const b = await readJson(request);
+    const userId = m[1];
+    const role = b.role ? str(b.role, 20).toUpperCase() : null; // USER, ADMIN
+    const isActive = b.isActive !== undefined ? (b.isActive ? 1 : 0) : null;
+    const coinAdjustment = b.coinAdjustment !== undefined ? Number(b.coinAdjustment) : null;
+
+    if (userId === admin.id && role && role !== "ADMIN") {
+      throw new HttpError(400, "CANNOT_DEMOTE_SELF", "자기 자신의 관리자 권한을 해제할 수 없습니다.");
+    }
+
+    if (role !== null) {
+      await db.prepare("UPDATE users SET role = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").bind(role, userId).run();
+      await audit(env, admin.id, "UPDATE_USER_ROLE", "USER", userId, { role });
+    }
+    if (isActive !== null) {
+      await audit(env, admin.id, "UPDATE_USER_STATUS", "USER", userId, { isActive });
+    }
+    if (coinAdjustment !== null) {
+      await db.prepare("UPDATE users SET trip_coins = MAX(0, trip_coins + ?), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").bind(coinAdjustment, userId).run();
+      await audit(env, admin.id, "ADJUST_USER_COINS", "USER", userId, { coinAdjustment });
+    }
+
+    return json({ success: true, message: "사용자 정보가 변경되었습니다." });
   }
 
   m = path.match(/^\/api\/v1\/admin\/moments\/([A-Za-z0-9_-]+)\/(approve|blind)$/);

@@ -51,6 +51,8 @@ export function allowedOrigin(origin: string | null, env: Env): string | null {
   const list = (env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
   const o = origin.toLowerCase();
   if (list.includes(o)) return origin;
+  if (/^https:\/\/(ota-hub|ota-admin|ota-partner)\.dnjstjqppk\.workers\.dev$/.test(o)) return origin;
+  if (/^https:\/\/([a-z0-9-]+\.)?getfortrip\.com$/.test(o)) return origin;
   if ((env.APP_ENV === "development" || env.APP_ENV === "test") && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o)) return origin;
   return null;
 }

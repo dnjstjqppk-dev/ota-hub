@@ -11,9 +11,11 @@ let eventSource: EventSource | null = null
 
 const navItems = [
   { path: '/dashboard', label: '통합 대시보드', icon: '📊' },
-  { path: '/catalog', label: '상품/인벤토리 관리', icon: '📦' },
-  { path: '/pricing', label: '가격/환율/마크업', icon: '💱' },
   { path: '/bookings', label: '예약/발권 OMS', icon: '✈️' },
+  { path: '/catalog', label: '상품/인벤토리 관리', icon: '📦' },
+  { path: '/partners', label: '파트너/공급사 관리', icon: '🤝' },
+  { path: '/users', label: '회원/권한 관리', icon: '👥' },
+  { path: '/pricing', label: '가격/환율/마크업', icon: '💱' },
   { path: '/promotions', label: '마케팅/쿠폰/리워드', icon: '🎁' },
   { path: '/community', label: '커뮤니티/리뷰 CMS', icon: '💬' },
   { path: '/support', label: '고객지원/공지사항', icon: '🎧' },

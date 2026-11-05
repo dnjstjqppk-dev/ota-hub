@@ -6,7 +6,7 @@
  *   src/services   booking orchestration, catalog loading
  *   src/payments   PG adapters (Toss, sandbox simulator)
  *   src/suppliers  supplier adapters (simulator, direct contract)
- *   src/routes     HTTP handlers
+ *   src/routes     HTTP handlers (auth, bookings, catalog, admin, partner, affiliate, user)
  */
 import type { Env } from "./src/env.ts";
 import { SECURITY_HEADERS, errorResponse, json, preflight, withCors } from "./src/lib/http.ts";
@@ -16,6 +16,7 @@ import { handleBookings } from "./src/routes/bookings.ts";
 import { handleCatalog } from "./src/routes/catalog.ts";
 import { handleUser } from "./src/routes/user.ts";
 import { handleAdmin } from "./src/routes/admin.ts";
+import { handlePartner } from "./src/routes/partner.ts";
 import { handleAffiliate } from "./src/routes/affiliate.ts";
 import { runMaintenance } from "./src/services/booking-service.ts";
 import { sitemap } from "./src/routes/seo.ts";
@@ -48,7 +49,7 @@ async function health(env: Env): Promise<Response> {
 async function route(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
   if (path === "/api/v1/health") return health(env);
-  for (const h of [handleAuth, handleBookings, handleAdmin, handleUser, handleAffiliate, handleCatalog]) {
+  for (const h of [handleAuth, handleBookings, handleAdmin, handlePartner, handleUser, handleAffiliate, handleCatalog]) {
     const r = await h(request, env, url);
     if (r) return r;
   }
@@ -68,7 +69,34 @@ async function spaShell(env: Env, url: URL, request: Request): Promise<Response 
 }
 
 async function serveAssets(request: Request, env: Env, url: URL): Promise<Response> {
+  const host = url.hostname.toLowerCase();
   const path = url.pathname;
+  const isAdminHost = host.startsWith("admin.") || host.startsWith("ota-admin.");
+  const isPartnerHost = host.startsWith("partner.") || host.startsWith("ota-partner.");
+
+  // 1. Admin Host Dispatching (e.g. ota-admin.dnjstjqppk.workers.dev or admin.getfortrip.com)
+  if (isAdminHost) {
+    if (path.startsWith("/admin/")) {
+      return Response.redirect(`${url.origin}${path.replace(/^\/admin/, "") || "/"}`, 301);
+    }
+    const a = await env.ASSETS.fetch(new Request(`${url.origin}/admin${path}`, request));
+    if (a.status === 200) return a;
+    const idx = await env.ASSETS.fetch(new Request(`${url.origin}/admin/index.html`, request));
+    if (idx.status === 200) return idx;
+  }
+
+  // 2. Partner Host Dispatching (e.g. ota-partner.dnjstjqppk.workers.dev or partner.getfortrip.com)
+  if (isPartnerHost) {
+    if (path.startsWith("/partner/")) {
+      return Response.redirect(`${url.origin}${path.replace(/^\/partner/, "") || "/"}`, 301);
+    }
+    const a = await env.ASSETS.fetch(new Request(`${url.origin}/partner${path}`, request));
+    if (a.status === 200) return a;
+    const idx = await env.ASSETS.fetch(new Request(`${url.origin}/partner/index.html`, request));
+    if (idx.status === 200) return idx;
+  }
+
+  // 3. Backwards-compatible path routing on default host (ota-hub)
   if (path === "/admin") return Response.redirect(`${url.origin}/admin/`, 301);
   if (path.startsWith("/admin/")) {
     const a = await env.ASSETS.fetch(request);
@@ -76,9 +104,17 @@ async function serveAssets(request: Request, env: Env, url: URL): Promise<Respon
     const idx = await env.ASSETS.fetch(new Request(`${url.origin}/admin/index.html`, request));
     if (idx.status === 200) return idx;
   }
+
+  if (path === "/partner") return Response.redirect(`${url.origin}/partner/`, 301);
+  if (path.startsWith("/partner/")) {
+    const a = await env.ASSETS.fetch(request);
+    if (a.status === 200) return a;
+    const idx = await env.ASSETS.fetch(new Request(`${url.origin}/partner/index.html`, request));
+    if (idx.status === 200) return idx;
+  }
+
+  // 4. User Portal Routing (Default)
   let res = await env.ASSETS.fetch(request);
-  // Client-side routes that were not prerendered (new products, unknown ids) get Nuxt's SPA shell.
-  // Never the prerendered home page (index.html): Nuxt would hydrate it as "/" and show the home page.
   if (res.status === 404 && (request.method === "GET" || request.method === "HEAD") && !/\.[A-Za-z0-9]{1,8}$/.test(path)) {
     const shell = await spaShell(env, url, request);
     if (shell) res = shell;

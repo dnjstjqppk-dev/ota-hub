@@ -25,7 +25,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
   const method = request.method;
 
   if (path === "/api/v1/auth/register" && method === "POST") {
-    await rateLimit(request, env, "register", 10, 3600);
+    await rateLimit(request, env, "register", 50, 3600);
     const body = await readJson(request);
     const email = str(body.email, 254).toLowerCase();
     const password = String(body.password || "");
@@ -125,18 +125,6 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     // Development aid only: lets local QA read parked emails (e.g. reset links).
     const rows = await env.DB.prepare("SELECT recipient, template, payload_json, created_at FROM notification_outbox ORDER BY created_at DESC LIMIT 20").all();
     return json({ success: true, outbox: rows.results });
-  }
-
-  if (path === "/api/v1/partner/login" && method === "POST") {
-    // The partner extranet has no contracted partners yet; keep the endpoint rate limited and honest.
-    await rateLimit(request, env, "partner_login", 10, 900);
-    const body = await readJson(request);
-    const email = str(body.email, 254).toLowerCase();
-    const p = await env.DB.prepare("SELECT * FROM partners WHERE email = ? AND is_active = 1").bind(email).first<any>();
-    const v = await verifyPasswordDetailed(String(body.password || ""), p?.password_hash);
-    if (!p || !v.ok) throw new HttpError(401, "INVALID_CREDENTIALS", "파트너 이메일 또는 비밀번호가 일치하지 않습니다.");
-    const token = await signJwt({ id: p.id, email: p.email, companyName: p.company_name, role: "PARTNER" }, jwtSecret(env), 12 * 3600);
-    return json({ success: true, token, partner: { id: p.id, companyName: p.company_name, email: p.email, partnerType: p.partner_type } });
   }
 
   return null;

@@ -27,8 +27,11 @@ export async function getAuthUser(request: Request, env: Env): Promise<AuthUser 
   const h = request.headers.get("Authorization");
   if (h?.startsWith("Bearer ")) token = h.slice(7).trim();
   if (!token) {
-    const m = (request.headers.get("Cookie") || "").match(/(?:^|;\s*)getfortrip_jwt=([^;]+)/);
-    if (m) token = m[1];
+    const cookies = request.headers.get("Cookie") || "";
+    const mPartner = cookies.match(/(?:^|;\s*)getfortrip_partner_jwt=([^;]+)/);
+    const mAdmin = cookies.match(/(?:^|;\s*)getfortrip_admin_jwt=([^;]+)/);
+    const mUser = cookies.match(/(?:^|;\s*)getfortrip_jwt=([^;]+)/);
+    token = mPartner?.[1] || mAdmin?.[1] || mUser?.[1] || "";
   }
   if (!token) return null;
   const p = await verifyJwt(token, secret);
@@ -52,6 +55,19 @@ export async function requireAdmin(request: Request, env: Env): Promise<AuthUser
   const row = await env.DB.prepare("SELECT role FROM users WHERE id = ?").bind(u.id).first<{ role: string }>();
   if (!row || row.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "관리자 권한이 없습니다.");
   return { ...u, role: "ADMIN" };
+}
+
+export async function requirePartner(request: Request, env: Env): Promise<AuthUser & { partnerId: string }> {
+  const u = await getAuthUser(request, env);
+  if (!u) throw new HttpError(401, "UNAUTHORIZED", "파트너 로그인이 필요합니다.");
+  if (u.role !== "PARTNER" && u.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "파트너 권한이 없습니다.");
+  const p = await env.DB.prepare(
+    "SELECT p.id, p.is_active, COALESCE(pr.status, 'ACTIVE') AS profile_status FROM partners p LEFT JOIN partner_profiles pr ON pr.partner_id = p.id WHERE p.id = ?"
+  ).bind(u.id).first<any>();
+  if (!p || p.is_active !== 1 || (p.profile_status !== "ACTIVE" && u.role !== "ADMIN")) {
+    throw new HttpError(403, "PARTNER_SUSPENDED", "승인 대기 중이거나 비활성화된 파트너 계정입니다.");
+  }
+  return { ...u, partnerId: u.id };
 }
 
 /**

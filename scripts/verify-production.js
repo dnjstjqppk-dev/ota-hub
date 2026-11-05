@@ -527,6 +527,151 @@ async function runVerificationSuite() {
   });
 
   // ---------------------------------------------------------------------------
+  // 27. 3-PORTAL INDEPENDENT URL & BACKWARD COMPATIBILITY VERIFICATION
+  // ---------------------------------------------------------------------------
+  await test("3-Portal Architecture: User, Admin, Partner independent URLs & Hub paths return HTTP 200", async () => {
+    const userRes = await fetch('https://ota-hub.dnjstjqppk.workers.dev');
+    if (!userRes.ok) throw new Error(`User portal failed: HTTP ${userRes.status}`);
+
+    const adminRes = await fetch('https://ota-admin.dnjstjqppk.workers.dev');
+    if (!adminRes.ok) throw new Error(`Admin portal failed: HTTP ${adminRes.status}`);
+
+    const partnerRes = await fetch('https://ota-partner.dnjstjqppk.workers.dev');
+    if (!partnerRes.ok) throw new Error(`Partner portal failed: HTTP ${partnerRes.status}`);
+
+    const hubAdminRes = await fetch('https://ota-hub.dnjstjqppk.workers.dev/admin/');
+    if (!hubAdminRes.ok) throw new Error(`Hub /admin/ path fallback failed: HTTP ${hubAdminRes.status}`);
+
+    const hubPartnerRes = await fetch('https://ota-hub.dnjstjqppk.workers.dev/partner/');
+    if (!hubPartnerRes.ok) throw new Error(`Hub /partner/ path fallback failed: HTTP ${hubPartnerRes.status}`);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 28. PARTNER AUTHENTICATION & EXTRANET CORE APIS
+  // ---------------------------------------------------------------------------
+  let partnerToken = '';
+  await test("Partner Auth: Login with valid credentials and receive JWT token", async () => {
+    const res = await fetch(`${BASE_URL}/api/v1/partner/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'hotel_partner@getfortrip.com',
+        password: 'Partner2026!SecureKey',
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Partner login failed HTTP ${res.status}: ${errText}`);
+    }
+    const json = await res.json();
+    if (!json.success || !json.token || !json.partner) {
+      throw new Error(`Invalid partner login response: ${JSON.stringify(json)}`);
+    }
+    partnerToken = json.token;
+  });
+
+  await test("Partner Extranet: Dashboard, Profile, Products, Inventory, Orders, Settlements", async () => {
+    if (!partnerToken) throw new Error('Partner token not set');
+
+    // 1. Dashboard
+    const dRes = await fetch(`${BASE_URL}/api/v1/partner/dashboard`, {
+      headers: { Authorization: `Bearer ${partnerToken}` },
+    });
+    if (!dRes.ok) throw new Error(`Partner dashboard failed: HTTP ${dRes.status}`);
+    const dJson = await dRes.json();
+    if (!dJson.success || !dJson.metrics) throw new Error(`Invalid dashboard data: ${JSON.stringify(dJson)}`);
+
+    // 2. Profile
+    const pRes = await fetch(`${BASE_URL}/api/v1/partner/profile`, {
+      headers: { Authorization: `Bearer ${partnerToken}` },
+    });
+    if (!pRes.ok) throw new Error(`Partner profile failed: HTTP ${pRes.status}`);
+
+    // 3. Products
+    const prRes = await fetch(`${BASE_URL}/api/v1/partner/products`, {
+      headers: { Authorization: `Bearer ${partnerToken}` },
+    });
+    if (!prRes.ok) throw new Error(`Partner products failed: HTTP ${prRes.status}`);
+
+    // 4. Inventory
+    const invRes = await fetch(`${BASE_URL}/api/v1/partner/inventory`, {
+      headers: { Authorization: `Bearer ${partnerToken}` },
+    });
+    if (!invRes.ok) throw new Error(`Partner inventory failed: HTTP ${invRes.status}`);
+
+    // 5. Orders
+    const ordRes = await fetch(`${BASE_URL}/api/v1/partner/orders`, {
+      headers: { Authorization: `Bearer ${partnerToken}` },
+    });
+    if (!ordRes.ok) throw new Error(`Partner orders failed: HTTP ${ordRes.status}`);
+
+    // 6. Settlements
+    const setRes = await fetch(`${BASE_URL}/api/v1/partner/settlements`, {
+      headers: { Authorization: `Bearer ${partnerToken}` },
+    });
+    if (!setRes.ok) throw new Error(`Partner settlements failed: HTTP ${setRes.status}`);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 29. ADMIN EXTENDED CAPABILITIES (PARTNERS & USERS MANAGEMENT)
+  // ---------------------------------------------------------------------------
+  await test("Admin Console: Partners listing and Users RBAC management", async () => {
+    if (!adminToken) throw new Error('Admin token not set');
+
+    // 1. Admin Partners List
+    const pRes = await fetch(`${BASE_URL}/api/v1/admin/partners`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    if (!pRes.ok) throw new Error(`Admin partners list failed: HTTP ${pRes.status}`);
+    const pJson = await pRes.json();
+    if (!pJson.success || !Array.isArray(pJson.partners)) throw new Error(`Invalid admin partners: ${JSON.stringify(pJson)}`);
+
+    // 2. Admin Users List
+    const uRes = await fetch(`${BASE_URL}/api/v1/admin/users`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    if (!uRes.ok) throw new Error(`Admin users list failed: HTTP ${uRes.status}`);
+    const uJson = await uRes.json();
+    if (!uJson.success || !Array.isArray(uJson.users)) throw new Error(`Invalid admin users: ${JSON.stringify(uJson)}`);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 30. PARTNER ONBOARDING & PENDING APPROVAL SECURITY ENFORCEMENT
+  // ---------------------------------------------------------------------------
+  await test("Partner Onboarding: Registration requires admin approval before login", async () => {
+    const applicantEmail = `applicant_${rand}@partner.getfortrip.com`;
+    const regRes = await fetch(`${BASE_URL}/api/v1/partner/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: applicantEmail,
+        password: 'PartnerAppPass2026!',
+        companyName: `테스트 호텔 리조트 (${rand})`,
+        partnerType: 'HOTEL',
+        businessNumber: `999-88-${rand}`,
+        contactPhone: '02-888-9999',
+        representativeName: '홍길동',
+      }),
+    });
+    if (!regRes.ok) throw new Error(`Partner registration failed: HTTP ${regRes.status}`);
+    const regJson = await regRes.json();
+    if (!regJson.success) throw new Error(`Registration rejected: ${JSON.stringify(regJson)}`);
+
+    // Verify login is blocked with 403 PENDING_APPROVAL
+    const loginRes = await fetch(`${BASE_URL}/api/v1/partner/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: applicantEmail,
+        password: 'PartnerAppPass2026!',
+      }),
+    });
+    if (loginRes.status !== 403) {
+      throw new Error(`Expected HTTP 403 PENDING_APPROVAL, got HTTP ${loginRes.status}`);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // SUMMARY
   // ---------------------------------------------------------------------------
   console.log('\n==============================================================================');
