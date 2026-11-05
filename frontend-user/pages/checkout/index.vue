@@ -9,6 +9,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '~/stores/auth'
 import { apiFetch, formatKrw } from '~/composables/useApi'
+import { fmtDay, qDate, qInt, todayIso } from '~/composables/useUrlQuery'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,16 +23,15 @@ const unitId = q.unitId ? String(q.unitId) : null
 const ratePlanId = domain === 'HOTEL' && q.ratePlanId ? String(q.ratePlanId) : undefined
 const returnItemId = domain === 'FLIGHT' && q.returnItemId ? String(q.returnItemId) : undefined
 const needsEnd = domain === 'HOTEL' || domain === 'CAR'
-const today = new Date().toISOString().slice(0, 10)
-const plusDays = (d: string, n: number) => new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10)
-
-const startDate = ref(q.startDate || plusDays(today, 14))
-const endDate = ref(q.endDate || plusDays(startDate.value, domain === 'CAR' ? 3 : 1))
-const returnDate = ref(q.returnDate || plusDays(startDate.value, 3))
-const rooms = ref(Number(q.rooms || 1))
-const adults = ref(Number(q.adults || (domain === 'HOTEL' ? 2 : 1)))
-const children = ref(Number(q.children || 0))
-const infants = ref(Number(q.infants || 0))
+const today = ref('')
+// Dates are never assumed: they come from the product page or the user picks them here.
+const startDate = ref(qDate(q.startDate))
+const endDate = ref(qDate(q.endDate))
+const returnDate = ref(qDate(q.returnDate))
+const rooms = ref(qInt(q.rooms, 1, 1, 9))
+const adults = ref(qInt(q.adults, domain === 'HOTEL' ? 2 : 1, 1, 9))
+const children = ref(qInt(q.children, 0, 0, 8))
+const infants = ref(qInt(q.infants, 0, 0, 4))
 const promotionCode = ref('')
 
 type Step = 'details' | 'travelers' | 'payment'
@@ -53,6 +53,11 @@ const simTicketing = ref('ok')
 const simPayment = ref('ok')
 
 const isFlight = computed(() => domain === 'FLIGHT')
+const STEPS = [['details', '일정·금액 확인'], ['travelers', '예약자 정보'], ['payment', '결제']] as const
+const stepIndex = computed(() => STEPS.findIndex((s) => s[0] === step.value))
+const startLabel = domain === 'HOTEL' ? '체크인' : domain === 'CAR' ? '인수일' : domain === 'FLIGHT' ? '가는 날' : '이용일'
+const endLabel = domain === 'HOTEL' ? '체크아웃' : '반납일'
+const FIELD = 'w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus disabled:bg-surface-sunken disabled:text-ink-muted'
 const perPersonTravelers = computed(() => ['FLIGHT', 'TRAIN', 'PACKAGE'].includes(domain))
 const quoteSecondsLeft = computed(() => quote.value ? Math.max(0, Math.floor((Date.parse(quote.value.expiresAt) - now.value) / 1000)) : 0)
 const paySecondsLeft = computed(() => booking.value?.paymentDeadline ? Math.max(0, Math.floor((Date.parse(booking.value.paymentDeadline) - now.value) / 1000)) : 0)
@@ -77,8 +82,10 @@ function idemKeyFor(quoteId: string) {
   } catch { return `chk_${quoteId}` }
 }
 
+const datesReady = computed(() => !!startDate.value && (!needsEnd || endDate.value > startDate.value) && (!returnItemId || returnDate.value >= startDate.value))
 async function getQuote() {
   error.value = ''
+  if (!datesReady.value) { error.value = needsEnd ? '시작일과 종료일을 선택해 주세요.' : returnItemId ? '가는 날과 오는 날을 선택해 주세요.' : '이용일을 선택해 주세요.'; return }
   busy.value = true
   const r = await apiFetch('/quotes', {
     method: 'POST',
@@ -154,6 +161,7 @@ async function pay() {
 function goLogin() { router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`) }
 
 onMounted(async () => {
+  today.value = todayIso()
   timer = setInterval(() => (now.value = Date.now()), 1000)
   await auth.initAuth()
   if (!auth.isLoggedIn) return goLogin()
@@ -163,6 +171,8 @@ onMounted(async () => {
   if (!contact.value.phone) contact.value.phone = auth.user?.phoneNumber || ''
   if (!DOMAIN_LABEL[domain] || !itemId) { error.value = '잘못된 상품 정보입니다.'; return }
   if (q.bookingId) await resumeBooking(String(q.bookingId))
+  // Arriving from a product page with dates already chosen: price it right away.
+  else if (datesReady.value) await getQuote()
 })
 
 /** Re-enter the payment step for an existing booking that is still awaiting payment (e.g. after a declined card). */
@@ -179,151 +189,154 @@ onBeforeUnmount(() => clearInterval(timer))
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto px-4 py-6 md:py-10">
-    <nav class="flex items-center gap-2 text-xs font-semibold mb-6" aria-label="예약 단계">
-      <span v-for="(s, i) in [['details','일정·가격 확인'],['travelers','여행자 정보'],['payment','결제']]" :key="s[0]" class="flex items-center gap-2">
-        <span :class="['w-6 h-6 rounded-full flex items-center justify-center', step === s[0] ? 'bg-trip-blue text-white' : 'bg-slate-200 text-slate-600']">{{ i + 1 }}</span>
-        <span :class="step === s[0] ? 'text-slate-900' : 'text-slate-500'">{{ s[1] }}</span>
-        <span v-if="i < 2" class="w-6 h-px bg-slate-300" />
-      </span>
+  <div class="mx-auto max-w-6xl px-4 pb-24 pt-6 lg:px-6 lg:pt-10">
+    <!-- Steps -->
+    <nav class="mb-6 flex items-center gap-2 text-sm font-semibold" aria-label="예약 단계">
+      <template v-for="(s, i) in STEPS" :key="s[0]">
+        <span :class="['flex items-center gap-2', i <= stepIndex ? 'text-ink' : 'text-ink-subtle']" :aria-current="step === s[0] ? 'step' : undefined">
+          <span :class="['flex h-7 w-7 items-center justify-center rounded-full text-xs', i < stepIndex ? 'bg-success text-white' : i === stepIndex ? 'bg-primary text-primary-ink' : 'bg-surface-sunken text-ink-subtle']">
+            <AppIcon v-if="i < stepIndex" name="check" :size="14" /><template v-else>{{ i + 1 }}</template>
+          </span>
+          <span :class="i === stepIndex ? '' : 'hidden sm:inline'">{{ s[1] }}</span>
+        </span>
+        <span v-if="i < 2" class="h-px w-6 bg-line-strong sm:w-10" aria-hidden="true" />
+      </template>
     </nav>
 
-    <div v-if="isSandbox" class="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900" data-testid="sandbox-banner">
-      <strong>테스트 모드</strong> — 실제 결제·실제 예약이 발생하지 않는 개발용 시뮬레이터입니다.
+    <div v-if="isSandbox" class="mb-4 flex items-start gap-2 rounded-2xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-ink" data-testid="sandbox-banner">
+      <AppIcon name="bolt" :size="18" class="mt-px text-warning" />
+      <span><b>테스트 모드</b> — 실제 결제나 실제 예약이 일어나지 않는 개발용 시뮬레이터예요.</span>
     </div>
 
-    <div v-if="blocked" class="rounded-2xl border border-slate-200 bg-white p-6 md:p-8" data-testid="not-bookable">
-      <h1 class="text-lg font-bold text-slate-900">지금은 GetForTrip에서 바로 예약할 수 없는 상품입니다</h1>
-      <p class="mt-2 text-sm text-slate-600">{{ blocked.message }}</p>
-      <p class="mt-2 text-xs text-slate-500">결제 전 단계에서 확인되었으며, 어떠한 금액도 청구되지 않았습니다.</p>
-      <NuxtLink to="/" class="mt-5 inline-block rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white">다른 상품 둘러보기</NuxtLink>
+    <div v-if="blocked" class="card mx-auto max-w-xl p-6 text-center sm:p-8" data-testid="not-bookable">
+      <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-sunken text-ink-subtle"><AppIcon name="lock" /></span>
+      <h1 class="mt-4 text-lg font-bold text-ink">지금은 getfortrip에서 바로 예약할 수 없는 상품이에요</h1>
+      <p class="mt-2 text-sm text-ink-muted">{{ blocked.message }}</p>
+      <p class="mt-2 text-xs text-ink-subtle">결제 전 단계에서 확인되었고, 어떤 금액도 청구되지 않았어요.</p>
+      <NuxtLink to="/" class="btn-primary mt-5">다른 상품 둘러보기</NuxtLink>
     </div>
 
-    <div v-else class="grid md:grid-cols-[1fr_340px] gap-6">
-      <section class="space-y-4">
+    <div v-else class="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <section class="min-w-0 space-y-4">
         <!-- Step 1: details -->
-        <div v-if="!booking || quote" class="rounded-2xl border border-slate-200 bg-white p-5 md:p-6">
-          <h1 class="text-base font-bold text-slate-900">{{ DOMAIN_LABEL[domain] || '상품' }}{{ returnItemId ? ' 왕복' : '' }} 예약</h1>
-          <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
-            <label class="col-span-2 sm:col-span-1">
-              <span class="block text-xs font-semibold text-slate-600 mb-1">{{ domain === 'HOTEL' ? '체크인' : domain === 'CAR' ? '대여일' : domain === 'FLIGHT' ? '가는 날' : '이용일' }}</span>
-              <input v-model="startDate" type="date" :min="today" :disabled="!!quote" class="w-full rounded-lg border border-slate-300 px-3 py-2" data-testid="start-date" />
-            </label>
-            <label v-if="returnItemId" class="col-span-2 sm:col-span-1">
-              <span class="block text-xs font-semibold text-slate-600 mb-1">오는 날</span>
-              <input v-model="returnDate" type="date" :min="startDate" :disabled="!!quote" class="w-full rounded-lg border border-slate-300 px-3 py-2" data-testid="return-date" />
-            </label>
-            <label v-if="needsEnd" class="col-span-2 sm:col-span-1">
-              <span class="block text-xs font-semibold text-slate-600 mb-1">{{ domain === 'HOTEL' ? '체크아웃' : '반납일' }}</span>
-              <input v-model="endDate" type="date" :min="startDate" :disabled="!!quote" class="w-full rounded-lg border border-slate-300 px-3 py-2" data-testid="end-date" />
-            </label>
-            <label v-if="domain === 'HOTEL'">
-              <span class="block text-xs font-semibold text-slate-600 mb-1">객실 수</span>
-              <input v-model.number="rooms" type="number" min="1" max="9" :disabled="!!quote" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
-            </label>
-            <label>
-              <span class="block text-xs font-semibold text-slate-600 mb-1">성인</span>
-              <input v-model.number="adults" type="number" min="1" max="9" :disabled="!!quote" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
-            </label>
-            <label v-if="domain !== 'CAR' && domain !== 'TRANSFER'">
-              <span class="block text-xs font-semibold text-slate-600 mb-1">아동</span>
-              <input v-model.number="children" type="number" min="0" max="8" :disabled="!!quote" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
-            </label>
-            <label v-if="isFlight">
-              <span class="block text-xs font-semibold text-slate-600 mb-1">유아 (좌석 미점유)</span>
-              <input v-model.number="infants" type="number" min="0" max="4" :disabled="!!quote" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
-            </label>
-            <label class="col-span-2">
-              <span class="block text-xs font-semibold text-slate-600 mb-1">쿠폰 코드 (선택)</span>
-              <input v-model="promotionCode" type="text" :disabled="!!quote" class="w-full rounded-lg border border-slate-300 px-3 py-2 uppercase" />
+        <div v-if="!booking || quote" class="card p-5 sm:p-6">
+          <h1 class="text-lg font-bold text-ink">{{ DOMAIN_LABEL[domain] || '상품' }}{{ returnItemId ? ' 왕복' : '' }} 예약</h1>
+          <p v-if="quote" class="mt-1 text-sm text-ink-muted">{{ quote.title }}</p>
+
+          <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <div data-testid="start-date" :class="needsEnd ? 'sm:col-span-2' : ''">
+              <DateRangePicker v-if="needsEnd" v-model:start="startDate" v-model:end="endDate" :start-label="startLabel" :end-label="endLabel" :unit="domain === 'HOTEL' ? 'night' : 'day'" :min="today" :max-range="domain === 'HOTEL' ? 30 : 60" :class="quote && 'pointer-events-none opacity-70'" />
+              <DateRangePicker v-else v-model:start="startDate" mode="single" :start-label="startLabel" :min="today" :class="quote && 'pointer-events-none opacity-70'" />
+            </div>
+            <div v-if="returnItemId" data-testid="return-date">
+              <DateRangePicker v-model:start="returnDate" mode="single" start-label="오는 날" :min="startDate || today" :class="quote && 'pointer-events-none opacity-70'" />
+            </div>
+            <div v-if="domain !== 'CAR'" :class="quote && 'pointer-events-none opacity-70'">
+              <GuestPicker v-model:adults="adults" v-model:children="children" v-model:rooms="rooms" :show-rooms="domain === 'HOTEL'" :label="domain === 'HOTEL' ? '인원·객실' : '인원'" />
+            </div>
+            <div v-if="isFlight" class="flex min-h-[64px] items-center justify-between rounded-2xl border border-line bg-surface px-4" :class="quote && 'pointer-events-none opacity-70'">
+              <div><p class="text-sm font-semibold text-ink">유아</p><p class="text-xs text-ink-subtle">만 2세 미만 · 좌석 미점유</p></div>
+              <div class="flex items-center gap-3">
+                <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink disabled:opacity-30" :disabled="infants <= 0" aria-label="유아 줄이기" @click="infants--"><AppIcon name="minus" :size="16" /></button>
+                <span class="tabular w-5 text-center font-semibold text-ink">{{ infants }}</span>
+                <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink disabled:opacity-30" :disabled="infants >= adults" aria-label="유아 늘리기" @click="infants++"><AppIcon name="plus" :size="16" /></button>
+              </div>
+            </div>
+            <label class="sm:col-span-2">
+              <span class="field-label">쿠폰 코드 (선택)</span>
+              <input v-model="promotionCode" type="text" :disabled="!!quote" :class="[FIELD, 'uppercase']" placeholder="예: WELCOME10" />
             </label>
           </div>
-          <div class="mt-4 flex gap-2">
-            <button v-if="!quote" :disabled="busy" class="rounded-xl bg-trip-blue px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50" data-testid="get-quote" @click="getQuote">
-              {{ busy ? '확인 중…' : '실시간 가격 확인' }}
-            </button>
-            <button v-else-if="step === 'details'" class="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold" @click="quote = null">일정 변경</button>
-            <button v-if="quote && step === 'details'" class="rounded-xl bg-trip-blue px-5 py-2.5 text-sm font-semibold text-white" data-testid="to-travelers" @click="step = 'travelers'">다음: 여행자 정보</button>
+
+          <div class="mt-5 flex flex-wrap gap-2">
+            <button v-if="!quote" type="button" :disabled="busy" class="btn-primary px-6 py-3" data-testid="get-quote" @click="getQuote">{{ busy ? '확인 중…' : '금액 확인' }}</button>
+            <template v-else-if="step === 'details'">
+              <button type="button" class="btn-secondary" @click="quote = null">일정·인원 변경</button>
+              <button type="button" class="btn-primary px-6" data-testid="to-travelers" @click="step = 'travelers'">다음: 예약자 정보<AppIcon name="arrow-right" :size="16" /></button>
+            </template>
           </div>
         </div>
 
         <!-- Step 2: travelers -->
-        <div v-if="step !== 'details' && quote" class="rounded-2xl border border-slate-200 bg-white p-5 md:p-6">
-          <h2 class="text-base font-bold text-slate-900">예약자 정보</h2>
-          <div class="mt-3 grid sm:grid-cols-3 gap-3 text-sm">
-            <input v-model="contact.name" :disabled="step === 'payment'" placeholder="이름" class="rounded-lg border border-slate-300 px-3 py-2" data-testid="contact-name" />
-            <input v-model="contact.email" :disabled="step === 'payment'" type="email" placeholder="이메일" class="rounded-lg border border-slate-300 px-3 py-2" data-testid="contact-email" />
-            <input v-model="contact.phone" :disabled="step === 'payment'" type="tel" placeholder="+82-10-0000-0000" class="rounded-lg border border-slate-300 px-3 py-2" data-testid="contact-phone" />
+        <div v-if="step !== 'details' && quote" class="card p-5 sm:p-6">
+          <h2 class="text-lg font-bold text-ink">예약자 정보</h2>
+          <p class="mt-1 text-sm text-ink-muted">예약 확인 메일과 바우처를 받을 연락처예요.</p>
+          <div class="mt-4 grid gap-3 sm:grid-cols-3">
+            <label><span class="field-label">이름</span><input v-model="contact.name" :disabled="step === 'payment'" autocomplete="name" :class="FIELD" data-testid="contact-name" /></label>
+            <label><span class="field-label">이메일</span><input v-model="contact.email" :disabled="step === 'payment'" type="email" autocomplete="email" :class="FIELD" data-testid="contact-email" /></label>
+            <label><span class="field-label">휴대전화</span><input v-model="contact.phone" :disabled="step === 'payment'" type="tel" autocomplete="tel" placeholder="+82-10-0000-0000" :class="FIELD" data-testid="contact-phone" /></label>
           </div>
-          <h2 class="mt-6 text-base font-bold text-slate-900">{{ perPersonTravelers ? '탑승자/여행자 정보' : '대표 이용자' }}</h2>
-          <p class="text-xs text-slate-500 mt-1">영문 성/이름은 {{ isFlight ? '여권과 정확히 동일하게' : '신분증과 동일하게' }} 입력하세요.</p>
-          <div v-for="(t, i) in travelers" :key="i" class="mt-3 rounded-xl bg-slate-50 p-3">
-            <div class="text-xs font-semibold text-slate-700 mb-2">{{ i + 1 }}. {{ t.type === 'ADULT' ? '성인' : t.type === 'CHILD' ? '아동' : '유아' }}</div>
-            <div class="grid sm:grid-cols-2 gap-2 text-sm">
-              <input v-model="t.lastNameEn" :disabled="step === 'payment'" placeholder="영문 성 (예: KIM)" class="rounded-lg border border-slate-300 px-3 py-2 uppercase" :data-testid="`t${i}-last`" />
-              <input v-model="t.firstNameEn" :disabled="step === 'payment'" placeholder="영문 이름 (예: MINJI)" class="rounded-lg border border-slate-300 px-3 py-2 uppercase" :data-testid="`t${i}-first`" />
+
+          <h2 class="mt-7 text-lg font-bold text-ink">{{ perPersonTravelers ? '탑승객·여행자 정보' : '대표 이용자' }}</h2>
+          <p class="mt-1 text-sm text-ink-muted">영문 성과 이름은 {{ isFlight ? '여권과 똑같이' : '신분증과 똑같이' }} 입력해 주세요.</p>
+          <div v-for="(t, i) in travelers" :key="i" class="mt-3 rounded-2xl bg-surface-sunken p-4">
+            <p class="mb-3 text-sm font-semibold text-ink">{{ i + 1 }}. {{ t.type === 'ADULT' ? '성인' : t.type === 'CHILD' ? '아동' : '유아' }}</p>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <label><span class="field-label">영문 성</span><input v-model="t.lastNameEn" :disabled="step === 'payment'" placeholder="예: KIM" autocomplete="family-name" :class="[FIELD, 'uppercase']" :data-testid="`t${i}-last`" /></label>
+              <label><span class="field-label">영문 이름</span><input v-model="t.firstNameEn" :disabled="step === 'payment'" placeholder="예: MINJI" autocomplete="given-name" :class="[FIELD, 'uppercase']" :data-testid="`t${i}-first`" /></label>
               <template v-if="isFlight">
-                <label class="text-xs text-slate-600">생년월일<input v-model="t.birthDate" :disabled="step === 'payment'" type="date" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
-                <label class="text-xs text-slate-600">국적<input v-model="t.nationality" :disabled="step === 'payment'" maxlength="3" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase" /></label>
-                <label class="text-xs text-slate-600">여권번호<input v-model="t.passportNumber" :disabled="step === 'payment'" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm uppercase" autocomplete="off" /></label>
-                <label class="text-xs text-slate-600">여권 만료일<input v-model="t.passportExpiry" :disabled="step === 'payment'" type="date" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+                <label><span class="field-label">생년월일</span><input v-model="t.birthDate" :disabled="step === 'payment'" type="date" :class="FIELD" /></label>
+                <label><span class="field-label">국적 (3자리 코드)</span><input v-model="t.nationality" :disabled="step === 'payment'" maxlength="3" :class="[FIELD, 'uppercase']" /></label>
+                <label><span class="field-label">여권번호</span><input v-model="t.passportNumber" :disabled="step === 'payment'" autocomplete="off" :class="[FIELD, 'uppercase']" /></label>
+                <label><span class="field-label">여권 만료일</span><input v-model="t.passportExpiry" :disabled="step === 'payment'" type="date" :class="FIELD" /></label>
               </template>
             </div>
           </div>
-          <textarea v-if="!perPersonTravelers" v-model="specialRequests" :disabled="step === 'payment'" rows="2" maxlength="500" placeholder="요청사항 (선택, 보장되지 않음)" class="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <label v-if="!perPersonTravelers" class="mt-4 block"><span class="field-label">요청사항 (선택 · 반영이 보장되지는 않아요)</span><textarea v-model="specialRequests" :disabled="step === 'payment'" rows="2" maxlength="500" :class="FIELD" /></label>
 
-          <div v-if="quote.fulfilmentMode === 'SIMULATED' && step === 'travelers'" class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-            <div class="font-semibold mb-2">테스트 시나리오 (개발 환경 전용)</div>
-            <label class="mr-3">공급사 응답
-              <select v-model="simSupplier" class="ml-1 rounded border px-1 py-0.5" data-testid="sim-supplier"><option value="confirm">확정</option><option value="fail">실패</option><option value="timeout">응답 없음</option><option value="pending">확정 대기</option></select>
+          <div v-if="quote.fulfilmentMode === 'SIMULATED' && step === 'travelers'" class="mt-4 rounded-2xl border border-warning/30 bg-warning-soft p-4 text-sm text-ink">
+            <p class="mb-2 font-semibold">테스트 시나리오 (개발 환경 전용)</p>
+            <label class="mr-4">공급사 응답
+              <select v-model="simSupplier" class="ml-1 rounded-lg border border-line bg-surface px-2 py-1" data-testid="sim-supplier"><option value="confirm">확정</option><option value="fail">실패</option><option value="timeout">응답 없음</option><option value="pending">확정 대기</option></select>
             </label>
             <label v-if="isFlight">발권
-              <select v-model="simTicketing" class="ml-1 rounded border px-1 py-0.5"><option value="ok">성공</option><option value="fail">실패</option></select>
+              <select v-model="simTicketing" class="ml-1 rounded-lg border border-line bg-surface px-2 py-1"><option value="ok">성공</option><option value="fail">실패</option></select>
             </label>
           </div>
-          <button v-if="step === 'travelers'" :disabled="busy" class="mt-4 rounded-xl bg-trip-blue px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50" data-testid="create-booking" @click="createBooking">
-            {{ busy ? '처리 중…' : '예약 정보 확인 후 결제 단계로' }}
-          </button>
+          <button v-if="step === 'travelers'" type="button" :disabled="busy" class="btn-primary mt-5 px-6 py-3" data-testid="create-booking" @click="createBooking">{{ busy ? '처리 중…' : '예약 정보 확인 후 결제 단계로' }}</button>
         </div>
 
         <!-- Step 3: payment -->
-        <div v-if="step === 'payment' && booking" class="rounded-2xl border border-slate-200 bg-white p-5 md:p-6" data-testid="payment-step">
-          <h2 class="text-base font-bold text-slate-900">결제</h2>
-          <p v-if="!quote" class="mt-1 text-sm text-slate-700">{{ booking.title }} · {{ booking.serviceStart }}</p>
-          <p class="mt-1 text-xs text-slate-600">예약번호 <strong data-testid="booking-number">{{ booking.bookingNumber }}</strong> · 결제 가능 시간 <strong>{{ mmss(paySecondsLeft) }}</strong></p>
-          <p class="mt-2 text-xs text-slate-500">결제가 완료되어도 공급사 확정 전까지는 예약이 확정되지 않습니다. 확정 실패 시 전액 환불됩니다.</p>
-          <div v-if="payConfig?.provider === 'sandbox'" class="mt-4 text-xs">
-            <label>테스트 결제 결과
-              <select v-model="simPayment" class="ml-1 rounded border px-1 py-0.5" data-testid="sim-payment"><option value="ok">승인</option><option value="declined">카드 거절</option><option value="timeout">PG 응답 유실</option><option value="refundfail">승인(환불 실패)</option></select>
-            </label>
-          </div>
-          <p v-if="!payConfig?.enabled" class="mt-4 text-sm text-red-700">현재 온라인 결제가 활성화되어 있지 않습니다.</p>
-          <button :disabled="busy || !payConfig?.enabled || paySecondsLeft === 0" class="mt-4 w-full rounded-xl bg-trip-orange px-5 py-3 text-sm font-bold text-white disabled:opacity-50" data-testid="pay" @click="pay">
-            {{ busy ? '결제 처리 중…' : `${formatKrw(booking.totalMinor)} 결제하기` }}
+        <div v-if="step === 'payment' && booking" class="card p-5 sm:p-6" data-testid="payment-step">
+          <h2 class="text-lg font-bold text-ink">결제</h2>
+          <p v-if="!quote" class="mt-1 text-sm text-ink">{{ booking.title }} · {{ booking.serviceStart }}</p>
+          <dl class="mt-3 grid gap-2 rounded-2xl bg-surface-sunken p-4 text-sm sm:grid-cols-2">
+            <div><dt class="text-xs text-ink-subtle">예약번호</dt><dd class="font-semibold text-ink tabular" data-testid="booking-number">{{ booking.bookingNumber }}</dd></div>
+            <div><dt class="text-xs text-ink-subtle">결제 가능 시간</dt><dd :class="['font-semibold tabular', paySecondsLeft < 120 ? 'text-danger' : 'text-ink']">{{ mmss(paySecondsLeft) }}</dd></div>
+          </dl>
+          <p class="mt-3 flex items-start gap-1.5 text-sm text-ink-muted"><AppIcon name="check" :size="16" class="mt-0.5 text-ink-subtle" />결제가 끝나도 공급사가 확정하기 전까지는 예약이 확정되지 않아요. 확정에 실패하면 결제 금액을 전액 환불해요.</p>
+          <label v-if="payConfig?.provider === 'sandbox'" class="mt-4 block text-sm text-ink">테스트 결제 결과
+            <select v-model="simPayment" class="ml-1 rounded-lg border border-line bg-surface px-2 py-1" data-testid="sim-payment"><option value="ok">승인</option><option value="declined">카드 거절</option><option value="timeout">PG 응답 유실</option><option value="refundfail">승인(환불 실패)</option></select>
+          </label>
+          <p v-if="!payConfig?.enabled" class="mt-4 text-sm font-medium text-danger">지금은 온라인 결제를 사용할 수 없어요.</p>
+          <button type="button" :disabled="busy || !payConfig?.enabled || paySecondsLeft === 0" class="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3.5 text-base font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40" data-testid="pay" @click="pay">
+            <AppIcon name="lock" :size="18" />{{ busy ? '결제 처리 중…' : `${formatKrw(booking.totalMinor)} 결제하기` }}
           </button>
         </div>
 
-        <p v-if="error" class="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700" role="alert" data-testid="error">{{ error }}</p>
+        <p v-if="error" class="flex items-start gap-2 rounded-2xl bg-danger-soft px-4 py-3 text-sm font-medium text-danger" role="alert" data-testid="error"><AppIcon name="close" :size="16" class="mt-0.5" />{{ error }}</p>
       </section>
 
       <!-- Summary -->
-      <aside v-if="quote" class="rounded-2xl border border-slate-200 bg-white p-5 h-fit md:sticky md:top-20" data-testid="summary">
-        <div class="text-xs font-semibold text-slate-500">{{ DOMAIN_LABEL[domain] }}</div>
-        <div class="mt-1 font-bold text-slate-900 text-sm leading-snug">{{ quote.title }}</div>
-        <div class="mt-1 text-xs text-slate-600">{{ quote.serviceStart }}<span v-if="quote.serviceEnd !== quote.serviceStart"> → {{ quote.serviceEnd }}</span></div>
-        <dl class="mt-4 space-y-1.5 text-sm">
-          <div v-for="l in quote.lines" :key="l.code" class="flex justify-between gap-3">
-            <dt class="text-slate-600">{{ l.label }}</dt><dd :class="l.amountMinor < 0 ? 'text-emerald-700' : 'text-slate-900'">{{ formatKrw(l.amountMinor) }}</dd>
+      <aside v-if="quote" class="h-fit lg:sticky lg:top-24" data-testid="summary">
+        <div class="card p-5">
+          <p class="text-xs font-semibold text-primary">{{ DOMAIN_LABEL[domain] }}</p>
+          <p class="mt-1 font-bold leading-snug text-ink">{{ quote.title }}</p>
+          <p class="mt-1 text-sm text-ink-muted">{{ fmtDay(quote.serviceStart, true) }}<template v-if="quote.serviceEnd && quote.serviceEnd !== quote.serviceStart"> → {{ fmtDay(quote.serviceEnd, true) }}</template></p>
+          <dl class="mt-4 space-y-2 border-t border-line pt-4 text-sm">
+            <div v-for="l in quote.lines" :key="l.code" class="flex justify-between gap-3">
+              <dt class="text-ink-muted">{{ l.label }}</dt><dd :class="['tabular', l.amountMinor < 0 ? 'font-semibold text-success' : 'text-ink']">{{ formatKrw(l.amountMinor) }}</dd>
+            </div>
+            <div class="flex justify-between border-t border-line pt-3 text-base font-extrabold text-ink"><dt>총 결제 금액</dt><dd class="tabular" data-testid="total">{{ formatKrw(quote.totalMinor) }}</dd></div>
+          </dl>
+          <p v-if="quote.display" class="mt-1 text-right text-xs text-ink-subtle">≈ {{ (quote.display.totalMinor / 100).toLocaleString() }} {{ quote.display.currency }} · {{ quote.display.note }}</p>
+          <div class="mt-4 rounded-2xl bg-surface-sunken p-3.5 text-sm">
+            <p class="font-semibold text-ink">취소 규정</p>
+            <p v-if="quote.cancellationPolicy.type === 'FREE_UNTIL'" class="mt-0.5 text-success">{{ new Date(quote.cancellationPolicy.freeUntil).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }) }}까지 무료 취소<span class="text-ink-muted">, 이후에는 환불되지 않아요</span></p>
+            <p v-else class="mt-0.5 text-danger">환불할 수 없는 요금이에요.</p>
           </div>
-          <div class="flex justify-between border-t border-slate-200 pt-2 font-bold text-base"><dt>총 결제금액</dt><dd data-testid="total">{{ formatKrw(quote.totalMinor) }}</dd></div>
-        </dl>
-        <p v-if="quote.display" class="mt-1 text-[11px] text-slate-500">≈ {{ (quote.display.totalMinor / 100).toLocaleString() }} {{ quote.display.currency }} · {{ quote.display.note }}</p>
-        <div class="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
-          <div class="font-semibold mb-1">취소 규정</div>
-          <span v-if="quote.cancellationPolicy.type === 'FREE_UNTIL'">{{ new Date(quote.cancellationPolicy.freeUntil).toLocaleString('ko-KR') }}까지 무료 취소, 이후 취소 시 환불 불가</span>
-          <span v-else>환불 불가 요금입니다.</span>
+          <p v-if="step !== 'payment'" class="mt-3 text-xs text-ink-subtle">이 금액은 <b class="tabular text-ink">{{ mmss(quoteSecondsLeft) }}</b> 동안 유지돼요.</p>
         </div>
-        <p v-if="step !== 'payment'" class="mt-3 text-[11px] text-slate-500">이 가격은 {{ mmss(quoteSecondsLeft) }} 동안 유효합니다.</p>
       </aside>
     </div>
   </div>
