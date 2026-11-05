@@ -339,32 +339,29 @@ export async function publishIngestedProduct(
     
     await env.DB.prepare(`
       INSERT INTO activities (
-        id, partner_id, title, city, country, category,
-        duration_hours, original_price_minor, final_price_minor,
-        currency, rating, review_count, image_url, images,
-        summary, description, inclusions, exclusions,
-        cancellation_policy, is_active, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        id, partner_id, title, category, city, country,
+        price_krw, review_score, review_count, instant_confirmation,
+        free_cancellation, duration_type, guide_language, voucher_type,
+        thumbnail_url, description, packages_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       newItemId,
       'ptn_tour_01',
       row.title,
+      'TOUR_PASS',
       row.city || '서울',
       row.country || '대한민국',
-      'TOUR_PASS',
-      row.duration_mins ? Math.round(row.duration_mins / 60) : 2,
-      row.original_price_minor || Math.round(row.price_minor * 1.2),
-      row.price_minor,
-      row.currency,
+      Number(row.price_minor || 35000),
       4.9,
-      12,
+      120,
+      1,
+      1,
+      'FULL_DAY',
+      'KO',
+      'QR_CODE',
       primaryImg,
-      row.image_urls,
-      row.summary,
-      row.description,
-      row.inclusions_json,
-      row.exclusions_json,
-      row.cancellation_policy,
+      row.description || row.summary || row.title,
+      row.options_json || '[]',
       now
     ).run();
 
@@ -375,14 +372,15 @@ export async function publishIngestedProduct(
 
     await env.DB.prepare(`
       INSERT INTO hotels (
-        id, partner_id, name, city, country, address,
-        latitude, longitude, star_rating, review_score,
-        price_per_night_minor, currency, image_url,
-        amenities, description, is_active, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        id, partner_id, name_ko, name_en, city, country, address,
+        latitude, longitude, star_rating, property_type, review_score, review_count,
+        neighborhood, subway_nearby, free_cancellation, free_breakfast,
+        base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       newItemId,
       'ptn_htl_01',
+      row.title,
       row.title,
       row.city || '서울',
       row.country || '대한민국',
@@ -390,46 +388,52 @@ export async function publishIngestedProduct(
       row.latitude || 37.5665,
       row.longitude || 126.9780,
       5,
+      'HOTEL',
       4.8,
-      row.price_minor,
-      row.currency,
+      150,
+      '도심 중심가',
+      '지하철역 도보 5분',
+      1,
+      1,
+      Number(row.price_minor || 150000),
       primaryImg,
+      row.image_urls || '[]',
       JSON.stringify(['WiFi', '조식', '피트니스', '수영장']),
-      row.description,
+      row.options_json || '[]',
       now
     ).run();
 
   } else {
     // Default fallback to activities catalog
     newItemId = newId('act');
+    const images = JSON.parse(row.image_urls || '[]');
+    const primaryImg = images[0] || 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=800&q=80';
+
     await env.DB.prepare(`
       INSERT INTO activities (
-        id, partner_id, title, city, country, category,
-        duration_hours, original_price_minor, final_price_minor,
-        currency, rating, review_count, image_url, images,
-        summary, description, inclusions, exclusions,
-        cancellation_policy, is_active, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        id, partner_id, title, category, city, country,
+        price_krw, review_score, review_count, instant_confirmation,
+        free_cancellation, duration_type, guide_language, voucher_type,
+        thumbnail_url, description, packages_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       newItemId,
       'ptn_tour_01',
       row.title,
+      'EXPERIENCE',
       row.city || '서울',
       row.country || '대한민국',
-      'EXPERIENCE',
-      2,
-      row.original_price_minor || Math.round(row.price_minor * 1.2),
-      row.price_minor,
-      row.currency,
+      Number(row.price_minor || 35000),
       4.8,
-      5,
-      JSON.parse(row.image_urls || '[]')[0] || '',
-      row.image_urls,
-      row.summary,
-      row.description,
-      row.inclusions_json,
-      row.exclusions_json,
-      row.cancellation_policy,
+      50,
+      1,
+      1,
+      'HALF_DAY',
+      'KO',
+      'QR_CODE',
+      primaryImg,
+      row.description || row.summary || row.title,
+      row.options_json || '[]',
       now
     ).run();
   }
