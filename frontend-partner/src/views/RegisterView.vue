@@ -239,3 +239,4 @@ const handleRegister = async () => {
     </div>
   </div>
 </template>
+
