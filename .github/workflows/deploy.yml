@@ -31,6 +31,7 @@ jobs:
           npm install
           npm --prefix frontend-user install
           cd frontend-admin && npm install
+          npm --prefix frontend-partner install
 
       - name: Run Brand Governance Guard
         run: npm run check:branding
