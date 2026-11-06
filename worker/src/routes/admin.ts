@@ -4,6 +4,7 @@ import { audit, requireAdmin } from "../lib/auth.ts";
 import * as S from "../services/booking-service.ts";
 import { BOOKING_STATUSES } from "../domain/state-machine.ts";
 import { newId } from "../lib/crypto.ts";
+import { invalidateSupplierCache } from "../services/catalog.ts";
 
 export async function handleAdmin(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
@@ -110,6 +111,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     }
     await db.prepare("UPDATE suppliers SET adapter = ?, integration_status = ?, contract_id = COALESCE(?, contract_id), notes = COALESCE(?, notes), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")
       .bind(adapter, status, b.contractId ? str(b.contractId, 64) : null, b.notes ? str(b.notes, 500) : null, m[1]).run();
+    invalidateSupplierCache();
     await audit(env, admin.id, "UPDATE_SUPPLIER", "SUPPLIER", m[1], { before: { adapter: before.adapter, status: before.integration_status }, after: { adapter, status } });
     return json({ success: true });
   }

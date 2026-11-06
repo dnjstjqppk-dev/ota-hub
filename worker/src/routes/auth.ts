@@ -79,6 +79,21 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     return json({ ...pu, user: pu });
   }
 
+  // Profile edit: name and phone only (email is the login identity and is not editable here).
+  if (path === "/api/v1/auth/me" && method === "PATCH") {
+    const a = await getAuthUser(request, env);
+    if (!a) throw new HttpError(401, "UNAUTHORIZED", "로그인이 필요합니다.");
+    const body = await readJson(request);
+    const fullName = str(body.fullName, 60);
+    const phone = str(body.phoneNumber, 30);
+    if (!fullName) throw new HttpError(400, "NAME_REQUIRED", "이름을 입력해주세요.");
+    if (phone && !/^\+?[0-9][0-9 -]{6,28}$/.test(phone)) throw new HttpError(400, "INVALID_PHONE", "전화번호 형식이 올바르지 않습니다.");
+    await env.DB.prepare("UPDATE users SET full_name = ?, phone_number = ? WHERE id = ?").bind(fullName, phone || null, a.id).run();
+    const u = await env.DB.prepare("SELECT id, email, full_name, phone_number, role, tier, trip_coins, avatar_url FROM users WHERE id = ?").bind(a.id).first<any>();
+    const pu = publicUser(u);
+    return json({ success: true, ...pu, user: pu });
+  }
+
   if (path === "/api/v1/auth/forgot-password" && method === "POST") {
     await rateLimit(request, env, "forgot", 5, 3600);
     const body = await readJson(request);
@@ -100,7 +115,8 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
       ]);
     }
     // Same response whether or not the account exists (no account enumeration). Token never returned.
-    return json({ success: true, message: "가입된 이메일이라면 비밀번호 재설정 안내가 발송됩니다.", emailDelivery: "NOT_CONFIGURED" });
+    // No provider is wired yet, so do not claim the email was sent.
+    return json({ success: true, message: "요청을 접수했어요. 다만 지금은 메일 발송 서비스가 준비 중이라 재설정 메일이 도착하지 않아요. 고객센터로 문의해 주세요.", emailDelivery: "NOT_CONFIGURED" });
   }
 
   if (path === "/api/v1/auth/reset-password" && method === "POST") {

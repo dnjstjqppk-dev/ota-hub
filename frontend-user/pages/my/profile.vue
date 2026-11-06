@@ -1,111 +1,50 @@
 <script setup lang="ts">
-import { ref, watchEffect } from 'vue'
+/**
+ * Member profile (design system "Horizon"). Values are the server's (GET /auth/me); saving uses
+ * PATCH /auth/me and reports the server's answer. Nothing is pre-filled with sample data.
+ */
+import { ref } from 'vue'
 import { useAuthStore } from '~/stores/auth'
+import { apiFetch } from '~/composables/useApi'
 
-const authStore = useAuthStore()
+useHead({ title: '회원 정보' })
+const auth = useAuthStore()
+const fullName = ref('')
+const phone = ref('')
+const email = ref('')
+const saving = ref(false)
+const msg = ref<{ ok: boolean; text: string } | null>(null)
 
-const fullName = ref(authStore.user?.fullName || '')
-const email = ref(authStore.user?.email || '')
-const phone = ref(authStore.user?.phone || '010-1234-5678')
-const birth = ref('1990-05-15')
-const gender = ref('MALE')
-const marketingConsent = ref(true)
-
-watchEffect(() => {
-  if (authStore.user) {
-    fullName.value = authStore.user.fullName
-    email.value = authStore.user.email
-    phone.value = authStore.user.phone || '010-1234-5678'
-  }
-})
-
-const saveProfile = () => {
-  if (authStore.user) {
-    authStore.user.fullName = fullName.value
-    authStore.user.phone = phone.value
-  }
-  alert('회원 프로필 정보가 성공적으로 수정되었습니다.')
+async function load() {
+  const r = await apiFetch('/auth/me')
+  const u: any = r.ok ? r.data : auth.user
+  fullName.value = u?.fullName || ''
+  phone.value = u?.phoneNumber || ''
+  email.value = u?.email || ''
 }
+async function save() {
+  msg.value = null; saving.value = true
+  const r = await apiFetch('/auth/me', { method: 'PATCH', body: { fullName: fullName.value.trim(), phoneNumber: phone.value.trim() } })
+  saving.value = false
+  if (!r.ok) { msg.value = { ok: false, text: r.data.error || '저장하지 못했어요.' }; return }
+  if (auth.user) { const u = auth.user as any; u.fullName = r.data.fullName; u.phoneNumber = r.data.phoneNumber; u.phone = r.data.phoneNumber; try { localStorage.setItem('getfortrip_user', JSON.stringify(auth.user)) } catch {} }
+  msg.value = { ok: true, text: '회원 정보를 저장했어요.' }
+}
+function logout() { auth.logout(); navigateTo('/') }
+const FIELD = 'w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus disabled:bg-surface-sunken disabled:text-ink-muted'
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto px-4 py-8 space-y-6">
-    <div class="flex items-center gap-3 border-b border-slate-200 pb-4">
-      <NuxtLink to="/my" class="text-xs font-bold text-slate-400 hover:text-slate-600">‹ 마이 콘솔</NuxtLink>
-      <h1 class="text-xl font-black text-slate-900">회원 프로필 및 계정 설정</h1>
-    </div>
-
-    <!-- 비로그인 게이트 -->
-    <div v-if="!authStore.isLoggedIn || !authStore.user" class="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-4 shadow-sm">
-      <div class="w-16 h-16 rounded-full bg-blue-50 text-trip-blue flex items-center justify-center text-2xl mx-auto font-black">
-        👤
+  <MyShell title="회원 정보" @ready="load">
+    <form class="card max-w-xl space-y-4 p-5 sm:p-6" novalidate @submit.prevent="save">
+      <label class="block"><span class="field-label">이메일 (로그인 아이디)</span><input :value="email" disabled :class="FIELD" /></label>
+      <label class="block"><span class="field-label">이름</span><input v-model="fullName" autocomplete="name" :class="FIELD" /></label>
+      <label class="block"><span class="field-label">휴대전화</span><input v-model="phone" type="tel" autocomplete="tel" placeholder="+82-10-0000-0000" :class="FIELD" /></label>
+      <p v-if="msg" :class="['rounded-xl px-4 py-2.5 text-sm font-medium', msg.ok ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger']" :role="msg.ok ? 'status' : 'alert'">{{ msg.text }}</p>
+      <div class="flex flex-wrap gap-2 pt-1">
+        <button type="submit" class="btn-primary" :disabled="saving">{{ saving ? '저장 중…' : '저장' }}</button>
       </div>
-      <h2 class="text-lg font-black text-slate-900">로그인이 필요한 서비스입니다</h2>
-      <p class="text-xs text-slate-500 max-w-md mx-auto">
-        개인정보 보호 정책에 따라 회원 프로필 및 계정 설정은 본인 인증 후 안전하게 접근 가능합니다.
-      </p>
-      <div class="pt-4 flex justify-center gap-3">
-        <NuxtLink
-          to="/login"
-          class="px-5 py-2.5 bg-trip-blue text-white text-xs font-black rounded-xl hover:bg-blue-600 shadow-sm transition"
-        >
-          로그인
-        </NuxtLink>
-      </div>
-    </div>
-
-    <!-- 로그인 회원 프로필 폼 -->
-    <div v-else class="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-sm space-y-6">
-      <div class="flex items-center gap-4 border-b border-slate-100 pb-6">
-        <img v-if="authStore.user.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-16 h-16 rounded-full border-2 border-slate-200 object-cover" />
-        <span v-else class="w-16 h-16 rounded-full bg-trip-blue text-white text-xl font-black flex items-center justify-center" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
-        <div>
-          <h2 class="text-base font-black text-slate-900">{{ authStore.user.fullName }}</h2>
-          <span class="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black border border-amber-200">
-            💎 {{ authStore.user.tier }} VIP 회원
-          </span>
-        </div>
-      </div>
-
-      <div class="space-y-4 text-xs">
-        <div>
-          <label class="block font-bold text-slate-700 mb-1">성명 (실명)</label>
-          <input v-model="fullName" type="text" class="w-full p-2.5 border border-slate-200 rounded-xl font-bold text-slate-800" />
-        </div>
-
-        <div>
-          <label class="block font-bold text-slate-700 mb-1">이메일 주소 (로그인 계정)</label>
-          <input :value="email" disabled class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-500" />
-        </div>
-
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block font-bold text-slate-700 mb-1">휴대전화번호</label>
-            <input v-model="phone" type="tel" class="w-full p-2.5 border border-slate-200 rounded-xl font-mono text-slate-800" />
-          </div>
-          <div>
-            <label class="block font-bold text-slate-700 mb-1">생년월일</label>
-            <input v-model="birth" type="date" class="w-full p-2.5 border border-slate-200 rounded-xl font-mono text-slate-800" />
-          </div>
-        </div>
-
-        <div class="pt-2">
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input v-model="marketingConsent" type="checkbox" class="w-4 h-4 rounded text-blue-600" />
-            <span class="text-slate-600 font-medium text-xs">특가 프로모션 및 리워드 코인 적립 안내 수신 동의 (선택)</span>
-          </label>
-        </div>
-      </div>
-
-      <div class="pt-4 border-t border-slate-100 flex justify-end">
-        <button
-          @click="saveProfile"
-          class="px-6 py-2.5 bg-trip-blue hover:bg-blue-600 text-white font-black rounded-xl text-xs shadow-sm transition"
-        >
-          변경사항 저장
-        </button>
-      </div>
-    </div>
-  </div>
+    </form>
+    <button type="button" class="mt-6 flex items-center gap-2 text-sm font-semibold text-ink-muted hover:text-danger" @click="logout"><AppIcon name="logout" :size="18" />로그아웃</button>
+  </MyShell>
 </template>
-

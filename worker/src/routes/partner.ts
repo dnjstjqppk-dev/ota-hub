@@ -134,8 +134,9 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const orders = await db.prepare(
       `SELECT id, booking_number, domain_type, title, status, total_price, currency, created_at
        FROM bookings
+       WHERE partner_id = ?
        ORDER BY created_at DESC LIMIT 10`
-    ).all<any>();
+    ).bind(pId).all<any>();
 
     const profile = await db.prepare("SELECT * FROM partner_profiles WHERE partner_id = ?").bind(pId).first<any>();
 
@@ -265,8 +266,9 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const rows = await db.prepare(
       `SELECT id, booking_number, domain_type, title, status, total_price, currency, customer_name, created_at
        FROM bookings
+       WHERE partner_id = ?
        ORDER BY created_at DESC LIMIT 100`
-    ).all<any>();
+    ).bind(pId).all<any>();
 
     // Mask customer name for privacy compliance (김** 등)
     const masked = (rows.results || []).map((r: any) => {
@@ -282,11 +284,12 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   if (m && method === "POST") {
     const orderId = m[1];
     const action = m[2];
-    const b = await db.prepare("SELECT * FROM bookings WHERE id = ?").bind(orderId).first<any>();
+    // Scope to the caller's own bookings: another partner's order is indistinguishable from a missing one.
+    const b = await db.prepare("SELECT * FROM bookings WHERE id = ? AND partner_id = ?").bind(orderId, pId).first<any>();
     if (!b) throw new HttpError(404, "ORDER_NOT_FOUND", "주문 정보를 찾을 수 없습니다.");
 
     const newStatus = action === "confirm" ? "CONFIRMED" : "CANCELLED";
-    await db.prepare("UPDATE bookings SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").bind(newStatus, orderId).run();
+    await db.prepare("UPDATE bookings SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND partner_id = ?").bind(newStatus, orderId, pId).run();
     return json({ success: true, bookingId: orderId, status: newStatus });
   }
 

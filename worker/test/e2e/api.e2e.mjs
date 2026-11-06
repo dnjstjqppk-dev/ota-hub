@@ -422,6 +422,41 @@ test("sitemap: dynamic, includes catalog detail pages", async () => {
   assert.ok(xml.includes("/flights/detail/flt_ke703</loc>"));
 });
 
+async function approvedPartner(tag) {
+  const email = `qa_ptn_${tag}_${rnd()}@local.test`;
+  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: `QA ${tag}`, businessNumber: "000-00-00000" } });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
+  sql(`UPDATE partner_profiles SET status = 'ACTIVE' WHERE partner_id = '${reg.data.partnerId}'`);
+  const login = await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } });
+  assert.equal(login.status, 200, JSON.stringify(login.data));
+  return { id: reg.data.partnerId, token: login.data.token };
+}
+
+test("partner extranet: orders are scoped to the partner; other partners cannot see or act on them", async () => {
+  const q = (await quote(A.token)).data.quote;
+  const b = (await book(A.token, q)).data.booking;
+  const [P, Q] = [await approvedPartner("p"), await approvedPartner("q")];
+
+  // Booking belongs to the hotel's own supplier, not to P.
+  let orders = await api("GET", "/api/v1/partner/orders", { token: P.token });
+  assert.equal(orders.status, 200);
+  assert.ok(!orders.data.orders.some((o) => o.id === b.id), "foreign booking leaked into partner orders");
+  const dash = await api("GET", "/api/v1/partner/dashboard", { token: P.token });
+  assert.ok(!dash.data.recentOrders.some((o) => o.id === b.id), "foreign booking leaked into partner dashboard");
+
+  // Once the booking is P's, P sees it and Q still cannot touch it.
+  sql(`UPDATE bookings SET partner_id = '${P.id}' WHERE id = '${b.id}'`);
+  orders = await api("GET", "/api/v1/partner/orders", { token: P.token });
+  assert.ok(orders.data.orders.some((o) => o.id === b.id));
+  orders = await api("GET", "/api/v1/partner/orders", { token: Q.token });
+  assert.ok(!orders.data.orders.some((o) => o.id === b.id));
+  for (const action of ["confirm", "reject"]) {
+    const r = await api("POST", `/api/v1/partner/orders/${b.id}/${action}`, { token: Q.token });
+    assert.equal(r.status, 404, JSON.stringify(r.data));
+  }
+  assert.equal(sql(`SELECT status FROM bookings WHERE id = '${b.id}'`)[0].status, "AWAITING_PAYMENT");
+});
+
 test("ledger: every journal balanced; no payment/refund/deposit mismatch (run last)", async () => {
   const r = await api("GET", "/api/v1/admin/reconciliation", { token: ADMIN });
   assert.equal(r.status, 200);
@@ -454,6 +489,18 @@ test("autocomplete: places carry codes/ids, typos and 초성 match, wildcards es
   const f = (await api("GET", "/api/v1/flights?origin=ICN&dest=TYO")).data;
   const arr = (f.flights || f.data || []).map((x) => x.arrival_airport);
   assert.ok(arr.length > 0 && arr.every((a) => a === "NRT" || a === "HND"), `TYO must expand to NRT/HND, got ${arr}`);
+
+  // Profile edit persists name/phone and rejects junk.
+  const me = await register("profile");
+  const upd = await api("PATCH", "/api/v1/auth/me", { token: me.token, body: { fullName: "새 이름", phoneNumber: "+82-10-2222-3333" } });
+  assert.equal(upd.status, 200, JSON.stringify(upd.data));
+  const after = (await api("GET", "/api/v1/auth/me", { token: me.token })).data;
+  assert.equal(after.fullName, "새 이름"); assert.equal(after.phoneNumber, "+82-10-2222-3333");
+  assert.equal((await api("PATCH", "/api/v1/auth/me", { token: me.token, body: { fullName: "", phoneNumber: "" } })).status, 400);
+  assert.equal((await api("PATCH", "/api/v1/auth/me", { token: me.token, body: { fullName: "X", phoneNumber: "abc" } })).status, 400);
+  assert.equal((await api("PATCH", "/api/v1/auth/me", { body: { fullName: "X" } })).status, 401);
+  const fp = (await api("POST", "/api/v1/auth/forgot-password", { body: { email: me.email } })).data;
+  assert.ok(fp.emailDelivery !== "NOT_CONFIGURED" || !/발송됩니다|발송되었습니다/.test(fp.message), "must not claim an email was sent when no provider exists");
 
   // Names picked from autocomplete (no code in the text) must resolve too: 서울 → ICN/GMP, 도쿄 → NRT/HND.
   const byName = (await api("GET", `/api/v1/flights?origin=${encodeURIComponent("서울")}&dest=${encodeURIComponent("도쿄")}`)).data.data || [];

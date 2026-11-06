@@ -183,10 +183,24 @@ export function bookabilityOf(env: Env, supplier: SupplierRow | null): Bookabili
   return { bookable: false, reason: "SUPPLIER_NOT_INTEGRATED", mode: null };
 }
 
-/** Bulk bookability lookup for search results (one query). */
+// Search results only *display* bookability; quoting/booking always re-reads the
+// supplier via loadSupplier(), so a short per-isolate cache can never sell
+// something a just-blocked supplier cannot deliver.
+const SUPPLIER_CACHE_TTL_MS = 30_000;
+let supplierCache: { db: unknown; at: number; rows: SupplierRow[] } | null = null;
+
+export function invalidateSupplierCache(): void {
+  supplierCache = null;
+}
+
+/** Bulk bookability lookup for search results (one cached query). */
 export async function supplierBookabilityMap(env: Env): Promise<Map<string, Bookability>> {
-  const rows = await env.DB.prepare("SELECT id, name, adapter, integration_status, transaction_model, settlement_rate_bps FROM suppliers").all<SupplierRow>();
+  const now = Date.now();
+  if (!supplierCache || supplierCache.db !== env.DB || now - supplierCache.at > SUPPLIER_CACHE_TTL_MS) {
+    const res = await env.DB.prepare("SELECT id, name, adapter, integration_status, transaction_model, settlement_rate_bps FROM suppliers").all<SupplierRow>();
+    supplierCache = { db: env.DB, at: now, rows: res.results || [] };
+  }
   const m = new Map<string, Bookability>();
-  for (const r of rows.results || []) m.set(r.id, bookabilityOf(env, r));
+  for (const r of supplierCache.rows) m.set(r.id, bookabilityOf(env, r));
   return m;
 }

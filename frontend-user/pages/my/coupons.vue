@@ -1,175 +1,81 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useAuthStore } from '~/stores/auth'
-import { useApiUrl } from '~/composables/useApi'
+/**
+ * Coupons (design system "Horizon"). Shows only coupons the user actually claimed (GET /user/coupons) and
+ * promotions that are live and not yet claimed. Claiming goes through the server, which rejects unknown,
+ * expired or duplicate codes — the page shows that answer verbatim instead of inventing a coupon.
+ */
+import { computed, ref } from 'vue'
+import { apiFetch, formatKrw } from '~/composables/useApi'
 
-const authStore = useAuthStore()
-const couponInput = ref('')
+useHead({ title: '쿠폰' })
+const mine = ref<any[]>([])
+const available = ref<any[]>([])
+const state = ref<'loading' | 'ready' | 'error'>('loading')
+const code = ref('')
+const busy = ref('')
+const msg = ref<{ ok: boolean; text: string } | null>(null)
 
-const defaultCoupons = [
-  {
-    code: 'WELCOME2026',
-    title: '신규 회원 첫 예약 10% 웰컴 특별 할인',
-    discount: '10% OFF',
-    validUntil: '2026.12.31까지',
-    condition: '최대 30,000원 할인 · 최소 주문 금액 50,000원'
-  },
-  {
-    code: 'HOTEL50000',
-    title: '5성급 럭셔리 호텔 ₩50,000 즉시 할인',
-    discount: '₩50,000',
-    validUntil: '2026.12.31까지',
-    condition: '최소 결제 금액 300,000원 이상'
-  },
-  {
-    code: 'FLIGHT20000',
-    title: '전 세계 국제선 항공권 ₩20,000 안심 할인',
-    discount: '₩20,000',
-    validUntil: '2026.12.31까지',
-    condition: '최소 결제 금액 200,000원 이상'
-  },
-  {
-    code: 'GLOBAL10',
-    title: '동적 패키지 / 렌터카 / 공항픽업 10% 메가 할인',
-    discount: '10% OFF',
-    validUntil: '2026.12.31까지',
-    condition: '최대 40,000원 할인 · 최소 주문 금액 80,000원'
-  }
-]
+async function load() {
+  state.value = 'loading'
+  const r = await apiFetch('/user/coupons')
+  if (!r.ok) { state.value = 'error'; return }
+  mine.value = r.data.coupons || []
+  const now = new Date().toISOString()
+  available.value = (r.data.availablePromotions || []).filter((p: any) => (!p.valid_until || p.valid_until > now) && !String(p.title || '').includes('[테스트]'))
+  state.value = 'ready'
+}
+const claimable = computed(() => available.value.filter((p) => !mine.value.some((c) => c.coupon_code === p.code)))
 
-const coupons = ref<any[]>(defaultCoupons)
-
-onMounted(async () => {
-  if (authStore.isLoggedIn && authStore.token) {
-    try {
-      const res = await fetch(useApiUrl('/user/coupons'), {
-        headers: { Authorization: `Bearer ${authStore.token}` }
-      })
-      if (res.ok) {
-        const json = await res.json()
-        if (Array.isArray(json.coupons) && json.coupons.length > 0) {
-          coupons.value = json.coupons.map((c: any) => ({
-            code: c.coupon_code,
-            title: c.title,
-            discount: c.discount_type === 'PERCENTAGE' ? `${c.discount_value}% OFF` : `₩${Number(c.discount_value).toLocaleString()}`,
-            validUntil: `${c.valid_until}까지`,
-            condition: `최대 ${Number(c.max_discount_krw || 50000).toLocaleString()}원 할인 · 최소 주문 ${Number(c.min_order_amount_krw || 50000).toLocaleString()}원`
-          }))
-        }
-      }
-    } catch (e) {}
-  }
-})
-
-const registerCoupon = async () => {
-  const code = couponInput.value.trim().toUpperCase()
-  if (!code) return
-
-  if (authStore.isLoggedIn && authStore.token) {
-    try {
-      const res = await fetch(useApiUrl('/user/coupons/claim'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authStore.token}`
-        },
-        body: JSON.stringify({ code })
-      })
-      if (res.ok) {
-        const json = await res.json()
-        coupons.value.unshift({
-          code,
-          title: json.coupon?.title || '프로모션 전용 특별 할인권',
-          discount: '₩10,000',
-          validUntil: '2026.12.31까지',
-          condition: '전 카테고리 적용 가능'
-        })
-        couponInput.value = ''
-        alert('쿠폰이 성공적으로 등록되었습니다.')
-        return
-      }
-    } catch (e) {}
-  }
-
-  coupons.value.unshift({
-    code,
-    title: '프로모션 전용 특별 할인권',
-    discount: '₩10,000',
-    validUntil: '2026.12.31까지',
-    condition: '전 카테고리 적용 가능'
-  })
-  couponInput.value = ''
-  alert('쿠폰이 성공적으로 등록되었습니다.')
+async function claim(c: string) {
+  const v = c.trim().toUpperCase()
+  if (!v) return
+  busy.value = v; msg.value = null
+  const r = await apiFetch('/user/coupons/claim', { method: 'POST', body: { code: v } })
+  busy.value = ''
+  if (!r.ok) { msg.value = { ok: false, text: r.data.error || '쿠폰을 받지 못했어요.' }; return }
+  msg.value = { ok: true, text: `‘${r.data.coupon?.title || v}’ 쿠폰을 받았어요. 결제할 때 코드 ${v}를 입력하면 적용돼요.` }
+  code.value = ''
+  await load()
+}
+const benefit = (c: any) => (c.discount_type === 'PERCENTAGE' ? `${c.discount_value}% 할인` : `${formatKrw(Number(c.discount_value))} 할인`)
+function conditions(c: any) {
+  return [c.max_discount_krw ? `최대 ${formatKrw(Number(c.max_discount_krw))}` : '', Number(c.min_order_amount_krw) ? `${formatKrw(Number(c.min_order_amount_krw))} 이상 결제 시` : '', c.valid_until ? `${String(c.valid_until).slice(0, 10)}까지` : '기한 없음'].filter(Boolean).join(' · ')
 }
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto px-4 py-8 space-y-6">
-    <!-- 비로그인 차단 게이트웨이 카드 -->
-    <div v-if="!authStore.isLoggedIn || !authStore.user" class="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 text-center space-y-4 shadow-sm">
-      <div class="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto text-3xl shadow-sm">
-        🎟️
-      </div>
-      <h2 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-        로그인이 필요한 서비스입니다
-      </h2>
-      <p class="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
-        회원 전용 할인 쿠폰 및 프로모션 혜택을 확인하시려면 먼저 로그인해주세요.
-      </p>
-      <div class="pt-2">
-        <NuxtLink
-          to="/login"
-          class="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition"
-        >
-          <span>로그인 페이지로 이동</span>
-          <span>→</span>
-        </NuxtLink>
-      </div>
-    </div>
+  <MyShell title="쿠폰" subtitle="받은 쿠폰은 결제 화면에서 코드를 입력하면 적용돼요." @ready="load">
+    <form class="card flex flex-col gap-2 p-4 sm:flex-row" novalidate @submit.prevent="claim(code)">
+      <label class="flex-1"><span class="sr-only">쿠폰 코드</span><input v-model="code" class="w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm uppercase text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus" placeholder="쿠폰 코드 입력" /></label>
+      <button type="submit" class="btn-primary" :disabled="!code.trim() || !!busy">쿠폰 받기</button>
+    </form>
+    <p v-if="msg" :class="['mt-3 rounded-xl px-4 py-2.5 text-sm font-medium', msg.ok ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger']" :role="msg.ok ? 'status' : 'alert'">{{ msg.text }}</p>
 
-    <!-- 로그인 시 표시되는 쿠폰함 -->
-    <div v-else class="space-y-6">
-      <div class="flex items-center gap-3 border-b border-slate-200 pb-4">
-        <NuxtLink to="/my" class="text-xs font-bold text-slate-400 hover:text-slate-600">‹ 마이 콘솔</NuxtLink>
-        <h1 class="text-xl font-black text-slate-900">내 보유 쿠폰함 ({{ coupons.length }}장)</h1>
-      </div>
-
-      <!-- 쿠폰 등록 바 -->
-      <div class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-sm flex items-center gap-3">
-        <input
-          v-model="couponInput"
-          type="text"
-          placeholder="쿠폰 코드를 입력하세요 (예: SPECIAL2026)"
-          class="flex-1 px-4 py-2.5 text-xs font-mono font-bold uppercase border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <button
-          @click="registerCoupon"
-          class="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm transition whitespace-nowrap"
-        >
-          쿠폰 등록
-        </button>
-      </div>
-
-      <!-- 쿠폰 그리드 -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div
-          v-for="c in coupons"
-          :key="c.code"
-          class="bg-white rounded-3xl p-5 border-2 border-dashed border-blue-200 shadow-sm flex items-start justify-between gap-4"
-        >
-          <div class="space-y-1.5">
-            <div class="flex items-center gap-2">
-              <span class="px-2 py-0.5 rounded bg-blue-50 text-blue-600 font-mono font-bold text-xs">{{ c.code }}</span>
-              <span class="text-[11px] text-slate-400">{{ c.validUntil }}</span>
-            </div>
-            <h3 class="text-sm font-black text-slate-900">{{ c.title }}</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">{{ c.condition }}</p>
+    <h2 class="mb-3 mt-8 text-lg font-bold text-ink">내 쿠폰</h2>
+    <ResultsState :state="state" :count="mine.length" icon="gift" empty-title="받은 쿠폰이 없어요" :empty-hint="claimable.length ? '아래에서 지금 받을 수 있는 쿠폰을 확인해 보세요.' : ''" error-title="쿠폰을 불러오지 못했어요" @retry="load">
+      <ul class="grid gap-3 sm:grid-cols-2">
+        <li v-for="c in mine" :key="c.id" class="card flex overflow-hidden">
+          <div class="flex w-28 shrink-0 flex-col items-center justify-center bg-primary-soft px-3 text-center text-primary"><span class="text-lg font-extrabold leading-tight">{{ benefit(c) }}</span></div>
+          <div class="min-w-0 flex-1 p-4">
+            <p class="font-semibold text-ink">{{ c.title }}</p>
+            <p class="mt-1 text-xs text-ink-muted">{{ conditions(c) }}</p>
+            <p class="mt-2 text-xs text-ink-subtle">코드 <b class="tabular text-ink">{{ c.coupon_code }}</b></p>
           </div>
-          <div class="text-right flex-shrink-0">
-            <span class="text-lg font-black text-trip-orange font-mono">{{ c.discount }}</span>
+        </li>
+      </ul>
+    </ResultsState>
+
+    <template v-if="state === 'ready' && claimable.length">
+      <h2 class="mb-3 mt-8 text-lg font-bold text-ink">지금 받을 수 있는 쿠폰</h2>
+      <ul class="grid gap-3 sm:grid-cols-2">
+        <li v-for="p in claimable" :key="p.id" class="card flex items-center gap-4 p-4">
+          <div class="min-w-0 flex-1">
+            <p class="font-semibold text-ink">{{ p.title }}</p>
+            <p class="mt-1 text-xs text-ink-muted">{{ benefit(p) }} · {{ conditions(p) }}</p>
           </div>
-        </div>
-      </div>
-    </div>
-  </div>
+          <button type="button" class="btn-secondary shrink-0" :disabled="busy === p.code" @click="claim(p.code)">받기</button>
+        </li>
+      </ul>
+    </template>
+  </MyShell>
 </template>
