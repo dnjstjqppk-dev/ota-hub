@@ -34,7 +34,7 @@ export interface IngestedDraft {
   created_at?: string;
 }
 
-function validateUrlSafety(inputUrl: string): URL {
+export function validateUrlSafety(inputUrl: string): URL {
   let parsed: URL;
   try {
     parsed = new URL(inputUrl);
@@ -46,18 +46,54 @@ function validateUrlSafety(inputUrl: string): URL {
     throw new HttpError(400, 'DISALLOWED_PROTOCOL', 'HTTP 또는 HTTPS 프로토콜만 수집 가능합니다.');
   }
 
-  const hostname = parsed.hostname.toLowerCase();
-  // SSRF Protection: Block localhost and private/cloud IP ranges
-  if (
+  // WHATWG URL keeps IPv6 brackets in .hostname and callers may add a trailing dot: normalize both.
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  // SSRF Protection: Block localhost and private/cloud IP ranges.
+  // Note: IPv4 written as decimal/octal/hex is normalized to dotted form by the URL parser,
+  // so `10.`-style prefix checks below already cover those spellings.
+  // WHATWG URL may serialize the mapped tail as hex (::ffff:7f00:1) instead of
+  // dotted (::ffff:127.0.0.1): normalize both to a dotted quad for the checks.
+  const unmapV4 = (host: string): string => {
+    const m = host.match(/^::ffff:(.+)$/);
+    if (!m) return host;
+    const tail = m[1];
+    if (tail.includes('.')) return tail;
+    const parts = tail.split(':');
+    if (parts.length !== 2) return host;
+    const nums = parts.map((p) => parseInt(p, 16));
+    if (nums.some((n) => !Number.isInteger(n) || n < 0 || n > 0xffff)) return host;
+    return [(nums[0] >> 8) & 255, nums[0] & 255, (nums[1] >> 8) & 255, nums[1] & 255].join('.');
+  };
+  const v4mapped = unmapV4(hostname);
+  // IPv6-only checks (hostnames like "fcbayern.com" must not trip the fc00::/7 rule).
+  const isV6 = hostname.includes(':');
+  const blocked =
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||
-    hostname === '::1' ||
     hostname === '0.0.0.0' ||
     hostname === '169.254.169.254' ||
     hostname.startsWith('10.') ||
     hostname.startsWith('192.168.') ||
-    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)
-  ) {
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
+    // IPv6 loopback / unspecified / link-local / unique-local / documentation.
+    (isV6 && (
+      hostname === '::1' ||
+      hostname === '::' ||
+      hostname.startsWith('fe80:') ||
+      hostname.startsWith('fc') ||
+      hostname.startsWith('fd') ||
+      hostname.startsWith('2001:db8:')
+    )) ||
+    // IPv4-mapped IPv6 forms of the blocked ranges above.
+    v4mapped !== hostname && (
+      v4mapped === '127.0.0.1' ||
+      v4mapped === '0.0.0.0' ||
+      v4mapped === '169.254.169.254' ||
+      v4mapped.startsWith('10.') ||
+      v4mapped.startsWith('192.168.') ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(v4mapped)
+    );
+  if (blocked) {
     throw new HttpError(403, 'SSRF_BLOCKED', '보안 정책에 따라 내부망 또는 메타데이터 주소 접근이 금지되어 있습니다.');
   }
 
@@ -79,11 +115,15 @@ function extractJsonLd(html: string): any[] {
   const jsonLdBlocks: any[] = [];
   const regex = /<script\s+[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let match;
-  while ((match = regex.exec(html)) !== null) {
+  // Cap blocks and payload: a hostile page must not blow up parse time or memory.
+  let scanned = 0;
+  while ((match = regex.exec(html)) !== null && scanned < 50 && jsonLdBlocks.length < 100) {
+    scanned++;
     try {
-      const parsed = JSON.parse(match[1].trim());
+      const raw = match[1].trim().slice(0, 200_000);
+      const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        jsonLdBlocks.push(...parsed);
+        jsonLdBlocks.push(...parsed.slice(0, 100));
       } else {
         jsonLdBlocks.push(parsed);
       }
@@ -94,24 +134,52 @@ function extractJsonLd(html: string): any[] {
   return jsonLdBlocks;
 }
 
-export async function scrapeTravelProductUrl(urlStr: string): Promise<IngestedDraft> {
-  const safeUrl = validateUrlSafety(urlStr);
+/** Keep only web-fetchable image URLs; drop data: blobs and absurd lengths. */
+function cleanImageUrl(raw: string, base: URL): string | null {
+  const s = String(raw || '').trim();
+  if (!s || s.length > 2000 || s.startsWith('data:')) return null;
+  try {
+    const u = new URL(s, base);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
 
+const MAX_SCRAPE_BYTES = 3 * 1024 * 1024;
+const MAX_REDIRECTS = 3;
+
+export async function scrapeTravelProductUrl(urlStr: string): Promise<IngestedDraft> {
+  // Redirects are followed manually so every hop is re-validated: an external page
+  // must never bounce the fetcher onto an internal address.
+  let safeUrl = validateUrlSafety(urlStr);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 7000);
 
   let response: Response;
   try {
-    response = await fetch(safeUrl.toString(), {
-      headers: {
-        'User-Agent': 'getfortrip-bot/1.0 (+https://getfortrip.com/bot; travel metadata parser; compliant with robots.txt)',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
-      },
-      signal: controller.signal
-    });
+    for (let hop = 0; ; hop++) {
+      response = await fetch(safeUrl.toString(), {
+        headers: {
+          'User-Agent': 'getfortrip-bot/1.0 (+https://getfortrip.com/bot; travel metadata parser; compliant with robots.txt)',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
+        },
+        signal: controller.signal,
+        redirect: 'manual'
+      });
+      if (![301, 302, 303, 307, 308].includes(response.status)) break;
+      if (hop >= MAX_REDIRECTS) {
+        throw new HttpError(502, 'TOO_MANY_REDIRECTS', '리다이렉트가 너무 많습니다 (최대 3회).');
+      }
+      const next = response.headers.get('location');
+      if (!next) break;
+      safeUrl = validateUrlSafety(new URL(next, safeUrl.toString()).toString());
+    }
   } catch (err: any) {
     clearTimeout(timeoutId);
+    if (err instanceof HttpError) throw err;
     if (err.name === 'AbortError') {
       throw new HttpError(504, 'SCRAPE_TIMEOUT', '해당 URL 서버 응답 시간이 초과되었습니다 (7초).');
     }
@@ -120,41 +188,47 @@ export async function scrapeTravelProductUrl(urlStr: string): Promise<IngestedDr
     clearTimeout(timeoutId);
   }
 
-  if (!response.ok) {
+  if (!response!.ok) {
     throw new HttpError(
-      response.status === 404 ? 404 : 502,
+      response!.status === 404 ? 404 : 502,
       'TARGET_ERROR',
-      `대상 사이트 응답 오류 (HTTP ${response.status})`
+      `대상 사이트 응답 오류 (HTTP ${response!.status})`
     );
   }
 
-  const html = await response.text();
+  const contentType = response!.headers.get('content-type') || '';
+  if (contentType && !/(text\/html|application\/(xhtml\+xml|xml|ld\+json|json))/.test(contentType)) {
+    throw new HttpError(415, 'NOT_HTML', 'HTML 문서가 아닌 URL은 수집할 수 없습니다.');
+  }
+  const declared = Number(response!.headers.get('content-length') || 0);
+  if (declared > MAX_SCRAPE_BYTES) {
+    throw new HttpError(502, 'PAGE_TOO_LARGE', '대상 페이지가 너무 큽니다 (최대 3MB).');
+  }
+
+  const html = (await response!.text()).slice(0, MAX_SCRAPE_BYTES);
 
   // 1. Title Extraction
   let title = extractMetaTag(html, 'og:title') || extractMetaTag(html, 'twitter:title');
   if (!title) {
     const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-    title = titleMatch ? titleMatch[1].trim() : '수집된 여행 상품';
+    title = titleMatch ? titleMatch[1].trim() : '';
   }
 
   // 2. Description / Summary
-  const description = extractMetaTag(html, 'og:description') || extractMetaTag(html, 'description') || '';
+  const description = (extractMetaTag(html, 'og:description') || extractMetaTag(html, 'description') || '').slice(0, 2000);
   const summary = description.slice(0, 150);
 
   // 3. Images
   const image_urls: string[] = [];
   const ogImage = extractMetaTag(html, 'og:image');
   if (ogImage) {
-    try {
-      image_urls.push(new URL(ogImage, safeUrl).toString());
-    } catch {
-      image_urls.push(ogImage);
-    }
+    const cleaned = cleanImageUrl(ogImage, safeUrl);
+    if (cleaned) image_urls.push(cleaned);
   }
 
   // 4. Schema.org JSON-LD parsing
   const jsonLds = extractJsonLd(html);
-  let price_minor = 0;
+  let sourcePrice = 0;
   let currency = 'KRW';
   let address = '';
   let country = '';
@@ -170,14 +244,14 @@ export async function scrapeTravelProductUrl(urlStr: string): Promise<IngestedDr
       if (item.image) {
         const imgs = Array.isArray(item.image) ? item.image : [item.image];
         imgs.forEach((img: any) => {
-          const imgUrl = typeof img === 'string' ? img : img?.url;
-          if (imgUrl && !image_urls.includes(imgUrl)) image_urls.push(imgUrl);
+          const cleaned = cleanImageUrl(typeof img === 'string' ? img : img?.url, safeUrl);
+          if (cleaned && !image_urls.includes(cleaned)) image_urls.push(cleaned);
         });
       }
       if (item.offers) {
         const offer = Array.isArray(item.offers) ? item.offers[0] : item.offers;
         if (offer) {
-          if (offer.price) price_minor = Math.round(Number(offer.price));
+          if (offer.price) sourcePrice = Number(offer.price);
           if (offer.priceCurrency) currency = String(offer.priceCurrency).toUpperCase();
         }
       }
@@ -193,22 +267,17 @@ export async function scrapeTravelProductUrl(urlStr: string): Promise<IngestedDr
     }
   }
 
-  // Fallback heuristic: price meta tags
+  // Fallback: price meta tags
   const ogPrice = extractMetaTag(html, 'og:price:amount') || extractMetaTag(html, 'product:price:amount');
   const ogCurr = extractMetaTag(html, 'og:price:currency') || extractMetaTag(html, 'product:price:currency');
-  if (ogPrice && !price_minor) {
-    price_minor = Math.round(Number(ogPrice));
-  }
-  if (ogCurr) {
-    currency = ogCurr.toUpperCase();
-  }
+  if (ogPrice && !sourcePrice) sourcePrice = Number(ogPrice);
+  if (ogCurr) currency = ogCurr.toUpperCase();
 
-  // If still zero price, provide a reasonable draft floor price
-  if (price_minor <= 0) {
-    price_minor = 35000;
-  }
+  // Only a KRW price can go straight into the catalogue (whole won). A foreign-currency price is kept in
+  // raw_html_meta for the reviewer and the draft price stays 0 until a KRW price is entered by hand.
+  const price_minor = currency === 'KRW' && Number.isFinite(sourcePrice) && sourcePrice > 0 ? Math.round(sourcePrice) : 0;
 
-  // Auto-detect domain type based on keywords
+  // Domain is only a suggestion from keywords; the reviewer confirms it before publishing.
   const fullText = (title + ' ' + description).toLowerCase();
   let domain_type: IngestedDraft['domain_type'] = 'ACTIVITY';
   if (fullText.includes('호텔') || fullText.includes('리조트') || fullText.includes('hotel') || fullText.includes('resort')) {
@@ -223,37 +292,40 @@ export async function scrapeTravelProductUrl(urlStr: string): Promise<IngestedDr
     domain_type = 'TICKET';
   }
 
-  const options = [
-    { name: '기본 일반 이용권 (Standard)', price_minor: price_minor, max_pax: 10 },
-    { name: '패스트트랙 / VIP 옵션 (Premium)', price_minor: Math.round(price_minor * 1.35), max_pax: 5 }
-  ];
-
+  // Everything below is what the page actually states. Unknown facts stay empty — never invented —
+  // and publishIngestedProduct() refuses a draft until a reviewer fills the required ones.
   return {
     id: newId('ing'),
     source_url: safeUrl.toString(),
     domain_type,
     title: title.slice(0, 180),
-    summary: summary || `${title} 상품 안내 및 예약 정보`,
-    description: description || `${title}의 상세 일정 및 예약 조건입니다.`,
+    summary,
+    description,
     image_urls: image_urls.slice(0, 5),
-    currency,
+    currency: 'KRW',
     price_minor,
-    original_price_minor: Math.round(price_minor * 1.2),
-    options,
-    country: country || '대한민국',
-    city: city || '서울',
-    address: address || '상세 주소 확인 필요',
+    original_price_minor: null,
+    options: [],
+    country,
+    city,
+    address,
     latitude,
     longitude,
-    duration_mins: 120,
-    inclusions: ['공식 입장/이용권', '예약 확정 모바일 바우처'],
-    exclusions: ['개인 경비', '여행자보험'],
-    terms: ['예약 당일 모바일 바우처 제시 후 이용', '지정된 시간 미준수 시 노쇼(No-show) 처리'],
-    cancellation_policy: '이용일 3일 전까지 100% 무료 취소, 2일 전 50% 환불, 당일 취소 불가',
+    duration_mins: null,
+    inclusions: [],
+    exclusions: [],
+    terms: [],
+    cancellation_policy: '',
     supplier_name: supplier_name.slice(0, 80),
-    supplier_sku: `SKU-${Date.now().toString().slice(-6)}`,
+    supplier_sku: '',
     status: 'DRAFT',
-    raw_html_meta: { ogImage, jsonLdCount: jsonLds.length, scrapedAt: new Date().toISOString() }
+    raw_html_meta: {
+      ogImage,
+      jsonLdCount: jsonLds.length,
+      sourcePrice: Number.isFinite(sourcePrice) && sourcePrice > 0 ? sourcePrice : null,
+      sourceCurrency: currency,
+      scrapedAt: new Date().toISOString()
+    }
   };
 }
 
@@ -315,6 +387,20 @@ export async function saveIngestedDraft(env: Env, draft: IngestedDraft, createdB
   return draft;
 }
 
+/** Fields a reviewer must confirm before a scraped draft can become a sellable catalogue row. */
+export function missingForPublish(row: any): string[] {
+  const missing: string[] = [];
+  if (!String(row.title || '').trim()) missing.push('title');
+  if (!(Number(row.price_minor) > 0) || String(row.currency || 'KRW') !== 'KRW') missing.push('price_minor');
+  if (!String(row.city || '').trim()) missing.push('city');
+  if (!String(row.country || '').trim()) missing.push('country');
+  if (!String(row.cancellation_policy || '').trim()) missing.push('cancellation_policy');
+  if (row.domain_type === 'HOTEL' && !String(row.address || '').trim()) missing.push('address');
+  return missing;
+}
+
+export const PUBLISHABLE_DOMAINS = ['ACTIVITY', 'TICKET', 'HOTEL'] as const;
+
 export async function publishIngestedProduct(
   env: Env,
   ingestId: string,
@@ -327,123 +413,65 @@ export async function publishIngestedProduct(
   if (!row) {
     throw new HttpError(404, 'INGEST_NOT_FOUND', '해당 수집 상품 내역을 찾을 수 없습니다.');
   }
-
+  if (row.status === 'PUBLISHED' || row.published_item_id) {
+    throw new HttpError(409, 'ALREADY_PUBLISHED', `이미 카탈로그에 등록된 상품입니다 (${row.published_item_id}).`);
+  }
+  if (row.status === 'REJECTED') {
+    throw new HttpError(409, 'DRAFT_REJECTED', '반려된 수집 상품은 등록할 수 없습니다.');
+  }
   const domainType = row.domain_type;
+  if (!(PUBLISHABLE_DOMAINS as readonly string[]).includes(domainType)) {
+    throw new HttpError(422, 'UNSUPPORTED_DOMAIN', '자동 등록은 투어·티켓·호텔만 지원합니다. 다른 상품군은 파트너 콘솔에서 등록해 주세요.');
+  }
+  const missing = missingForPublish(row);
+  if (missing.length) {
+    throw new HttpError(422, 'INCOMPLETE_DRAFT', '등록 전에 필수 정보를 확인해 주세요.', { missing });
+  }
+
   const now = new Date().toISOString();
+  const images: string[] = JSON.parse(row.image_urls || '[]');
+  const thumbnail = images[0] || null;
+  const description = row.description || row.summary || null;
   let newItemId = '';
 
-  if (domainType === 'ACTIVITY' || domainType === 'TICKET') {
-    newItemId = newId('act');
-    const images = JSON.parse(row.image_urls || '[]');
-    const primaryImg = images[0] || 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=800&q=80';
-    
-    await env.DB.prepare(`
-      INSERT INTO activities (
-        id, partner_id, title, category, city, country,
-        price_krw, review_score, review_count, instant_confirmation,
-        free_cancellation, duration_type, guide_language, voucher_type,
-        thumbnail_url, description, packages_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      newItemId,
-      'ptn_tour_01',
-      row.title,
-      'TOUR_PASS',
-      row.city || '서울',
-      row.country || '대한민국',
-      Number(row.price_minor || 35000),
-      4.9,
-      120,
-      1,
-      1,
-      'FULL_DAY',
-      'KO',
-      'QR_CODE',
-      primaryImg,
-      row.description || row.summary || row.title,
-      row.options_json || '[]',
-      now
-    ).run();
-
-  } else if (domainType === 'HOTEL') {
+  // Ratings, reviews, amenities, cancellation flags and coordinates are never invented: unknown values
+  // stay NULL/empty and the product starts with no reviews. Free cancellation / instant confirmation stay
+  // off until a supplier contract says otherwise; the reviewed policy text is kept on the ingestion row.
+  if (domainType === 'HOTEL') {
     newItemId = newId('htl');
-    const images = JSON.parse(row.image_urls || '[]');
-    const primaryImg = images[0] || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80';
-
     await env.DB.prepare(`
       INSERT INTO hotels (
         id, partner_id, name_ko, name_en, city, country, address,
         latitude, longitude, star_rating, property_type, review_score, review_count,
-        neighborhood, subway_nearby, free_cancellation, free_breakfast,
-        base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'HOTEL', NULL, 0, 0, 0, ?, ?, ?, '[]', '[]', ?)
     `).bind(
-      newItemId,
-      'ptn_htl_01',
-      row.title,
-      row.title,
-      row.city || '서울',
-      row.country || '대한민국',
-      row.address || '대한민국 서울시 중구',
-      row.latitude || 37.5665,
-      row.longitude || 126.9780,
-      5,
-      'HOTEL',
-      4.8,
-      150,
-      '도심 중심가',
-      '지하철역 도보 5분',
-      1,
-      1,
-      Number(row.price_minor || 150000),
-      primaryImg,
-      row.image_urls || '[]',
-      JSON.stringify(['WiFi', '조식', '피트니스', '수영장']),
-      row.options_json || '[]',
-      now
+      newItemId, 'ptn_htl_01', row.title, row.title, row.city, row.country, row.address,
+      row.latitude ?? null, row.longitude ?? null, Number(row.price_minor), thumbnail, row.image_urls || '[]', now
     ).run();
-
   } else {
-    // Default fallback to activities catalog
     newItemId = newId('act');
-    const images = JSON.parse(row.image_urls || '[]');
-    const primaryImg = images[0] || 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=800&q=80';
-
     await env.DB.prepare(`
       INSERT INTO activities (
-        id, partner_id, title, category, city, country,
-        price_krw, review_score, review_count, instant_confirmation,
-        free_cancellation, duration_type, guide_language, voucher_type,
-        thumbnail_url, description, packages_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, partner_id, title, category, city, country, price_krw, review_score, review_count,
+        instant_confirmation, free_cancellation, thumbnail_url, description, packages_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, 0, 0, ?, ?, '[]', ?)
     `).bind(
-      newItemId,
-      'ptn_tour_01',
-      row.title,
-      'EXPERIENCE',
-      row.city || '서울',
-      row.country || '대한민국',
-      Number(row.price_minor || 35000),
-      4.8,
-      50,
-      1,
-      1,
-      'HALF_DAY',
-      'KO',
-      'QR_CODE',
-      primaryImg,
-      row.description || row.summary || row.title,
-      row.options_json || '[]',
-      now
+      newItemId, 'ptn_tour_01', row.title, domainType === 'TICKET' ? 'TOUR_PASS' : 'EXPERIENCE',
+      row.city, row.country, Number(row.price_minor), thumbnail, description, now
     ).run();
   }
 
-  // Update Ingestion status
-  await env.DB.prepare(`
+  // Conditional on still being unpublished, so two concurrent publishes cannot both claim the draft.
+  const claimed = await env.DB.prepare(`
     UPDATE url_product_ingestions
     SET status = 'PUBLISHED', published_item_id = ?, published_at = ?, updated_at = ?
-    WHERE id = ?
+    WHERE id = ? AND published_item_id IS NULL
   `).bind(newItemId, now, now, ingestId).run();
+  if (!claimed.meta.changes) {
+    await env.DB.prepare(domainType === 'HOTEL' ? 'DELETE FROM hotels WHERE id = ?' : 'DELETE FROM activities WHERE id = ?').bind(newItemId).run();
+    throw new HttpError(409, 'ALREADY_PUBLISHED', '다른 요청이 먼저 이 상품을 등록했습니다.');
+  }
 
   await audit(env, adminId, 'PUBLISH_INGESTED_PRODUCT', 'CATALOG', newItemId, {
     ingest_id: ingestId,
@@ -451,10 +479,5 @@ export async function publishIngestedProduct(
     published_item_id: newItemId
   });
 
-  return {
-    success: true,
-    published_item_id: newItemId,
-    domain_type: domainType
-  };
+  return { success: true, published_item_id: newItemId, domain_type: domainType };
 }
-

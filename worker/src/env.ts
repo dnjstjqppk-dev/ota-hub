@@ -18,6 +18,10 @@ export interface Env {
   ALLOW_SIMULATED_SUPPLIERS?: string;
   /** "true" lets development run with a DRAFT business entity. Refused outside development/test. */
   ALLOW_DRAFT_ENTITY?: string;
+  /** Resend API key for transactional email. Unset = emails stay queued, API says NOT_CONFIGURED. */
+  RESEND_API_KEY?: string;
+  /** Verified sender identity, e.g. "getfortrip <noreply@getfortrip.com>". */
+  EMAIL_FROM?: string;
 }
 
 export function isNonProduction(env: Env): boolean {

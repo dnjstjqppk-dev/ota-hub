@@ -20,6 +20,7 @@ import { loadProduct, loadSupplier, bookabilityOf, type SupplierRow } from "./ca
 import { adapterFor, type Simulation, type SupplierContext } from "../suppliers/adapter.ts";
 import { getPaymentProvider, requirePaymentProvider } from "../payments/provider.ts";
 import { createOrderSettlement } from "./marketplace-service.ts";
+import { flushOutbox } from "./email-service.ts";
 
 const QUOTE_TTL_MS = 15 * 60_000;
 const PAYMENT_WINDOW_MS = 15 * 60_000;
@@ -640,7 +641,7 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
   const supplier = await loadSupplier(env, b.supplier_id);
   const split = L.recognitionSplit(b.paid_minor, Math.round(Number(b.discount_amount_krw || 0)), supplier?.settlement_rate_bps ?? 9000);
   const notify = (template: string) =>
-    db.prepare("INSERT INTO notification_outbox (id, channel, recipient, template, payload_json, status) VALUES (?, 'EMAIL', ?, ?, ?, 'BLOCKED_NO_PROVIDER')")
+    db.prepare("INSERT INTO notification_outbox (id, channel, recipient, template, payload_json, status) VALUES (?, 'EMAIL', ?, ?, ?, 'PENDING')")
       .bind(newId("ntf"), b.customer_email, template, JSON.stringify({ bookingId: b.id, bookingNumber: b.booking_number }));
 
   if (b.domain_type === "FLIGHT") {
@@ -830,8 +831,44 @@ export async function expireBooking(env: Env, b: BookingRow, reason: string): Pr
   }
 }
 
+/**
+ * Resolve one UNKNOWN payment by asking the PG for the truth, then apply the
+ * same capture/fail transitions the confirm flow would have used. Shared by the
+ * maintenance cron and the PG webhook: both are just triggers for a lookup.
+ * Only UNKNOWN payments on MANUAL_REVIEW_REQUIRED bookings move; everything
+ * else is left for its owning flow (single-writer invariant for money state).
+ */
+export async function reconcilePaymentByLookup(env: Env, paymentId: string): Promise<"RECONCILED" | "SKIPPED"> {
+  const provider = getPaymentProvider(env);
+  if (!provider) return "SKIPPED";
+  const p = await env.DB.prepare("SELECT * FROM payments WHERE id = ?").bind(paymentId).first<any>();
+  if (!p || p.status !== "UNKNOWN" || p.provider !== provider.name) return "SKIPPED";
+  const r = await provider.lookup({ orderId: p.booking_id, paymentKey: p.provider_payment_key, amountMinor: p.amount_minor });
+  const b = await mustGet(env, p.booking_id);
+  if (b.status !== "MANUAL_REVIEW_REQUIRED") return "SKIPPED";
+  if (r.outcome === "CAPTURED" && r.amountMinor === p.amount_minor) {
+    await runBatch(env.DB, [
+      ...transition(env.DB, b, "PAYMENT_AUTHORIZED", { type: "PAYMENT_PROVIDER", id: provider.name }, "RECONCILED_CAPTURED", { payment_status: "CAPTURED", paid_minor: r.amountMinor }),
+      env.DB.prepare("UPDATE payments SET status = 'CAPTURED', provider_payment_key = ?, method = ?, approved_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(r.paymentKey, r.method, r.approvedAt, p.id),
+      env.DB.prepare("UPDATE inventory_holds SET status = 'COMMITTED' WHERE booking_id = ? AND status = 'HELD'").bind(b.id),
+      ...journalStmts(env.DB, L.paymentCaptured(p.id, r.amountMinor), b),
+    ]);
+    await fulfil(env, await mustGet(env, b.id));
+    return "RECONCILED";
+  }
+  if (r.outcome === "NOT_CAPTURED") {
+    await runBatch(env.DB, [
+      ...transition(env.DB, b, "FAILED", { type: "PAYMENT_PROVIDER", id: provider.name }, "RECONCILED_NOT_CAPTURED", { payment_status: "FAILED" }),
+      env.DB.prepare("UPDATE payments SET status = 'FAILED', failure_code = 'NOT_CAPTURED', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(p.id),
+      env.DB.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+    ]);
+    return "RECONCILED";
+  }
+  return "SKIPPED";
+}
+
 export async function runMaintenance(env: Env): Promise<Record<string, number>> {
-  const stats = { expired: 0, paymentsReconciled: 0, refundsRetried: 0, quotesExpired: 0 };
+  const stats = { expired: 0, paymentsReconciled: 0, refundsRetried: 0, quotesExpired: 0, emailsSent: 0, emailsPending: 0, rowsPruned: 0 };
   const now = nowIso();
   const stale = await env.DB.prepare("SELECT * FROM bookings WHERE status = 'AWAITING_PAYMENT' AND inventory_lock_expires_at <= ? LIMIT 100").bind(now).all<BookingRow>();
   for (const b of stale.results || []) {
@@ -842,48 +879,38 @@ export async function runMaintenance(env: Env): Promise<Record<string, number>> 
   stats.quotesExpired = q.meta.changes || 0;
 
   // Payments whose outcome was unknown: ask the PG what really happened.
-  const provider = getPaymentProvider(env);
-  if (provider) {
-    const unknown = await env.DB.prepare("SELECT p.*, b.status AS booking_status FROM payments p JOIN bookings b ON b.id = p.booking_id WHERE p.status = 'UNKNOWN' AND p.provider = ? LIMIT 50")
-      .bind(provider.name).all<any>();
-    for (const p of unknown.results || []) {
-      const r = await provider.lookup({ orderId: p.booking_id, paymentKey: p.provider_payment_key, amountMinor: p.amount_minor });
-      const b = await mustGet(env, p.booking_id);
-      if (b.status !== "MANUAL_REVIEW_REQUIRED") continue;
-      if (r.outcome === "CAPTURED" && r.amountMinor === p.amount_minor) {
-        await runBatch(env.DB, [
-          ...transition(env.DB, b, "PAYMENT_AUTHORIZED", { type: "PAYMENT_PROVIDER", id: provider.name }, "RECONCILED_CAPTURED", { payment_status: "CAPTURED", paid_minor: r.amountMinor }),
-          env.DB.prepare("UPDATE payments SET status = 'CAPTURED', provider_payment_key = ?, method = ?, approved_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(r.paymentKey, r.method, r.approvedAt, p.id),
-          env.DB.prepare("UPDATE inventory_holds SET status = 'COMMITTED' WHERE booking_id = ? AND status = 'HELD'").bind(b.id),
-          ...journalStmts(env.DB, L.paymentCaptured(p.id, r.amountMinor), b),
-        ]);
-        await fulfil(env, await mustGet(env, b.id));
-        stats.paymentsReconciled++;
-      } else if (r.outcome === "NOT_CAPTURED") {
-        await runBatch(env.DB, [
-          ...transition(env.DB, b, "FAILED", { type: "PAYMENT_PROVIDER", id: provider.name }, "RECONCILED_NOT_CAPTURED", { payment_status: "FAILED" }),
-          env.DB.prepare("UPDATE payments SET status = 'FAILED', failure_code = 'NOT_CAPTURED', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(p.id),
-          env.DB.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
-        ]);
-        stats.paymentsReconciled++;
-      }
-    }
+  const unknown = await env.DB.prepare("SELECT p.id FROM payments p JOIN bookings b ON b.id = p.booking_id WHERE p.status = 'UNKNOWN' LIMIT 50").all<{ id: string }>();
+  for (const p of unknown.results || []) {
+    if ((await reconcilePaymentByLookup(env, p.id)) === "RECONCILED") stats.paymentsReconciled++;
   }
   const pending = await env.DB.prepare("SELECT id FROM refunds WHERE status = 'PENDING' AND attempts < ? LIMIT 50").bind(MAX_REFUND_ATTEMPTS).all<{ id: string }>();
   for (const r of pending.results || []) {
     await processRefund(env, r.id);
     stats.refundsRetried++;
   }
+  const mail = await flushOutbox(env);
+  stats.emailsSent = mail.sent;
+  stats.emailsPending = mail.pending;
+  // Ephemeral rows must not grow forever: rate-limit buckets older than any window,
+  // spent txn-guard rows, and dead password-reset tokens.
+  const epoch = Math.floor(Date.now() / 1000);
+  const pruned = await env.DB.batch([
+    env.DB.prepare("DELETE FROM login_attempts WHERE attempted_at < ?").bind(epoch - 86400),
+    env.DB.prepare("DELETE FROM txn_guards WHERE id < (SELECT COALESCE(MAX(id), 0) - 5000 FROM txn_guards)"),
+    env.DB.prepare("DELETE FROM password_reset_tokens WHERE used = 1 OR expires_at < ?").bind(epoch),
+  ]);
+  stats.rowsPruned = pruned.reduce((n, r) => n + (r.meta.changes || 0), 0);
   return stats;
 }
 
 // ---------------------------------------------------------------------------
 // 8. Operator actions (admin OMS)
 // ---------------------------------------------------------------------------
-export async function adminSupplierDecision(env: Env, admin: AuthUser, bookingId: string, body: any) {
+export async function adminSupplierDecision(env: Env, decider: AuthUser, bookingId: string, body: any) {
   const b = await mustGet(env, bookingId);
   const decision = str(body.decision, 20).toUpperCase();
-  const actor: Actor = { type: "ADMIN", id: admin.id };
+  // Operators act as ADMIN; partners deciding their own orders act as the SUPPLIER of record.
+  const actor: Actor = decider.role === "PARTNER" ? { type: "SUPPLIER", id: decider.id } : { type: "ADMIN", id: decider.id };
   const note = str(body.note, 300) || null;
   const db = env.DB;
   if (decision === "CONFIRM") {

@@ -1,0 +1,27 @@
+{
+  "nav": {
+    "hotels": "酒店",
+    "flights": "机票",
+    "trains": "火车票",
+    "cars": "租车",
+    "transfers": "接送机",
+    "activities": "门票·玩乐",
+    "packages": "机+酒套餐",
+    "esim": "eSIM",
+    "insurance": "旅游保险",
+    "best": "榜单",
+    "moments": "旅拍",
+    "deals": "特惠",
+    "partnerCenter": "商家中心",
+    "myBookings": "我的订单",
+    "wishlist": "心愿单",
+    "login": "登录"
+  },
+  "common": {
+    "search": "搜索",
+    "bookNow": "立即预订",
+    "loading": "加载中…",
+    "retry": "重试",
+    "close": "关闭"
+  }
+}

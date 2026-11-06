@@ -20,7 +20,7 @@ import { BRAND } from '~/config/brand'
       <!-- 1. 호텔 -->
       <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
         <h2 class="text-base font-black text-slate-900 flex items-center gap-2">
-          <span>🏨</span>
+          <AppIcon name="hotel" :size="18" class="text-primary" />
           <span>호텔 및 숙소 취소 규정</span>
         </h2>
         <div class="text-xs text-slate-600 leading-relaxed space-y-2">

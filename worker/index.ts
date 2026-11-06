@@ -13,6 +13,7 @@ import { SECURITY_HEADERS, errorResponse, json, preflight, withCors } from "./sr
 import { getPaymentProvider } from "./src/payments/provider.ts";
 import { handleAuth } from "./src/routes/auth.ts";
 import { handleBookings } from "./src/routes/bookings.ts";
+import { handleWebhooks } from "./src/routes/webhooks.ts";
 import { handleCatalog } from "./src/routes/catalog.ts";
 import { handleUser } from "./src/routes/user.ts";
 import { handleAdmin } from "./src/routes/admin.ts";
@@ -43,7 +44,7 @@ async function health(env: Env): Promise<Response> {
       piiEncryptionKey: Boolean(env.PII_ENC_KEY),
       paymentProvider: pay ? `${pay.name}:${pay.mode}` : "DISABLED",
       sellerEntityActive: Boolean(entity),
-      emailProvider: "NOT_CONFIGURED",
+      emailProvider: (env.RESEND_API_KEY || "").trim() ? "RESEND" : "NOT_CONFIGURED",
     },
     time: new Date().toISOString(),
   }, db && jwt ? 200 : 503);
@@ -52,7 +53,7 @@ async function health(env: Env): Promise<Response> {
 async function route(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
   if (path === "/api/v1/health") return health(env);
-  for (const h of [handleAuth, handleBookings, handleFeatureFlags, handleUrlIngest, handleMarketplace, handleAdmin, handlePartner, handleUser, handleAffiliate, handleCatalog]) {
+  for (const h of [handleAuth, handleBookings, handleWebhooks, handleFeatureFlags, handleUrlIngest, handleMarketplace, handleAdmin, handlePartner, handleUser, handleAffiliate, handleCatalog]) {
     const r = await h(request, env, url);
     if (r) return r;
   }

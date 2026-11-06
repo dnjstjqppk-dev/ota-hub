@@ -12,6 +12,7 @@ import UsersView from '../views/UsersView.vue'
 import LoginView from '../views/LoginView.vue'
 import FeatureFlagsView from '../views/FeatureFlagsView.vue'
 import UrlIngestionView from '../views/UrlIngestionView.vue'
+import SuppliersView from '../views/SuppliersView.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -40,6 +41,12 @@ const routes: RouteRecordRaw[] = [
     path: '/catalog',
     name: 'Catalog',
     component: CatalogView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/suppliers',
+    name: 'Suppliers',
+    component: SuppliersView,
     meta: { requiresAuth: true }
   },
   {

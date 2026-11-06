@@ -1,359 +1,174 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { apiUrl } from '../config/api'
+/**
+ * Partner onboarding and status (GET /admin/partners ?q ?status, PATCH /admin/partners/:id).
+ * Reject/suspend require a reason (server-enforced); commission is 0–50% in basis points.
+ */
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { api, toast } from '../composables/session'
+import { useResource } from '../composables/useResource'
+import { PARTNER_STATUS, dateTime, partnerStatus } from '../composables/format'
+import PageHeader from '../components/PageHeader.vue'
+import StatePanel from '../components/StatePanel.vue'
+import StatusBadge from '../components/StatusBadge.vue'
+import SidePanel from '../components/SidePanel.vue'
+import EntitySearch from '../components/EntitySearch.vue'
 
-interface PartnerRow {
-  id: string
-  company_name: string
-  email: string
-  partner_type: string
-  business_number: string
-  contact_phone: string
-  is_active: number
-  profile_status: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED' | 'SUSPENDED'
-  settlement_rate_bps: number
-  representative_name: string
-  bank_name: string
-  bank_account_number: string
-  bank_account_holder: string
-  created_at: string
+const route = useRoute()
+const router = useRouter()
+const qv = (k: string) => (typeof route.query[k] === 'string' ? (route.query[k] as string) : '')
+function patch(change: Record<string, string>) {
+  const next: Record<string, string> = {}
+  for (const [k, v] of Object.entries({ ...route.query, ...change })) if (typeof v === 'string' && v) next[k] = v
+  router.replace({ query: next })
 }
+const q = computed(() => qv('q'))
+const status = computed(() => qv('status'))
+const draft = ref(q.value)
+watch(q, (v) => { draft.value = v })
 
-const partners = ref<PartnerRow[]>([])
-const loading = ref(false)
-const filterStatus = ref<string>('ALL')
-const searchQuery = ref<string>('')
-const selectedPartner = ref<PartnerRow | null>(null)
-const isModalOpen = ref(false)
-const actionType = ref<'APPROVE' | 'REJECT' | 'SUSPEND' | 'EDIT_RATE'>('APPROVE')
-const actionReason = ref('')
-const newRateBps = ref(1000)
-const actionLoading = ref(false)
+const list = useResource(async () => {
+  const p = new URLSearchParams()
+  if (q.value) p.set('q', q.value)
+  if (status.value) p.set('status', status.value)
+  return (await api(`/admin/partners?${p}`)).partners || []
+}, [] as any[])
+watch([q, status], () => list.reload())
+onMounted(list.reload)
+const suggest = async (term: string, signal: AbortSignal) => (await api(`/admin/partners?q=${encodeURIComponent(term)}&limit=8`, { signal })).partners || []
 
-const filteredPartners = computed(() => {
-  return partners.value.filter(p => {
-    const matchStatus = filterStatus.value === 'ALL' || p.profile_status === filterStatus.value
-    const matchQuery = !searchQuery.value ||
-      p.company_name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      p.email.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      p.business_number.includes(searchQuery.value)
-    return matchStatus && matchQuery
-  })
+const TYPE: Record<string, string> = { HOTEL: '숙박', FLIGHT: '항공', CAR: '렌터카', TRANSFER: '공항 이동', ACTIVITY: '투어·티켓', TOUR: '투어·티켓', PACKAGE: '패키지' }
+const mask = (s: string | null) => (s ? `${'•'.repeat(Math.max(0, s.length - 4))}${s.slice(-4)}` : '—')
+
+const selected = ref<any | null>(null)
+const form = reactive({ action: '' as '' | 'ACTIVE' | 'REJECTED' | 'SUSPENDED', reason: '', ratePct: '' })
+const busy = ref(false)
+function open(p: any) { selected.value = p; Object.assign(form, { action: '', reason: '', ratePct: String(Number(p.settlement_rate_bps) / 100) }) }
+
+const rateBps = computed(() => Math.round(Number(form.ratePct) * 100))
+const rateError = computed(() => {
+  if (form.ratePct.trim() === '') return '수수료율을 입력해 주세요.'
+  const v = Number(form.ratePct)
+  if (!Number.isFinite(v) || v < 0 || v > 50) return '0–50% 사이로 입력해 주세요.'
+  if (Math.abs(v * 100 - Math.round(v * 100)) > 1e-9) return '소수점 둘째 자리까지 입력할 수 있어요.'
+  return ''
 })
+const rateChanged = computed(() => !!selected.value && !rateError.value && rateBps.value !== Number(selected.value.settlement_rate_bps))
 
-const fetchPartners = async () => {
-  loading.value = true
+async function apply(body: Record<string, unknown>, done: string) {
+  busy.value = true
   try {
-    const token = localStorage.getItem('getfortrip_admin_token')
-    const res = await fetch(apiUrl('/admin/partners'), {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    if (res.ok) {
-      const json = await res.json()
-      partners.value = json.partners || []
-    }
-  } catch (e) {
-    console.error('Failed to load partners', e)
-  } finally {
-    loading.value = false
-  }
+    await api(`/admin/partners/${encodeURIComponent(selected.value.id)}`, { method: 'PATCH', json: body })
+    toast(done)
+    await list.reload()
+    selected.value = list.data.value.find((p: any) => p.id === selected.value.id) || null
+    if (selected.value) open(selected.value)
+  } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
 }
-
-const openActionModal = (p: PartnerRow, type: 'APPROVE' | 'REJECT' | 'SUSPEND' | 'EDIT_RATE') => {
-  selectedPartner.value = p
-  actionType.value = type
-  actionReason.value = ''
-  newRateBps.value = p.settlement_rate_bps || 1000
-  isModalOpen.value = true
+function submitStatus() {
+  if (form.action !== 'ACTIVE' && !form.reason.trim()) { toast('사유를 입력해 주세요.', 'danger'); return }
+  const label = { ACTIVE: '승인', REJECTED: '반려', SUSPENDED: '정지' }[form.action as 'ACTIVE']
+  apply({ status: form.action, reason: form.reason.trim() || undefined }, `파트너를 ${label}했어요.`)
 }
-
-const handleConfirmAction = async () => {
-  if (!selectedPartner.value) return
-  actionLoading.value = true
-  try {
-    const token = localStorage.getItem('getfortrip_admin_token')
-    let body: any = {}
-    if (actionType.value === 'APPROVE') {
-      body = { status: 'ACTIVE', settlementRateBps: newRateBps.value }
-    } else if (actionType.value === 'REJECT') {
-      body = { status: 'REJECTED', reason: actionReason.value || '사업자 인증 요건 미충족' }
-    } else if (actionType.value === 'SUSPEND') {
-      body = { status: 'SUSPENDED', reason: actionReason.value || '운영 정책 위반' }
-    } else if (actionType.value === 'EDIT_RATE') {
-      body = { settlementRateBps: newRateBps.value }
-    }
-
-    const res = await fetch(apiUrl(`/admin/partners/${selectedPartner.value.id}`), {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(body)
-    })
-    if (res.ok) {
-      isModalOpen.value = false
-      await fetchPartners()
-    } else {
-      const err = await res.json()
-      alert(err.error || '처리에 실패했습니다.')
-    }
-  } catch (e: any) {
-    alert(e.message || '오류가 발생했습니다.')
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-onMounted(() => {
-  fetchPartners()
-})
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
-          <span>파트너 / 공급사 입점 관리</span>
-          <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-            {{ partners.length }}개사 등록
-          </span>
-        </h1>
-        <p class="text-sm text-slate-500 font-medium mt-1">
-          글로벌 호텔, 렌터카, 투어 공급사의 입점 신청 승인, 수수료율 설정 및 정산 계좌를 관리합니다.
-        </p>
-      </div>
-      <div class="flex items-center gap-2">
-        <button
-          @click="fetchPartners"
-          class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
+  <div>
+    <PageHeader title="파트너" description="입점 신청을 승인·반려하고, 운영 중인 파트너의 상태와 수수료율을 관리해요." />
+
+    <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
+      <div class="lg:w-96">
+        <EntitySearch
+          v-model="draft"
+          label="파트너 검색"
+          input-id="partner-search"
+          placeholder="회사명, 이메일, 사업자등록번호"
+          :fetcher="suggest"
+          :item-key="(x: any) => x.id"
+          @select="open"
+          @submit="(t: string) => patch({ q: t })"
         >
-          <span>🔄</span>
-          <span>새로고침</span>
-        </button>
+          <template #item="{ item }">
+            <div class="flex items-center gap-2">
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium text-ink">{{ item.company_name }}</p>
+                <p class="truncate text-2xs text-ink-subtle">{{ item.email }} · {{ item.business_number || '사업자번호 없음' }}</p>
+              </div>
+              <StatusBadge v-bind="partnerStatus(item.profile_status)" />
+            </div>
+          </template>
+        </EntitySearch>
+      </div>
+      <div class="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:mx-0 lg:flex-wrap lg:px-0 [&::-webkit-scrollbar]:hidden" role="group" aria-label="상태 필터">
+        <button type="button" class="chip" :aria-pressed="!status" @click="patch({ status: '' })">전체</button>
+        <button v-for="(v, k) in PARTNER_STATUS" :key="k" type="button" class="chip" :aria-pressed="status === k" @click="patch({ status: k })">{{ v.label }}</button>
       </div>
     </div>
+    <p v-if="q" class="mb-3 text-sm text-ink-muted">‘{{ q }}’ 검색 결과 · <button type="button" class="font-semibold text-primary" @click="patch({ q: '' })">검색 해제</button></p>
 
-    <!-- Filters & Search -->
-    <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between">
-      <!-- Status Tabs -->
-      <div class="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
-        <button
-          v-for="st in [
-            { id: 'ALL', label: '전체 파트너' },
-            { id: 'PENDING_APPROVAL', label: '승인 대기 ⏳' },
-            { id: 'ACTIVE', label: '정상 운영 ✅' },
-            { id: 'SUSPENDED', label: '이용 정지 ⛔' },
-            { id: 'REJECTED', label: '반려됨 ❌' }
-          ]"
-          :key="st.id"
-          @click="filterStatus = st.id"
-          :class="[
-            filterStatus === st.id
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
-            'px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex-shrink-0'
-          ]"
-        >
-          {{ st.label }}
-        </button>
-      </div>
-
-      <!-- Search Input -->
-      <div class="relative w-full md:w-72">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="회사명, 이메일, 사업자번호 검색..."
-          class="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-        />
-        <span class="absolute left-3 top-2.5 text-xs text-slate-400">🔍</span>
-      </div>
-    </div>
-
-    <!-- Table -->
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse text-xs">
-          <thead>
-            <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-              <th class="p-3.5">파트너 ID</th>
-              <th class="p-3.5">회사명 / 대표자</th>
-              <th class="p-3.5">유형</th>
-              <th class="p-3.5">사업자 번호</th>
-              <th class="p-3.5">정산 수수료율</th>
-              <th class="p-3.5">정산 지급 계좌</th>
-              <th class="p-3.5">상태</th>
-              <th class="p-3.5 text-right">관리 작업</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-100 font-medium">
-            <tr v-if="loading">
-              <td colspan="8" class="p-8 text-center text-slate-400 font-bold">
-                파트너 목록을 불러오는 중입니다...
-              </td>
-            </tr>
-            <tr v-else-if="filteredPartners.length === 0">
-              <td colspan="8" class="p-8 text-center text-slate-400 font-bold">
-                조건에 맞는 파트너가 없습니다.
-              </td>
-            </tr>
-            <tr
-              v-else
-              v-for="p in filteredPartners"
-              :key="p.id"
-              class="hover:bg-slate-50/80 transition"
-            >
-              <td class="p-3.5 font-mono text-slate-500">{{ p.id }}</td>
-              <td class="p-3.5">
-                <div class="font-bold text-slate-900">{{ p.company_name }}</div>
-                <div class="text-[11px] text-slate-400">{{ p.email }} · {{ p.representative_name || '-' }}</div>
-              </td>
-              <td class="p-3.5">
-                <span class="px-2 py-0.5 rounded font-black text-[10px] bg-slate-100 text-slate-700">
-                  {{ p.partner_type }}
-                </span>
-              </td>
-              <td class="p-3.5 font-mono">{{ p.business_number }}</td>
-              <td class="p-3.5 font-bold text-blue-600">
-                {{ (p.settlement_rate_bps || 1000) / 100 }}%
-                <button
-                  @click="openActionModal(p, 'EDIT_RATE')"
-                  class="ml-1 text-[10px] text-slate-400 hover:text-blue-600 underline"
-                >
-                  변경
-                </button>
-              </td>
-              <td class="p-3.5">
-                <div class="text-slate-800">{{ p.bank_name || '미등록' }} {{ p.bank_account_number || '' }}</div>
-                <div class="text-[10px] text-slate-400">예금주: {{ p.bank_account_holder || '-' }}</div>
-              </td>
-              <td class="p-3.5">
-                <span
-                  :class="[
-                    p.profile_status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
-                    p.profile_status === 'PENDING_APPROVAL' ? 'bg-amber-100 text-amber-800 border-amber-200 animate-pulse' :
-                    p.profile_status === 'SUSPENDED' ? 'bg-rose-100 text-rose-800 border-rose-200' :
-                    'bg-slate-100 text-slate-600 border-slate-200',
-                    'px-2 py-0.5 text-[11px] font-black rounded-full border'
-                  ]"
-                >
-                  {{
-                    p.profile_status === 'ACTIVE' ? '정상 운영' :
-                    p.profile_status === 'PENDING_APPROVAL' ? '승인 대기' :
-                    p.profile_status === 'SUSPENDED' ? '이용 정지' : '가입 반려'
-                  }}
-                </span>
-              </td>
-              <td class="p-3.5 text-right space-x-1.5">
-                <button
-                  v-if="p.profile_status === 'PENDING_APPROVAL'"
-                  @click="openActionModal(p, 'APPROVE')"
-                  class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] shadow-sm transition"
-                >
-                  승인
-                </button>
-                <button
-                  v-if="p.profile_status === 'PENDING_APPROVAL'"
-                  @click="openActionModal(p, 'REJECT')"
-                  class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-[11px] transition"
-                >
-                  반려
-                </button>
-                <button
-                  v-if="p.profile_status === 'ACTIVE'"
-                  @click="openActionModal(p, 'SUSPEND')"
-                  class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg font-bold text-[11px] transition"
-                >
-                  정지
-                </button>
-                <button
-                  v-if="p.profile_status === 'SUSPENDED'"
-                  @click="openActionModal(p, 'APPROVE')"
-                  class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[11px] shadow-sm transition"
-                >
-                  정지 해제
-                </button>
-              </td>
+    <StatePanel :state="list.state.value" :error="list.error.value" :empty="!list.data.value.length" empty-text="조건에 맞는 파트너가 없어요." @retry="list.reload()">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>파트너</th><th>유형</th><th>사업자등록번호</th><th class="text-right">수수료</th><th>상태</th><th>신청</th></tr></thead>
+          <tbody>
+            <tr v-for="p in list.data.value" :key="p.id" class="row-link" tabindex="0" @click="open(p)" @keydown.enter="open(p)">
+              <td><p class="font-medium">{{ p.company_name }}</p><p class="text-2xs text-ink-subtle">{{ p.email }}</p></td>
+              <td class="text-xs">{{ TYPE[p.partner_type] || p.partner_type }}</td>
+              <td class="text-xs tabular">{{ p.business_number || '—' }}</td>
+              <td class="text-right tabular">{{ (Number(p.settlement_rate_bps) / 100).toFixed(2).replace(/\.?0+$/, '') }}%</td>
+              <td><StatusBadge v-bind="partnerStatus(p.profile_status)" /></td>
+              <td class="whitespace-nowrap text-xs text-ink-muted tabular">{{ dateTime(p.created_at) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+    </StatePanel>
 
-    <!-- Action Modal -->
-    <div
-      v-if="isModalOpen && selectedPartner"
-      class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-    >
-      <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-5">
-        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 class="text-base font-black text-slate-900">
-            {{
-              actionType === 'APPROVE' ? '파트너 입점 승인' :
-              actionType === 'REJECT' ? '파트너 신청 반려' :
-              actionType === 'SUSPEND' ? '파트너 계정 정지' : '수수료율 변경'
-            }}
-          </h3>
-          <button @click="isModalOpen = false" class="text-slate-400 hover:text-slate-600 font-bold text-sm">✕</button>
-        </div>
+    <SidePanel :open="!!selected" :title="selected?.company_name || ''" :subtitle="selected?.email" @close="selected = null">
+      <div v-if="selected" class="space-y-6 text-sm">
+        <div class="flex items-center gap-2"><StatusBadge v-bind="partnerStatus(selected.profile_status)" /><span v-if="selected.rejection_reason" class="text-xs text-ink-muted">사유: {{ selected.rejection_reason }}</span></div>
 
-        <div class="space-y-3 text-xs">
-          <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
-            <div class="font-bold text-slate-900">{{ selectedPartner.company_name }}</div>
-            <div class="text-slate-500">{{ selectedPartner.email }} · {{ selectedPartner.business_number }}</div>
+        <dl class="grid grid-cols-2 gap-3">
+          <div><dt class="text-2xs text-ink-subtle">파트너 ID</dt><dd class="break-all font-mono text-xs">{{ selected.id }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">유형</dt><dd>{{ TYPE[selected.partner_type] || selected.partner_type }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">대표자</dt><dd>{{ selected.representative_name || '—' }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">연락처</dt><dd>{{ selected.contact_phone || '—' }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">사업자등록번호</dt><dd class="tabular">{{ selected.business_number || '—' }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">세금계산서 이메일</dt><dd class="break-all">{{ selected.tax_invoice_email || '—' }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">정산 계좌</dt><dd>{{ selected.bank_name || '—' }} {{ mask(selected.bank_account_number) }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">예금주</dt><dd>{{ selected.bank_account_holder || '—' }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">신청</dt><dd class="tabular">{{ dateTime(selected.created_at) }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">승인</dt><dd class="tabular">{{ dateTime(selected.approved_at) }}</dd></div>
+        </dl>
+
+        <section class="space-y-2">
+          <h3 class="font-bold">상태 변경</h3>
+          <div class="flex flex-wrap gap-2">
+            <button v-if="selected.profile_status !== 'ACTIVE'" type="button" class="btn-primary btn-sm" @click="form.action = 'ACTIVE'">{{ selected.profile_status === 'SUSPENDED' ? '다시 활성화' : '승인' }}</button>
+            <button v-if="selected.profile_status === 'PENDING_APPROVAL'" type="button" class="btn-secondary btn-sm" @click="form.action = 'REJECTED'">반려</button>
+            <button v-if="selected.profile_status === 'ACTIVE'" type="button" class="btn-secondary btn-sm text-danger" @click="form.action = 'SUSPENDED'">이용 정지</button>
           </div>
-
-          <!-- Commission Rate Edit -->
-          <div v-if="actionType === 'APPROVE' || actionType === 'EDIT_RATE'" class="space-y-1">
-            <label class="font-bold text-slate-700">플랫폼 수수료율 (기본 10% = 1000 bps)</label>
-            <div class="flex items-center gap-2">
-              <input
-                v-model.number="newRateBps"
-                type="number"
-                step="50"
-                min="0"
-                max="5000"
-                class="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold text-slate-900"
-              />
-              <span class="font-black text-blue-600 text-sm whitespace-nowrap">
-                = {{ (newRateBps / 100).toFixed(2) }}%
-              </span>
+          <form v-if="form.action" class="space-y-2 rounded-field border border-line p-3" @submit.prevent="submitStatus">
+            <label class="label" for="pt-reason">{{ form.action === 'ACTIVE' ? '메모 (선택)' : '사유 *' }}</label>
+            <textarea id="pt-reason" v-model="form.reason" class="input min-h-[72px] py-2" maxlength="300" />
+            <div class="flex gap-2">
+              <button type="submit" :class="form.action === 'ACTIVE' ? 'btn-primary btn-sm' : 'btn-danger btn-sm'" :disabled="busy">{{ { ACTIVE: '승인 처리', REJECTED: '반려 처리', SUSPENDED: '정지 처리' }[form.action] }}</button>
+              <button type="button" class="btn-ghost btn-sm" @click="form.action = ''">취소</button>
             </div>
-            <p class="text-[11px] text-slate-400">파트너 매출에서 공제되는 플랫폼 수수료율입니다.</p>
-          </div>
+          </form>
+        </section>
 
-          <!-- Reason input -->
-          <div v-if="actionType === 'REJECT' || actionType === 'SUSPEND'" class="space-y-1">
-            <label class="font-bold text-slate-700">사유 입력</label>
-            <textarea
-              v-model="actionReason"
-              rows="3"
-              placeholder="반려 또는 정지 사유를 구체적으로 입력하세요..."
-              class="w-full p-2.5 border border-slate-200 rounded-xl font-medium outline-none"
-            ></textarea>
+        <form class="space-y-2" @submit.prevent="apply({ settlementRateBps: rateBps }, '수수료율을 저장했어요.')">
+          <h3 class="font-bold">수수료율</h3>
+          <div class="flex items-center gap-2">
+            <input v-model="form.ratePct" inputmode="decimal" class="input w-28 tabular" aria-label="수수료율 (%)" />
+            <span class="text-ink-muted">%</span>
+            <button type="submit" class="btn-secondary btn-sm" :disabled="busy || !rateChanged">저장</button>
           </div>
-        </div>
-
-        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-          <button
-            @click="isModalOpen = false"
-            class="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl font-bold text-xs"
-          >
-            취소
-          </button>
-          <button
-            @click="handleConfirmAction"
-            :disabled="actionLoading"
-            class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs shadow-md shadow-blue-500/25 disabled:opacity-50"
-          >
-            {{ actionLoading ? '처리 중...' : '확인 완료' }}
-          </button>
-        </div>
+          <p v-if="rateError" class="text-xs text-danger" role="alert">{{ rateError }}</p>
+          <p class="text-2xs text-ink-subtle">플랫폼이 판매가에서 가져가는 비율이에요 (0–50%).</p>
+        </form>
       </div>
-    </div>
+    </SidePanel>
   </div>
 </template>
-

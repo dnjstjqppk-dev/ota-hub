@@ -18,6 +18,16 @@ const pop = ref<Pop>(null)
 const drawer = ref(false)
 const scrolled = ref(false)
 const headerEl = ref<HTMLElement | null>(null)
+const dark = ref(false)
+
+function applyTheme() {
+  if (typeof document !== 'undefined') document.documentElement.classList.toggle('dark', dark.value)
+}
+function toggleTheme() {
+  dark.value = !dark.value
+  try { localStorage.setItem('getfortrip_theme', dark.value ? 'dark' : 'light') } catch {}
+  applyTheme()
+}
 
 const primary = CATEGORIES.filter(c => c.primary)
 const secondary = CATEGORIES.filter(c => !c.primary)
@@ -42,6 +52,8 @@ watch(drawer, (open) => { if (typeof document !== 'undefined') document.document
 onMounted(() => {
   currency.fetchRates()
   locale.initLocale()
+  try { dark.value = localStorage.getItem('getfortrip_theme') === 'dark' } catch {}
+  applyTheme()
   document.addEventListener('pointerdown', onDoc)
   document.addEventListener('keydown', onKey)
   window.addEventListener('scroll', onScroll, { passive: true })
@@ -63,7 +75,8 @@ onBeforeUnmount(() => {
     <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-ink">본문으로 건너뛰기</a>
     <div class="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 lg:px-6">
       <NuxtLink to="/" class="flex shrink-0 items-center" :title="BRAND.name">
-        <img src="/logo.svg" alt="getfortrip" class="h-8 w-auto" width="132" height="32" />
+        <img src="/logo.svg" alt="getfortrip" class="h-8 w-auto dark:hidden" width="132" height="32" />
+        <img src="/logo-white.svg" alt="getfortrip" class="hidden h-8 w-auto dark:block" width="132" height="32" />
       </NuxtLink>
 
       <!-- Desktop navigation -->
@@ -150,6 +163,15 @@ onBeforeUnmount(() => {
         <NuxtLink to="/my/bookings" class="hidden h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink md:flex">
           <AppIcon name="bookings" :size="18" />내 예약
         </NuxtLink>
+        <button
+          type="button"
+          class="flex h-10 w-10 items-center justify-center rounded-xl text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+          :aria-label="dark ? '라이트 모드로 전환' : '다크 모드로 전환'"
+          :title="dark ? '라이트 모드' : '다크 모드'"
+          @click="toggleTheme"
+        >
+          <AppIcon :name="dark ? 'sun' : 'moon'" :size="18" />
+        </button>
 
         <!-- Account -->
         <div v-if="auth.isLoggedIn && auth.user" class="relative hidden md:block">
@@ -192,7 +214,10 @@ onBeforeUnmount(() => {
       <Transition enter-from-class="translate-x-full" enter-active-class="transition-transform duration-300 ease-out" leave-to-class="translate-x-full" leave-active-class="transition-transform duration-200 ease-in">
         <aside v-if="drawer" class="fixed inset-y-0 right-0 z-[61] flex w-[min(88vw,380px)] flex-col bg-surface shadow-pop lg:hidden" aria-label="전체 메뉴" role="dialog" aria-modal="true">
           <div class="flex h-16 items-center justify-between border-b border-line px-5">
-            <img src="/logo.svg" alt="getfortrip" class="h-7 w-auto" />
+            <span class="flex items-center">
+              <img src="/logo.svg" alt="getfortrip" class="h-7 w-auto dark:hidden" />
+              <img src="/logo-white.svg" alt="getfortrip" class="hidden h-7 w-auto dark:block" />
+            </span>
             <button type="button" class="flex h-10 w-10 items-center justify-center rounded-xl text-ink-muted hover:bg-surface-sunken" aria-label="메뉴 닫기" @click="drawer = false"><AppIcon name="close" /></button>
           </div>
           <div class="flex-1 overflow-y-auto overscroll-contain px-5 pb-8 pt-5">
@@ -233,7 +258,11 @@ onBeforeUnmount(() => {
               <button v-for="l in LOCALES" :key="l.id" type="button" :class="['rounded-lg border px-3 py-1.5 text-xs font-semibold', locale.activeLocale === l.id ? 'border-primary bg-primary text-primary-ink' : 'border-line text-ink-muted']" @click="setLocale(l.id)">{{ l.label }}</button>
             </div>
 
-            <a :href="BRAND.partnerConsoleUrl" class="mt-8 flex items-center justify-between rounded-xl border border-line px-4 py-3 text-sm font-semibold text-ink hover:bg-surface-sunken">
+            <button type="button" class="mt-8 flex w-full items-center justify-between rounded-xl border border-line px-4 py-3 text-sm font-semibold text-ink hover:bg-surface-sunken" @click="toggleTheme">
+              <span class="flex items-center gap-3"><AppIcon :name="dark ? 'sun' : 'moon'" :size="18" class="text-ink-muted" />{{ dark ? '라이트 모드' : '다크 모드' }}</span>
+              <span class="text-xs font-medium text-ink-subtle">{{ dark ? '켬' : '끔' }}</span>
+            </button>
+            <a :href="BRAND.partnerConsoleUrl" class="mt-2 flex items-center justify-between rounded-xl border border-line px-4 py-3 text-sm font-semibold text-ink hover:bg-surface-sunken">
               <span class="flex items-center gap-3"><AppIcon name="briefcase" :size="18" class="text-ink-muted" />파트너 콘솔</span><AppIcon name="external" :size="16" class="text-ink-subtle" />
             </a>
             <button v-if="auth.isLoggedIn" type="button" class="mt-2 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-ink-muted hover:text-danger" @click="logout"><AppIcon name="logout" :size="18" />로그아웃</button>

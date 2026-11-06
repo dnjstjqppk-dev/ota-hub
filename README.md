@@ -1,104 +1,113 @@
 # ✈️ getfortrip Global OTA Platform
 
-> **글로벌 최고 수준의 종합 여행 플랫폼(OTA) getfortrip 프로젝트**  
-> Go 1.23+ 코어 백엔드 엔진, Nuxt 3 SPA 사용자 웹, Vue 3 Vite 관리자 콘솔, PostgreSQL 16 스키마 및 Zero-Mock 실데이터 연동.
+> 호텔·항공·기차·렌터카·공항픽업·투어/티켓/eSIM·다이내믹패키지를 판매하는 종합 여행 OTA.
+> 직접판매·중계·제휴 하이브리드 마켓플레이스 + 파트너 입점/정산 엑스트라넷 + 관리자 OMS.
 
 - **공식 플랫폼명**: `getfortrip`
 - **예정 도메인**: `getfortrip.com`
-- **실서버 배포**: `https://ota-hub.dnjstjqppk.workers.dev`
+- **실서버 배포**: `https://ota-hub.dnjstjqppk.workers.dev` (API + 유저 포털),
+  `https://ota-admin.dnjstjqppk.workers.dev` (어드민), `https://ota-partner.dnjstjqppk.workers.dev` (파트너)
 
 ---
 
-## 🚀 빠른 시작 가이드 (Quick Start)
+## 아키텍처 (프로덕션 경로)
 
-### 1. 백엔드 코어 엔진 (Go 1.23+)
-- **위치**: `backend/`
-- **실행 포트**: `http://localhost:8080`
-```powershell
-cd backend
-go run cmd/api/main.go
-# 또는 컴파일된 바이너리 실행:
-.\server.exe
 ```
-- **주요 엔드포인트**:
-  - `GET /health`: 헬스체크 (`service: getfortrip-core-engine`)
-  - `GET /api/v1/search/suggest`: getfortrip 전 도메인 자동완성 검색
-  - `GET /api/v1/hotels`: 숙소 필터 검색
-  - `GET /api/v1/flights`: 항공권 검색
-  - `GET /api/v1/trains`: KTX / 신칸센 기차표
-  - `GET /api/v1/cars`: 렌터카 및 공항픽업
-  - `GET /api/v1/activities`: 투어 티켓 및 5G eSIM
-  - `GET /api/v1/packages`: 항공+호텔 다이내믹 패키지
-  - `POST /api/v1/bookings/calculate`: 정밀 환율/세금/할인 계산기
-  - `POST /api/v1/bookings`: 15분 재고 락(Lock) 가예약 생성
-  - `POST /api/v1/bookings/:id/pay`: 결제 승인 및 바우처 즉시 발급
-  - `GET /api/v1/admin/dashboard`: 실시간 GMV 및 도메인 지표
-  - `GET /api/v1/sse/events`: 실시간 가격/예약 변동 SSE 스트리밍
+frontend-user (Nuxt 3, :3000) ─────┐
+frontend-admin (Vue 3 + Vite, :3001) ─┼─▶ ota-hub Worker (worker/index.ts, REST /api/v1/*) ─▶ D1 (ota_production)
+frontend-partner (Vue 3 + Vite, :3002) ┘        │  ├─ 정적 에셋 서빙 (/admin, /partner 포함)
+                                              │  └─ cron: 예약만료·미확인결제 대사·환불재시도·메일발송
+backend/ (Go 1.23, :8080) ── 참조용 인메모리 구현 (프로덕션 경로 아님)
+```
+
+- **API**: `worker/` (TypeScript, Cloudflare Workers + D1). 라우팅은 `worker/index.ts`,
+  규칙은 `src/domain/`, 오케스트레이션은 `src/services/`, HTTP는 `src/routes/`, PG는 `src/payments/`.
+- **DB**: D1 SQLite. `worker/migrations/0001~0008` (wrangler가 배포 시 자동 적용).
+- **결제**: Toss Payments 서버 승인/취소/조회 + PG 웹훅(`/api/v1/webhooks/toss`,
+  힌트 수신 후 lookup 재확인). 미설정 시 결제는 비활성으로 정직 응답.
+- **메일**: Resend. 미설정 시 outbox에 적재되고 API가 `NOT_CONFIGURED`로 응답.
+- **공급사**: 직계약(`direct_contract`, OMS 수동 확정) + 제휴 딥링크.
+  GDS/NDC 실연동은 계약 대기(`BLOCKED_PENDING_CONTRACT`, 가짜 성공 없음).
 
 ---
 
-### 2. 사용자 웹 프론트엔드 (TypeScript + Vue 3 + Nuxt 3 + Tailwind CSS)
-- **위치**: `frontend-user/`
-- **실행 포트**: `http://localhost:3000`
+## 빠른 시작
+
+### 1. 프로덕션 API (Cloudflare Worker + D1)
+
+```powershell
+npm install
+npx wrangler d1 migrations apply ota_production --local   # 또는: node scripts/migrate-d1.js
+npx wrangler dev -c wrangler.local.jsonc                  # http://127.0.0.1:8799
+```
+
+### 2. 사용자 웹 (Nuxt 3)
+
 ```powershell
 cd frontend-user
-# 개발 서버 실행:
-npm run dev
-# 또는 정적 배포 빌드:
-npm run generate
+npm run dev        # http://localhost:3000
+npm run generate   # 정적 프리렌더 빌드
 ```
-- **구현 페이지**:
-  - `/`: 메인 홈 (GNB, 7대 도메인 탭 위젯, 타임딜 배너, 추천 도시, getfortrip Best)
-  - `/hotels/list`: 숙소 검색 리스트 (12개 필터, 지도 분할 Map View)
-  - `/hotels/:id`: 호텔 상세 (객실 타입/취소규정 비교 매트릭스, AI 리뷰)
-  - `/hotels/booking`: 체크아웃 (실시간 계산기, 쿠폰/코인 차감, 즉시 발권)
-  - `/flights/search`: 항공권 검색 (전후 7일 최저가 바, 직항 필터)
-  - `/trains`: 고속철도 스케줄 및 승차권
-  - `/cars`: 렌터카 및 공항 픽업/샌딩
-  - `/things-to-do`: 명소 입장권, 일일투어, 5G eSIM
-  - `/packages/builder`: 항공+호텔 결합 할인 패키지
-  - `/moments`: 여행 모먼트 (getfortrip Moments) 포토 피드 및 작성
-  - `/trip-best`: 2026 연간 호텔/명소 랭킹 어워드 (getfortrip Best)
-  - `/deals`: 프로모션 및 쿠폰 다운로드 센터
-  - `/rewards`: 회원 등급(Silver~Diamond+) 진행률 및 getfortrip 코인(G-Coins) 원장
-  - `/my/bookings`: 전 도메인 통합 예약 관리, 바우처 출력 및 셀프 취소
-  - `/help`: 24/7 고객센터 FAQ 및 1:1 상담
 
----
+주요 경로: `/`(홈·7도메인 위젯), `/hotels/list`, `/hotels/detail/[id]`,
+`/flights/search`, `/trains/search`, `/checkout`, `/booking/result`,
+`/my/bookings`, `/moments`, `/trip-best`, `/deals`, `/rewards`, `/help`,
+`/terms`, `/privacy`, `/refund-policy`.
 
-### 3. 관리자 콘솔 백오피스 (TypeScript + Vue 3 + Vite + Tailwind CSS)
-- **위치**: `frontend-admin/`
-- **실행 포트**: `http://localhost:3001`
+### 3. 관리자 콘솔 (Vue 3 + Vite)
+
 ```powershell
 cd frontend-admin
-npm run dev
-# 또는 프로덕션 미리보기:
-npm run preview -- --port 3001 --host
+npm run dev      # http://localhost:3001
 ```
-- **8대 관리자 모듈**:
-  - `/dashboard`: 실시간 GMV, 일간 예약량, 도메인별 점유율, API 헬스체크
-  - `/catalog`: 7대 도메인 상품 마스터 데이터 및 재고 제어
-  - `/pricing`: 실시간 환율(FX) 테이블 및 가격 엔진 시뮬레이터
-  - `/bookings`: 예약/발권 OMS (상태 전이 강제 집행, 수동 PNR 발권, 환불 승인)
-  - `/promotions`: 프로모션 코드 발급 및 getfortrip 코인 제어
-  - `/community`: getfortrip 모먼트 및 리뷰 CMS 검수
-  - `/support`: 1:1 상담 티켓 및 결항/천재지변 긴급 공지 배너 발송
-  - `/settlements`: 공급사 정산 대사 및 RBAC 관리자 작업 감사 로그
 
----
+14 모듈: 대시보드·예약OMS·카탈로그·가격·프로모션·커뮤니티·공지·정산·파트너·
+사용자·공급사·피처플래그·URL수집. 전 뷰 실API 연동 + 라우트 가드.
 
-### 4. 데이터베이스 및 마이그레이션 (PostgreSQL 16)
-- **위치**: `database/migrations/`
-  - `000001_init_trip_schema.up.sql`: 14개 정규화 테이블 DDL
-  - `000001_init_trip_schema.down.sql`: 롤백 DDL
-  - `000002_seed_data.sql`: 7대 도메인 실데이터 시드
+### 4. 파트너 엑스트라넷 (Vue 3 + Vite)
 
----
-
-### 5. 브랜드 거버넌스 및 무결성 검증
 ```powershell
-npm run check:branding
+cd frontend-partner
+npm run dev      # http://localhost:3002
 ```
-모든 커밋 및 빌드 파이프라인에서 getfortrip 단일 브랜드 명칭과 거버넌스 룰을 엄격히 검증합니다.
 
-<!-- getfortrip Production Repository Synchronized: 2026-10-19T00:15:00Z | Status: 100% PASS -->
+대시보드·상품·재고캘린더·주문·정산·프로필·스태프·API키/웹훅.
+서버간 연동: `Authorization: Bearer gft_live_...` (화면에서 발급, 평문 1회 표시),
+규격: `GET /api/v1/partner/openapi.json`.
+
+### 5. 참조 백엔드 (Go, 인메모리)
+
+```powershell
+cd backend
+go run cmd/api/main.go   # http://localhost:8080
+```
+
+표준 라이브러리만 사용, 재시작 시 데이터 소실. API 스펙 참조용이며 배포하지 않음.
+
+---
+
+## 테스트·품질 게이트
+
+```powershell
+npm test          # Worker 단위 테스트 + 프론트 컴포넌트 테스트 (node:test)
+npm run test:e2e  # 로컬 워커 대상 E2E (BASE=... ADMIN_PASSWORD=... 필요, README 상단 주석 참조)
+cd backend; go test ./...
+npm run check:branding   # 브랜드 거버넌스 (CI 필수 게이트)
+```
+
+CI(`.github/workflows/deploy.yml`): 브랜딩 → Go 테스트 → Worker/프론트 단위 테스트 →
+3포털 빌드·배포.
+
+## 환경 변수
+
+`.env.example` 참조. Worker 시크릿은 대시보드/CLI로 등록:
+
+```powershell
+npx wrangler secret put JWT_SECRET        # 32자 이상 필수
+npx wrangler secret put PII_ENC_KEY       # 32바이트 base64 (여권 암호화)
+npx wrangler secret put TOSS_SECRET_KEY   # live_... (실결제) / test_... (샌드박스)
+# 선택: TOSS_CLIENT_KEY, RESEND_API_KEY, EMAIL_FROM
+```
+
+`wrangler.jsonc`의 `vars`는 공개값만. Toss 웹훅 수신 URL:
+`https://<host>/api/v1/webhooks/toss` (토스 콘솔에 등록).

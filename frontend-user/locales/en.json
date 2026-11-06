@@ -1,0 +1,27 @@
+{
+  "nav": {
+    "hotels": "Hotels",
+    "flights": "Flights",
+    "trains": "Trains",
+    "cars": "Cars",
+    "transfers": "Transfers",
+    "activities": "Attractions",
+    "packages": "Flight+Hotel",
+    "esim": "eSIM",
+    "insurance": "Insurance",
+    "best": "Best",
+    "moments": "Moments",
+    "deals": "Deals",
+    "partnerCenter": "Partner Hub",
+    "myBookings": "My Trips",
+    "wishlist": "Wishlist",
+    "login": "Sign In"
+  },
+  "common": {
+    "search": "Search",
+    "bookNow": "Book Now",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "close": "Close"
+  }
+}

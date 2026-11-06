@@ -1,0 +1,27 @@
+{
+  "nav": {
+    "hotels": "ホテル",
+    "flights": "航空券",
+    "trains": "鉄道・新幹線",
+    "cars": "レンタカー",
+    "transfers": "空港送迎",
+    "activities": "ツアー・チケット",
+    "packages": "航空券+ホテル",
+    "esim": "eSIM",
+    "insurance": "旅行保険",
+    "best": "Best",
+    "moments": "モーメント",
+    "deals": "セール",
+    "partnerCenter": "パートナー",
+    "myBookings": "予約管理",
+    "wishlist": "お気に入り",
+    "login": "ログイン"
+  },
+  "common": {
+    "search": "検索",
+    "bookNow": "予約する",
+    "loading": "読み込み中…",
+    "retry": "再試行",
+    "close": "閉じる"
+  }
+}

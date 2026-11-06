@@ -1,126 +1,63 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { apiUrl } from '../config/api'
+/**
+ * Promotion codes (GET /admin/promotions, PATCH /admin/promotions/:id). Codes are applied by the quote
+ * engine (worker/src/services/booking-service.ts), so turning one off stops new quotes from using it.
+ */
+import { onMounted, ref } from 'vue'
+import { api, toast } from '../composables/session'
+import { useResource } from '../composables/useResource'
+import { dateOnly, krw, num } from '../composables/format'
+import PageHeader from '../components/PageHeader.vue'
+import StatePanel from '../components/StatePanel.vue'
+import StatusBadge from '../components/StatusBadge.vue'
 
-const DEFAULT_PROMOTIONS = [
-  {
-    id: 'promo_welcome',
-    code: 'WELCOME2026',
-    title: '신규 회원 첫 예약 10% 웰컴 특별 할인',
-    discount_type: 'PERCENTAGE',
-    discount_value: 10,
-    min_order_amount_krw: 100000,
-    max_discount_krw: 30000,
-    valid_until: '2026-12-31T23:59:59Z',
-    is_active: true
-  },
-  {
-    id: 'promo_hotel50',
-    code: 'HOTEL50000',
-    title: '5성급 럭셔리 호텔 ₩50,000 즉시 할인',
-    discount_type: 'FIXED_AMOUNT',
-    discount_value: 50000,
-    min_order_amount_krw: 300000,
-    max_discount_krw: 50000,
-    valid_until: '2026-12-31T23:59:59Z',
-    is_active: true
-  },
-  {
-    id: 'promo_flight20',
-    code: 'FLIGHT20000',
-    title: '전 세계 국제선 항공권 ₩20,000 안심 할인',
-    discount_type: 'FIXED_AMOUNT',
-    discount_value: 20000,
-    min_order_amount_krw: 200000,
-    max_discount_krw: 20000,
-    valid_until: '2026-12-31T23:59:59Z',
-    is_active: true
-  },
-  {
-    id: 'promo_global10',
-    code: 'GLOBAL10',
-    title: '동적 패키지 / 렌터카 / 공항픽업 10% 메가 할인',
-    discount_type: 'PERCENTAGE',
-    discount_value: 10,
-    min_order_amount_krw: 80000,
-    max_discount_krw: 40000,
-    valid_until: '2026-12-31T23:59:59Z',
-    is_active: true
-  }
-]
+const list = useResource(async () => (await api('/admin/promotions')).promotions || [], [] as any[])
+onMounted(list.reload)
 
-const promotions = ref<any[]>(DEFAULT_PROMOTIONS)
-const loading = ref(false)
-
-const fetchPromotions = async () => {
-  loading.value = true
-  try {
-    const res = await fetch(apiUrl('/promotions'))
-    if (res.ok) {
-      const json = await res.json()
-      if (json.data && json.data.length > 0) {
-        promotions.value = json.data
-      }
-    }
-  } catch (e) {
-    // Keep DEFAULT_PROMOTIONS
-  } finally {
-    loading.value = false
-  }
+const now = Date.now()
+const expired = (p: any) => !!p.valid_until && Date.parse(p.valid_until) < now
+const notStarted = (p: any) => !!p.valid_from && Date.parse(p.valid_from) > now
+function state(p: any): { label: string; tone: any } {
+  if (!p.is_active) return { label: '꺼짐', tone: 'neutral' }
+  if (expired(p)) return { label: '기간 만료', tone: 'neutral' }
+  if (notStarted(p)) return { label: '시작 전', tone: 'info' }
+  return { label: '사용 가능', tone: 'success' }
 }
+const benefit = (p: any) => (p.discount_type === 'PERCENTAGE' ? `${num(p.discount_value)}% 할인${p.max_discount_krw ? ` (최대 ${krw(p.max_discount_krw)})` : ''}` : `${krw(p.discount_value)} 할인`)
 
-onMounted(() => {
-  fetchPromotions()
-})
+const busy = ref('')
+async function toggle(p: any) {
+  const next = !p.is_active
+  if (!confirm(`${p.code} 코드를 ${next ? '켤까요' : '끌까요'}? ${next ? '' : '이후 새 견적에서 이 코드를 쓸 수 없어요.'}`)) return
+  busy.value = p.id
+  try {
+    await api(`/admin/promotions/${encodeURIComponent(p.id)}`, { method: 'PATCH', json: { isActive: next } })
+    toast(`${p.code}를 ${next ? '켰어요' : '껐어요'}.`)
+    list.reload()
+  } catch (e) { toast((e as Error).message, 'danger') } finally { busy.value = '' }
+}
 </script>
 
 <template>
-  <div class="p-8 space-y-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-black text-slate-900 tracking-tight">마케팅 & 쿠폰 & 리워드 관리</h1>
-        <p class="text-sm text-slate-500 mt-1">글로벌 프로모션 코드 발급, getfortrip 코인 적립 배율 및 멤버십 혜택 관리</p>
+  <div>
+    <PageHeader title="프로모션" description="할인 코드를 켜고 꺼요. 코드는 견적 단계에서 서버가 검증해 적용해요." />
+    <StatePanel :state="list.state.value" :error="list.error.value" :empty="!list.data.value.length" empty-text="등록된 프로모션이 없어요." @retry="list.reload()">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>코드</th><th>혜택</th><th class="text-right">최소 주문</th><th>기간</th><th>상태</th><th class="w-px"></th></tr></thead>
+          <tbody>
+            <tr v-for="p in list.data.value" :key="p.id">
+              <td><p class="font-mono font-semibold">{{ p.code }}</p><p class="max-w-[280px] truncate text-2xs text-ink-subtle">{{ p.title }}</p></td>
+              <td class="text-sm">{{ benefit(p) }}</td>
+              <td class="text-right tabular">{{ p.min_order_amount_krw ? krw(p.min_order_amount_krw) : '—' }}</td>
+              <td class="whitespace-nowrap text-xs tabular">{{ dateOnly(p.valid_from) }} ~ {{ dateOnly(p.valid_until) }}</td>
+              <td><StatusBadge v-bind="state(p)" /></td>
+              <td><button type="button" class="btn-secondary btn-sm" :disabled="busy === p.id" @click="toggle(p)">{{ p.is_active ? '끄기' : '켜기' }}</button></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-    </div>
-
-    <!-- 쿠폰 목록 테이블 -->
-    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-      <table class="w-full text-left text-sm">
-        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
-          <tr>
-            <th class="p-4">쿠폰 코드</th>
-            <th class="p-4">프로모션 명</th>
-            <th class="p-4">할인 유형</th>
-            <th class="p-4">할인 혜택</th>
-            <th class="p-4">최소 주문액 / 최대 할인</th>
-            <th class="p-4">유효 기간</th>
-            <th class="p-4 text-center">활성 상태</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-          <tr v-for="p in promotions" :key="p.id" class="hover:bg-slate-50/70">
-            <td class="p-4 font-mono font-bold text-trip-blue">{{ p.code }}</td>
-            <td class="p-4 font-bold text-slate-900">{{ p.title }}</td>
-            <td class="p-4">
-              <span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-bold">{{ p.discount_type }}</span>
-            </td>
-            <td class="p-4 font-mono font-bold text-emerald-600">
-              {{ p.discount_type === 'PERCENTAGE' ? `${p.discount_value}%` : `₩${p.discount_value.toLocaleString()}` }}
-            </td>
-            <td class="p-4 text-xs text-slate-600">
-              최소 ₩{{ p.min_order_amount_krw.toLocaleString() }} / 최대 ₩{{ p.max_discount_krw.toLocaleString() }}
-            </td>
-            <td class="p-4 text-xs text-slate-400">
-              {{ new Date(p.valid_from).toLocaleDateString() }} ~ {{ new Date(p.valid_until).toLocaleDateString() }}
-            </td>
-            <td class="p-4 text-center">
-              <span :class="['px-2.5 py-1 rounded-full text-xs font-bold', p.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500']">
-                {{ p.is_active ? '활성 (ACTIVE)' : '만료' }}
-              </span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+      <p class="mt-2 text-2xs text-ink-subtle">새 코드 발급은 아직 화면에서 지원하지 않아요.</p>
+    </StatePanel>
   </div>
 </template>

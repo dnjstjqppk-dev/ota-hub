@@ -3,6 +3,7 @@ import { isNonProduction } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { hashPassword, newId, randomToken, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
 import { audit, authCookie, getAuthUser, jwtSecret, rateLimit } from "../lib/auth.ts";
+import { isEmailConfigured } from "../services/email-service.ts";
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 
@@ -108,15 +109,16 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
       await env.DB.batch([
         env.DB.prepare("INSERT INTO password_reset_tokens (token, token_hash, user_id, email, expires_at, used) VALUES (?, ?, ?, ?, ?, 0)")
           .bind(newId("rst"), tokenHash, u.id, email, expires),
-        // The reset link is delivered only by email. No email provider is configured yet,
-        // so the message is parked in the outbox (status BLOCKED_NO_PROVIDER).
-        env.DB.prepare("INSERT INTO notification_outbox (id, channel, recipient, template, payload_json, status) VALUES (?, 'EMAIL', ?, 'PASSWORD_RESET', ?, 'BLOCKED_NO_PROVIDER')")
+        // The reset link is delivered only by email; the maintenance cron sends queued rows.
+        env.DB.prepare("INSERT INTO notification_outbox (id, channel, recipient, template, payload_json, status) VALUES (?, 'EMAIL', ?, 'PASSWORD_RESET', ?, 'PENDING')")
           .bind(newId("ntf"), email, JSON.stringify({ link: `${site}/reset-password?token=${token}` })),
       ]);
     }
     // Same response whether or not the account exists (no account enumeration). Token never returned.
-    // No provider is wired yet, so do not claim the email was sent.
-    return json({ success: true, message: "요청을 접수했어요. 다만 지금은 메일 발송 서비스가 준비 중이라 재설정 메일이 도착하지 않아요. 고객센터로 문의해 주세요.", emailDelivery: "NOT_CONFIGURED" });
+    if (!isEmailConfigured(env)) {
+      return json({ success: true, message: "요청을 접수했어요. 다만 지금은 메일 발송 서비스가 준비 중이라 재설정 메일이 도착하지 않아요. 고객센터로 문의해 주세요.", emailDelivery: "NOT_CONFIGURED" });
+    }
+    return json({ success: true, message: "비밀번호 재설정 링크를 이메일로 보냈어요. 30분 안에 확인해주세요.", emailDelivery: "QUEUED" });
   }
 
   if (path === "/api/v1/auth/reset-password" && method === "POST") {

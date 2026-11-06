@@ -69,19 +69,19 @@ const authStore = useAuthStore()
     <!-- 멤버십 혜택 안내 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
       <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
-        <div class="text-2xl">🏨</div>
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary"><AppIcon name="hotel" :size="22" /></div>
         <h3 class="font-bold text-slate-900 text-base">호텔 최대 20% 추가 VIP 특가</h3>
         <p class="text-xs text-slate-500 leading-relaxed">전 세계 10만 개 이상 호텔에서 전용 회원가 할인이 자동 적용됩니다.</p>
       </div>
 
       <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
-        <div class="text-2xl">☕</div>
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-warning-soft text-warning"><AppIcon name="trophy" :size="22" /></div>
         <h3 class="font-bold text-slate-900 text-base">공항 VIP 라운지 연 2회 무료</h3>
         <p class="text-xs text-slate-500 leading-relaxed">다이아몬드 회원은 전 세계 주요 국제공항 라운지 무료 이용 혜택이 제공됩니다.</p>
       </div>
 
       <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
-        <div class="text-2xl">💰</div>
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-success-soft text-success"><AppIcon name="coins" :size="22" /></div>
         <h3 class="font-bold text-slate-900 text-base">getfortrip Coins 적립률 3배 보너스</h3>
         <p class="text-xs text-slate-500 leading-relaxed">숙박 및 탑승 완료 시 일반 회원 대비 3배 많은 getfortrip 코인이 확정 적립됩니다.</p>
       </div>

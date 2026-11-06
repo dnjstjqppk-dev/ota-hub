@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { apiUrl } from '../config/api'
+import { apiUrl, partnerToken } from '../config/api'
 
 interface ProductRow {
   id: string
@@ -13,6 +13,7 @@ interface ProductRow {
 
 const products = ref<ProductRow[]>([])
 const loading = ref(false)
+const error = ref('')
 const isModalOpen = ref(false)
 
 const newDomain = ref('HOTEL')
@@ -20,25 +21,27 @@ const newTitle = ref('')
 const newCity = ref('서울')
 const newPrice = ref(120000)
 const submitLoading = ref(false)
+const submitError = ref('')
 
 // URL Ingestion for Partners
 const importUrl = ref('')
 const isImporting = ref(false)
 const importMessage = ref('')
+const importOk = ref(false)
 
 const fetchProducts = async () => {
   loading.value = true
+  error.value = ''
   try {
-    const token = localStorage.getItem('getfortrip_partner_token')
+    const token = partnerToken()
     const res = await fetch(apiUrl('/partner/products'), {
       headers: { Authorization: `Bearer ${token}` }
     })
-    if (res.ok) {
-      const json = await res.json()
-      products.value = json.products || []
-    }
-  } catch (e) {
-    console.error('Failed to load products', e)
+    if (!res.ok) throw new Error('상품 목록을 불러오지 못했습니다.')
+    const json = await res.json()
+    products.value = json.products || []
+  } catch (e: any) {
+    error.value = e.message || '상품 목록을 불러오지 못했습니다.'
   } finally {
     loading.value = false
   }
@@ -48,8 +51,9 @@ const handleImportUrl = async () => {
   if (!importUrl.value.trim()) return
   isImporting.value = true
   importMessage.value = ''
+  importOk.value = false
   try {
-    const token = localStorage.getItem('getfortrip_partner_token')
+    const token = partnerToken()
     const res = await fetch(apiUrl('/partner/ingest/url'), {
       method: 'POST',
       headers: {
@@ -67,9 +71,10 @@ const handleImportUrl = async () => {
     newDomain.value = draft.domain_type || 'ACTIVITY'
     newPrice.value = draft.price_minor || 50000
     newCity.value = draft.city || '서울'
-    importMessage.value = '✅ URL에서 상품명, 요금, 카테고리를 자동 추출했습니다.'
+    importOk.value = true
+    importMessage.value = 'URL에서 상품명, 요금, 카테고리를 자동 추출했습니다. 등록 전에 확인해주세요.'
   } catch (err: any) {
-    importMessage.value = `⚠️ 수집 실패: ${err.message}`
+    importMessage.value = `수집 실패: ${err.message}`
   } finally {
     isImporting.value = false
   }
@@ -78,8 +83,9 @@ const handleImportUrl = async () => {
 const handleCreateProduct = async () => {
   if (!newTitle.value) return
   submitLoading.value = true
+  submitError.value = ''
   try {
-    const token = localStorage.getItem('getfortrip_partner_token')
+    const token = partnerToken()
     const res = await fetch(apiUrl('/partner/products'), {
       method: 'POST',
       headers: {
@@ -102,10 +108,10 @@ const handleCreateProduct = async () => {
       await fetchProducts()
     } else {
       const err = await res.json()
-      window.alert(err.error || '상품 등록에 실패했습니다.')
+      submitError.value = err.error || '상품 등록에 실패했습니다.'
     }
   } catch (e: any) {
-    window.alert(e.message || '오류가 발생했습니다.')
+    submitError.value = e.message || '오류가 발생했습니다.'
   } finally {
     submitLoading.value = false
   }
@@ -118,83 +124,89 @@ onMounted(() => {
 
 <template>
   <div class="space-y-6">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
       <div>
-        <h1 class="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
+        <h1 class="flex items-center gap-2 text-2xl font-black tracking-tight text-ink">
           <span>파트너 공급 상품 관리</span>
-          <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+          <span class="rounded-full bg-primary-soft px-2 py-0.5 text-xs font-bold text-primary">
             총 {{ products.length }}개
           </span>
         </h1>
-        <p class="text-sm text-slate-500 font-medium mt-1">
-          귀사에서 GetForTrip 플랫폼에 공급 중인 상품 목록과 기본 요금을 관리합니다.
+        <p class="mt-1 text-sm font-medium text-ink-subtle">
+          getfortrip 플랫폼에 공급 중인 상품 목록과 기본 요금을 관리합니다.
         </p>
       </div>
       <div class="flex gap-2">
         <button
+          type="button"
+          class="btn-primary btn-sm !text-xs"
           @click="isModalOpen = true"
-          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md shadow-blue-500/20 transition flex items-center gap-1.5"
         >
-          <span>➕</span>
+          <AppIcon name="plus" :size="14" />
           <span>신규 상품 추가</span>
         </button>
       </div>
     </div>
 
+    <div v-if="error" class="rounded-2xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">
+      {{ error }}
+      <button type="button" class="ml-2 underline" @click="fetchProducts">다시 시도</button>
+    </div>
+
     <!-- Product Table -->
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="card overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse text-xs">
+        <table class="table !min-w-[640px] text-xs">
           <thead>
-            <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-              <th class="p-3.5">상품 ID</th>
-              <th class="p-3.5">도메인</th>
-              <th class="p-3.5">상품명</th>
-              <th class="p-3.5">위치/도시</th>
-              <th class="p-3.5">기본 기준 요금</th>
-              <th class="p-3.5">판매 상태</th>
-              <th class="p-3.5 text-right">관리</th>
+            <tr>
+              <th>상품 ID</th>
+              <th>도메인</th>
+              <th>상품명</th>
+              <th>위치/도시</th>
+              <th>기본 기준 요금</th>
+              <th>판매 상태</th>
+              <th class="!text-right">관리</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-100 font-medium text-slate-700">
+          <tbody class="font-medium">
             <tr v-if="loading">
-              <td colspan="7" class="p-8 text-center text-slate-400">데이터를 불러오는 중입니다...</td>
+              <td colspan="7" class="p-8 text-center text-ink-subtle">데이터를 불러오는 중입니다...</td>
             </tr>
             <tr v-else-if="products.length === 0">
-              <td colspan="7" class="p-8 text-center text-slate-400">등록된 파트너 공급 상품이 없습니다.</td>
+              <td colspan="7" class="p-8 text-center text-ink-subtle">등록된 파트너 공급 상품이 없습니다.</td>
             </tr>
             <tr
               v-for="p in products"
               :key="p.id"
-              class="hover:bg-slate-50/80 transition"
+              class="transition hover:bg-surface-sunken"
             >
-              <td class="p-3.5 font-mono text-slate-400">{{ p.id }}</td>
-              <td class="p-3.5">
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+              <td class="font-mono text-ink-subtle">{{ p.id }}</td>
+              <td>
+                <span class="rounded bg-surface-sunken px-2 py-0.5 text-[10px] font-bold text-ink-muted">
                   {{ p.domain_type }}
                 </span>
               </td>
-              <td class="p-3.5 font-bold text-slate-900 max-w-xs truncate" :title="p.title">
+              <td class="max-w-xs truncate font-bold" :title="p.title">
                 {{ p.title }}
               </td>
-              <td class="p-3.5">{{ p.city }}</td>
-              <td class="p-3.5 font-bold text-slate-900">
-                ₩{{ (p.base_price_krw || 0).toLocaleString() }}
+              <td class="text-ink-muted">{{ p.city }}</td>
+              <td class="font-bold tabular">
+                {{ (p.base_price_krw || 0).toLocaleString() }}원
               </td>
-              <td class="p-3.5">
+              <td>
                 <span
                   :class="[
-                    'px-2 py-0.5 rounded text-[10px] font-bold',
-                    p.is_active === 1 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
+                    'rounded px-2 py-0.5 text-[10px] font-bold',
+                    p.is_active === 1 ? 'bg-success-soft text-success' : 'bg-surface-sunken text-ink-subtle'
                   ]"
                 >
                   {{ p.is_active === 1 ? '판매중' : '판매중지' }}
                 </span>
               </td>
-              <td class="p-3.5 text-right space-x-2">
+              <td class="!text-right">
                 <router-link
                   to="/inventory"
-                  class="px-2.5 py-1 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded font-bold"
+                  class="rounded-lg bg-surface-sunken px-2.5 py-1 font-bold text-ink-muted transition hover:text-ink"
                 >
                   재고/가격 캘린더
                 </router-link>
@@ -208,46 +220,47 @@ onMounted(() => {
     <!-- Create Product Modal -->
     <div
       v-if="isModalOpen"
-      class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-midnight-950/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="신규 공급 상품 등록"
     >
-      <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-5">
-        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 class="text-base font-black text-slate-900">신규 공급 상품 등록</h3>
-          <button @click="isModalOpen = false" class="text-slate-400 hover:text-slate-600 font-bold text-sm">✕</button>
+      <div class="w-full max-w-md space-y-5 rounded-2xl border border-line bg-surface-raised p-6 shadow-pop">
+        <div class="flex items-center justify-between border-b border-line pb-3">
+          <h3 class="text-base font-black text-ink">신규 공급 상품 등록</h3>
+          <button type="button" aria-label="닫기" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" @click="isModalOpen = false"><AppIcon name="close" :size="18" /></button>
         </div>
 
         <!-- URL Quick Import Box -->
-        <div class="p-3.5 bg-blue-50/60 rounded-xl border border-blue-100 text-xs space-y-2">
-          <div class="flex items-center justify-between font-bold text-blue-900">
-            <span>🌐 외부 상품 URL로 자동 추출</span>
-            <span class="text-[10px] text-blue-600 font-normal">오픈마켓/홈페이지 연동</span>
+        <div class="space-y-2 rounded-xl border border-primary/25 bg-primary-soft p-3.5 text-xs">
+          <div class="flex items-center justify-between font-bold text-ink">
+            <span class="inline-flex items-center gap-1.5"><AppIcon name="globe" :size="14" class="text-primary" />외부 상품 URL로 자동 추출</span>
+            <span class="text-[10px] font-normal text-ink-subtle">오픈마켓/홈페이지 연동</span>
           </div>
           <div class="flex gap-2">
             <input
               v-model="importUrl"
               type="url"
               placeholder="https://... 외부 상품 URL 입력"
-              class="flex-1 px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-xs outline-none"
+              class="input !min-h-[36px] !text-xs"
             />
             <button
               type="button"
-              @click="handleImportUrl"
               :disabled="isImporting || !importUrl.trim()"
-              class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs disabled:opacity-50"
+              class="btn-primary btn-sm shrink-0"
+              @click="handleImportUrl"
             >
               {{ isImporting ? '추출중...' : '추출' }}
             </button>
           </div>
-          <p v-if="importMessage" class="text-[11px] font-medium text-blue-800">{{ importMessage }}</p>
+          <p v-if="importMessage" :class="['text-[11px] font-medium', importOk ? 'text-success' : 'text-danger']">{{ importMessage }}</p>
         </div>
 
-        <form @submit.prevent="handleCreateProduct" class="space-y-4 text-xs">
+        <form class="space-y-4 text-xs" @submit.prevent="handleCreateProduct">
+          <div v-if="submitError" class="rounded-xl bg-danger-soft px-3.5 py-2.5 font-medium text-danger" role="alert">{{ submitError }}</div>
           <div class="space-y-1">
-            <label class="font-bold text-slate-700">카테고리</label>
-            <select
-              v-model="newDomain"
-              class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl font-bold text-slate-800 outline-none"
-            >
+            <label class="label">카테고리</label>
+            <select v-model="newDomain" class="input font-bold">
               <option value="HOTEL">호텔 / 객실</option>
               <option value="CAR">렌터카 차량</option>
               <option value="ACTIVITY">투어 & 티켓</option>
@@ -255,50 +268,50 @@ onMounted(() => {
           </div>
 
           <div class="space-y-1">
-            <label class="font-bold text-slate-700">상품명 (노출명) *</label>
+            <label class="label">상품명 (노출명) *</label>
             <input
               v-model="newTitle"
               type="text"
               required
               placeholder="예: 디럭스 더블룸 (시티뷰 조식포함)"
-              class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl font-medium outline-none focus:ring-2 focus:ring-blue-500"
+              class="input font-medium"
             />
           </div>
 
           <div class="grid grid-cols-2 gap-3">
             <div class="space-y-1">
-              <label class="font-bold text-slate-700">도시 / 지역</label>
+              <label class="label">도시 / 지역</label>
               <input
                 v-model="newCity"
                 type="text"
                 required
-                class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                class="input font-medium"
               />
             </div>
             <div class="space-y-1">
-              <label class="font-bold text-slate-700">기본 1박/1일 요금 (KRW)</label>
+              <label class="label">기본 1박/1일 요금 (KRW)</label>
               <input
                 v-model.number="newPrice"
                 type="number"
                 step="1000"
                 required
-                class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500"
+                class="input font-bold tabular"
               />
             </div>
           </div>
 
-          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+          <div class="flex items-center justify-end gap-2 border-t border-line pt-2">
             <button
               type="button"
+              class="btn-secondary btn-sm"
               @click="isModalOpen = false"
-              class="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl font-bold"
             >
               취소
             </button>
             <button
               type="submit"
               :disabled="submitLoading"
-              class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black shadow-md disabled:opacity-50"
+              class="btn-primary btn-sm"
             >
               {{ submitLoading ? '등록 중...' : '상품 등록 완료' }}
             </button>

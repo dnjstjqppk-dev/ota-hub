@@ -1,5 +1,5 @@
 import type { Env } from "../env.ts";
-import { verifyJwt } from "./crypto.ts";
+import { sha256Hex, verifyJwt } from "./crypto.ts";
 import { HttpError, clientIp } from "./http.ts";
 
 export interface AuthUser {
@@ -57,9 +57,41 @@ export async function requireAdmin(request: Request, env: Env): Promise<AuthUser
   return { ...u, role: "ADMIN" };
 }
 
+/**
+ * Server-to-server authentication for partner PMS/ERP integrations.
+ * A `Bearer gft_live_...` token is resolved to its owning partner; JWTs are
+ * untouched. Returns null when the request carries no API key.
+ */
+export async function getPartnerByApiKey(request: Request, env: Env): Promise<{ id: string; email: string; companyName: string } | null> {
+  const h = request.headers.get("Authorization");
+  if (!h?.startsWith("Bearer gft_")) return null;
+  const key = h.slice(7).trim();
+  if (!/^gft_(live|test)_[0-9a-f]{32}$/.test(key)) return null;
+  const row = await env.DB.prepare(
+    `SELECT k.partner_id AS id, p.email, p.company_name
+     FROM partner_api_keys k JOIN partners p ON p.id = k.partner_id
+     WHERE k.key_hash = ? AND k.is_active = 1 AND k.revoked_at IS NULL`,
+  ).bind(await sha256Hex(key)).first<{ id: string; email: string; company_name: string }>();
+  if (!row) return null;
+  await env.DB.prepare("UPDATE partner_api_keys SET last_used_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE key_hash = ?")
+    .bind(await sha256Hex(key)).run();
+  return { id: row.id, email: row.email, companyName: row.company_name };
+}
+
 export async function requirePartner(request: Request, env: Env): Promise<AuthUser & { partnerId: string; companyName: string }> {
   const u = await getAuthUser(request, env);
-  if (!u) throw new HttpError(401, "UNAUTHORIZED", "파트너 로그인이 필요합니다.");
+  if (!u) {
+    // Fall back to API-key auth before rejecting: integrations carry no JWT.
+    const k = await getPartnerByApiKey(request, env).catch(() => null);
+    if (!k) throw new HttpError(401, "UNAUTHORIZED", "파트너 로그인이 필요합니다.");
+    const p = await env.DB.prepare(
+      "SELECT p.id, p.company_name, p.is_active, COALESCE(pr.status, 'ACTIVE') AS profile_status FROM partners p LEFT JOIN partner_profiles pr ON pr.partner_id = p.id WHERE p.id = ?",
+    ).bind(k.id).first<any>();
+    if (!p || p.is_active !== 1 || p.profile_status !== "ACTIVE") {
+      throw new HttpError(403, "PARTNER_SUSPENDED", "승인 대기 중이거나 비활성화된 파트너 계정입니다.");
+    }
+    return { id: k.id, email: k.email, role: "PARTNER", partnerId: k.id, companyName: p.company_name || k.companyName };
+  }
   if (u.role !== "PARTNER" && u.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "파트너 권한이 없습니다.");
   const p = await env.DB.prepare(
     "SELECT p.id, p.company_name, p.is_active, COALESCE(pr.status, 'ACTIVE') AS profile_status FROM partners p LEFT JOIN partner_profiles pr ON pr.partner_id = p.id WHERE p.id = ?"

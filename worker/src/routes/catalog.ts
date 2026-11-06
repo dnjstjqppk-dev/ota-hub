@@ -7,7 +7,10 @@
 import type { Env } from "../env.ts";
 import { json } from "../lib/http.ts";
 import { hotelRatePlans, supplierBookabilityMap, type Bookability } from "../services/catalog.ts";
-import { airportsForCityCode, airportsForPlaceName, parseDomain, suggest } from "../services/suggest-service.ts";
+import { airportsForCityCode, airportsForPlaceName, likeEscape, parseDomain, suggest } from "../services/suggest-service.ts";
+
+/** User text for a LIKE '%...%' pattern: `%`/`_`/`\` become literals, never wildcards. */
+const contains = (s: string): string => `%${likeEscape(s)}%`;
 
 const PRICE_NOTICE = "참고 가격 (공급사 실시간 검증 전)";
 
@@ -71,8 +74,8 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       let q = "SELECT * FROM hotels WHERE 1=1";
       const p: any[] = [];
       if (city) {
-        q += " AND (city LIKE ? OR name_ko LIKE ? OR name_en LIKE ? OR neighborhood LIKE ?)";
-        p.push(`%${city}%`, `%${city}%`, `%${city}%`, `%${city}%`);
+        q += " AND (city LIKE ? ESCAPE '\\' OR name_ko LIKE ? ESCAPE '\\' OR name_en LIKE ? ESCAPE '\\' OR neighborhood LIKE ? ESCAPE '\\')";
+        p.push(contains(city), contains(city), contains(city), contains(city));
       }
       if (star > 0) {
         q += " AND star_rating >= ?";
@@ -154,31 +157,31 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
         q += ` AND departure_airport IN (${originAirports.map(() => "?").join(",")})`;
         p.push(...originAirports);
       } else if (originCode || cleanOrigin) {
-        q += " AND (departure_airport = ? OR departure_airport LIKE ? OR departure_city LIKE ? OR ? LIKE '%' || departure_city || '%')";
-        p.push(originCode || cleanOrigin, `%${originCode || cleanOrigin}%`, `%${cleanOrigin}%`, cleanOrigin);
+        q += " AND (departure_airport = ? OR departure_airport LIKE ? ESCAPE '\\' OR departure_city LIKE ? ESCAPE '\\' OR ? LIKE '%' || departure_city || '%')";
+        p.push(originCode || cleanOrigin, contains(originCode || cleanOrigin), contains(cleanOrigin), cleanOrigin);
       }
       if (destAirports.length) {
         q += ` AND arrival_airport IN (${destAirports.map(() => "?").join(",")})`;
         p.push(...destAirports);
       } else if (destCode || cleanDest) {
-        q += " AND (arrival_airport = ? OR arrival_airport LIKE ? OR arrival_city LIKE ? OR ? LIKE '%' || arrival_city || '%')";
-        p.push(destCode || cleanDest, `%${destCode || cleanDest}%`, `%${cleanDest}%`, cleanDest);
+        q += " AND (arrival_airport = ? OR arrival_airport LIKE ? ESCAPE '\\' OR arrival_city LIKE ? ESCAPE '\\' OR ? LIKE '%' || arrival_city || '%')";
+        p.push(destCode || cleanDest, contains(destCode || cleanDest), contains(cleanDest), cleanDest);
       }
       if (stops !== null && stops !== undefined && stops !== "") {
         q += " AND stops = ?";
         p.push(parseInt(stops, 10));
       }
       if (airline) {
-        q += " AND (airline_name LIKE ? OR airline_code LIKE ?)";
-        p.push(`%${airline}%`, `%${airline}%`);
+        q += " AND (airline_name LIKE ? ESCAPE '\\' OR airline_code LIKE ? ESCAPE '\\')";
+        p.push(contains(airline), contains(airline));
       }
       if (timeSlot && timeSlot !== "ALL") {
         q += " AND departure_time_slot = ?";
         p.push(timeSlot.toUpperCase());
       }
       if (cabinClass && cabinClass !== "ALL") {
-        q += " AND cabin_class LIKE ?";
-        p.push(`%${cabinClass}%`);
+        q += " AND cabin_class LIKE ? ESCAPE '\\'";
+        p.push(contains(cabinClass));
       }
 
       if (sortBy === "cheapest" || sortBy === "price_asc") {
@@ -215,16 +218,16 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       let q = "SELECT * FROM trains WHERE 1=1";
       const p: any[] = [];
       if (dep) {
-        q += " AND (departure_station LIKE ? OR ? LIKE '%' || departure_station || '%')";
-        p.push(`%${dep}%`, dep);
+        q += " AND (departure_station LIKE ? ESCAPE '\\' OR ? LIKE '%' || departure_station || '%')";
+        p.push(contains(dep), dep);
       }
       if (arr) {
-        q += " AND (arrival_station LIKE ? OR ? LIKE '%' || arrival_station || '%')";
-        p.push(`%${arr}%`, arr);
+        q += " AND (arrival_station LIKE ? ESCAPE '\\' OR ? LIKE '%' || arrival_station || '%')";
+        p.push(contains(arr), arr);
       }
       if (trainType && trainType !== "ALL") {
-        q += " AND train_type LIKE ?";
-        p.push(`%${trainType}%`);
+        q += " AND train_type LIKE ? ESCAPE '\\'";
+        p.push(contains(trainType));
       }
       if (sortBy === "price_asc") {
         q += " ORDER BY price_krw ASC";
@@ -254,8 +257,8 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       let q = "SELECT * FROM cars WHERE 1=1";
       const p: any[] = [];
       if (loc) {
-        q += " AND (pickup_location LIKE ? OR company_name LIKE ? OR vehicle_model LIKE ?)";
-        p.push(`%${loc}%`, `%${loc}%`, `%${loc}%`);
+        q += " AND (pickup_location LIKE ? ESCAPE '\\' OR company_name LIKE ? ESCAPE '\\' OR vehicle_model LIKE ? ESCAPE '\\')";
+        p.push(contains(loc), contains(loc), contains(loc));
       }
       if (vehicleType && vehicleType !== "ALL") {
         q += " AND vehicle_type = ?";
@@ -299,12 +302,12 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
         q += ` AND airport_code IN (${named.map(() => "?").join(",")})`;
         p.push(...named);
       } else if (airportCode || cleanAirport) {
-        q += " AND (airport_code = ? OR airport_code LIKE ? OR service_title LIKE ?)";
-        p.push(airportCode || cleanAirport, `%${airportCode || cleanAirport}%`, `%${cleanAirport}%`);
+        q += " AND (airport_code = ? OR airport_code LIKE ? ESCAPE '\\' OR service_title LIKE ? ESCAPE '\\')";
+        p.push(airportCode || cleanAirport, contains(airportCode || cleanAirport), contains(cleanAirport));
       }
       if (cleanDest) {
-        q += " AND (destination_area LIKE ? OR service_title LIKE ?)";
-        p.push(`%${cleanDest}%`, `%${cleanDest}%`);
+        q += " AND (destination_area LIKE ? ESCAPE '\\' OR service_title LIKE ? ESCAPE '\\')";
+        p.push(contains(cleanDest), contains(cleanDest));
       }
       q += " LIMIT 50";
       const res = await env.DB.prepare(q).bind(...p).all();
@@ -329,12 +332,12 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       let q = "SELECT * FROM activities WHERE 1=1";
       const p: any[] = [];
       if (qKeyword) {
-        q += " AND (title LIKE ? OR description LIKE ? OR city LIKE ?)";
-        p.push(`%${qKeyword}%`, `%${qKeyword}%`, `%${qKeyword}%`);
+        q += " AND (title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR city LIKE ? ESCAPE '\\')";
+        p.push(contains(qKeyword), contains(qKeyword), contains(qKeyword));
       }
       if (city) {
-        q += " AND (city LIKE ? OR title LIKE ? OR description LIKE ?)";
-        p.push(`%${city}%`, `%${city}%`, `%${city}%`);
+        q += " AND (city LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')";
+        p.push(contains(city), contains(city), contains(city));
       }
       if (category && category !== "ALL") {
         q += " AND category = ?";
@@ -391,8 +394,8 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       let q = "SELECT * FROM packages WHERE 1=1";
       const p: any[] = [];
       if (dest) {
-        q += " AND (destination_city LIKE ? OR title LIKE ?)";
-        p.push(`%${dest}%`, `%${dest}%`);
+        q += " AND (destination_city LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\')";
+        p.push(contains(dest), contains(dest));
       }
       q += " ORDER BY package_discount_rate DESC LIMIT 50";
       const res = await env.DB.prepare(q).bind(...p).all();

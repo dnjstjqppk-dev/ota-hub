@@ -109,7 +109,7 @@ const sendMessage = () => {
               <div class="text-[11px] text-blue-200">평균 응답 시간: 1분 이내</div>
             </div>
           </div>
-          <button @click="closeChat" class="text-white/80 hover:text-white text-xl font-bold p-1">✕</button>
+          <button type="button" aria-label="채팅 닫기" class="flex h-8 w-8 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white" @click="closeChat"><AppIcon name="close" :size="18" /></button>
         </div>
 
         <!-- 메시지 영역 -->

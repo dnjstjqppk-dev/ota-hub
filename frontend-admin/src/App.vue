@@ -1,166 +1,110 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+/**
+ * Admin console shell (design system "Horizon"): grouped sidebar on desktop, drawer on phones,
+ * top bar with page title, theme toggle and the signed-in admin from the login response.
+ */
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { apiUrl } from './config/api'
+import { clearSession, session } from './composables/session'
+import ToastHost from './components/ToastHost.vue'
 
 const route = useRoute()
 const router = useRouter()
-const sseActive = ref(false)
-const sseTime = ref('')
-let eventSource: EventSource | null = null
 
-const navItems = [
-  { path: '/dashboard', label: '통합 대시보드', icon: '📊' },
-  { path: '/bookings', label: '예약/발권 OMS', icon: '✈️' },
-  { path: '/catalog', label: '상품/인벤토리 관리', icon: '📦' },
-  { path: '/url-ingest', label: 'URL 상품 자동 수집', icon: '🌐' },
-  { path: '/feature-flags', label: '기능 ON/OFF 관리', icon: '🚩' },
-  { path: '/partners', label: '파트너/공급사 관리', icon: '🤝' },
-  { path: '/users', label: '회원/권한 관리', icon: '👥' },
-  { path: '/pricing', label: '가격/환율/마크업', icon: '💱' },
-  { path: '/promotions', label: '마케팅/쿠폰/리워드', icon: '🎁' },
-  { path: '/community', label: '커뮤니티/리뷰 CMS', icon: '💬' },
-  { path: '/support', label: '고객지원/공지사항', icon: '🎧' },
-  { path: '/settlements', label: '정산/감사로그', icon: '📑' }
+const NAV = [
+  { group: '운영', items: [
+    { path: '/dashboard', label: '대시보드', icon: 'dashboard' },
+    { path: '/bookings', label: '예약 관리', icon: 'bookings' },
+    { path: '/catalog', label: '상품', icon: 'package' },
+    { path: '/suppliers', label: '공급사 연동', icon: 'server' }
+  ] },
+  { group: '회원·파트너', items: [
+    { path: '/partners', label: '파트너', icon: 'building' },
+    { path: '/users', label: '회원', icon: 'users' }
+  ] },
+  { group: '콘텐츠', items: [
+    { path: '/url-ingest', label: 'URL 상품 수집', icon: 'link' },
+    { path: '/community', label: '커뮤니티', icon: 'chat' },
+    { path: '/support', label: '공지사항', icon: 'megaphone' },
+    { path: '/promotions', label: '프로모션', icon: 'gift' }
+  ] },
+  { group: '재무·설정', items: [
+    { path: '/settlements', label: '정산·감사 로그', icon: 'ledger' },
+    { path: '/pricing', label: '환율', icon: 'exchange' },
+    { path: '/feature-flags', label: '기능 플래그', icon: 'flag' }
+  ] }
 ]
+const flat = NAV.flatMap((g) => g.items)
+const current = computed(() => flat.find((i) => route.path.startsWith(i.path)))
+const isLogin = computed(() => route.path === '/login')
 
-const currentUser = computed(() => {
-  try {
-    const raw = localStorage.getItem('getfortrip_admin_user')
-    if (raw) return JSON.parse(raw)
-  } catch (e) {}
-  return { name: '총괄 관리자', email: 'admin@getfortrip.com', role: 'SUPER_ADMIN' }
-})
+const drawer = ref(false)
+watch(() => route.fullPath, () => { drawer.value = false })
 
-const isLoginPage = computed(() => route.path === '/login')
-
-const connectSSE = () => {
-  if (isLoginPage.value || eventSource) return
-  try {
-    eventSource = new EventSource(apiUrl('/sse/events'))
-    eventSource.onopen = () => {
-      sseActive.value = true
-    }
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        sseTime.value = data.time
-      } catch (e) {}
-    }
-    eventSource.onerror = () => {
-      sseActive.value = false
-    }
-  } catch (e) {
-    sseActive.value = false
-  }
+const dark = ref(document.documentElement.classList.contains('dark'))
+function toggleTheme() {
+  dark.value = !dark.value
+  document.documentElement.classList.toggle('dark', dark.value)
+  try { localStorage.setItem('gft_admin_theme', dark.value ? 'dark' : 'light') } catch { /* ignore */ }
 }
 
-const handleLogout = () => {
-  if (eventSource) {
-    eventSource.close()
-    eventSource = null
-  }
-  localStorage.removeItem('getfortrip_admin_token')
-  localStorage.removeItem('getfortrip_admin_user')
+const initials = computed(() => (session.user?.name || session.user?.email || '?').trim().slice(0, 1).toUpperCase())
+function logout() {
+  clearSession()
   router.push('/login')
 }
-
-watch(
-  () => route.path,
-  (newPath) => {
-    if (newPath !== '/login' && !eventSource) {
-      connectSSE()
-    }
-  }
-)
-
-onMounted(() => {
-  if (!isLoginPage.value) {
-    connectSSE()
-  }
-})
 </script>
 
 <template>
-  <div class="h-screen bg-slate-100 font-sans antialiased text-slate-800 flex overflow-hidden">
-    <!-- 사이드바 (로그인 페이지에서는 숨김) -->
+  <router-view v-if="isLogin" />
+  <div v-else class="flex min-h-screen bg-canvas text-ink">
+    <!-- Sidebar (drawer on < lg) -->
+    <div v-if="drawer" class="fixed inset-0 z-30 bg-midnight-950/50 lg:hidden" aria-hidden="true" @click="drawer = false" />
     <aside
-      v-if="!isLoginPage"
-      class="w-64 bg-trip-navy text-slate-200 flex flex-col justify-between shadow-xl flex-shrink-0 z-30 select-none"
+      id="admin-nav"
+      :class="['fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-line bg-surface transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0', drawer ? 'translate-x-0' : '-translate-x-full']"
+      aria-label="관리자 메뉴"
     >
-      <div class="overflow-y-auto">
-        <!-- 로고 -->
-        <div class="p-5 border-b border-slate-700/60 flex items-center gap-3">
-          <img src="/symbol.svg" alt="getfortrip" class="w-9 h-9 object-contain rounded-xl shadow-lg shadow-blue-500/30" />
-          <div>
-            <div class="text-base font-black tracking-tight text-white flex items-center gap-1.5">
-              <span>getfor<span class="text-cyan-400">trip</span></span>
-              <span class="text-[10px] uppercase font-bold bg-blue-500/20 text-cyan-300 px-1.5 py-0.5 rounded">Admin</span>
-            </div>
-            <div class="text-[11px] text-slate-400 font-medium">Global OMS & Backoffice</div>
-          </div>
-        </div>
-
-        <!-- 메뉴 목록 -->
-        <nav class="p-3 space-y-1">
-          <router-link
-            v-for="item in navItems"
-            :key="item.path"
-            :to="item.path"
-            :class="[
-              'flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all',
-              route.path.startsWith(item.path)
-                ? 'bg-trip-blue text-white shadow-md shadow-blue-600/30'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            ]"
-          >
-            <span class="text-base">{{ item.icon }}</span>
-            <span>{{ item.label }}</span>
-          </router-link>
-        </nav>
+      <div class="flex h-14 items-center gap-2.5 border-b border-line px-4">
+        <img src="/symbol.svg" alt="" class="h-7 w-7" />
+        <span class="text-[15px] font-extrabold tracking-tight">getfor<span class="text-primary">trip</span></span>
+        <span class="rounded-md bg-primary-soft px-1.5 py-0.5 text-2xs font-bold text-primary">관리자</span>
       </div>
-
-      <!-- 하단 상태 및 관리자 프로필 & 로그아웃 -->
-      <div class="p-4 border-t border-slate-800 space-y-3 bg-slate-950/40">
-        <!-- 실시간 SSE 상태 뱃지 -->
-        <div class="flex items-center justify-between px-3 py-2 bg-slate-900/80 rounded-lg text-xs">
-          <span class="text-slate-400 font-medium flex items-center gap-1.5">
-            <span :class="['w-2 h-2 rounded-full animate-pulse', sseActive ? 'bg-emerald-400' : 'bg-rose-500']"></span>
-            SSE 스트림
-          </span>
-          <span :class="['font-bold font-mono', sseActive ? 'text-emerald-400' : 'text-slate-400']">
-            {{ sseActive ? 'ONLINE' : 'STANDBY' }}
-          </span>
+      <nav class="flex-1 overflow-y-auto px-3 py-4">
+        <div v-for="g in NAV" :key="g.group" class="mb-5">
+          <p class="mb-1.5 px-2 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">{{ g.group }}</p>
+          <router-link
+            v-for="it in g.items"
+            :key="it.path"
+            :to="it.path"
+            :aria-current="current?.path === it.path ? 'page' : undefined"
+            :class="['mb-0.5 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors', current?.path === it.path ? 'bg-primary-soft text-primary' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink']"
+          ><AppIcon :name="it.icon" :size="18" />{{ it.label }}</router-link>
         </div>
-
-        <!-- 관리자 계정 정보 -->
-        <div class="flex items-center justify-between px-1">
-          <div class="flex items-center gap-2.5 min-w-0">
-            <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center font-bold text-white text-xs shadow flex-shrink-0">
-              AD
-            </div>
-            <div class="overflow-hidden">
-              <div class="text-xs font-bold text-white truncate">{{ currentUser.name }}</div>
-              <div class="text-[10px] text-slate-400 truncate">{{ currentUser.email }}</div>
-            </div>
-          </div>
-          <!-- 로그아웃 버튼 -->
-          <button
-            @click="handleLogout"
-            title="관리자 로그아웃"
-            class="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors flex-shrink-0"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-          </button>
+      </nav>
+      <div class="flex items-center gap-2.5 border-t border-line p-3">
+        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-ink">{{ initials }}</span>
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-sm font-semibold text-ink">{{ session.user?.name || '이름 없음' }}</p>
+          <p class="truncate text-2xs text-ink-subtle">{{ session.user?.email }}</p>
         </div>
+        <button type="button" class="btn-ghost btn-sm px-2" title="로그아웃" aria-label="로그아웃" @click="logout"><AppIcon name="logout" :size="18" /></button>
       </div>
     </aside>
 
-    <!-- 메인 콘텐츠 영역 -->
-    <main class="flex-1 overflow-y-auto flex flex-col min-w-0">
-      <router-view />
-    </main>
+    <div class="flex min-w-0 flex-1 flex-col">
+      <header class="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-surface/90 px-4 backdrop-blur lg:px-6">
+        <button type="button" class="btn-ghost btn-sm -ml-2 px-2 lg:hidden" aria-label="메뉴 열기" aria-controls="admin-nav" :aria-expanded="drawer" @click="drawer = true"><AppIcon name="menu" :size="20" /></button>
+        <p class="truncate text-sm font-semibold text-ink-muted">{{ current?.label }}</p>
+        <div class="ml-auto flex items-center gap-1">
+          <a href="https://ota-hub.dnjstjqppk.workers.dev" target="_blank" rel="noopener" class="btn-ghost btn-sm hidden sm:inline-flex">사용자 사이트 <AppIcon name="external" :size="14" /></a>
+          <button type="button" class="btn-ghost btn-sm px-2" :aria-label="dark ? '라이트 모드' : '다크 모드'" :title="dark ? '라이트 모드' : '다크 모드'" @click="toggleTheme"><AppIcon :name="dark ? 'sun' : 'moon'" :size="18" /></button>
+        </div>
+      </header>
+      <main class="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 lg:px-6">
+        <router-view />
+      </main>
+    </div>
   </div>
+  <ToastHost />
 </template>

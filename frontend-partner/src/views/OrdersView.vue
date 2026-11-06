@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { apiUrl } from '../config/api'
+import { apiUrl, partnerToken } from '../config/api'
 
 interface OrderRow {
   id: string
@@ -16,61 +16,91 @@ interface OrderRow {
   created_at: string
 }
 
+const STATUS_GROUPS = [
+  { id: 'ALL', label: '전체 주문', match: (_s: string) => true },
+  { id: 'AWAITING', label: '결제 대기', match: (s: string) => s === 'AWAITING_PAYMENT' },
+  { id: 'ACTIONABLE', label: '확정 대기', match: (s: string) => s === 'SUPPLIER_BOOKING_PENDING' || s === 'PAYMENT_AUTHORIZED' },
+  { id: 'DONE', label: '확정 완료', match: (s: string) => ['SUPPLIER_CONFIRMED', 'VOUCHER_ISSUED', 'TICKETED'].includes(s) },
+  { id: 'DEAD', label: '취소·환불', match: (s: string) => ['CANCELLED', 'REFUNDED', 'FAILED', 'EXPIRED', 'REFUND_PENDING', 'CANCELLATION_REQUESTED'].includes(s) }
+] as const
+
+const TERMINAL = new Set(['SUPPLIER_CONFIRMED', 'VOUCHER_ISSUED', 'TICKETED', 'CANCELLED', 'REFUNDED', 'FAILED', 'EXPIRED', 'REFUND_PENDING', 'CANCELLATION_REQUESTED'])
+
 const orders = ref<OrderRow[]>([])
 const loading = ref(false)
-const filterStatus = ref('ALL')
+const error = ref('')
+const filterStatus = ref<string>('ALL')
 const searchQuery = ref('')
-const actionLoading = ref(false)
+const actionLoading = ref('')
+const actionError = ref('')
 
 const filteredOrders = computed(() => {
+  const g = STATUS_GROUPS.find(x => x.id === filterStatus.value) || STATUS_GROUPS[0]
   return orders.value.filter(o => {
-    const matchStatus = filterStatus.value === 'ALL' || o.status === filterStatus.value
     const matchQuery = !searchQuery.value ||
       (o.booking_number && o.booking_number.toLowerCase().includes(searchQuery.value.toLowerCase())) ||
       (o.title && o.title.toLowerCase().includes(searchQuery.value.toLowerCase()))
-    return matchStatus && matchQuery
+    return g.match(o.status) && matchQuery
   })
 })
 
+const actionable = (o: OrderRow) => !TERMINAL.has(o.status)
+
+function badge(status: string) {
+  if (['SUPPLIER_CONFIRMED', 'VOUCHER_ISSUED', 'TICKETED'].includes(status)) return 'bg-success-soft text-success'
+  if (['CANCELLED', 'REFUNDED', 'FAILED', 'EXPIRED'].includes(status)) return 'bg-surface-sunken text-ink-subtle'
+  if (status === 'AWAITING_PAYMENT') return 'bg-warning-soft text-warning'
+  return 'bg-primary-soft text-primary'
+}
+
 const fetchOrders = async () => {
   loading.value = true
+  error.value = ''
   try {
-    const token = localStorage.getItem('getfortrip_partner_token')
+    const token = partnerToken()
     const res = await fetch(apiUrl('/partner/orders'), {
       headers: { Authorization: `Bearer ${token}` }
     })
-    if (res.ok) {
-      const json = await res.json()
-      orders.value = json.orders || []
-    }
-  } catch (e) {
-    console.error('Failed to load orders', e)
+    if (!res.ok) throw new Error('주문 목록을 불러오지 못했습니다.')
+    const json = await res.json()
+    orders.value = json.orders || []
+  } catch (e: any) {
+    error.value = e.message || '주문 목록을 불러오지 못했습니다.'
   } finally {
     loading.value = false
   }
 }
 
-const handleOrderAction = async (orderId: string, action: 'confirm' | 'reject') => {
-  const confirmMsg = action === 'confirm' ? '해당 예약을 확정하시겠습니까?' : '해당 예약을 거절/취소 처리하시겠습니까?'
-  if (!confirm(confirmMsg)) return
-
-  actionLoading.value = true
-  try {
-    const token = localStorage.getItem('getfortrip_partner_token')
-    const res = await fetch(apiUrl(`/partner/orders/${orderId}/${action}`), {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    if (res.ok) {
-      await fetchOrders()
-    } else {
-      const err = await res.json()
-      alert(err.error || '처리에 실패했습니다.')
+const handleOrderAction = async (order: OrderRow, action: 'confirm' | 'reject') => {
+  actionError.value = ''
+  let supplierReference = ''
+  if (action === 'confirm') {
+    const ref = window.prompt('공급사 확정번호를 입력하세요 (예약 확정에 필요합니다):', '')
+    if (ref === null) return
+    supplierReference = ref.trim()
+    if (!supplierReference) {
+      actionError.value = '공급사 확정번호를 입력해야 확정할 수 있습니다.'
+      return
     }
+  } else if (!window.confirm('해당 예약을 거절 처리할까요? 결제된 금액은 전액 환불됩니다.')) {
+    return
+  }
+
+  actionLoading.value = order.id
+  try {
+    const token = partnerToken()
+    const res = await fetch(apiUrl(`/partner/orders/${order.id}/${action}`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ supplierReference })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || '처리에 실패했습니다.')
+    await fetchOrders()
   } catch (e: any) {
-    alert(e.message || '오류가 발생했습니다.')
+    actionError.value = e.message || '오류가 발생했습니다.'
   } finally {
-    actionLoading.value = false
+    actionLoading.value = ''
   }
 }
 
@@ -81,47 +111,53 @@ onMounted(() => {
 
 <template>
   <div class="space-y-6">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
       <div>
-        <h1 class="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
+        <h1 class="flex items-center gap-2 text-2xl font-black tracking-tight text-ink">
           <span>주문 / 예약 접수 관리</span>
-          <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+          <span class="rounded-full bg-primary-soft px-2 py-0.5 text-xs font-bold text-primary">
             {{ orders.length }}건 접수
           </span>
         </h1>
-        <p class="text-sm text-slate-500 font-medium mt-1">
-          접수된 고객 예약의 실재고 확인 후 확정 처리 또는 취소 거절 처리를 수행합니다.
+        <p class="mt-1 text-sm font-medium text-ink-subtle">
+          접수된 고객 예약의 실재고 확인 후 확정 처리 또는 거절 처리를 수행합니다. 확정 시 공급사 확정번호가 필요합니다.
         </p>
       </div>
       <div>
         <button
+          type="button"
+          class="btn-secondary btn-sm !text-xs"
           @click="fetchOrders"
-          class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
         >
-          <span>🔄</span>
+          <AppIcon name="refresh" :size="14" />
           <span>새로고침</span>
         </button>
       </div>
     </div>
 
+    <div v-if="error" class="rounded-2xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">
+      {{ error }}
+      <button type="button" class="ml-2 underline" @click="fetchOrders">다시 시도</button>
+    </div>
+    <div v-if="actionError" class="rounded-2xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm font-semibold text-danger" role="alert">
+      {{ actionError }}
+    </div>
+
     <!-- Filters & Search -->
-    <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between">
-      <div class="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+    <div class="card flex flex-col justify-between gap-4 p-4 md:flex-row">
+      <div class="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0" role="group" aria-label="주문 상태 필터">
         <button
-          v-for="st in [
-            { id: 'ALL', label: '전체 주문' },
-            { id: 'AWAITING_PAYMENT', label: '결제 대기' },
-            { id: 'CONFIRMED', label: '확정 완료 ✅' },
-            { id: 'CANCELLED', label: '취소/환불 ❌' }
-          ]"
+          v-for="st in STATUS_GROUPS"
           :key="st.id"
-          @click="filterStatus = st.id"
+          type="button"
+          :aria-pressed="filterStatus === st.id"
           :class="[
             filterStatus === st.id
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
-            'px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex-shrink-0'
+              ? 'bg-primary text-primary-ink shadow-md'
+              : 'bg-surface-sunken text-ink-muted hover:text-ink',
+            'flex-shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-bold transition'
           ]"
+          @click="filterStatus = st.id"
         >
           {{ st.label }}
         </button>
@@ -132,35 +168,36 @@ onMounted(() => {
           v-model="searchQuery"
           type="text"
           placeholder="예약번호, 상품명 검색..."
-          class="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+          class="input !pl-9 !text-xs"
+          aria-label="주문 검색"
         />
-        <span class="absolute left-3 top-2.5 text-xs text-slate-400">🔍</span>
+        <AppIcon name="search" :size="14" class="pointer-events-none absolute left-3 top-3 text-ink-subtle" />
       </div>
     </div>
 
     <!-- Order Table -->
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="card overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse text-xs">
+        <table class="table !min-w-[720px] text-xs">
           <thead>
-            <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-              <th class="p-3.5">예약 번호</th>
-              <th class="p-3.5">상품명</th>
-              <th class="p-3.5">이용 기간</th>
-              <th class="p-3.5">예약자명 (마스킹)</th>
-              <th class="p-3.5">결제 금액</th>
-              <th class="p-3.5">상태</th>
-              <th class="p-3.5 text-right">주문 처리</th>
+            <tr>
+              <th>예약 번호</th>
+              <th>상품명</th>
+              <th>이용 기간</th>
+              <th>예약자명 (마스킹)</th>
+              <th>결제 금액</th>
+              <th>상태</th>
+              <th class="!text-right">주문 처리</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-100 font-medium">
+          <tbody class="font-medium">
             <tr v-if="loading">
-              <td colspan="7" class="p-8 text-center text-slate-400 font-bold">
+              <td colspan="7" class="p-8 text-center font-bold text-ink-subtle">
                 주문 목록을 불러오는 중입니다...
               </td>
             </tr>
             <tr v-else-if="filteredOrders.length === 0">
-              <td colspan="7" class="p-8 text-center text-slate-400 font-bold">
+              <td colspan="7" class="p-8 text-center font-bold text-ink-subtle">
                 일치하는 예약 주문이 없습니다.
               </td>
             </tr>
@@ -168,44 +205,40 @@ onMounted(() => {
               v-else
               v-for="o in filteredOrders"
               :key="o.id"
-              class="hover:bg-slate-50/80 transition"
+              class="transition hover:bg-surface-sunken"
             >
-              <td class="p-3.5 font-mono font-bold text-slate-700">{{ o.booking_number || o.id }}</td>
-              <td class="p-3.5 font-bold text-slate-900">{{ o.title }}</td>
-              <td class="p-3.5 text-slate-500">
+              <td class="font-mono font-bold">{{ o.booking_number || o.id }}</td>
+              <td class="font-bold">{{ o.title }}</td>
+              <td class="text-ink-subtle">
                 {{ o.service_start || '-' }} <span v-if="o.service_end">~ {{ o.service_end }}</span>
               </td>
-              <td class="p-3.5 font-bold text-slate-700">{{ o.customerNameMasked || '김**' }}</td>
-              <td class="p-3.5 font-bold text-blue-600">{{ (o.total_minor || 0).toLocaleString() }}원</td>
-              <td class="p-3.5">
-                <span
-                  :class="[
-                    o.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-800' :
-                    o.status === 'CANCELLED' ? 'bg-rose-100 text-rose-800' :
-                    'bg-amber-100 text-amber-800',
-                    'px-2 py-0.5 rounded-full text-[10px] font-bold'
-                  ]"
-                >
+              <td class="font-bold text-ink-muted">{{ o.customerNameMasked || '-' }}</td>
+              <td class="font-bold tabular text-primary">{{ (o.total_minor || 0).toLocaleString() }}원</td>
+              <td>
+                <span :class="['rounded-full px-2 py-0.5 text-[10px] font-bold', badge(o.status)]">
                   {{ o.status }}
                 </span>
               </td>
-              <td class="p-3.5 text-right space-x-1.5">
-                <button
-                  v-if="o.status !== 'CONFIRMED' && o.status !== 'CANCELLED'"
-                  @click="handleOrderAction(o.id, 'confirm')"
-                  :disabled="actionLoading"
-                  class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] shadow-sm transition disabled:opacity-50"
-                >
-                  예약 확정
-                </button>
-                <button
-                  v-if="o.status !== 'CANCELLED'"
-                  @click="handleOrderAction(o.id, 'reject')"
-                  :disabled="actionLoading"
-                  class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-[11px] transition disabled:opacity-50"
-                >
-                  취소 거절
-                </button>
+              <td class="!text-right">
+                <span v-if="!actionable(o)" class="text-[11px] text-ink-subtle">처리 완료</span>
+                <span v-else class="space-x-1.5">
+                  <button
+                    type="button"
+                    :disabled="actionLoading === o.id"
+                    class="rounded-lg bg-success px-2.5 py-1 text-[11px] font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+                    @click="handleOrderAction(o, 'confirm')"
+                  >
+                    {{ actionLoading === o.id ? '처리 중...' : '예약 확정' }}
+                  </button>
+                  <button
+                    type="button"
+                    :disabled="actionLoading === o.id"
+                    class="rounded-lg border border-danger/30 bg-danger-soft px-2.5 py-1 text-[11px] font-bold text-danger transition hover:opacity-80 disabled:opacity-50"
+                    @click="handleOrderAction(o, 'reject')"
+                  >
+                    거절
+                  </button>
+                </span>
               </td>
             </tr>
           </tbody>
@@ -214,4 +247,3 @@ onMounted(() => {
     </div>
   </div>
 </template>
-

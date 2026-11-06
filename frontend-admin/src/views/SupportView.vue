@@ -1,70 +1,72 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { adminFetch } from '../config/api'
+/**
+ * Site notices (GET/POST /admin/notices, PATCH /admin/notices/:id). A notice with the banner on is shown
+ * on the user site (GET /notices); "긴급" puts it first.
+ */
+import { onMounted, reactive, ref } from 'vue'
+import { api, toast } from '../composables/session'
+import { useResource } from '../composables/useResource'
+import { dateTime } from '../composables/format'
+import PageHeader from '../components/PageHeader.vue'
+import StatePanel from '../components/StatePanel.vue'
+import StatusBadge from '../components/StatusBadge.vue'
 
-const DEFAULT_NOTICES = [
-  {
-    id: 'notice-01',
-    title: '동남아 및 일본 태풍 예보에 따른 항공편 결항 시 전액 무료 취소 안내',
-    content: '기상 악화로 인한 항공사 결항/지연 통보 시 getfortrip 앱 및 마이페이지에서 수수료 없이 100% 즉시 환불 접수됩니다.'
-  },
-  {
-    id: 'notice-02',
-    title: '유럽 유로스타(Eurostar) 노선 선로 개보수로 인한 일부 편수 스케줄 변경',
-    content: '런던-파리 구간 일부 고속열차의 출발 시각이 15분 앞당겨졌으니 탑승 전 모바일 티켓 QR 및 출발 안내를 재확인해 주시기 바랍니다.'
-  }
-]
+const list = useResource(async () => (await api('/admin/notices')).notices || [], [] as any[])
+onMounted(list.reload)
 
-const notices = ref<any[]>(DEFAULT_NOTICES)
-const loading = ref(false)
-
-const fetchNotices = async () => {
-  loading.value = true
+const form = reactive({ title: '', content: '', isEmergency: false, bannerActive: true })
+const saving = ref(false)
+async function create() {
+  if (!form.title.trim() || !form.content.trim()) { toast('제목과 내용을 입력해 주세요.', 'danger'); return }
+  saving.value = true
   try {
-    const res = await adminFetch('/admin/notices')
-    if (res.ok) {
-      const json = await res.json()
-      const list = json.notices || json.data
-      if (list && list.length > 0) {
-        notices.value = list
-      }
-    }
-  } catch (e) {
-    // Keep DEFAULT_NOTICES
-  } finally {
-    loading.value = false
-  }
+    const shown = form.bannerActive
+    await api('/admin/notices', { method: 'POST', json: { title: form.title.trim(), content: form.content.trim(), isEmergency: form.isEmergency, bannerActive: shown } })
+    Object.assign(form, { title: '', content: '', isEmergency: false, bannerActive: true })
+    toast(shown ? '공지를 등록했어요. 사용자 사이트에 바로 보여요.' : '공지를 등록했어요.')
+    list.reload()
+  } catch (e) { toast((e as Error).message, 'danger') } finally { saving.value = false }
 }
-
-onMounted(() => {
-  fetchNotices()
-})
+const busy = ref('')
+async function patch(n: any, change: { bannerActive?: boolean; isEmergency?: boolean }) {
+  busy.value = n.id
+  try {
+    await api(`/admin/notices/${encodeURIComponent(n.id)}`, { method: 'PATCH', json: change })
+    list.reload()
+  } catch (e) { toast((e as Error).message, 'danger') } finally { busy.value = '' }
+}
 </script>
 
 <template>
-  <div class="p-8 space-y-6">
-    <div>
-      <h1 class="text-2xl font-black text-slate-900 tracking-tight">고객센터 & 긴급 공지 관리</h1>
-      <p class="text-sm text-slate-500 mt-1">1:1 고객 상담 티켓 할당 및 천재지변/결항 긴급 안내 배너 발송</p>
-    </div>
-
-    <!-- 긴급 공지 배너 관리 -->
-    <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
-      <h3 class="text-base font-bold text-slate-900">글로벌 실시간 긴급 공지 배너</h3>
-      <div class="space-y-3">
-        <div v-for="n in notices" :key="n.id" class="p-4 rounded-xl border border-rose-200 bg-rose-50/50 flex items-start justify-between">
-          <div class="space-y-1">
-            <div class="flex items-center gap-2">
-              <span class="px-2 py-0.5 bg-rose-600 text-white text-[11px] font-bold rounded-full">긴급 공지</span>
-              <h4 class="font-bold text-rose-950 text-sm">{{ n.title }}</h4>
+  <div>
+    <PageHeader title="공지사항" description="사용자 사이트 상단에 보일 공지를 등록하고 노출을 관리해요." />
+    <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <StatePanel :state="list.state.value" :error="list.error.value" :empty="!list.data.value.length" empty-text="등록된 공지가 없어요." @retry="list.reload()">
+        <ul class="space-y-3">
+          <li v-for="n in list.data.value" :key="n.id" class="card p-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <StatusBadge v-if="n.is_emergency" tone="danger" label="긴급" />
+              <StatusBadge :tone="n.banner_active ? 'success' : 'neutral'" :label="n.banner_active ? '노출 중' : '숨김'" />
+              <span class="text-2xs text-ink-subtle tabular">{{ dateTime(n.created_at) }}</span>
             </div>
-            <p class="text-xs text-rose-800 leading-relaxed">{{ n.content }}</p>
-          </div>
-          <span class="px-2 py-1 bg-white border border-rose-200 text-rose-700 text-xs font-bold rounded-lg shadow-sm">
-            노출중
-          </span>
-        </div>
-      </div>
+            <h3 class="mt-2 font-bold text-ink">{{ n.title }}</h3>
+            <p class="mt-1 whitespace-pre-line text-sm text-ink-muted">{{ n.content }}</p>
+            <div class="mt-3 flex gap-2">
+              <button type="button" class="btn-secondary btn-sm" :disabled="busy === n.id" @click="patch(n, { bannerActive: !n.banner_active })">{{ n.banner_active ? '숨기기' : '노출하기' }}</button>
+              <button type="button" class="btn-ghost btn-sm" :disabled="busy === n.id" @click="patch(n, { isEmergency: !n.is_emergency })">{{ n.is_emergency ? '긴급 해제' : '긴급 지정' }}</button>
+            </div>
+          </li>
+        </ul>
+      </StatePanel>
+
+      <form class="card h-fit space-y-3 p-5 lg:sticky lg:top-20" @submit.prevent="create">
+        <h2 class="font-bold text-ink">새 공지</h2>
+        <div><label for="nt-title" class="label">제목</label><input id="nt-title" v-model="form.title" class="input" maxlength="200" /></div>
+        <div><label for="nt-content" class="label">내용</label><textarea id="nt-content" v-model="form.content" class="input min-h-[140px] py-2" maxlength="4000" /></div>
+        <label class="flex items-center gap-2 text-sm"><input v-model="form.bannerActive" type="checkbox" class="h-4 w-4 accent-[rgb(var(--gft-primary))]" />사용자 사이트에 바로 노출</label>
+        <label class="flex items-center gap-2 text-sm"><input v-model="form.isEmergency" type="checkbox" class="h-4 w-4 accent-[rgb(var(--gft-primary))]" />긴급 공지 (맨 위에 표시)</label>
+        <button type="submit" class="btn-primary w-full" :disabled="saving">{{ saving ? '등록 중…' : '공지 등록' }}</button>
+      </form>
     </div>
   </div>
 </template>

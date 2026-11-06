@@ -343,7 +343,7 @@ const PRODUCT_QUERIES: ProductQuery[] = [
     domains: ["all", "esim"],
     sql: "SELECT DISTINCT country_code, country_name FROM esim_plans WHERE is_active = 1 AND (country_name LIKE ? ESCAPE '\\' OR country_code LIKE ? ESCAPE '\\') LIMIT 4",
     params: (q) => [q, q],
-    map: (e) => ({ id: `esim_${e.country_code}`, kind: "product", type: "esim", code: e.country_code, country_code: e.country_code, title: `${e.country_name} eSIM`, subtitle: "판매 중인 eSIM 요금제", value: e.country_name, target_url: `/esim?country=${encodeURIComponent(e.country_code)}`, badge: "eSIM", domain: "esim" }),
+    map: (e) => ({ id: `esim_${e.country_code}`, kind: "product", type: "esim", code: e.country_code, country_code: e.country_code, title: `${e.country_name} eSIM`, subtitle: "eSIM 요금제 보기", value: e.country_name, target_url: `/esim?country=${encodeURIComponent(e.country_code)}`, badge: "eSIM", domain: "esim" }),
   },
 ];
 

@@ -194,7 +194,7 @@ const preMadePackages = ref([
       <!-- Hotel Selection Card -->
       <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
         <h3 class="text-sm font-black text-slate-900 flex items-center gap-2">
-          <span>🏨</span>
+          <AppIcon name="hotel" :size="18" class="text-primary" />
           <span>호텔 선택 (3박 기준)</span>
         </h3>
 
@@ -278,8 +278,8 @@ const preMadePackages = ref([
           <div class="p-6 space-y-3 text-xs">
             <h3 class="font-black text-slate-900 text-sm leading-snug">{{ pkg.title }}</h3>
             <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1 text-slate-600">
-              <div>✈️ 항공: {{ pkg.airline }}</div>
-              <div>🏨 호텔: {{ pkg.hotel }}</div>
+              <div class="flex items-center gap-1.5"><AppIcon name="flight" :size="14" />항공: {{ pkg.airline }}</div>
+              <div class="flex items-center gap-1.5"><AppIcon name="hotel" :size="14" />호텔: {{ pkg.hotel }}</div>
             </div>
             <div class="flex items-center justify-between pt-2 border-t border-slate-100">
               <div>

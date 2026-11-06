@@ -1,0 +1,27 @@
+{
+  "nav": {
+    "hotels": "호텔",
+    "flights": "항공권",
+    "trains": "기차표",
+    "cars": "렌터카",
+    "transfers": "공항픽업",
+    "activities": "투어·티켓",
+    "packages": "항공+호텔",
+    "esim": "eSIM",
+    "insurance": "여행자보험",
+    "best": "Best",
+    "moments": "모먼트",
+    "deals": "프로모션",
+    "partnerCenter": "파트너 센터",
+    "myBookings": "내 예약",
+    "wishlist": "위시리스트",
+    "login": "로그인"
+  },
+  "common": {
+    "search": "검색",
+    "bookNow": "예약하기",
+    "loading": "불러오는 중…",
+    "retry": "다시 시도",
+    "close": "닫기"
+  }
+}

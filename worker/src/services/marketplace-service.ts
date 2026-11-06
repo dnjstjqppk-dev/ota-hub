@@ -233,7 +233,7 @@ export async function getMarketplaceFinancialSummary(env: Env) {
       breakdown['CONSIGNMENT'] = {
         order_count: Number(r.order_count),
         gmv_minor: gmv,
-        supplier_cogs_minor: Number(r.total_supply_cost_minor || r.total_payout_minor),
+        supplier_cogs_minor: Number(r.total_cogs_minor),
         profit_minor: profit
       };
     }

@@ -1,205 +1,133 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { BRAND } from '~/config/brand'
+/**
+ * Travel insurance landing (design system "Horizon"). Plans and premiums come from
+ * GET /api/v1/insurance/plans?days=N (the server multiplies the daily rate). Selling insurance needs an
+ * insurance-agency registration and an underwriter agreement, neither of which exists yet, so this page
+ * never enrolls anyone, never issues a policy number and does not name an insurer.
+ */
+import { computed, onMounted, ref, watch } from 'vue'
+import { useCurrencyStore } from '~/stores/currency'
+import { useApiUrl } from '~/composables/useApi'
+import { qInt, qStr, useUrlQuery } from '~/composables/useUrlQuery'
+import { isIsoCountry, resolveCountry } from '~/composables/useCountryLookup'
 
-const durationDays = ref(5)
-const planType = ref<'standard' | 'premium' | 'vip'>('premium')
+interface Plan {
+  id: string
+  plan_name: string
+  tier: string
+  medical_coverage_minor: number
+  baggage_loss_coverage_minor: number
+  cancellation_coverage_minor: number
+  daily_rate_minor: number
+  total_price_minor: number
+}
 
-const plans = {
-  standard: {
-    name: '실속 플랜 (Basic)',
-    medical: '해외 의료비 최대 3,000만원 보장',
-    baggage: '휴대품 도난/파손 최대 50만원',
-    flightDelay: '항공기 결항/지연 20만원 지원',
-    emergency: '24시간 한국어 긴급 의료 지원',
-    priceKrw: 8900
-  },
-  premium: {
-    name: '표준 안심 플랜 (Recommended)',
-    medical: '해외 의료비 최대 7,000만원 보장',
-    baggage: '휴대품 도난/파손 최대 100만원',
-    flightDelay: '항공기 결항/지연 40만원 지원',
-    emergency: '긴급 이송 및 구조비 5,000만원 지원',
-    priceKrw: 14500
-  },
-  vip: {
-    name: 'VIP 프리미엄 무제한 케어',
-    medical: '해외 의료비 최대 1억원 전액 보장',
-    baggage: '휴대품 도난/파손 최대 200만원',
-    flightDelay: '항공기 결항/지연 60만원 지원',
-    emergency: '긴급 후송 1억원 + 전담 의료진 케어',
-    priceKrw: 22800
+const currency = useCurrencyStore()
+const { route, patch } = useUrlQuery()
+const MIN_DAYS = 1
+const MAX_DAYS = 90
+const days = ref(qInt(route.query.days, 5, MIN_DAYS, MAX_DAYS))
+const destination = ref('')
+const plans = ref<Plan[]>([])
+const state = ref<'loading' | 'ready' | 'error'>('loading')
+let ctrl: AbortController | null = null
+
+async function load() {
+  ctrl?.abort()
+  ctrl = new AbortController()
+  state.value = 'loading'
+  try {
+    const r = await fetch(useApiUrl(`/insurance/plans?days=${days.value}`), { signal: ctrl.signal })
+    if (!r.ok) throw new Error(String(r.status))
+    plans.value = (await r.json()).plans || []
+    state.value = 'ready'
+  } catch (e) {
+    if ((e as Error).name !== 'AbortError') state.value = 'error'
   }
 }
+onMounted(async () => {
+  load()
+  const code = qStr(route.query.country).toUpperCase()
+  if (isIsoCountry(code)) destination.value = (await resolveCountry(code, 'insurance'))?.name || ''
+})
+let t: ReturnType<typeof setTimeout> | undefined
+watch(days, (n) => { patch({ days: n === 5 ? '' : n }); clearTimeout(t); t = setTimeout(load, 250) })
 
-const isModalOpen = ref(false)
-const travelerName = ref('')
-const travelerBirth = ref('')
-const isEnrolled = ref(false)
-const policyNumber = ref('')
+function onSelect(it: { code?: string | null; country_code?: string | null }) {
+  const code = it.code || it.country_code
+  if (code) patch({ country: code.toUpperCase() })
+}
+watch(destination, (v) => { if (!v.trim()) patch({ country: '' }) })
 
-const enroll = () => {
-  travelerName.value = '홍길동'
-  travelerBirth.value = '1990-05-15'
-  isEnrolled.value = false
-  isModalOpen.value = true
+function setDays(n: number) {
+  days.value = Math.max(MIN_DAYS, Math.min(MAX_DAYS, Math.round(Number(n) || MIN_DAYS)))
 }
 
-const completeEnrollment = () => {
-  if (!travelerName.value) {
-    alert('피보험자 성함을 입력해 주세요.')
-    return
-  }
-  policyNumber.value = `GFT-INS-${Date.now().toString(36).toUpperCase()}`
-  isEnrolled.value = true
+/** 70,000,000 → "7,000만원", 100,000,000 → "1억원". */
+function won(n: number) {
+  if (n >= 1e8 && n % 1e8 === 0) return `${(n / 1e8).toLocaleString('ko-KR')}억원`
+  if (n >= 1e4) return `${Math.round(n / 1e4).toLocaleString('ko-KR')}만원`
+  return `${n.toLocaleString('ko-KR')}원`
 }
+const tripLabel = computed(() => `${destination.value.trim() ? `${destination.value.trim()} ` : ''}${days.value}일 여행 기준`)
+
+useHead({
+  title: '해외 여행자보험',
+  meta: [{ name: 'description', content: '여행 기간에 맞춰 해외 여행자보험 플랜의 보장 내용과 보험료를 비교해 보세요.' }]
+})
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto px-4 py-8 space-y-10">
-    <!-- 상단 배너 -->
-    <div class="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 rounded-3xl p-6 sm:p-10 text-white shadow-xl">
-      <div class="space-y-3 max-w-xl">
-        <span class="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-black uppercase tracking-wider">
-          🛡️ 해외 여행자 안심 보험
-        </span>
-        <h1 class="text-2xl sm:text-4xl font-black tracking-tight leading-tight">
-          출국 1분 전에도 간편 가입! 든든한 해외 의료비 & 수하물 보장
-        </h1>
-        <p class="text-xs sm:text-sm text-emerald-100">
-          해외 현지 병원비 폭탄, 휴대폰 파손, 항공기 지연까지 공식 공인 보험 플랜으로 완벽하게 대비하세요.
-        </p>
-      </div>
-    </div>
-
-    <!-- 플랜 비교 카드 그리드 -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div
-        v-for="(info, key) in plans"
-        :key="key"
-        :class="[
-          'bg-white rounded-3xl border p-6 shadow-sm transition space-y-5 flex flex-col justify-between',
-          planType === key ? 'border-2 border-emerald-500 shadow-md ring-2 ring-emerald-100' : 'border-slate-200'
-        ]"
-      >
-        <div class="space-y-4">
-          <div class="flex items-center justify-between">
-            <span
-              v-if="key === 'premium'"
-              class="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black border border-emerald-200"
-            >
-              가장 많은 여행자 선택
-            </span>
-            <span v-else class="text-[10px] text-slate-400 font-bold">여행자 보장</span>
-          </div>
-
-          <div>
-            <h3 class="text-lg font-black text-slate-900">{{ info.name }}</h3>
-            <div class="mt-2 text-2xl font-black text-emerald-600 font-mono">
-              ₩{{ (info.priceKrw * (durationDays / 5)).toLocaleString() }}
-              <span class="text-xs font-normal text-slate-400">/ 5일 기준</span>
+  <div class="pb-24 lg:pb-16">
+    <section class="relative overflow-hidden border-b border-line bg-gradient-to-b from-sapphire-50 to-canvas">
+      <div class="mx-auto max-w-7xl px-4 pb-6 pt-8 lg:px-6 lg:pt-12">
+        <nav class="mb-2 flex items-center gap-1 text-xs text-ink-subtle" aria-label="이동 경로"><NuxtLink to="/" class="hover:text-ink">홈</NuxtLink><AppIcon name="chevron-right" :size="12" /><span>여행자보험</span></nav>
+        <h1 class="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">여행 기간에 맞춘 여행자보험</h1>
+        <p class="mt-2 max-w-2xl text-base text-ink-muted">여행할 국가와 기간을 넣으면 플랜별 보험료를 비교해 드려요.</p>
+        <div class="mt-5 flex max-w-2xl flex-col gap-2 sm:flex-row">
+          <div class="field-box flex-1"><label for="ins-dest" class="field-label">여행 국가</label><SearchAutocomplete v-model="destination" input-id="ins-dest" domain="insurance" variant="bare" placeholder="예: 일본, 프랑스" @select="onSelect" /></div>
+          <div class="field-box sm:w-48">
+            <label for="ins-days" class="field-label">여행 기간</label>
+            <div class="flex items-center gap-2">
+              <button type="button" class="flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted hover:text-ink disabled:opacity-40" :disabled="days <= MIN_DAYS" aria-label="하루 줄이기" @click="setDays(days - 1)"><AppIcon name="minus" :size="14" /></button>
+              <input id="ins-days" :value="days" type="number" inputmode="numeric" :min="MIN_DAYS" :max="MAX_DAYS" class="w-12 bg-transparent text-center text-base font-semibold text-ink tabular focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" @change="setDays(Number(($event.target as HTMLInputElement).value))" />
+              <span class="text-sm text-ink-muted">일</span>
+              <button type="button" class="flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted hover:text-ink disabled:opacity-40" :disabled="days >= MAX_DAYS" aria-label="하루 늘리기" @click="setDays(days + 1)"><AppIcon name="plus" :size="14" /></button>
             </div>
           </div>
-
-          <div class="space-y-2.5 text-xs text-slate-600 border-t border-slate-100 pt-4">
-            <div class="flex items-start gap-2">
-              <span class="text-emerald-500">✓</span>
-              <span>{{ info.medical }}</span>
-            </div>
-            <div class="flex items-start gap-2">
-              <span class="text-emerald-500">✓</span>
-              <span>{{ info.baggage }}</span>
-            </div>
-            <div class="flex items-start gap-2">
-              <span class="text-emerald-500">✓</span>
-              <span>{{ info.flightDelay }}</span>
-            </div>
-            <div class="flex items-start gap-2">
-              <span class="text-emerald-500">✓</span>
-              <span>{{ info.emergency }}</span>
-            </div>
-          </div>
-        </div>
-
-        <button
-          @click="planType = key as any; enroll()"
-          :class="[
-            'w-full py-3 rounded-xl text-xs font-black transition shadow-sm',
-            planType === key ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
-          ]"
-        >
-          {{ planType === key ? '이 플랜으로 가입하기' : '선택하기' }}
-        </button>
-      </div>
-    </div>
-
-    <!-- 여행자 보험 가입 신청 모달 -->
-    <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden p-6 space-y-6">
-        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div class="flex items-center gap-2">
-            <span class="text-xl">🛡️</span>
-            <h3 class="font-bold text-slate-900 text-sm">해외 여행자보험 가입 신청</h3>
-          </div>
-          <button @click="isModalOpen = false" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
-        </div>
-
-        <div v-if="!isEnrolled" class="space-y-4 text-xs">
-          <div class="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-100 space-y-1">
-            <div class="font-bold text-emerald-900">{{ plans[planType].name }}</div>
-            <div class="text-[11px] text-emerald-700">{{ plans[planType].medical }}</div>
-            <div class="text-[11px] text-emerald-700">{{ plans[planType].baggage }}</div>
-            <div class="text-base font-black text-emerald-900 pt-2 font-mono">보험료 ₩{{ plans[planType].priceKrw.toLocaleString() }} (총 1인)</div>
-          </div>
-
-          <div class="space-y-2">
-            <div class="space-y-1">
-              <label class="font-bold text-slate-700 block">피보험자 성명 (한글)</label>
-              <input
-                v-model="travelerName"
-                placeholder="홍길동"
-                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div class="space-y-1">
-              <label class="font-bold text-slate-700 block">생년월일 (YYYY-MM-DD)</label>
-              <input
-                v-model="travelerBirth"
-                placeholder="1990-05-15"
-                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          <button
-            @click="completeEnrollment"
-            class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow-md transition"
-          >
-            ₩{{ plans[planType].priceKrw.toLocaleString() }} 결제 및 보험 증권 발급
-          </button>
-        </div>
-
-        <!-- 가입 완료 상태 -->
-        <div v-else class="text-center space-y-4 py-2">
-          <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-xl font-black">✓</div>
-          <div class="space-y-1">
-            <h4 class="font-black text-slate-900 text-base">보험 가입이 완료되었습니다!</h4>
-            <p class="text-[11px] text-slate-500">증권 번호: <span class="font-mono font-bold text-slate-800">{{ policyNumber }}</span></p>
-          </div>
-          <div class="bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-300 space-y-1.5 text-left text-[11px] text-slate-600">
-            <div>• <strong>피보험자:</strong> {{ travelerName }}</div>
-            <div>• <strong>보장 플랜:</strong> {{ plans[planType].name }}</div>
-            <div>• <strong>보장 효력:</strong> 출국 심사 완료 시점부터 즉시 유효</div>
-          </div>
-          <button
-            @click="isModalOpen = false"
-            class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"
-          >
-            확인 및 닫기
-          </button>
         </div>
       </div>
+    </section>
+
+    <div class="mx-auto max-w-7xl px-4 lg:px-6">
+      <div class="mt-6 flex items-start gap-3 rounded-card border border-line bg-surface-sunken p-4 text-sm text-ink-muted" role="note">
+        <AppIcon name="shield" class="mt-0.5 shrink-0 text-ink-subtle" />
+        <p><strong class="font-semibold text-ink">여행자보험은 아직 가입할 수 없어요.</strong> 보험 판매에 필요한 대리점 등록과 보험사 제휴를 준비하고 있어요. 아래 보장 내용과 보험료는 확정 전 참고용이고, 이 화면에서는 가입이나 증권 발급이 되지 않아요.</p>
+      </div>
+
+      <h2 class="pb-3 pt-8 text-xl font-bold tracking-tight text-ink">플랜 비교 <span class="ml-1 text-base font-semibold text-ink-subtle">{{ tripLabel }}</span></h2>
+
+      <div v-if="state === 'loading' && !plans.length" class="grid gap-4 md:grid-cols-3">
+        <div v-for="n in 3" :key="n" class="h-64 animate-pulse rounded-card bg-surface-sunken" />
+      </div>
+      <div v-else-if="state === 'error'" class="card p-6 text-center text-sm">
+        <span class="text-ink-muted">플랜을 불러오지 못했어요.</span>
+        <button type="button" class="ml-2 font-semibold text-primary" @click="load">다시 시도</button>
+      </div>
+      <p v-else-if="!plans.length" class="card p-8 text-center text-sm text-ink-muted">준비된 플랜이 없어요.</p>
+      <ul v-else class="grid gap-4 md:grid-cols-3" :aria-busy="state === 'loading'">
+        <li v-for="p in plans" :key="p.id" class="card flex flex-col p-5" :class="state === 'loading' ? 'opacity-60' : ''">
+          <h3 class="text-lg font-bold text-ink">{{ p.plan_name }}</h3>
+          <p class="mt-2 text-2xl font-extrabold text-ink tabular">{{ currency.formatKRW(p.total_price_minor) }}</p>
+          <p class="text-2xs text-ink-subtle">{{ days }}일 · 1인 · 하루 {{ currency.formatKRW(p.daily_rate_minor) }} · 참고가</p>
+          <dl class="mb-4 mt-4 space-y-2 border-t border-line pt-4 text-sm">
+            <div class="flex justify-between gap-3"><dt class="text-ink-subtle">해외 의료비</dt><dd class="font-semibold text-ink tabular">최대 {{ won(p.medical_coverage_minor) }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-ink-subtle">휴대품 손해</dt><dd class="font-semibold text-ink tabular">최대 {{ won(p.baggage_loss_coverage_minor) }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-ink-subtle">여행 취소</dt><dd class="font-semibold text-ink tabular">최대 {{ won(p.cancellation_coverage_minor) }}</dd></div>
+          </dl>
+          <button type="button" class="btn-secondary mt-auto w-full cursor-not-allowed opacity-60" disabled>가입 준비 중</button>
+        </li>
+      </ul>
     </div>
   </div>
 </template>
-

@@ -200,6 +200,36 @@ test("PG response lost: manual review, then reconciliation discovers capture and
   assert.equal(after.data.booking.status, "VOUCHER_ISSUED");
 });
 
+test("toss webhook: hint triggers PG lookup; duplicates acknowledged; unknown orders ignored", async () => {
+  assert.equal((await api("POST", "/api/v1/webhooks/toss", { body: { eventType: "PAYMENT_STATUS_CHANGED" } })).status, 400);
+  const ghost = await api("POST", "/api/v1/webhooks/toss", { body: { eventType: "PAYMENT_STATUS_CHANGED", data: { orderId: "bkg_no_such_booking", paymentKey: "xxx", status: "DONE" } } });
+  assert.equal(ghost.data.action, "IGNORED_UNKNOWN_ORDER");
+  const { p } = await fullHotelBooking(A.token, {}, "timeout");
+  const id = p.data.booking.id;
+  assert.equal(p.data.booking.status, "MANUAL_REVIEW_REQUIRED");
+  const hook = { eventType: "PAYMENT_STATUS_CHANGED", data: { orderId: id, paymentKey: `sbx_timeout_probe`, status: "DONE" } };
+  const r1 = await api("POST", "/api/v1/webhooks/toss", { body: hook });
+  assert.equal(r1.status, 200, JSON.stringify(r1.data));
+  assert.equal(r1.data.reconciled, true);
+  const after = await api("GET", `/api/v1/bookings/${id}`, { token: A.token });
+  assert.equal(after.data.booking.status, "VOUCHER_ISSUED");
+  const r2 = await api("POST", "/api/v1/webhooks/toss", { body: hook });
+  assert.equal(r2.data.duplicate, true);
+  assert.equal(sql(`SELECT COUNT(*) AS c FROM payments WHERE booking_id = '${id}' AND status = 'CAPTURED'`)[0].c, 1);
+});
+
+test("outbox email: without a provider key, rows stay queued and maintenance says so", async () => {
+  const h = await api("GET", "/api/v1/health");
+  assert.equal(h.data.checks.emailProvider, "NOT_CONFIGURED");
+  const before = sql("SELECT COUNT(*) AS c FROM notification_outbox WHERE status IN ('PENDING','BLOCKED_NO_PROVIDER')")[0].c;
+  assert.ok(before > 0, "earlier tests enqueued booking emails");
+  const m = await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN });
+  assert.equal(m.data.stats.emailsSent, 0);
+  assert.equal(m.data.stats.emailsPending, Math.min(before, 20), JSON.stringify(m.data.stats));
+  const after = sql("SELECT COUNT(*) AS c FROM notification_outbox WHERE status IN ('PENDING','BLOCKED_NO_PROVIDER')")[0].c;
+  assert.equal(after, before, "nothing sent, nothing lost");
+});
+
 test("flight: passport required & encrypted; PNR and ticket are separate steps", async () => {
   const fq = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: day(50), travelers: { adults: 1, infants: 1 } } })).data.quote;
   assert.equal(fq.requiresPassport, true);
@@ -457,6 +487,164 @@ test("partner extranet: orders are scoped to the partner; other partners cannot 
   assert.equal(sql(`SELECT status FROM bookings WHERE id = '${b.id}'`)[0].status, "AWAITING_PAYMENT");
 });
 
+test("partner api keys: issued once, prefix-only listing, server-to-server auth, revoke kills the key", async () => {
+  const P = await approvedPartner("key");
+  const issued = await api("POST", "/api/v1/partner/api-keys", { token: P.token, body: { name: "PMS" } });
+  assert.equal(issued.status, 201, JSON.stringify(issued.data));
+  const key = issued.data.apiKey;
+  assert.match(key, /^gft_live_[0-9a-f]{32}$/);
+  const list = await api("GET", "/api/v1/partner/api-keys", { token: P.token });
+  assert.equal(list.status, 200);
+  assert.equal(list.data.keys.length, 1);
+  assert.equal(list.data.keys[0].apiKey, undefined, "plaintext is never readable again");
+  assert.ok(list.data.keys[0].keyPrefix.includes("..."));
+  const viaKey = await api("GET", "/api/v1/partner/orders", { token: key });
+  assert.equal(viaKey.status, 200, JSON.stringify(viaKey.data));
+  assert.ok(sql(`SELECT last_used_at FROM partner_api_keys WHERE id = '${issued.data.id}'`)[0].last_used_at, "usage is timestamped");
+  const Q = await approvedPartner("keyq");
+  const qKey = (await api("POST", "/api/v1/partner/api-keys", { token: Q.token, body: {} })).data.apiKey;
+  assert.equal((await api("DELETE", `/api/v1/partner/api-keys/${issued.data.id}`, { token: Q.token })).status, 404);
+  assert.equal((await api("DELETE", `/api/v1/partner/api-keys/${issued.data.id}`, { token: P.token })).status, 200);
+  assert.equal((await api("GET", "/api/v1/partner/orders", { token: key })).status, 401);
+  assert.equal((await api("GET", "/api/v1/partner/orders", { token: qKey })).status, 200);
+});
+
+test("partner webhook + money: https-only URL storage, dashboard/settlement totals come from real bookings", async () => {
+  const P = await approvedPartner("wh");
+  assert.equal((await api("PUT", "/api/v1/partner/webhook", { token: P.token, body: { webhookUrl: "http://plain.example.com/hook" } })).status, 400);
+  assert.equal((await api("PUT", "/api/v1/partner/webhook", { token: P.token, body: { webhookUrl: "not a url" } })).status, 400);
+  const saved = await api("PUT", "/api/v1/partner/webhook", { token: P.token, body: { webhookUrl: "https://pms.example.com/gft-events" } });
+  assert.equal(saved.status, 200);
+  assert.equal((await api("GET", "/api/v1/partner/webhook", { token: P.token })).data.webhookUrl, "https://pms.example.com/gft-events");
+  const q = (await quote(A.token)).data.quote;
+  const b = (await book(A.token, q)).data.booking;
+  sql(`UPDATE bookings SET partner_id = '${P.id}' WHERE id = '${b.id}'`);
+  const total = Number(sql(`SELECT total_minor FROM bookings WHERE id = '${b.id}'`)[0].total_minor);
+  const dash = await api("GET", "/api/v1/partner/dashboard", { token: P.token });
+  assert.equal(dash.data.stats.monthlyGrossKrw, total);
+  const st = await api("GET", "/api/v1/partner/settlements", { token: P.token });
+  assert.equal(st.data.summary.totalGrossKrw, total);
+  assert.equal(st.data.summary.totalNetPayoutKrw, st.data.summary.totalGrossKrw - st.data.summary.totalCommissionKrw);
+  assert.match(st.data.summary.nextPayoutDate, /^\d{4}-\d{2}-20$/);
+  assert.equal(st.data.summary.payoutBank, null, "no bank on file means null, not a sample account");
+  const spec = await api("GET", "/api/v1/partner/openapi.json", { token: P.token });
+  assert.equal(spec.status, 200);
+  assert.equal(spec.data.openapi, "3.0.3");
+  assert.ok(spec.data.paths["/partner/api-keys"], "spec documents the integration surface");
+});
+
+test("partner orders: confirm/reject run the booking state machine (no raw status writes)", async () => {
+  const P = await approvedPartner("decide");
+  const Q = await approvedPartner("decideq");
+  async function paidPending(tag) {
+    const q = (await quote(A.token)).data.quote;
+    const b = (await book(A.token, q)).data.booking;
+    const total = Number(sql(`SELECT total_minor FROM bookings WHERE id = '${b.id}'`)[0].total_minor);
+    sql(`UPDATE bookings SET partner_id = '${P.id}', supplier_id = 'ptn_htl_01', status = 'SUPPLIER_BOOKING_PENDING', payment_status = 'CAPTURED', paid_minor = ${total} WHERE id = '${b.id}'`);
+    sql(`INSERT INTO payments (id, booking_id, provider, mode, order_id, provider_payment_key, amount_minor, currency, status, method) VALUES ('pay_${tag}_${b.id}', '${b.id}', 'sandbox', 'SANDBOX', '${b.id}', 'sbx_ok_${tag}_${b.id}', ${total}, 'KRW', 'CAPTURED', 'CARD')`);
+    return b.id;
+  }
+  const cId = await paidPending("cfm");
+  assert.equal((await api("POST", `/api/v1/partner/orders/${cId}/confirm`, { token: P.token, body: {} })).status, 400, "reference required");
+  assert.equal((await api("POST", `/api/v1/partner/orders/${cId}/confirm`, { token: Q.token, body: { supplierReference: "X" } })).status, 404);
+  const c = await api("POST", `/api/v1/partner/orders/${cId}/confirm`, { token: P.token, body: { supplierReference: "HTL-8819" } });
+  assert.equal(c.data.status, "VOUCHER_ISSUED");
+  assert.equal(sql(`SELECT supplier_reference FROM bookings WHERE id = '${cId}'`)[0].supplier_reference, "HTL-8819");
+  assert.ok(sql(`SELECT voucher_code FROM booking_items WHERE booking_id = '${cId}'`)[0].voucher_code, "voucher issued");
+  const rId = await paidPending("rej");
+  const r = await api("POST", `/api/v1/partner/orders/${rId}/reject`, { token: P.token, body: { note: "sold out" } });
+  assert.equal(r.data.status, "REFUNDED");
+  const pay = sql(`SELECT status, refunded_minor, amount_minor FROM payments WHERE booking_id = '${rId}'`)[0];
+  assert.equal(pay.status, "REFUNDED");
+  assert.equal(pay.refunded_minor, pay.amount_minor, "full refund on supplier rejection");
+});
+
+test("admin: catalog API works across all product tables, search escapes LIKE wildcards", async () => {
+  const all = await api("GET", "/api/v1/admin/catalog?limit=200", { token: ADMIN });
+  assert.equal(all.status, 200, JSON.stringify(all.data));
+  const domains = new Set(all.data.items.map((i) => i.domain_type));
+  for (const d of ["HOTEL", "FLIGHT", "TRAIN", "CAR", "TRANSFER", "ACTIVITY", "PACKAGE"]) assert.ok(domains.has(d), `missing ${d}`);
+  const ke = await api("GET", "/api/v1/admin/catalog?q=KE&domain=FLIGHT&limit=8", { token: ADMIN });
+  assert.ok(ke.data.items.length > 0 && ke.data.items.every((i) => i.domain_type === "FLIGHT"));
+  assert.equal((await api("GET", "/api/v1/admin/catalog?q=%25", { token: ADMIN })).data.items.length, 0);
+  assert.equal((await api("GET", "/api/v1/admin/users?q=%25", { token: ADMIN })).data.users.length, 0);
+  const literalUnderscore = sql("SELECT COUNT(*) AS c FROM bookings WHERE booking_number LIKE '%\\_%' ESCAPE '\\' OR customer_email LIKE '%\\_%' ESCAPE '\\' OR customer_name LIKE '%\\_%' ESCAPE '\\' OR title LIKE '%\\_%' ESCAPE '\\' OR id = '_'")[0].c;
+  const totalBookings = sql("SELECT COUNT(*) AS c FROM bookings")[0].c;
+  assert.ok(totalBookings > literalUnderscore, "wildcard test needs bookings without a literal _ to discriminate");
+  assert.equal((await api("GET", "/api/v1/admin/bookings?q=_", { token: ADMIN })).data.bookings.length, literalUnderscore);
+  assert.equal((await api("GET", "/api/v1/admin/catalog", { token: A.token })).status, 403);
+});
+
+test("admin: member suspension is refused (no schema support); coin adjustments are validated and ledgered", async () => {
+  assert.equal((await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, body: { isActive: false } })).status, 400);
+  assert.equal((await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, body: { coinAdjustment: 1.5 } })).status, 400);
+  assert.equal((await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, body: { role: "SUPER" } })).status, 400);
+  assert.equal((await api("PATCH", "/api/v1/admin/users/usr_does_not_exist", { token: ADMIN, body: { coinAdjustment: 10 } })).status, 404);
+  const before = Number(sql(`SELECT trip_coins FROM users WHERE id = '${A.id}'`)[0].trip_coins);
+  const up = await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, body: { coinAdjustment: 250, note: "e2e" } });
+  assert.equal(up.status, 200, JSON.stringify(up.data));
+  assert.equal(up.data.coinBalance, before + 250);
+  // Over-deduction clamps at zero and the ledger records only what was actually removed.
+  const down = await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, body: { coinAdjustment: -(before + 1000) } });
+  assert.equal(down.data.coinBalance, 0);
+  const ledger = sql(`SELECT delta FROM coin_ledger WHERE user_id = '${A.id}' AND reason LIKE 'ADMIN_ADJUSTMENT%' ORDER BY created_at, rowid`).map((r) => Number(r.delta));
+  assert.deepEqual(ledger.slice(-2), [250, -(before + 250)]);
+  const users = await api("GET", `/api/v1/admin/users?q=${encodeURIComponent(A.email)}`, { token: ADMIN });
+  assert.equal(users.data.users[0].is_active, undefined, "no fabricated is_active column");
+});
+
+test("admin: partner status/commission and supplier LIVE switch are validated", async () => {
+  const email = `qa_adm_${rnd()}@local.test`;
+  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: "QA admin", businessNumber: "000-00-00000" } });
+  const id = reg.data.partnerId;
+  const found = await api("GET", `/api/v1/admin/partners?q=${encodeURIComponent(email)}`, { token: ADMIN });
+  assert.equal(found.data.partners[0].id, id);
+  assert.equal((await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { status: "REJECTED" } })).status, 400, "reason required");
+  assert.equal((await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { status: "BOGUS" } })).status, 400);
+  assert.equal((await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { settlementRateBps: -1 } })).status, 400);
+  assert.equal((await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { settlementRateBps: 1250.5 } })).status, 400);
+  assert.equal((await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { status: "ACTIVE", settlementRateBps: 1250 } })).status, 200);
+  assert.equal(sql(`SELECT settlement_rate_bps FROM partner_profiles WHERE partner_id = '${id}'`)[0].settlement_rate_bps, 1250);
+
+  const sup = (await api("GET", "/api/v1/admin/suppliers", { token: ADMIN })).data.suppliers.find((s) => !s.contract_id && s.integration_status !== "LIVE");
+  assert.ok(sup, "a supplier without contract exists in seed data");
+  assert.equal((await api("PATCH", `/api/v1/admin/suppliers/${sup.id}`, { token: ADMIN, body: { integrationStatus: "LIVE", adapter: "api" } })).status, 409);
+  assert.equal((await api("PATCH", `/api/v1/admin/suppliers/${sup.id}`, { token: ADMIN, body: { adapter: "telepathy" } })).status, 400);
+  assert.equal((await api("PATCH", `/api/v1/admin/suppliers/${sup.id}`, { token: ADMIN, body: { contractId: "ctr_does_not_exist" } })).status, 400);
+});
+
+test("url ingest: drafts are never published with missing facts; publish is once-only and invents nothing", async () => {
+  const id = `ing_e2e_${rnd()}`.replace(/[^A-Za-z0-9_]/g, "");
+  sql(`INSERT INTO url_product_ingestions (id, source_url, domain_type, title, currency, price_minor, country, city, cancellation_policy, status, created_by) VALUES ('${id}', 'https://example.org/p', 'ACTIVITY', 'E2E 투어', 'KRW', 0, '', '', '', 'DRAFT', 'e2e')`);
+  const incomplete = await api("POST", `/api/v1/admin/ingest/${id}/publish`, { token: ADMIN });
+  assert.equal(incomplete.status, 422, JSON.stringify(incomplete.data));
+  assert.deepEqual(incomplete.data.details.missing.sort(), ["cancellation_policy", "city", "country", "price_minor"]);
+  assert.equal((await api("PATCH", `/api/v1/admin/ingest/${id}`, { token: ADMIN, body: { price_minor: -5 } })).status, 400);
+  const filled = await api("PATCH", `/api/v1/admin/ingest/${id}`, { token: ADMIN, body: { price_minor: 42000, country: "일본", city: "오사카", cancellation_policy: "이용 3일 전까지 무료 취소" } });
+  assert.equal(filled.status, 200);
+  const pub = await api("POST", `/api/v1/admin/ingest/${id}/publish`, { token: ADMIN });
+  assert.equal(pub.status, 200, JSON.stringify(pub.data));
+  const act = sql(`SELECT price_krw, review_score, review_count, free_cancellation, instant_confirmation, thumbnail_url FROM activities WHERE id = '${pub.data.published_item_id}'`)[0];
+  assert.deepEqual({ ...act }, { price_krw: 42000, review_score: null, review_count: 0, free_cancellation: 0, instant_confirmation: 0, thumbnail_url: null });
+  assert.equal((await api("POST", `/api/v1/admin/ingest/${id}/publish`, { token: ADMIN })).status, 409, "no duplicate catalogue rows");
+  assert.equal((await api("PATCH", `/api/v1/admin/ingest/${id}`, { token: ADMIN, body: { title: "x" } })).status, 409, "published drafts are frozen");
+
+  const car = `ing_e2e_car_${rnd()}`.replace(/[^A-Za-z0-9_]/g, "");
+  sql(`INSERT INTO url_product_ingestions (id, source_url, domain_type, title, currency, price_minor, country, city, cancellation_policy, status, created_by) VALUES ('${car}', 'https://example.org/c', 'CAR', '렌터카', 'KRW', 50000, '일본', '오사카', '무료 취소', 'REVIEWED', 'e2e')`);
+  assert.equal((await api("POST", `/api/v1/admin/ingest/${car}/publish`, { token: ADMIN })).status, 422, "unsupported domains are not silently turned into activities");
+});
+
+test("admin: moderation list includes blinded moments; promotions can be toggled", async () => {
+  const promos = await api("GET", "/api/v1/admin/promotions", { token: ADMIN });
+  assert.equal(promos.status, 200);
+  assert.equal((await api("PATCH", "/api/v1/admin/promotions/promo_missing", { token: ADMIN, body: { isActive: false } })).status, 404);
+  assert.equal((await api("PATCH", `/api/v1/admin/promotions/${promos.data.promotions[0].id}`, { token: ADMIN, body: { isActive: "no" } })).status, 400);
+  const m = await api("GET", "/api/v1/admin/moments?filter=blinded", { token: ADMIN });
+  assert.equal(m.status, 200);
+  assert.ok(m.data.moments.every((x) => x.is_blinded === 1));
+  assert.equal((await api("POST", "/api/v1/admin/moments/mmt_missing/blind", { token: ADMIN })).status, 404);
+});
+
 test("ledger: every journal balanced; no payment/refund/deposit mismatch (run last)", async () => {
   const r = await api("GET", "/api/v1/admin/reconciliation", { token: ADMIN });
   assert.equal(r.status, 200);
@@ -478,6 +666,16 @@ test("autocomplete: places carry codes/ids, typos and 초성 match, wildcards es
   assert.equal((await s("ㄷㅋ", "hotels")).data[0].id, "cty_TYO");
   for (const it of (await s("", "trains")).data) assert.equal(it.place_type, "STATION");
   assert.equal((await s("100%_", "all")).count, 0, "LIKE wildcards must be escaped");
+  // Public catalog search must escape wildcards too: a literal % matches only rows
+  // containing %, never "everything" (ground truth comes straight from SQL).
+  const litPct = (table, cols) => sql(`SELECT COUNT(*) AS c FROM ${table} WHERE ` + cols.map((c) => `${c} LIKE '%\\%%' ESCAPE '\\'`).join(" OR "))[0].c;
+  assert.equal((await api("GET", "/api/v1/hotels?city=%25")).data.count, litPct("hotels", ["city", "name_ko", "name_en", "neighborhood"]));
+  assert.equal((await api("GET", "/api/v1/cars?loc=%25")).data.count, litPct("cars", ["pickup_location", "company_name", "vehicle_model"]));
+  assert.equal((await api("GET", "/api/v1/activities?q=%25")).data.count, litPct("activities", ["title", "description", "city"]));
+  assert.equal((await api("GET", "/api/v1/packages?dest=%25")).data.count, litPct("packages", ["destination_city", "title"]));
+  assert.equal((await api("GET", "/api/v1/trains?dep=%25&arr=%25")).data.count, 0);
+  assert.equal((await api("GET", "/api/v1/flights?origin=%25&dest=%25")).data.count, 0);
+  assert.equal((await api("GET", "/api/v1/transfers?airport=%25")).data.count, litPct("transfers", ["airport_code", "service_title"]));
 
   const hotel = (await s("하얏트", "hotels")).data.find((x) => x.kind === "product");
   assert.ok(hotel && hotel.target_url === `/hotels/detail/${encodeURIComponent(hotel.id)}`);

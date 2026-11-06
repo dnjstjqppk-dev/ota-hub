@@ -1,6 +1,7 @@
 import type { Env } from '../env.ts';
 import { HttpError } from '../lib/http.ts';
 import { audit } from '../lib/auth.ts';
+import { likeEscape } from './suggest-service.ts';
 
 export interface FeatureFlag {
   key: string;
@@ -91,9 +92,9 @@ export async function updateFeatureFlag(
   // Check 2: If turning OFF, warn if other active flags depend on this one
   if (!isEnabled) {
     const dependentFlags = await env.DB.prepare(
-      "SELECT key, display_name FROM feature_flags WHERE is_enabled = 1 AND requires_flags LIKE ?"
+      "SELECT key, display_name FROM feature_flags WHERE is_enabled = 1 AND requires_flags LIKE ? ESCAPE '\\'"
     )
-      .bind(`%"${flagKey}"%`)
+      .bind(`%"${likeEscape(flagKey)}"%`)
       .all<any>();
 
     if (dependentFlags.results && dependentFlags.results.length > 0) {

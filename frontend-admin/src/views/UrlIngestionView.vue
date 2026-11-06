@@ -1,485 +1,214 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { adminFetch } from '../config/api'
+/**
+ * URL product ingestion. POST /admin/ingest/url reads only what the page states (title, description,
+ * images, JSON-LD price/address); every missing fact stays empty. A reviewer completes the draft
+ * (PATCH /admin/ingest/:id) and publishes it (POST /admin/ingest/:id/publish), which the server refuses
+ * while required fields are missing. Country/city use the places autocomplete.
+ */
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { api, toast } from '../composables/session'
+import { useResource } from '../composables/useResource'
+import { dateTime, domainLabel, krw } from '../composables/format'
+import PageHeader from '../components/PageHeader.vue'
+import StatePanel from '../components/StatePanel.vue'
+import StatusBadge from '../components/StatusBadge.vue'
+import SidePanel from '../components/SidePanel.vue'
+import PlaceInput from '../components/PlaceInput.vue'
 
-interface IngestDraft {
-  id?: string
-  source_url: string
-  domain_type: string
-  title: string
-  summary: string
-  description: string
-  image_urls: string[]
-  currency: string
-  price_minor: number
-  original_price_minor: number | null
-  options: Array<{ name: string; price_minor: number; max_pax: number }>
-  country: string
-  city: string
-  address: string
-  duration_mins: number | null
-  inclusions: string[]
-  exclusions: string[]
-  cancellation_policy: string
-  supplier_name: string
-  status: string
-  published_item_id?: string | null
+const DOMAINS: Record<string, { label: string; publishable: boolean }> = {
+  ACTIVITY: { label: '투어·액티비티', publishable: true },
+  TICKET: { label: '입장권·패스', publishable: true },
+  HOTEL: { label: '호텔', publishable: true },
+  CAR: { label: '렌터카', publishable: false },
+  TRANSFER: { label: '공항 이동', publishable: false },
+  PACKAGE: { label: '패키지', publishable: false }
 }
+const STATUS: Record<string, { label: string; tone: any }> = {
+  DRAFT: { label: '검토 전', tone: 'warning' }, REVIEWED: { label: '검토 완료', tone: 'info' },
+  PUBLISHED: { label: '등록됨', tone: 'success' }, REJECTED: { label: '반려', tone: 'neutral' }
+}
+const FIELD: Record<string, string> = { title: '상품명', price_minor: '원화 판매가', city: '도시', country: '국가', cancellation_policy: '취소 규정', address: '주소' }
 
-const targetUrl = ref('')
-const isScraping = ref(false)
-const isPublishing = ref(false)
-const currentDraft = ref<IngestDraft | null>(null)
-const history = ref<any[]>([])
-const loadingHistory = ref(false)
-const feedbackMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null)
+const statusFilter = ref('')
+const history = useResource(async () => (await api(`/admin/ingest/history${statusFilter.value ? `?status=${statusFilter.value}` : ''}`)).items || [], [] as any[])
+watch(statusFilter, () => history.reload())
+onMounted(history.reload)
 
-const samplePresets = [
-  { label: '도쿄 스카이트리 전망대', url: 'https://travel.example.com/tokyo-skytree-admission' },
-  { label: '파리 세느강 바토무슈 디너', url: 'https://travel.example.com/paris-seine-river-dinner-cruise' },
-  { label: '오사카 유니버설 스튜디오 익스프레스', url: 'https://travel.example.com/usj-osaka-express-pass' },
-  { label: '제주 신라호텔 오션뷰 스위트', url: 'https://hotels.example.com/shilla-jeju-suite' }
-]
-
-const domainOptions = [
-  { id: 'ACTIVITY', label: '투어/액티비티' },
-  { id: 'HOTEL', label: '호텔/숙박' },
-  { id: 'CAR', label: '렌터카' },
-  { id: 'PACKAGE', label: '여행 패키지' },
-  { id: 'TRANSFER', label: '공항 픽업/샌딩' },
-  { id: 'TICKET', label: '입장권/교통패스' }
-]
-
-const handleScrape = async () => {
-  if (!targetUrl.value.trim()) {
-    feedbackMessage.value = { type: 'error', text: '수집할 여행 상품 URL을 입력해주세요.' }
-    return
-  }
-
-  isScraping.value = true
-  feedbackMessage.value = null
-  currentDraft.value = null
-
+// ------------------------------------------------------------------ scrape
+const url = ref('')
+const scraping = ref(false)
+async function scrape() {
+  const u = url.value.trim()
+  if (!/^https?:\/\//i.test(u)) { toast('http:// 또는 https://로 시작하는 주소를 입력해 주세요.', 'danger'); return }
+  scraping.value = true
   try {
-    const res = await adminFetch('/admin/ingest/url', {
-      method: 'POST',
-      body: JSON.stringify({ url: targetUrl.value.trim() })
-    })
-
-    const data = await res.json()
-    if (!res.ok) {
-      throw new Error(data.error || 'URL 상품 수집에 실패했습니다.')
-    }
-
-    currentDraft.value = data.draft
-    feedbackMessage.value = {
-      type: 'success',
-      text: `[${data.draft.title}] 상품 정보가 성공적으로 추출되어 임시 저장되었습니다.`
-    }
-    fetchHistory()
-  } catch (err: any) {
-    feedbackMessage.value = { type: 'error', text: err.message || '수집 중 오류가 발생했습니다.' }
-  } finally {
-    isScraping.value = false
-  }
+    const r = await api('/admin/ingest/url', { method: 'POST', json: { url: u } })
+    url.value = ''
+    if (r.auto_published) toast(`필수 정보가 모두 있어 자동 등록했어요 (${r.publish_result?.published_item_id}).`)
+    else toast(r.missing?.length ? `초안을 만들었어요. ${r.missing.length}개 항목을 채워야 등록할 수 있어요.` : '초안을 만들었어요. 검토 후 등록해 주세요.', 'info', 5000)
+    await history.reload()
+    const fresh = history.data.value.find((x: any) => x.id === r.draft.id)
+    open(fresh || r.draft)
+  } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { scraping.value = false }
 }
 
-const handlePublish = async (draftId?: string) => {
-  const idToPublish = draftId || currentDraft.value?.id
-  if (!idToPublish) return
-
-  isPublishing.value = true
-  feedbackMessage.value = null
-
-  try {
-    const res = await adminFetch(`/admin/ingest/${idToPublish}/publish`, {
-      method: 'POST'
-    })
-
-    const data = await res.json()
-    if (!res.ok) {
-      throw new Error(data.error || '카탈로그 등록에 실패했습니다.')
-    }
-
-    feedbackMessage.value = {
-      type: 'success',
-      text: `공식 카탈로그에 등록 완료되었습니다! (신규 상품 ID: ${data.published_item_id})`
-    }
-    if (currentDraft.value && currentDraft.value.id === idToPublish) {
-      currentDraft.value.status = 'PUBLISHED'
-      currentDraft.value.published_item_id = data.published_item_id
-    }
-    fetchHistory()
-  } catch (err: any) {
-    feedbackMessage.value = { type: 'error', text: err.message || '등록 중 오류가 발생했습니다.' }
-  } finally {
-    isPublishing.value = false
-  }
+// ------------------------------------------------------------------ review
+const draft = ref<any | null>(null)
+const form = reactive({ domain_type: 'ACTIVITY', title: '', summary: '', description: '', price: '', country: '', countryCode: '', city: '', address: '', cancellation_policy: '' })
+const busy = ref(false)
+const meta = computed(() => { try { return typeof draft.value?.raw_html_meta === 'string' ? JSON.parse(draft.value.raw_html_meta) : draft.value?.raw_html_meta || {} } catch { return {} } })
+function open(d: any) {
+  draft.value = d
+  Object.assign(form, {
+    domain_type: d.domain_type, title: d.title || '', summary: d.summary || '', description: d.description || '',
+    price: Number(d.price_minor) > 0 ? String(d.price_minor) : '', country: d.country || '', countryCode: '', city: d.city || '',
+    address: d.address || '', cancellation_policy: d.cancellation_policy || ''
+  })
 }
-
-const fetchHistory = async () => {
-  loadingHistory.value = true
-  try {
-    const res = await adminFetch('/admin/ingest/history')
-    if (res.ok) {
-      const data = await res.json()
-      history.value = data.items || []
-    }
-  } catch (e) {
-    console.error('Failed to load history', e)
-  } finally {
-    loadingHistory.value = false
-  }
-}
-
-const loadDraftToEditor = (item: any) => {
-  currentDraft.value = { ...item }
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-onMounted(() => {
-  fetchHistory()
+const locked = computed(() => draft.value?.status === 'PUBLISHED')
+const priceNum = computed(() => (form.price.trim() === '' ? 0 : Number(form.price.replace(/,/g, ''))))
+const priceError = computed(() => (form.price.trim() && (!Number.isInteger(priceNum.value) || priceNum.value < 0 || priceNum.value > 100_000_000) ? '0–1억 원 사이의 정수로 입력해 주세요.' : ''))
+const missing = computed(() => {
+  const m: string[] = []
+  if (!form.title.trim()) m.push('title')
+  if (!(priceNum.value > 0)) m.push('price_minor')
+  if (!form.city.trim()) m.push('city')
+  if (!form.country.trim()) m.push('country')
+  if (!form.cancellation_policy.trim()) m.push('cancellation_policy')
+  if (form.domain_type === 'HOTEL' && !form.address.trim()) m.push('address')
+  return m
 })
+const canPublish = computed(() => !locked.value && DOMAINS[form.domain_type]?.publishable && !missing.value.length && !priceError.value)
+
+function body(extra: Record<string, unknown> = {}) {
+  return {
+    domain_type: form.domain_type, title: form.title.trim(), summary: form.summary.trim(), description: form.description.trim(),
+    price_minor: priceNum.value > 0 ? priceNum.value : undefined, country: form.country.trim(), city: form.city.trim(),
+    address: form.address.trim(), cancellation_policy: form.cancellation_policy.trim(), ...extra
+  }
+}
+async function save(status?: 'REVIEWED' | 'REJECTED') {
+  if (priceError.value) return
+  busy.value = true
+  try {
+    await api(`/admin/ingest/${draft.value.id}`, { method: 'PATCH', json: body(status ? { status } : {}) })
+    toast(status === 'REJECTED' ? '수집 상품을 반려했어요.' : '초안을 저장했어요.')
+    await history.reload()
+    if (status === 'REJECTED') draft.value = null
+    else draft.value = history.data.value.find((x: any) => x.id === draft.value.id) || draft.value
+  } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
+}
+async function publish() {
+  if (!canPublish.value) return
+  busy.value = true
+  try {
+    await api(`/admin/ingest/${draft.value.id}`, { method: 'PATCH', json: body({ status: 'REVIEWED' }) })
+    const r = await api(`/admin/ingest/${draft.value.id}/publish`, { method: 'POST' })
+    toast(`카탈로그에 등록했어요 (${r.published_item_id}). 예약 가능 여부는 공급사 연동 상태(공급사 연동 메뉴)를 따라요.`, 'success', 6000)
+    draft.value = null
+    history.reload()
+  } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
+}
 </script>
 
 <template>
-  <div class="p-8 space-y-8 max-w-7xl mx-auto">
-    <!-- Header -->
-    <div class="border-b pb-6">
-      <div class="flex items-center gap-2">
-        <span class="text-2xl">🌐</span>
-        <h1 class="text-2xl font-bold text-slate-900">URL 기반 여행상품 자동 수집 (OpenMarket Ingestion Engine)</h1>
-        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-          Smart Parser Active
-        </span>
-      </div>
-      <p class="text-sm text-slate-500 mt-1">
-        외부 여행사, 오픈마켓, 파트너 웹페이지 URL을 입력하면 OpenGraph 메타데이터와 Schema.org JSON-LD를 자동 추출하여 즉시 카탈로그 상품으로 규격화합니다.
-      </p>
-    </div>
+  <div>
+    <PageHeader title="URL 상품 수집" description="상품 페이지 주소에서 이름·설명·사진·가격처럼 페이지에 적힌 정보만 가져와요. 없는 정보는 비워 두고, 필수 항목을 채워야 카탈로그에 등록할 수 있어요." />
 
-    <!-- Alert / Toast -->
-    <div
-      v-if="feedbackMessage"
-      :class="[
-        'p-4 rounded-xl flex items-center justify-between text-sm shadow-sm transition-all',
-        feedbackMessage.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
-      ]"
-    >
-      <div class="flex items-center gap-2 font-medium">
-        <span>{{ feedbackMessage.type === 'success' ? '✅' : '⚠️' }}</span>
-        <span>{{ feedbackMessage.text }}</span>
-      </div>
-      <button @click="feedbackMessage = null" class="text-xs opacity-70 hover:opacity-100">✕ 닫기</button>
-    </div>
+    <form class="card mb-6 flex flex-col gap-2 p-4 sm:flex-row" @submit.prevent="scrape">
+      <label for="ingest-url" class="sr-only">상품 페이지 주소</label>
+      <input id="ingest-url" v-model="url" type="url" inputmode="url" class="input flex-1" placeholder="https://… 상품 페이지 주소" :disabled="scraping" />
+      <button type="submit" class="btn-primary" :disabled="scraping || !url.trim()"><AppIcon name="link" :size="16" />{{ scraping ? '가져오는 중…' : '정보 가져오기' }}</button>
+    </form>
 
-    <!-- URL Input Card -->
-    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-      <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
-        <span>🔗</span> 여행상품 외부 URL 입력
-      </h2>
-
-      <div class="flex flex-col sm:flex-row gap-3">
-        <input
-          v-model="targetUrl"
-          type="url"
-          placeholder="https://... 수집할 상품 페이지 URL을 입력하세요"
-          class="flex-1 px-4 py-3 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-          :disabled="isScraping"
-        />
-        <button
-          @click="handleScrape"
-          :disabled="isScraping || !targetUrl.trim()"
-          class="px-6 py-3 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm transition-all min-w-[140px]"
-        >
-          <span v-if="isScraping" class="animate-spin">⚙️</span>
-          <span>{{ isScraping ? '데이터 수집 중...' : '상품 수집 시작' }}</span>
-        </button>
-      </div>
-
-      <!-- Presets -->
-      <div class="flex flex-wrap items-center gap-2 pt-2">
-        <span class="text-xs font-semibold text-slate-400">테스트 프리셋:</span>
-        <button
-          v-for="preset in samplePresets"
-          :key="preset.label"
-          @click="targetUrl = preset.url"
-          class="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
-        >
-          {{ preset.label }}
-        </button>
+    <div class="mb-3 flex items-center justify-between gap-3">
+      <h2 class="font-bold text-ink">수집 내역</h2>
+      <div class="flex flex-wrap gap-1.5" role="group" aria-label="상태 필터">
+        <button type="button" class="chip" :aria-pressed="!statusFilter" @click="statusFilter = ''">전체</button>
+        <button v-for="(v, k) in STATUS" :key="k" type="button" class="chip" :aria-pressed="statusFilter === k" @click="statusFilter = k">{{ v.label }}</button>
       </div>
     </div>
-
-    <!-- Extracted Draft Preview & Editor Card -->
-    <div v-if="currentDraft" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div class="p-6 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="px-2.5 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-800">
-              수집 완료 (DRAFT)
-            </span>
-            <span class="text-xs text-slate-500 font-mono">ID: {{ currentDraft.id }}</span>
-            <span
-              v-if="currentDraft.status === 'PUBLISHED'"
-              class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800"
-            >
-              카탈로그 등록 완료 ({{ currentDraft.published_item_id }})
-            </span>
-          </div>
-          <h2 class="text-lg font-bold text-slate-900 mt-1">수집된 상품 상세 및 카탈로그 등록 검토</h2>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <button
-            @click="currentDraft = null"
-            class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
-          >
-            편집 닫기
-          </button>
-          <button
-            @click="handlePublish()"
-            :disabled="isPublishing || currentDraft.status === 'PUBLISHED'"
-            class="px-5 py-2 text-xs font-bold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 shadow-sm flex items-center gap-1.5 transition-all"
-          >
-            <span>{{ isPublishing ? '카탈로그 등록 중...' : '🚀 공식 카탈로그 등록 (Publish)' }}</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="p-6 space-y-6">
-        <!-- Two Column Form -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <!-- Left Column: Form Fields (2 Cols) -->
-          <div class="lg:col-span-2 space-y-4">
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">상품명 (Title)</label>
-              <input
-                v-model="currentDraft.title"
-                type="text"
-                class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">상품 카테고리</label>
-                <select
-                  v-model="currentDraft.domain_type"
-                  class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option v-for="opt in domainOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
-                </select>
-              </div>
-
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">공급업체 명 (Supplier)</label>
-                <input
-                  v-model="currentDraft.supplier_name"
-                  type="text"
-                  class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg"
-                />
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">판매가 (KRW)</label>
-                <input
-                  v-model.number="currentDraft.price_minor"
-                  type="number"
-                  class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg font-bold text-blue-600"
-                />
-              </div>
-
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">정상가 (소비자가)</label>
-                <input
-                  v-model.number="currentDraft.original_price_minor"
-                  type="number"
-                  class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg text-slate-500"
-                />
-              </div>
-
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">국가 / 도시</label>
-                <div class="flex gap-2">
-                  <input v-model="currentDraft.country" placeholder="국가" class="w-1/2 px-3 py-2 text-sm border border-slate-300 rounded-lg" />
-                  <input v-model="currentDraft.city" placeholder="도시" class="w-1/2 px-3 py-2 text-sm border border-slate-300 rounded-lg" />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">상세 위치 / 주소</label>
-              <input
-                v-model="currentDraft.address"
-                type="text"
-                class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg"
-              />
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">한 줄 요약 (Summary)</label>
-              <input
-                v-model="currentDraft.summary"
-                type="text"
-                class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg"
-              />
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">상세 설명 (Description)</label>
-              <textarea
-                v-model="currentDraft.description"
-                rows="4"
-                class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg leading-relaxed"
-              ></textarea>
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">취소 및 환불 정책</label>
-              <input
-                v-model="currentDraft.cancellation_policy"
-                type="text"
-                class="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg"
-              />
-            </div>
-          </div>
-
-          <!-- Right Column: Images & Options Preview -->
-          <div class="space-y-4">
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">추출된 상품 대표 이미지</label>
-              <div v-if="currentDraft.image_urls && currentDraft.image_urls.length > 0" class="rounded-xl overflow-hidden border border-slate-200">
-                <img :src="currentDraft.image_urls[0]" class="w-full h-44 object-cover" />
-              </div>
-              <div v-else class="h-44 bg-slate-100 rounded-xl flex items-center justify-center text-xs text-slate-400">
-                이미지 없음
-              </div>
-            </div>
-
-            <!-- Options Box -->
-            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <h4 class="text-xs font-bold text-slate-800 mb-2">선택 옵션 목록 ({{ currentDraft.options?.length || 0 }})</h4>
-              <div class="space-y-2">
-                <div
-                  v-for="(opt, idx) in currentDraft.options"
-                  :key="idx"
-                  class="p-2.5 bg-white rounded-lg border border-slate-200 text-xs flex items-center justify-between"
-                >
-                  <div>
-                    <p class="font-bold text-slate-800">{{ opt.name }}</p>
-                    <p class="text-[11px] text-slate-400">최대 {{ opt.max_pax }}명 이용 가능</p>
-                  </div>
-                  <span class="font-bold text-blue-600">₩{{ opt.price_minor.toLocaleString() }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Inclusions / Exclusions -->
-            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2">
-              <div>
-                <span class="font-bold text-emerald-700">포함 사항:</span>
-                <span class="text-slate-600 ml-1">{{ currentDraft.inclusions?.join(', ') || '없음' }}</span>
-              </div>
-              <div>
-                <span class="font-bold text-rose-700">불포함 사항:</span>
-                <span class="text-slate-600 ml-1">{{ currentDraft.exclusions?.join(', ') || '없음' }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Ingestion History Table -->
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div class="p-6 border-b border-slate-200 flex items-center justify-between">
-        <div>
-          <h2 class="text-base font-bold text-slate-900">최근 URL 수집 상품 내역</h2>
-          <p class="text-xs text-slate-500 mt-0.5">외부에서 수집된 상품들의 검토 및 카탈로그 등록 이력입니다.</p>
-        </div>
-        <button
-          @click="fetchHistory"
-          class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200"
-        >
-          새로고침
-        </button>
-      </div>
-
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs">
-          <thead class="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-            <tr>
-              <th class="p-4">도메인</th>
-              <th class="p-4">상품명</th>
-              <th class="p-4">위치</th>
-              <th class="p-4">판매가</th>
-              <th class="p-4">상태</th>
-              <th class="p-4">수집 일시</th>
-              <th class="p-4 text-right">작업</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-100">
-            <tr v-if="loadingHistory">
-              <td colspan="7" class="p-8 text-center text-slate-400">내역을 불러오는 중...</td>
-            </tr>
-            <tr v-else-if="history.length === 0">
-              <td colspan="7" class="p-8 text-center text-slate-400">수집된 상품 내역이 없습니다.</td>
-            </tr>
-            <tr
-              v-for="item in history"
-              :key="item.id"
-              class="hover:bg-slate-50/80 transition-colors"
-            >
-              <td class="p-4">
-                <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700">
-                  {{ item.domain_type }}
-                </span>
-              </td>
-              <td class="p-4 font-bold text-slate-900 max-w-xs truncate" :title="item.title">
-                {{ item.title }}
-              </td>
-              <td class="p-4 text-slate-600">
-                {{ item.country }} / {{ item.city }}
-              </td>
-              <td class="p-4 font-bold text-slate-900">
-                ₩{{ Number(item.price_minor || 0).toLocaleString() }}
-              </td>
-              <td class="p-4">
-                <span
-                  :class="[
-                    'px-2 py-0.5 rounded text-[11px] font-bold',
-                    item.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                  ]"
-                >
-                  {{ item.status === 'PUBLISHED' ? '공식 카탈로그 등록' : '검토 대기 (DRAFT)' }}
-                </span>
-              </td>
-              <td class="p-4 text-slate-400">
-                {{ new Date(item.created_at).toLocaleDateString('ko-KR') }}
-              </td>
-              <td class="p-4 text-right space-x-2">
-                <button
-                  @click="loadDraftToEditor(item)"
-                  class="px-2.5 py-1 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded font-medium"
-                >
-                  상세/수정
-                </button>
-                <button
-                  v-if="item.status !== 'PUBLISHED'"
-                  @click="handlePublish(item.id)"
-                  class="px-2.5 py-1 text-white bg-emerald-600 hover:bg-emerald-700 rounded font-bold"
-                >
-                  등록
-                </button>
-              </td>
+    <StatePanel :state="history.state.value" :error="history.error.value" :empty="!history.data.value.length" empty-text="수집한 상품이 없어요." @retry="history.reload()">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>상품</th><th>상품군</th><th class="text-right">판매가</th><th>위치</th><th>상태</th><th>수집</th></tr></thead>
+          <tbody>
+            <tr v-for="d in history.data.value" :key="d.id" class="row-link" tabindex="0" @click="open(d)" @keydown.enter="open(d)">
+              <td><p class="max-w-[320px] truncate font-medium">{{ d.title || '(제목 없음)' }}</p><p class="max-w-[320px] truncate text-2xs text-ink-subtle">{{ d.source_url }}</p></td>
+              <td class="text-xs">{{ DOMAINS[d.domain_type]?.label || domainLabel(d.domain_type) }}</td>
+              <td class="text-right tabular">{{ Number(d.price_minor) > 0 ? krw(d.price_minor) : '미입력' }}</td>
+              <td class="text-xs">{{ [d.city, d.country].filter(Boolean).join(', ') || '미입력' }}</td>
+              <td><StatusBadge v-bind="STATUS[d.status] || { label: d.status }" /></td>
+              <td class="whitespace-nowrap text-xs text-ink-muted tabular">{{ dateTime(d.created_at) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+    </StatePanel>
+
+    <SidePanel :open="!!draft" wide :title="form.title || '(제목 없음)'" :subtitle="draft?.source_url" @close="draft = null">
+      <form v-if="draft" id="ingest-form" class="space-y-4 text-sm" @submit.prevent="publish">
+        <div class="flex flex-wrap items-center gap-2">
+          <StatusBadge v-bind="STATUS[draft.status] || { label: draft.status }" />
+          <a :href="draft.source_url" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs font-semibold text-primary">원본 페이지 <AppIcon name="external" :size="12" /></a>
+          <span v-if="draft.published_item_id" class="font-mono text-2xs text-ink-subtle">{{ draft.published_item_id }}</span>
+        </div>
+        <p v-if="locked" class="rounded-field bg-surface-sunken px-3 py-2 text-xs text-ink-muted">카탈로그에 등록된 상품이라 수정할 수 없어요.</p>
+
+        <fieldset :disabled="locked" class="space-y-4">
+          <div>
+            <label class="label" for="ig-domain">상품군</label>
+            <select id="ig-domain" v-model="form.domain_type" class="input">
+              <option v-for="(v, k) in DOMAINS" :key="k" :value="k">{{ v.label }}{{ v.publishable ? '' : ' (자동 등록 불가)' }}</option>
+            </select>
+            <p v-if="!DOMAINS[form.domain_type]?.publishable" class="mt-1 text-2xs text-warning">이 상품군은 자동 등록을 지원하지 않아요. 파트너 콘솔에서 등록해 주세요.</p>
+          </div>
+          <div><label class="label" for="ig-title">상품명 *</label><input id="ig-title" v-model="form.title" class="input" maxlength="180" /></div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label class="label" for="ig-price">원화 판매가 *</label>
+              <input id="ig-price" v-model="form.price" inputmode="numeric" class="input tabular" placeholder="예: 35000" />
+              <p v-if="priceError" class="mt-1 text-xs text-danger">{{ priceError }}</p>
+              <p v-else-if="meta.sourcePrice && meta.sourceCurrency !== 'KRW'" class="mt-1 text-2xs text-ink-subtle">원본 가격: {{ meta.sourcePrice }} {{ meta.sourceCurrency }} — 원화로 직접 입력해 주세요.</p>
+              <p v-else-if="!meta.sourcePrice" class="mt-1 text-2xs text-ink-subtle">페이지에서 가격을 찾지 못했어요.</p>
+            </div>
+            <div>
+              <label class="label" for="ig-country">국가 *</label>
+              <PlaceInput v-model="form.country" kind="country" label="국가" input-id="ig-country" @pick="(p) => (form.countryCode = p.code || '')" />
+            </div>
+            <div>
+              <label class="label" for="ig-city">도시 *</label>
+              <PlaceInput v-model="form.city" kind="city" label="도시" input-id="ig-city" :country-code="form.countryCode" @pick="(p) => { if (!form.country && p.countryCode) form.countryCode = p.countryCode }" />
+            </div>
+            <div>
+              <label class="label" for="ig-address">주소{{ form.domain_type === 'HOTEL' ? ' *' : '' }}</label>
+              <input id="ig-address" v-model="form.address" class="input" maxlength="300" />
+            </div>
+          </div>
+          <div><label class="label" for="ig-summary">요약</label><input id="ig-summary" v-model="form.summary" class="input" maxlength="300" /></div>
+          <div><label class="label" for="ig-desc">설명</label><textarea id="ig-desc" v-model="form.description" class="input min-h-[96px] py-2" maxlength="4000" /></div>
+          <div>
+            <label class="label" for="ig-cancel">취소 규정 *</label>
+            <textarea id="ig-cancel" v-model="form.cancellation_policy" class="input min-h-[72px] py-2" maxlength="1000" placeholder="공급사 약관에 적힌 취소·환불 조건을 그대로 입력해 주세요." />
+          </div>
+          <div v-if="draft.image_urls?.length">
+            <p class="label">페이지에서 찾은 사진</p>
+            <div class="flex gap-2 overflow-x-auto">
+              <img v-for="src in draft.image_urls" :key="src" :src="src" alt="" class="h-20 w-28 shrink-0 rounded-lg border border-line object-cover" loading="lazy" referrerpolicy="no-referrer" />
+            </div>
+          </div>
+        </fieldset>
+
+        <div v-if="!locked && missing.length" class="rounded-field bg-warning-soft px-3 py-2 text-xs text-warning" role="status">
+          등록하려면 채워야 해요: {{ missing.map((m) => FIELD[m]).join(', ') }}
+        </div>
+        <p v-if="!locked" class="text-2xs text-ink-subtle">등록된 상품은 평점·리뷰 없이 시작하고, 예약 가능 여부는 공급사 연동 상태(공급사 연동 메뉴)를 따라요.</p>
+      </form>
+      <template v-if="draft && !locked" #footer>
+        <button type="button" class="btn-ghost text-danger" :disabled="busy" @click="save('REJECTED')">반려</button>
+        <button type="button" class="btn-secondary" :disabled="busy || !!priceError" @click="save()">저장</button>
+        <button type="submit" form="ingest-form" class="btn-primary" :disabled="busy || !canPublish">{{ busy ? '처리 중…' : '카탈로그에 등록' }}</button>
+      </template>
+    </SidePanel>
   </div>
 </template>
-

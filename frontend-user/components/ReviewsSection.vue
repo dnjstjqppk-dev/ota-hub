@@ -61,43 +61,43 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="rounded-3xl border border-slate-200 bg-white p-6 md:p-8 space-y-5" data-testid="reviews">
+  <section class="rounded-3xl border border-line bg-surface p-6 md:p-8 space-y-5" data-testid="reviews">
     <div class="flex flex-wrap items-end justify-between gap-3">
-      <h3 class="text-xl font-bold text-slate-900">이용 후기</h3>
-      <div v-if="summary && summary.count" class="text-sm text-slate-700">
-        <span class="text-amber-500">{{ stars(summary.average || 0) }}</span>
+      <h3 class="text-xl font-bold text-ink">이용 후기</h3>
+      <div v-if="summary && summary.count" class="text-sm text-ink-muted">
+        <span class="text-warning">{{ stars(summary.average || 0) }}</span>
         <strong class="ml-1">{{ summary.average }}</strong>
-        <span class="text-slate-500"> · 후기 {{ summary.count }}개 (실이용 인증 {{ summary.verifiedCount }}개)</span>
+        <span class="text-ink-subtle"> · 후기 {{ summary.count }}개 (실이용 인증 {{ summary.verifiedCount }}개)</span>
       </div>
     </div>
 
-    <p v-if="loading" class="text-sm text-slate-400">후기를 불러오는 중…</p>
-    <p v-else-if="!reviews.length" class="text-sm text-slate-500">아직 등록된 후기가 없습니다.</p>
-    <ul v-else class="divide-y divide-slate-100">
+    <p v-if="loading" class="text-sm text-ink-subtle">후기를 불러오는 중…</p>
+    <p v-else-if="!reviews.length" class="text-sm text-ink-subtle">아직 등록된 후기가 없습니다.</p>
+    <ul v-else class="divide-y divide-line">
       <li v-for="r in reviews" :key="r.id" class="py-3">
-        <div class="flex items-center gap-2 text-xs text-slate-500">
-          <span class="text-amber-500">{{ stars(r.rating) }}</span>
-          <span class="font-semibold text-slate-700">{{ r.user_name }}</span>
-          <span v-if="r.verified_stay" class="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">실이용 인증</span>
+        <div class="flex items-center gap-2 text-xs text-ink-subtle">
+          <span class="text-warning">{{ stars(r.rating) }}</span>
+          <span class="font-semibold text-ink-muted">{{ r.user_name }}</span>
+          <span v-if="r.verified_stay" class="rounded-full bg-success-soft px-2 py-0.5 font-semibold text-success">실이용 인증</span>
           <span>{{ new Date(r.created_at).toLocaleDateString('ko-KR') }}</span>
         </div>
-        <p class="mt-1 whitespace-pre-line text-sm text-slate-800">{{ r.comment }}</p>
+        <p class="mt-1 whitespace-pre-line text-sm text-ink">{{ r.comment }}</p>
       </li>
     </ul>
 
-    <form v-if="canWrite" class="rounded-2xl bg-slate-50 p-4 space-y-3" data-testid="review-form" @submit.prevent="submit">
-      <div class="text-sm font-semibold text-slate-800">이용하신 예약으로 후기 남기기</div>
-      <select v-if="eligible.length > 1" v-model="form.bookingId" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+    <form v-if="canWrite" class="rounded-2xl bg-surface-sunken p-4 space-y-3" data-testid="review-form" @submit.prevent="submit">
+      <div class="text-sm font-semibold text-ink">이용하신 예약으로 후기 남기기</div>
+      <select v-if="eligible.length > 1" v-model="form.bookingId" class="w-full rounded-lg border border-line-strong px-3 py-2 text-sm">
         <option v-for="b in eligible" :key="b.id" :value="b.id">{{ b.bookingNumber }} · {{ b.serviceStart }}</option>
       </select>
       <div class="flex items-center gap-1" role="radiogroup" aria-label="평점">
-        <button v-for="n in 5" :key="n" type="button" :aria-checked="form.rating === n" role="radio" class="text-2xl leading-none" :class="n <= form.rating ? 'text-amber-500' : 'text-slate-300'" @click="form.rating = n">★</button>
+        <button v-for="n in 5" :key="n" type="button" :aria-checked="form.rating === n" role="radio" class="text-2xl leading-none" :class="n <= form.rating ? 'text-warning' : 'text-ink-subtle'" @click="form.rating = n">★</button>
       </div>
-      <textarea v-model="form.comment" rows="3" maxlength="2000" placeholder="이용 경험을 10자 이상 남겨주세요." class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" data-testid="review-comment" />
-      <p v-if="err" class="text-sm text-red-700" role="alert">{{ err }}</p>
-      <button type="submit" :disabled="busy" class="rounded-xl bg-trip-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{{ busy ? '등록 중…' : '후기 등록' }}</button>
+      <textarea v-model="form.comment" rows="3" maxlength="2000" placeholder="이용 경험을 10자 이상 남겨주세요." class="w-full rounded-lg border border-line-strong px-3 py-2 text-sm" data-testid="review-comment" />
+      <p v-if="err" class="text-sm text-danger" role="alert">{{ err }}</p>
+      <button type="submit" :disabled="busy" class="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{{ busy ? '등록 중…' : '후기 등록' }}</button>
     </form>
-    <p v-else-if="auth.isLoggedIn && !msg" class="text-xs text-slate-500">이용이 완료된 예약이 있으면 인증 후기를 남길 수 있습니다.</p>
-    <p v-if="msg" class="text-sm text-emerald-700" role="status" data-testid="review-success">{{ msg }}</p>
+    <p v-else-if="auth.isLoggedIn && !msg" class="text-xs text-ink-subtle">이용이 완료된 예약이 있으면 인증 후기를 남길 수 있습니다.</p>
+    <p v-if="msg" class="text-sm text-success" role="status" data-testid="review-success">{{ msg }}</p>
   </section>
 </template>

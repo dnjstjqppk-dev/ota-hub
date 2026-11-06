@@ -42,16 +42,16 @@ onMounted(async () => {
 <template>
   <div class="max-w-lg mx-auto px-4 py-16 text-center" data-testid="payment-return">
     <template v-if="state === 'working'">
-      <div class="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-trip-blue" />
-      <p class="mt-4 text-sm font-semibold text-slate-700">결제 승인을 확인하고 있습니다…</p>
-      <p class="mt-1 text-xs text-slate-500">이 창을 닫거나 새로고침하지 마세요.</p>
+      <div class="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-line border-t-primary" />
+      <p class="mt-4 text-sm font-semibold text-ink-muted">결제 승인을 확인하고 있습니다…</p>
+      <p class="mt-1 text-xs text-ink-subtle">이 창을 닫거나 새로고침하지 마세요.</p>
     </template>
-    <div v-else class="rounded-2xl border border-slate-200 bg-white p-6" role="alert">
-      <h1 class="text-base font-bold text-slate-900">결제가 완료되지 않았습니다</h1>
-      <p class="mt-2 text-sm text-slate-600">{{ message }}</p>
+    <div v-else class="rounded-2xl border border-line bg-surface p-6" role="alert">
+      <h1 class="text-base font-bold text-ink">결제가 완료되지 않았습니다</h1>
+      <p class="mt-2 text-sm text-ink-muted">{{ message }}</p>
       <div class="mt-5 flex justify-center gap-2">
-        <NuxtLink v-if="bookingId" :to="`/booking/result?bookingId=${encodeURIComponent(bookingId)}`" class="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">예약 상태 보기</NuxtLink>
-        <NuxtLink to="/" class="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold">홈으로</NuxtLink>
+        <NuxtLink v-if="bookingId" :to="`/booking/result?bookingId=${encodeURIComponent(bookingId)}`" class="rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-ink-inverse">예약 상태 보기</NuxtLink>
+        <NuxtLink to="/" class="rounded-xl border border-line-strong px-4 py-2.5 text-sm font-semibold">홈으로</NuxtLink>
       </div>
     </div>
   </div>

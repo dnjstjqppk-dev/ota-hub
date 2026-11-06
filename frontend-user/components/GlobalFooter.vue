@@ -11,7 +11,8 @@ const year = new Date().getFullYear()
       <div class="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
         <div class="max-w-sm space-y-4">
           <NuxtLink to="/" class="inline-block" :title="BRAND.name">
-            <img src="/logo.svg" alt="getfortrip" class="h-8 w-auto" width="132" height="32" />
+            <img src="/logo.svg" alt="getfortrip" class="h-8 w-auto dark:hidden" width="132" height="32" />
+            <img src="/logo-white.svg" alt="getfortrip" class="hidden h-8 w-auto dark:block" width="132" height="32" />
           </NuxtLink>
           <p class="text-sm leading-relaxed text-ink-muted">항공권부터 호텔, 현지 이동까지. 결제 전 최종 금액을 확정하고, 공급사 확정이 끝난 예약만 확정으로 안내합니다.</p>
           <a :href="`mailto:${BRAND.supportEmail}`" class="inline-flex items-center gap-2 text-sm font-semibold text-ink hover:text-primary">

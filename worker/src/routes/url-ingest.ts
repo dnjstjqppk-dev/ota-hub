@@ -1,10 +1,12 @@
 import type { Env } from '../env.ts';
 import { HttpError, json, readJson, str } from '../lib/http.ts';
-import { requireAdmin, requirePartner } from '../lib/auth.ts';
+import { rateLimit, requireAdmin, requirePartner } from '../lib/auth.ts';
 import {
   scrapeTravelProductUrl,
   saveIngestedDraft,
-  publishIngestedProduct
+  publishIngestedProduct,
+  missingForPublish,
+  PUBLISHABLE_DOMAINS
 } from '../services/url-ingest-service.ts';
 import { isFeatureEnabled } from '../services/feature-flag-service.ts';
 
@@ -23,6 +25,7 @@ export async function handleUrlIngest(request: Request, env: Env, url: URL): Pro
   // 1. Admin Scrape & Create Draft: POST /api/v1/admin/ingest/url
   if (path === '/api/v1/admin/ingest/url' && method === 'POST') {
     const admin = await requireAdmin(request, env);
+    await rateLimit(request, env, 'ingest_scrape', 30, 60);
     const body = await readJson(request);
     const inputUrl = str(body.url, 2000);
     if (!inputUrl) {
@@ -32,17 +35,22 @@ export async function handleUrlIngest(request: Request, env: Env, url: URL): Pro
     const draft = await scrapeTravelProductUrl(inputUrl);
     const saved = await saveIngestedDraft(env, draft, admin.id);
 
-    // If AUTO_PRODUCT_PUBLISH flag is turned ON, automatically publish!
+    // AUTO_PRODUCT_PUBLISH only publishes a draft that already carries every required fact.
+    // Anything missing is reported so the reviewer fills it in; nothing is guessed.
     const isAutoPublish = await isFeatureEnabled(env, 'AUTO_PRODUCT_PUBLISH');
+    const missing = missingForPublish(saved);
+    const publishable = (PUBLISHABLE_DOMAINS as readonly string[]).includes(saved.domain_type);
     let publishResult = null;
-    if (isAutoPublish) {
+    if (isAutoPublish && publishable && !missing.length) {
       publishResult = await publishIngestedProduct(env, saved.id, admin.id);
     }
 
     return json({
       success: true,
       draft: saved,
-      auto_published: isAutoPublish,
+      missing,
+      publishable,
+      auto_published: !!publishResult,
       publish_result: publishResult
     }, 201);
   }
@@ -111,6 +119,13 @@ export async function handleUrlIngest(request: Request, env: Env, url: URL): Pro
     await requireAdmin(request, env);
     const id = updateDraftMatch[1];
     const b = await readJson(request);
+    const cur = await env.DB.prepare('SELECT status FROM url_product_ingestions WHERE id = ?').bind(id).first<{ status: string }>();
+    if (!cur) throw new HttpError(404, 'DRAFT_NOT_FOUND', '수집 내역을 찾을 수 없습니다.');
+    if (cur.status === 'PUBLISHED') throw new HttpError(409, 'ALREADY_PUBLISHED', '이미 등록된 상품은 수정할 수 없습니다. 카탈로그에서 관리해 주세요.');
+    const DOMAINS = ['ACTIVITY', 'HOTEL', 'CAR', 'PACKAGE', 'TRANSFER', 'TICKET'];
+    if (b.domain_type !== undefined && !DOMAINS.includes(String(b.domain_type))) throw new HttpError(400, 'INVALID_DOMAIN', '지원하지 않는 상품군입니다.');
+    if (b.status !== undefined && !['DRAFT', 'REVIEWED', 'REJECTED'].includes(String(b.status))) throw new HttpError(400, 'INVALID_STATUS', 'status는 DRAFT | REVIEWED | REJECTED 중 하나여야 합니다.');
+    if (b.price_minor !== undefined && (!Number.isInteger(b.price_minor) || b.price_minor < 0 || b.price_minor > 100_000_000)) throw new HttpError(400, 'INVALID_PRICE', '가격은 0–1억 원 사이 정수여야 합니다.');
 
     const now = new Date().toISOString();
     await env.DB.prepare(`
@@ -122,19 +137,23 @@ export async function handleUrlIngest(request: Request, env: Env, url: URL): Pro
         domain_type = COALESCE(?, domain_type),
         city = COALESCE(?, city),
         country = COALESCE(?, country),
+        address = COALESCE(?, address),
+        currency = CASE WHEN ? IS NOT NULL THEN 'KRW' ELSE currency END,
         cancellation_policy = COALESCE(?, cancellation_policy),
         status = COALESCE(?, status),
         updated_at = ?
       WHERE id = ?
     `).bind(
-      b.title || null,
-      b.summary || null,
-      b.description || null,
+      b.title ? str(b.title, 180) : null,
+      b.summary ? str(b.summary, 300) : null,
+      b.description ? str(b.description, 4000) : null,
       typeof b.price_minor === 'number' ? b.price_minor : null,
       b.domain_type || null,
-      b.city || null,
-      b.country || null,
-      b.cancellation_policy || null,
+      b.city ? str(b.city, 80) : null,
+      b.country ? str(b.country, 80) : null,
+      b.address ? str(b.address, 300) : null,
+      typeof b.price_minor === 'number' ? b.price_minor : null,
+      b.cancellation_policy ? str(b.cancellation_policy, 1000) : null,
       b.status || null,
       now,
       id
@@ -160,6 +179,7 @@ export async function handleUrlIngest(request: Request, env: Env, url: URL): Pro
   // 6. Partner Ingest URL: POST /api/v1/partner/ingest/url
   if (path === '/api/v1/partner/ingest/url' && method === 'POST') {
     const partner = await requirePartner(request, env);
+    await rateLimit(request, env, 'ingest_scrape', 30, 60);
     const body = await readJson(request);
     const inputUrl = str(body.url, 2000);
     if (!inputUrl) {

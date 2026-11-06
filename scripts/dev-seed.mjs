@@ -8,6 +8,8 @@
  * - routes every catalog supplier through the SIMULATOR adapter (dev only:
  *   the worker refuses simulator suppliers unless APP_ENV is development/test)
  * - creates a local admin account with the given password (default: random, printed)
+ * - restores the documented dev password on the three seed partners (0010
+ *   neutralizes it everywhere; local QA needs a working extranet login)
  * - inserts test promotions
  */
 import { execFileSync } from "node:child_process";
@@ -36,6 +38,8 @@ async function pbkdf2Hash(password) {
 
 const adminPassword = process.argv[2] || `Adm1n-${randomBytes(6).toString("hex")}`;
 const hash = await pbkdf2Hash(adminPassword);
+// Published dev-only credential (see frontend-partner login hint, DEV builds only).
+const PARTNER_DEV_HASH = "pbkdf2:sha256:100000:178c3ab91950c4dfa89b982f4f18a4f6:b591e05763c607026962d7d4fd4edb6182982c1d49e9ca77cad4dbba876785b4";
 
 console.log("1/3 loading catalog seed (local) ...");
 d1(["--file", "database/seed_catalogs_remote.sql"]);
@@ -43,6 +47,8 @@ d1(["--file", "database/seed_transfers.sql"]);
 
 const sql = `
 UPDATE suppliers SET adapter = 'simulator', integration_status = 'NOT_INTEGRATED', notes = 'LOCAL DEV: simulator adapter' ;
+UPDATE partners SET password_hash = '${PARTNER_DEV_HASH}', is_active = 1 WHERE id IN ('ptn_htl_01', 'ptn_car_01', 'ptn_tour_01');
+UPDATE partner_staff SET password_hash = '${PARTNER_DEV_HASH}' WHERE id IN ('stf_hotel_01', 'stf_car_01', 'stf_tour_01');
 INSERT INTO users (id, email, password_hash, full_name, role, tier, trip_coins)
   VALUES ('usr_local_admin', 'admin@local.test', '${hash}', '로컬 관리자', 'ADMIN', 'SILVER', 0)
   ON CONFLICT(id) DO UPDATE SET password_hash = excluded.password_hash, role = 'ADMIN';

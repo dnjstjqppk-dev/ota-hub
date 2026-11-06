@@ -1,320 +1,164 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { apiUrl } from '../config/api'
+/**
+ * Members (GET /admin/users ?q ?role, PATCH /admin/users/:id). Search suggests as you type (email,
+ * name, phone, id). Role changes and coin adjustments are audited; coin adjustments are written to
+ * coin_ledger by the server. Account suspension is not supported by the schema, so it is not offered.
+ */
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { api, session, toast } from '../composables/session'
+import { useResource } from '../composables/useResource'
+import { dateTime, num } from '../composables/format'
+import PageHeader from '../components/PageHeader.vue'
+import StatePanel from '../components/StatePanel.vue'
+import StatusBadge from '../components/StatusBadge.vue'
+import SidePanel from '../components/SidePanel.vue'
+import EntitySearch from '../components/EntitySearch.vue'
 
-interface UserRow {
-  id: string
-  email: string
-  full_name: string
-  phone_number: string
-  role: 'USER' | 'ADMIN'
-  tier: string
-  coin_balance: number
-  is_active: number
-  created_at: string
+const route = useRoute()
+const router = useRouter()
+const qv = (k: string) => (typeof route.query[k] === 'string' ? (route.query[k] as string) : '')
+function patch(change: Record<string, string>) {
+  const next: Record<string, string> = {}
+  for (const [k, v] of Object.entries({ ...route.query, ...change })) if (typeof v === 'string' && v) next[k] = v
+  router.replace({ query: next })
 }
+const q = computed(() => qv('q'))
+const role = computed(() => qv('role'))
+const draft = ref(q.value)
+watch(q, (v) => { draft.value = v })
 
-const users = ref<UserRow[]>([])
-const loading = ref(false)
-const searchQuery = ref('')
-const filterRole = ref<string>('ALL')
-const selectedUser = ref<UserRow | null>(null)
-const isModalOpen = ref(false)
-const targetRole = ref<'USER' | 'ADMIN'>('USER')
-const targetActive = ref(true)
-const actionLoading = ref(false)
+const list = useResource(async () => {
+  const p = new URLSearchParams()
+  if (q.value) p.set('q', q.value)
+  if (role.value) p.set('role', role.value)
+  return (await api(`/admin/users?${p}`)).users || []
+}, [] as any[])
+watch([q, role], () => list.reload())
+onMounted(list.reload)
+const suggest = async (term: string, signal: AbortSignal) => (await api(`/admin/users?q=${encodeURIComponent(term)}&limit=8`, { signal })).users || []
 
-const filteredUsers = computed(() => {
-  return users.value.filter(u => {
-    const matchRole = filterRole.value === 'ALL' || u.role === filterRole.value
-    const matchQuery = !searchQuery.value ||
-      u.email.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      (u.full_name && u.full_name.toLowerCase().includes(searchQuery.value.toLowerCase())) ||
-      (u.phone_number && u.phone_number.includes(searchQuery.value))
-    return matchRole && matchQuery
-  })
+const ROLE: Record<string, { label: string; tone: any }> = { USER: { label: '회원', tone: 'neutral' }, ADMIN: { label: '관리자', tone: 'info' } }
+
+const selected = ref<any | null>(null)
+const form = reactive({ role: 'USER', coin: '', note: '' })
+const busy = ref(false)
+function open(u: any) { selected.value = u; Object.assign(form, { role: u.role, coin: '', note: '' }) }
+const isSelf = computed(() => selected.value?.id === session.user?.id)
+const coinValue = computed(() => (form.coin.trim() === '' ? null : Number(form.coin)))
+const coinError = computed(() => {
+  const v = coinValue.value
+  if (v === null) return ''
+  if (!Number.isInteger(v) || v === 0) return '0이 아닌 정수를 입력해 주세요. 차감은 음수(예: -500)로 입력해요.'
+  if (Math.abs(v) > 10_000_000) return '한 번에 ±10,000,000 코인까지 조정할 수 있어요.'
+  return ''
 })
+const dirty = computed(() => !!selected.value && (form.role !== selected.value.role || coinValue.value !== null))
 
-const fetchUsers = async () => {
-  loading.value = true
+async function save() {
+  if (coinError.value) return
+  if (form.role !== selected.value.role && !confirm(`${selected.value.email}의 권한을 ${ROLE[form.role].label}(으)로 바꿀까요?`)) return
+  busy.value = true
   try {
-    const token = localStorage.getItem('getfortrip_admin_token')
-    const res = await fetch(apiUrl('/admin/users'), {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    if (res.ok) {
-      const json = await res.json()
-      users.value = json.users || []
-    }
-  } catch (e) {
-    console.error('Failed to load users', e)
-  } finally {
-    loading.value = false
-  }
+    const body: Record<string, unknown> = {}
+    if (form.role !== selected.value.role) body.role = form.role
+    if (coinValue.value !== null) { body.coinAdjustment = coinValue.value; body.note = form.note.trim() || undefined }
+    const r = await api(`/admin/users/${encodeURIComponent(selected.value.id)}`, { method: 'PATCH', json: body })
+    selected.value = { ...selected.value, role: form.role, coin_balance: r.coinBalance ?? selected.value.coin_balance }
+    form.coin = ''
+    form.note = ''
+    toast('회원 정보를 저장했어요.')
+    list.reload()
+  } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
 }
-
-const openEditModal = (u: UserRow) => {
-  selectedUser.value = u
-  targetRole.value = u.role
-  targetActive.value = u.is_active === 1
-  isModalOpen.value = true
-}
-
-const handleSaveUser = async () => {
-  if (!selectedUser.value) return
-  actionLoading.value = true
-  try {
-    const token = localStorage.getItem('getfortrip_admin_token')
-    const res = await fetch(apiUrl(`/admin/users/${selectedUser.value.id}`), {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        role: targetRole.value,
-        isActive: targetActive.value
-      })
-    })
-    if (res.ok) {
-      isModalOpen.value = false
-      await fetchUsers()
-    } else {
-      const err = await res.json()
-      alert(err.error || '사용자 정보 수정에 실패했습니다.')
-    }
-  } catch (e: any) {
-    alert(e.message || '오류가 발생했습니다.')
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-onMounted(() => {
-  fetchUsers()
-})
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
-          <span>회원 계정 및 RBAC 권한 관리</span>
-          <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-            총 {{ users.length }}명
-          </span>
-        </h1>
-        <p class="text-sm text-slate-500 font-medium mt-1">
-          B2C 회원 및 백오피스 관리자 권한을 부여·회수하고 비정상 계정을 정지합니다.
-        </p>
-      </div>
-      <div class="flex items-center gap-2">
-        <button
-          @click="fetchUsers"
-          class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
+  <div>
+    <PageHeader title="회원" description="회원을 찾아 권한과 코인을 관리해요. 모든 변경은 감사 로그에 남아요." />
+
+    <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
+      <div class="lg:w-96">
+        <EntitySearch
+          v-model="draft"
+          label="회원 검색"
+          input-id="user-search"
+          placeholder="이메일, 이름, 전화번호"
+          :fetcher="suggest"
+          :item-key="(x: any) => x.id"
+          @select="open"
+          @submit="(t: string) => patch({ q: t })"
         >
-          <span>🔄</span>
-          <span>새로고침</span>
-        </button>
+          <template #item="{ item }">
+            <div class="flex items-center gap-2">
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium text-ink">{{ item.full_name || '이름 없음' }}</p>
+                <p class="truncate text-2xs text-ink-subtle">{{ item.email }}<span v-if="item.phone_number"> · {{ item.phone_number }}</span></p>
+              </div>
+              <StatusBadge v-bind="ROLE[item.role] || { label: item.role }" />
+            </div>
+          </template>
+        </EntitySearch>
+      </div>
+      <div class="flex gap-1.5" role="group" aria-label="권한 필터">
+        <button type="button" class="chip" :aria-pressed="!role" @click="patch({ role: '' })">전체</button>
+        <button v-for="(v, k) in ROLE" :key="k" type="button" class="chip" :aria-pressed="role === k" @click="patch({ role: k })">{{ v.label }}</button>
       </div>
     </div>
+    <p v-if="q" class="mb-3 text-sm text-ink-muted">‘{{ q }}’ 검색 결과 · <button type="button" class="font-semibold text-primary" @click="patch({ q: '' })">검색 해제</button></p>
 
-    <!-- Filters & Search -->
-    <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between">
-      <div class="flex items-center gap-2">
-        <button
-          v-for="r in [
-            { id: 'ALL', label: '전체 회원' },
-            { id: 'USER', label: '일반 회원 (B2C)' },
-            { id: 'ADMIN', label: '관리자 (ADMIN) 👑' }
-          ]"
-          :key="r.id"
-          @click="filterRole = r.id"
-          :class="[
-            filterRole === r.id
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
-            'px-3.5 py-1.5 rounded-xl text-xs font-bold transition'
-          ]"
-        >
-          {{ r.label }}
-        </button>
-      </div>
-
-      <div class="relative w-full md:w-72">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="이메일, 이름, 연락처 검색..."
-          class="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-        />
-        <span class="absolute left-3 top-2.5 text-xs text-slate-400">🔍</span>
-      </div>
-    </div>
-
-    <!-- Table -->
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse text-xs">
-          <thead>
-            <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-              <th class="p-3.5">회원 ID</th>
-              <th class="p-3.5">이메일 / 이름</th>
-              <th class="p-3.5">연락처</th>
-              <th class="p-3.5">권한 역할 (RBAC)</th>
-              <th class="p-3.5">멤버십 등급</th>
-              <th class="p-3.5">보유 코인 잔액</th>
-              <th class="p-3.5">계정 상태</th>
-              <th class="p-3.5">가입 일시</th>
-              <th class="p-3.5 text-right">관리</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-100 font-medium">
-            <tr v-if="loading">
-              <td colspan="9" class="p-8 text-center text-slate-400 font-bold">
-                회원 목록을 불러오는 중입니다...
-              </td>
-            </tr>
-            <tr v-else-if="filteredUsers.length === 0">
-              <td colspan="9" class="p-8 text-center text-slate-400 font-bold">
-                일치하는 회원이 없습니다.
-              </td>
-            </tr>
-            <tr
-              v-else
-              v-for="u in filteredUsers"
-              :key="u.id"
-              class="hover:bg-slate-50/80 transition"
-            >
-              <td class="p-3.5 font-mono text-slate-400">{{ u.id }}</td>
-              <td class="p-3.5">
-                <div class="font-bold text-slate-900">{{ u.email }}</div>
-                <div class="text-[11px] text-slate-400">{{ u.full_name || '이름 미설정' }}</div>
-              </td>
-              <td class="p-3.5 font-mono text-slate-600">{{ u.phone_number || '-' }}</td>
-              <td class="p-3.5">
-                <span
-                  :class="[
-                    u.role === 'ADMIN' ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-slate-100 text-slate-700 border-slate-200',
-                    'px-2 py-0.5 rounded font-black text-[10px] border inline-flex items-center gap-1'
-                  ]"
-                >
-                  <span v-if="u.role === 'ADMIN'">👑</span>
-                  {{ u.role }}
-                </span>
-              </td>
-              <td class="p-3.5">
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                  {{ u.tier || 'SILVER' }}
-                </span>
-              </td>
-              <td class="p-3.5 font-bold text-slate-800">{{ (u.coin_balance || 0).toLocaleString() }} C</td>
-              <td class="p-3.5">
-                <span
-                  :class="[
-                    u.is_active === 1 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800',
-                    'px-2 py-0.5 rounded-full text-[10px] font-bold'
-                  ]"
-                >
-                  {{ u.is_active === 1 ? '정상 활성' : '이용 정지' }}
-                </span>
-              </td>
-              <td class="p-3.5 text-slate-400 font-mono text-[11px]">
-                {{ (u.created_at || '').slice(0, 10) }}
-              </td>
-              <td class="p-3.5 text-right">
-                <button
-                  @click="openEditModal(u)"
-                  class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-[11px] transition"
-                >
-                  권한/상태 설정
-                </button>
-              </td>
+    <StatePanel :state="list.state.value" :error="list.error.value" :empty="!list.data.value.length" empty-text="조건에 맞는 회원이 없어요." @retry="list.reload()">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>회원</th><th>전화번호</th><th>권한</th><th>등급</th><th class="text-right">코인</th><th>가입</th></tr></thead>
+          <tbody>
+            <tr v-for="u in list.data.value" :key="u.id" class="row-link" tabindex="0" @click="open(u)" @keydown.enter="open(u)">
+              <td><p class="font-medium">{{ u.full_name || '이름 없음' }}</p><p class="text-2xs text-ink-subtle">{{ u.email }}</p></td>
+              <td class="text-xs tabular">{{ u.phone_number || '—' }}</td>
+              <td><StatusBadge v-bind="ROLE[u.role] || { label: u.role }" /></td>
+              <td class="text-xs">{{ u.tier || '—' }}</td>
+              <td class="text-right tabular">{{ num(u.coin_balance) }}</td>
+              <td class="whitespace-nowrap text-xs text-ink-muted tabular">{{ dateTime(u.created_at) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+      <p class="mt-2 text-2xs text-ink-subtle">최근 가입순 100명까지 표시해요. 더 찾으려면 검색하세요.</p>
+    </StatePanel>
 
-    <!-- Edit Modal -->
-    <div
-      v-if="isModalOpen && selectedUser"
-      class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-    >
-      <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 space-y-5">
-        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 class="text-base font-black text-slate-900">회원 권한 & 상태 변경</h3>
-          <button @click="isModalOpen = false" class="text-slate-400 hover:text-slate-600 font-bold text-sm">✕</button>
-        </div>
+    <SidePanel :open="!!selected" :title="selected?.full_name || selected?.email || ''" :subtitle="selected?.email" @close="selected = null">
+      <form v-if="selected" id="user-form" class="space-y-5 text-sm" @submit.prevent="save">
+        <dl class="grid grid-cols-2 gap-3">
+          <div><dt class="text-2xs text-ink-subtle">회원 ID</dt><dd class="break-all font-mono text-xs">{{ selected.id }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">가입</dt><dd class="tabular">{{ dateTime(selected.created_at) }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">전화번호</dt><dd>{{ selected.phone_number || '—' }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">코인 잔액</dt><dd class="font-semibold tabular">{{ num(selected.coin_balance) }}</dd></div>
+        </dl>
 
-        <div class="space-y-4 text-xs">
-          <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
-            <div class="font-bold text-slate-900">{{ selectedUser.email }}</div>
-            <div class="text-slate-400">{{ selectedUser.full_name }} · {{ selectedUser.id }}</div>
+        <fieldset>
+          <legend class="label">권한</legend>
+          <div class="flex gap-2">
+            <label v-for="(v, k) in ROLE" :key="k" class="chip cursor-pointer" :aria-pressed="form.role === k">
+              <input v-model="form.role" type="radio" name="role" :value="k" class="sr-only" :disabled="isSelf && k !== 'ADMIN'" />{{ v.label }}
+            </label>
           </div>
+          <p v-if="isSelf" class="mt-1 text-2xs text-ink-subtle">본인의 관리자 권한은 해제할 수 없어요.</p>
+        </fieldset>
 
-          <div class="space-y-1.5">
-            <label class="font-bold text-slate-700">RBAC 역할 지정</label>
-            <div class="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                @click="targetRole = 'USER'"
-                :class="[
-                  targetRole === 'USER' ? 'border-blue-600 bg-blue-50 text-blue-700 font-bold' : 'border-slate-200 text-slate-600',
-                  'p-2.5 rounded-xl border text-center transition'
-                ]"
-              >
-                일반 회원 (USER)
-              </button>
-              <button
-                type="button"
-                @click="targetRole = 'ADMIN'"
-                :class="[
-                  targetRole === 'ADMIN' ? 'border-purple-600 bg-purple-50 text-purple-700 font-bold' : 'border-slate-200 text-slate-600',
-                  'p-2.5 rounded-xl border text-center transition'
-                ]"
-              >
-                관리자 (ADMIN) 👑
-              </button>
-            </div>
-            <p v-if="targetRole === 'ADMIN'" class="text-[11px] text-amber-600 font-medium">
-              ⚠️ 관리자 권한은 백오피스 전체 시스템과 원장 데이터에 접근할 수 있습니다.
-            </p>
-          </div>
+        <fieldset class="space-y-2">
+          <legend class="label">코인 조정</legend>
+          <input v-model="form.coin" inputmode="numeric" class="input tabular" placeholder="예: 1000 (지급), -500 (차감)" aria-describedby="coin-help" />
+          <p id="coin-help" class="text-2xs text-ink-subtle">잔액은 0 아래로 내려가지 않아요. 조정 내역은 코인 원장에 기록돼요.</p>
+          <p v-if="coinError" class="text-xs text-danger" role="alert">{{ coinError }}</p>
+          <input v-if="coinValue !== null" v-model="form.note" class="input" maxlength="200" placeholder="조정 사유 (원장에 기록)" />
+        </fieldset>
 
-          <div class="space-y-1.5">
-            <label class="font-bold text-slate-700">계정 활성화 상태</label>
-            <div class="flex items-center gap-3">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" :value="true" v-model="targetActive" class="text-blue-600" />
-                <span class="font-medium">정상 활성 (로그인 가능)</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" :value="false" v-model="targetActive" class="text-rose-600" />
-                <span class="font-medium text-rose-600">이용 정지</span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-          <button
-            @click="isModalOpen = false"
-            class="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl font-bold text-xs"
-          >
-            취소
-          </button>
-          <button
-            @click="handleSaveUser"
-            :disabled="actionLoading"
-            class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs shadow-md shadow-blue-500/25 disabled:opacity-50"
-          >
-            {{ actionLoading ? '저장 중...' : '변경 저장' }}
-          </button>
-        </div>
-      </div>
-    </div>
+        <p class="rounded-field bg-surface-sunken px-3 py-2 text-2xs text-ink-muted">회원 이용 정지는 아직 지원하지 않아요.</p>
+      </form>
+      <template #footer>
+        <button type="button" class="btn-ghost" @click="selected = null">닫기</button>
+        <button type="submit" form="user-form" class="btn-primary" :disabled="busy || !dirty || !!coinError">{{ busy ? '저장 중…' : '저장' }}</button>
+      </template>
+    </SidePanel>
   </div>
 </template>

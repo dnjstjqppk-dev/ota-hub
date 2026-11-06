@@ -5,6 +5,14 @@ import * as S from "../services/booking-service.ts";
 import { BOOKING_STATUSES } from "../domain/state-machine.ts";
 import { newId } from "../lib/crypto.ts";
 import { invalidateSupplierCache } from "../services/catalog.ts";
+import { likeEscape } from "../services/suggest-service.ts";
+
+const PARTNER_STATUSES = ["ACTIVE", "REJECTED", "SUSPENDED", "PENDING_APPROVAL"] as const;
+const USER_ROLES = ["USER", "ADMIN"] as const;
+const MAX_COIN_ADJUSTMENT = 10_000_000;
+// Mirrors the CHECK constraints on `suppliers` (migrations/0002_ota_core.sql).
+const SUPPLIER_ADAPTERS = ["none", "direct_contract", "simulator", "api"] as const;
+const SUPPLIER_STATUSES = ["LIVE", "SANDBOX_VERIFIED", "DEV_DONE_CONTRACT_PENDING", "CONTRACTED_IN_DEV", "EXTERNAL_LINK_ONLY", "NOT_INTEGRATED", "BLOCKED"] as const;
 
 export async function handleAdmin(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
@@ -46,10 +54,13 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       p.push(status);
     }
     if (q) {
-      sql += " AND (booking_number LIKE ? OR customer_email LIKE ? OR customer_name LIKE ?)";
-      p.push(`%${q}%`, `%${q}%`, `%${q}%`);
+      const like = `%${likeEscape(q)}%`;
+      sql += " AND (booking_number LIKE ? ESCAPE '\\' OR customer_email LIKE ? ESCAPE '\\' OR customer_name LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR id = ?)";
+      p.push(like, like, like, like, q);
     }
-    sql += " ORDER BY created_at DESC LIMIT 200";
+    const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit") || "200", 10) || 200));
+    sql += " ORDER BY created_at DESC LIMIT ?";
+    p.push(limit);
     const rows = await db.prepare(sql).bind(...p).all();
     return json({ success: true, bookings: rows.results, statuses: BOOKING_STATUSES });
   }
@@ -106,8 +117,22 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     if (!before) throw new HttpError(404, "SUPPLIER_NOT_FOUND", "공급사를 찾을 수 없습니다.");
     const adapter = b.adapter ? str(b.adapter, 20) : before.adapter;
     const status = b.integrationStatus ? str(b.integrationStatus, 40) : before.integration_status;
-    if (status === "LIVE" && !before.contract_id && !b.contractId) {
-      throw new HttpError(409, "CONTRACT_REQUIRED", "LIVE 전환에는 계약(entity_contracts) 등록이 필요합니다.");
+    if (!(SUPPLIER_ADAPTERS as readonly string[]).includes(adapter)) {
+      throw new HttpError(400, "INVALID_ADAPTER", `adapter는 ${SUPPLIER_ADAPTERS.join(" | ")} 중 하나여야 합니다.`);
+    }
+    if (!(SUPPLIER_STATUSES as readonly string[]).includes(status)) {
+      throw new HttpError(400, "INVALID_STATUS", `integrationStatus는 ${SUPPLIER_STATUSES.join(" | ")} 중 하나여야 합니다.`);
+    }
+    const contractId = b.contractId ? str(b.contractId, 64) : before.contract_id;
+    if (b.contractId) {
+      const c = await db.prepare("SELECT status, contract_type FROM entity_contracts WHERE id = ?").bind(contractId).first<{ status: string; contract_type: string }>();
+      if (!c || c.contract_type !== "SUPPLIER") throw new HttpError(400, "CONTRACT_NOT_FOUND", "등록된 공급사 계약(SUPPLIER)이 아닙니다.");
+    }
+    if (status === "LIVE") {
+      if (!contractId) throw new HttpError(409, "CONTRACT_REQUIRED", "LIVE 전환에는 계약(entity_contracts) 등록이 필요합니다.");
+      const c = await db.prepare("SELECT status FROM entity_contracts WHERE id = ?").bind(contractId).first<{ status: string }>();
+      if (c?.status !== "ACTIVE") throw new HttpError(409, "CONTRACT_NOT_ACTIVE", "LIVE 전환에는 유효(ACTIVE) 상태의 공급사 계약이 필요합니다.");
+      if (adapter !== "direct_contract" && adapter !== "api") throw new HttpError(409, "ADAPTER_NOT_LIVE", "LIVE 전환은 direct_contract 또는 api 어댑터에서만 가능합니다.");
     }
     await db.prepare("UPDATE suppliers SET adapter = ?, integration_status = ?, contract_id = COALESCE(?, contract_id), notes = COALESCE(?, notes), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")
       .bind(adapter, status, b.contractId ? str(b.contractId, 64) : null, b.notes ? str(b.notes, 500) : null, m[1]).run();
@@ -166,40 +191,58 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   }
 
   if (path === "/api/v1/admin/catalog" && method === "GET") {
-    const [h, f, c, t, tf, a, pk] = await Promise.all([
-      db.prepare("SELECT id, name_ko AS title, 'HOTEL' AS domain_type, base_price_krw AS price, partner_id FROM hotels LIMIT 50").all(),
-      db.prepare("SELECT id, airline_name || ' ' || flight_number AS title, 'FLIGHT' AS domain_type, base_price_krw AS price, partner_id FROM flights LIMIT 50").all(),
-      db.prepare("SELECT id, vehicle_model AS title, 'CAR' AS domain_type, daily_price_krw AS price, partner_id FROM cars LIMIT 50").all(),
-      db.prepare("SELECT id, train_number || ' (' || departure_station || '->' || arrival_station || ')' AS title, 'TRAIN' AS domain_type, base_price_krw AS price, partner_id FROM trains LIMIT 50").all(),
-      db.prepare("SELECT id, vehicle_type AS title, 'TRANSFER' AS domain_type, base_price_krw AS price, partner_id FROM transfers LIMIT 50").all(),
-      db.prepare("SELECT id, title, 'ACTIVITY' AS domain_type, base_price_krw AS price, partner_id FROM activities LIMIT 50").all(),
-      db.prepare("SELECT id, title, 'PACKAGE' AS domain_type, package_price_krw AS price, partner_id FROM packages LIMIT 50").all(),
-    ]);
-    return json({
-      success: true,
-      items: [
-        ...(h.results || []),
-        ...(f.results || []),
-        ...(c.results || []),
-        ...(t.results || []),
-        ...(tf.results || []),
-        ...(a.results || []),
-        ...(pk.results || []),
-      ],
-    });
+    // One SELECT per product table with the columns that actually exist in each schema.
+    // `title`/`subtitle` are what the admin list shows; `search` is what `q` matches.
+    const q = str(url.searchParams.get("q"), 80);
+    const domain = str(url.searchParams.get("domain"), 20).toUpperCase();
+    const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit") || "100", 10) || 100));
+    const sources: Record<string, string> = {
+      HOTEL: "SELECT id, 'HOTEL' AS domain_type, name_ko AS title, city AS subtitle, base_price_krw AS price, partner_id, name_ko || ' ' || COALESCE(name_en,'') || ' ' || COALESCE(city,'') AS search FROM hotels",
+      FLIGHT: "SELECT id, 'FLIGHT' AS domain_type, airline_name || ' ' || flight_number AS title, departure_airport || ' → ' || arrival_airport AS subtitle, base_price_krw AS price, partner_id, airline_name || ' ' || flight_number || ' ' || departure_airport || ' ' || arrival_airport || ' ' || COALESCE(departure_city,'') || ' ' || COALESCE(arrival_city,'') AS search FROM flights",
+      TRAIN: "SELECT id, 'TRAIN' AS domain_type, train_type || ' ' || train_number AS title, departure_station || ' → ' || arrival_station AS subtitle, price_krw AS price, NULL AS partner_id, train_type || ' ' || train_number || ' ' || departure_station || ' ' || arrival_station AS search FROM trains",
+      CAR: "SELECT id, 'CAR' AS domain_type, vehicle_model AS title, company_name || ' · ' || COALESCE(pickup_location,'') AS subtitle, daily_price_krw AS price, partner_id, vehicle_model || ' ' || company_name || ' ' || COALESCE(pickup_location,'') AS search FROM cars",
+      TRANSFER: "SELECT id, 'TRANSFER' AS domain_type, service_title AS title, airport_code || ' · ' || COALESCE(destination_area,'') AS subtitle, price_krw AS price, partner_id, service_title || ' ' || airport_code || ' ' || COALESCE(destination_area,'') AS search FROM transfers",
+      ACTIVITY: "SELECT id, 'ACTIVITY' AS domain_type, title, COALESCE(city,'') AS subtitle, price_krw AS price, partner_id, title || ' ' || COALESCE(city,'') || ' ' || COALESCE(category,'') AS search FROM activities",
+      PACKAGE: "SELECT id, 'PACKAGE' AS domain_type, title, COALESCE(destination_city,'') AS subtitle, total_package_krw AS price, NULL AS partner_id, title || ' ' || COALESCE(destination_city,'') AS search FROM packages",
+    };
+    // D1 caps the number of terms in a compound SELECT, so each table is queried on its own (in parallel)
+    // and the results are merged here.
+    const picked = domain && sources[domain] ? [domain] : Object.keys(sources);
+    const where = q ? " WHERE search LIKE ? ESCAPE '\\' OR id = ?" : "";
+    const binds: unknown[] = q ? [`%${likeEscape(q)}%`, q, limit] : [limit];
+    const parts = await Promise.all(picked.map((d) =>
+      db.prepare(`SELECT id, domain_type, title, subtitle, price, partner_id FROM (${sources[d]})${where} ORDER BY title LIMIT ?`).bind(...binds).all()));
+    const items = parts.flatMap((p) => p.results || [])
+      .sort((a: any, b: any) => String(a.domain_type).localeCompare(String(b.domain_type)) || String(a.title).localeCompare(String(b.title), "ko"))
+      .slice(0, limit);
+    return json({ success: true, items, domains: Object.keys(sources) });
   }
 
   // Admin Partners Management & Approvals
   if (path === "/api/v1/admin/partners" && method === "GET") {
-    const rows = await db.prepare(
-      `SELECT p.id, p.email, p.company_name, p.partner_type, p.business_number, p.contact_phone, p.is_active,
+    const q = str(url.searchParams.get("q"), 80);
+    const status = str(url.searchParams.get("status"), 20).toUpperCase();
+    const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit") || "100", 10) || 100));
+    let sql = `SELECT p.id, p.email, p.company_name, p.partner_type, p.business_number, p.contact_phone, p.is_active,
               COALESCE(pr.status, 'ACTIVE') AS profile_status, COALESCE(pr.settlement_rate_bps, 1000) AS settlement_rate_bps,
               pr.representative_name, pr.bank_name, pr.bank_account_number, pr.bank_account_holder, pr.tax_invoice_email,
-              pr.created_at, pr.approved_at, pr.approved_by
+              pr.rejection_reason, pr.created_at, pr.approved_at, pr.approved_by
        FROM partners p
        LEFT JOIN partner_profiles pr ON pr.partner_id = p.id
-       ORDER BY pr.created_at DESC LIMIT 100`
-    ).all();
+       WHERE 1=1`;
+    const p: unknown[] = [];
+    if (q) {
+      const like = `%${likeEscape(q)}%`;
+      sql += " AND (p.company_name LIKE ? ESCAPE '\\' OR p.email LIKE ? ESCAPE '\\' OR p.business_number LIKE ? ESCAPE '\\' OR p.id = ?)";
+      p.push(like, like, like, q);
+    }
+    if ((PARTNER_STATUSES as readonly string[]).includes(status)) {
+      sql += " AND COALESCE(pr.status, 'ACTIVE') = ?";
+      p.push(status);
+    }
+    sql += " ORDER BY pr.created_at DESC LIMIT ?";
+    p.push(limit);
+    const rows = await db.prepare(sql).bind(...p).all();
     return json({ success: true, partners: rows.results || [] });
   }
 
@@ -207,9 +250,20 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   if (m && method === "PATCH") {
     const b = await readJson(request);
     const partnerId = m[1];
-    const targetStatus = b.status ? str(b.status, 20).toUpperCase() : null; // ACTIVE, REJECTED, SUSPENDED
+    const targetStatus = b.status ? str(b.status, 20).toUpperCase() : null;
     const settlementRateBps = b.settlementRateBps !== undefined ? Number(b.settlementRateBps) : null;
     const reason = b.reason ? str(b.reason, 300) : null;
+    if (targetStatus !== null && !(PARTNER_STATUSES as readonly string[]).includes(targetStatus)) {
+      throw new HttpError(400, "INVALID_STATUS", `status는 ${PARTNER_STATUSES.join(" | ")} 중 하나여야 합니다.`);
+    }
+    if ((targetStatus === "REJECTED" || targetStatus === "SUSPENDED") && !reason) {
+      throw new HttpError(400, "REASON_REQUIRED", "반려·정지에는 사유가 필요합니다.");
+    }
+    if (settlementRateBps !== null && (!Number.isInteger(settlementRateBps) || settlementRateBps < 0 || settlementRateBps > 5000)) {
+      throw new HttpError(400, "INVALID_RATE", "수수료율은 0–50% 사이(0–5000bps 정수)여야 합니다.");
+    }
+    const exists = await db.prepare("SELECT id FROM partners WHERE id = ?").bind(partnerId).first();
+    if (!exists) throw new HttpError(404, "PARTNER_NOT_FOUND", "파트너를 찾을 수 없습니다.");
 
     if (targetStatus) {
       const isActive = targetStatus === "ACTIVE" ? 1 : 0;
@@ -236,13 +290,22 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   // Admin Users Management (RBAC)
   if (path === "/api/v1/admin/users" && method === "GET") {
     const q = str(url.searchParams.get("q"), 80);
-    let sql = "SELECT id, email, full_name, phone_number, role, tier, trip_coins AS coin_balance, 1 AS is_active, created_at FROM users WHERE 1=1";
+    const role = str(url.searchParams.get("role"), 20).toUpperCase();
+    const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit") || "100", 10) || 100));
+    // No is_active column exists on users, so none is reported (accounts cannot be suspended yet).
+    let sql = "SELECT id, email, full_name, phone_number, role, tier, trip_coins AS coin_balance, created_at FROM users WHERE 1=1";
     const p: unknown[] = [];
     if (q) {
-      sql += " AND (email LIKE ? OR full_name LIKE ?)";
-      p.push(`%${q}%`, `%${q}%`);
+      const like = `%${likeEscape(q)}%`;
+      sql += " AND (email LIKE ? ESCAPE '\\' OR full_name LIKE ? ESCAPE '\\' OR phone_number LIKE ? ESCAPE '\\' OR id = ?)";
+      p.push(like, like, like, q);
     }
-    sql += " ORDER BY created_at DESC LIMIT 100";
+    if ((USER_ROLES as readonly string[]).includes(role)) {
+      sql += " AND role = ?";
+      p.push(role);
+    }
+    sql += " ORDER BY created_at DESC LIMIT ?";
+    p.push(limit);
     const rows = await db.prepare(sql).bind(...p).all();
     return json({ success: true, users: rows.results || [] });
   }
@@ -251,34 +314,90 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   if (m && method === "PATCH") {
     const b = await readJson(request);
     const userId = m[1];
-    const role = b.role ? str(b.role, 20).toUpperCase() : null; // USER, ADMIN
-    const isActive = b.isActive !== undefined ? (b.isActive ? 1 : 0) : null;
-    const coinAdjustment = b.coinAdjustment !== undefined ? Number(b.coinAdjustment) : null;
+    const role = b.role ? str(b.role, 20).toUpperCase() : null;
+    const coinAdjustment = b.coinAdjustment !== undefined && b.coinAdjustment !== null && b.coinAdjustment !== "" ? Number(b.coinAdjustment) : null;
+    const note = str(b.note, 200) || null;
 
+    if (b.isActive !== undefined) {
+      throw new HttpError(400, "NOT_SUPPORTED", "회원 정지 기능은 아직 지원하지 않습니다.");
+    }
+    if (role !== null && !(USER_ROLES as readonly string[]).includes(role)) {
+      throw new HttpError(400, "INVALID_ROLE", `role은 ${USER_ROLES.join(" | ")} 중 하나여야 합니다.`);
+    }
+    if (coinAdjustment !== null && (!Number.isInteger(coinAdjustment) || coinAdjustment === 0 || Math.abs(coinAdjustment) > MAX_COIN_ADJUSTMENT)) {
+      throw new HttpError(400, "INVALID_COIN_ADJUSTMENT", `코인 조정값은 0이 아닌 ±${MAX_COIN_ADJUSTMENT.toLocaleString("ko-KR")} 이내 정수여야 합니다.`);
+    }
     if (userId === admin.id && role && role !== "ADMIN") {
       throw new HttpError(400, "CANNOT_DEMOTE_SELF", "자기 자신의 관리자 권한을 해제할 수 없습니다.");
     }
+    const user = await db.prepare("SELECT id, trip_coins FROM users WHERE id = ?").bind(userId).first<{ id: string; trip_coins: number }>();
+    if (!user) throw new HttpError(404, "USER_NOT_FOUND", "회원을 찾을 수 없습니다.");
 
     if (role !== null) {
       await db.prepare("UPDATE users SET role = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").bind(role, userId).run();
       await audit(env, admin.id, "UPDATE_USER_ROLE", "USER", userId, { role });
     }
-    if (isActive !== null) {
-      await audit(env, admin.id, "UPDATE_USER_STATUS", "USER", userId, { isActive });
-    }
+    let coinBalance = Number(user.trip_coins || 0);
     if (coinAdjustment !== null) {
-      await db.prepare("UPDATE users SET trip_coins = MAX(0, trip_coins + ?), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").bind(coinAdjustment, userId).run();
-      await audit(env, admin.id, "ADJUST_USER_COINS", "USER", userId, { coinAdjustment });
+      // Balance never goes below zero; the ledger records the change actually applied.
+      const next = Math.max(0, coinBalance + coinAdjustment);
+      const applied = next - coinBalance;
+      if (applied !== 0) {
+        await db.batch([
+          db.prepare("UPDATE users SET trip_coins = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND trip_coins = ?").bind(next, userId, coinBalance),
+          db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, ?, ?)").bind(newId("coin"), userId, applied, `ADMIN_ADJUSTMENT${note ? `: ${note}` : ""}`, admin.id),
+        ]);
+      }
+      await audit(env, admin.id, "ADJUST_USER_COINS", "USER", userId, { requested: coinAdjustment, applied, note });
+      coinBalance = next;
     }
 
-    return json({ success: true, message: "사용자 정보가 변경되었습니다." });
+    return json({ success: true, message: "사용자 정보가 변경되었습니다.", coinBalance });
   }
 
-  m = path.match(/^\/api\/v1\/admin\/moments\/([A-Za-z0-9_-]+)\/(approve|blind)$/);
+  // Promotions: the public endpoint only lists active codes; operators need all of them.
+  if (path === "/api/v1/admin/promotions" && method === "GET") {
+    const rows = await db.prepare("SELECT * FROM promotions ORDER BY is_active DESC, valid_until DESC").all();
+    return json({ success: true, promotions: rows.results || [] });
+  }
+  m = path.match(/^\/api\/v1\/admin\/promotions\/([A-Za-z0-9_-]+)$/);
+  if (m && method === "PATCH") {
+    const b = await readJson(request);
+    if (typeof b.isActive !== "boolean") throw new HttpError(400, "INVALID_BODY", "isActive(boolean)가 필요합니다.");
+    const r = await db.prepare("UPDATE promotions SET is_active = ? WHERE id = ?").bind(b.isActive ? 1 : 0, m[1]).run();
+    if (!r.meta.changes) throw new HttpError(404, "PROMOTION_NOT_FOUND", "프로모션을 찾을 수 없습니다.");
+    await audit(env, admin.id, b.isActive ? "ENABLE_PROMOTION" : "DISABLE_PROMOTION", "PROMOTION", m[1], null);
+    return json({ success: true });
+  }
+
+  // Moderation list includes blinded posts (the public /moments feed hides them).
+  if (path === "/api/v1/admin/moments" && method === "GET") {
+    const filter = str(url.searchParams.get("filter"), 20);
+    const where = filter === "blinded" ? "WHERE is_blinded = 1" : filter === "featured" ? "WHERE is_featured = 1" : filter === "visible" ? "WHERE is_blinded = 0" : "";
+    const rows = await db.prepare(`SELECT id, user_id, user_name, city, title, content, photos_json, likes_count, is_featured, is_blinded, created_at FROM trip_moments ${where} ORDER BY created_at DESC LIMIT 200`).all();
+    return json({ success: true, moments: rows.results || [] });
+  }
+
+  m = path.match(/^\/api\/v1\/admin\/moments\/([A-Za-z0-9_-]+)\/(approve|blind|restore)$/);
   if (m && method === "POST") {
-    const approve = m[2] === "approve";
-    await db.prepare(approve ? "UPDATE trip_moments SET is_featured = 1, is_blinded = 0 WHERE id = ?" : "UPDATE trip_moments SET is_blinded = 1, is_featured = 0 WHERE id = ?").bind(m[1]).run();
-    await audit(env, admin.id, approve ? "APPROVE_MOMENT" : "BLIND_MOMENT", "MOMENT", m[1], null);
+    const sql = {
+      approve: "UPDATE trip_moments SET is_featured = 1, is_blinded = 0 WHERE id = ?",
+      blind: "UPDATE trip_moments SET is_blinded = 1, is_featured = 0 WHERE id = ?",
+      restore: "UPDATE trip_moments SET is_blinded = 0 WHERE id = ?",
+    }[m[2] as "approve" | "blind" | "restore"];
+    const r = await db.prepare(sql).bind(m[1]).run();
+    if (!r.meta.changes) throw new HttpError(404, "MOMENT_NOT_FOUND", "게시물을 찾을 수 없습니다.");
+    await audit(env, admin.id, `${m[2].toUpperCase()}_MOMENT`, "MOMENT", m[1], null);
+    return json({ success: true });
+  }
+
+  m = path.match(/^\/api\/v1\/admin\/notices\/([A-Za-z0-9_-]+)$/);
+  if (m && method === "PATCH") {
+    const b = await readJson(request);
+    const r = await db.prepare("UPDATE notices SET banner_active = COALESCE(?, banner_active), is_emergency = COALESCE(?, is_emergency) WHERE id = ?")
+      .bind(b.bannerActive === undefined ? null : b.bannerActive ? 1 : 0, b.isEmergency === undefined ? null : b.isEmergency ? 1 : 0, m[1]).run();
+    if (!r.meta.changes) throw new HttpError(404, "NOTICE_NOT_FOUND", "공지를 찾을 수 없습니다.");
+    await audit(env, admin.id, "UPDATE_NOTICE", "NOTICE", m[1], { bannerActive: b.bannerActive, isEmergency: b.isEmergency });
     return json({ success: true });
   }
 

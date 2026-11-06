@@ -1,275 +1,163 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { BRAND } from '~/config/brand'
+/**
+ * eSIM landing (design system "Horizon"). Plans come from GET /api/v1/esim/plans; the country box uses the
+ * shared place autocomplete (domain "esim" → countries only) and filters by ISO country code, kept in the
+ * URL as ?country=JP (the suggest API links here that way).
+ * There is no eSIM supplier contract or checkout yet, so nothing here takes payment or issues a QR code.
+ */
+import { computed, onMounted, ref, watch } from 'vue'
+import { useCurrencyStore } from '~/stores/currency'
+import { useApiUrl } from '~/composables/useApi'
+import { qStr, useUrlQuery } from '~/composables/useUrlQuery'
+import { isIsoCountry, resolveCountry } from '~/composables/useCountryLookup'
 
-const searchQuery = ref('')
-const selectedRegion = ref('전체')
+interface Plan {
+  id: string
+  country_code: string
+  country_name: string
+  data_quota_mb: number
+  validity_days: number
+  network_carrier: string
+  price_minor: number
+  currency: string
+  speed_spec: string
+}
 
-const regions = ['전체', '일본', '동남아', '유럽', '미국/미주', '대만/홍콩']
+const currency = useCurrencyStore()
+const { route, patch, isSelf } = useUrlQuery()
+const plans = ref<Plan[]>([])
+const state = ref<'loading' | 'ready' | 'error'>('loading')
+const draft = ref('')
+const picked = ref<{ code: string; name: string } | null>(null)
+const notFound = ref('')
 
-const plans = ref([
-  {
-    id: 'esim-jp-01',
-    country: '일본',
-    flag: '🇯🇵',
-    title: '일본 매일 2GB + 무제한 데이터 (Docomo/Softbank)',
-    dataAmount: '매일 2GB (소진 시 저속 무제한)',
-    validityDays: 5,
-    priceKrw: 11900,
-    network: 'Docomo / Softbank 5G/LTE',
-    deliveryType: '결제 즉시 이메일 QR 코드 전송 (5분 이내)',
-    hot: true
-  },
-  {
-    id: 'esim-jp-02',
-    country: '일본',
-    flag: '🇯🇵',
-    title: '일본 완전 무제한 데이터 로컬 프리미엄 eSIM',
-    dataAmount: '속도 제한 없는 완전 무제한',
-    validityDays: 4,
-    priceKrw: 15900,
-    network: 'Softbank 로컬망 직결',
-    deliveryType: 'QR 즉시 발송',
-    hot: false
-  },
-  {
-    id: 'esim-vn-01',
-    country: '베트남',
-    flag: '🇻🇳',
-    title: '베트남 다낭/나트랑 매일 3GB 로컬 eSIM (Viettel)',
-    dataAmount: '매일 3GB 고속 데이터',
-    validityDays: 5,
-    priceKrw: 8900,
-    network: 'Viettel 4G LTE 1위 통신사',
-    deliveryType: 'QR 즉시 발송',
-    hot: true
-  },
-  {
-    id: 'esim-eu-01',
-    country: '유럽',
-    flag: '🇪🇺',
-    title: '유럽 33개국 통합 10GB 데이터 + 30일 패키지',
-    dataAmount: '총 10GB 고속 데이터',
-    validityDays: 30,
-    priceKrw: 24500,
-    network: 'Vodafone / Orange 유럽 전역',
-    deliveryType: 'QR 즉시 발송',
-    hot: false
-  },
-  {
-    id: 'esim-us-01',
-    country: '미국/미주',
-    flag: '🇺🇸',
-    title: '미국/하와이 완전 무제한 데이터 eSIM (T-Mobile)',
-    dataAmount: 'T-Mobile 5G 고속 무제한',
-    validityDays: 7,
-    priceKrw: 29000,
-    network: 'T-Mobile 미국 본토 및 하와이',
-    deliveryType: 'QR 즉시 발송',
-    hot: true
-  },
-  {
-    id: 'esim-tw-01',
-    country: '대만/홍콩',
-    flag: '🇹🇼',
-    title: '대만 타이베이 매일 2GB 무제한 eSIM (Chunghwa)',
-    dataAmount: '매일 2GB + 저속 무제한',
-    validityDays: 4,
-    priceKrw: 9500,
-    network: '중화전통 5G/LTE',
-    deliveryType: 'QR 즉시 발송',
-    hot: false
-  }
-])
+async function load() {
+  state.value = 'loading'
+  try {
+    const r = await fetch(useApiUrl('/esim/plans'), { signal: AbortSignal.timeout(10000) })
+    if (!r.ok) throw new Error(String(r.status))
+    plans.value = (await r.json()).plans || []
+    state.value = 'ready'
+  } catch { state.value = 'error' }
+}
 
-const filteredPlans = computed(() => {
-  return plans.value.filter(p => {
-    if (selectedRegion.value !== '전체' && p.country !== selectedRegion.value) {
-      return false
-    }
-    if (searchQuery.value) {
-      const q = searchQuery.value.toLowerCase()
-      return p.country.toLowerCase().includes(q) || p.title.toLowerCase().includes(q)
-    }
-    return true
-  })
+/** URL → selection. Names come from the plans when possible, otherwise from the places API. */
+async function syncFromUrl() {
+  const code = qStr(route.query.country).toUpperCase()
+  if (!isIsoCountry(code)) { picked.value = null; return }
+  if (picked.value?.code === code) return
+  const name = countries.value.find((c) => c.code === code)?.name || (await resolveCountry(code, 'esim'))?.name || code
+  picked.value = { code, name }
+  draft.value = name
+}
+onMounted(async () => { await load(); await syncFromUrl() })
+watch(() => route.query.country, () => { if (isSelf()) syncFromUrl() })
+
+/** Countries that actually have plans, in catalogue order. */
+const countries = computed(() => {
+  const seen = new Map<string, string>()
+  for (const p of plans.value) if (!seen.has(p.country_code)) seen.set(p.country_code, p.country_name)
+  return [...seen].map(([code, name]) => ({ code, name }))
 })
 
-const selectedPlan = ref<any>(null)
-const isModalOpen = ref(false)
-const buyerEmail = ref('')
-const isSuccess = ref(false)
-const qrVoucher = ref('')
+// A plan matches its own ISO code, or a country it names explicitly ("미국/캐나다" covers 캐나다).
+// Regional bundles that don't list their countries ("유럽 33개국 통합") are never guessed into a match.
+const shown = computed(() => {
+  const k = picked.value
+  if (!k) return plans.value
+  return plans.value.filter((p) => p.country_code === k.code || p.country_name.split('/').map((s) => s.trim()).includes(k.name))
+})
 
-const buyEsim = (plan: any) => {
-  selectedPlan.value = plan
-  buyerEmail.value = 'user@getfortrip.com'
-  isSuccess.value = false
-  isModalOpen.value = true
+function pick(code: string, name: string) {
+  notFound.value = ''
+  picked.value = { code: code.toUpperCase(), name }
+  draft.value = name
+  patch({ country: code.toUpperCase() })
 }
+function onSelect(it: { code?: string | null; country_code?: string | null; value?: string; title?: string }) {
+  const code = it.code || it.country_code
+  if (code) pick(code, it.value || it.title || code)
+}
+/** Enter without choosing a suggestion: plan country names first, then the places API. */
+async function onEnter(text: string) {
+  const t = text.trim()
+  if (!t) return clear()
+  const hit = countries.value.find((c) => c.name.split('/').some((n) => n.trim() === t))
+  if (hit) return pick(hit.code, hit.name)
+  const c = await resolveCountry(t, 'esim')
+  if (c) pick(c.code, c.name)
+  else notFound.value = t
+}
+function clear() { notFound.value = ''; picked.value = null; draft.value = ''; patch({ country: '' }) }
 
-const completeEsimPurchase = () => {
-  if (!buyerEmail.value) {
-    alert('QR 코드를 수신할 이메일을 입력해 주세요.')
-    return
-  }
-  qrVoucher.value = `LPA:1$getfortrip.esim.com$GFT-${Date.now().toString(36).toUpperCase()}`
-  isSuccess.value = true
-}
+const dataLabel = (mb: number) => mb < 0 ? '데이터 무제한' : mb >= 1024 ? `${+(mb / 1024).toFixed(1)}GB` : `${mb}MB`
+
+useHead({
+  title: '해외 eSIM',
+  meta: [{ name: 'description', content: '여행할 국가의 eSIM 데이터 요금제를 데이터 용량과 사용 기간으로 비교해 보세요.' }]
+})
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto px-4 py-8 space-y-8">
-    <!-- 상단 배너 -->
-    <div class="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 rounded-3xl p-6 sm:p-10 text-white shadow-xl relative overflow-hidden">
-      <div class="space-y-3 max-w-xl relative z-10">
-        <span class="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-black uppercase tracking-wider">
-          📱 해외 eSIM 즉시 개통
-        </span>
-        <h1 class="text-2xl sm:text-4xl font-black tracking-tight leading-tight">
-          실물 유심 교체 없이 QR 스캔으로 5분 만에 현지 데이터 개통
-        </h1>
-        <p class="text-xs sm:text-sm text-blue-100">
-          택배 대기 No! 인천공항 수령 대기 No! 결제 즉시 발송되는 QR 코드로 출국 전 바로 등록하세요.
-        </p>
+  <div class="pb-24 lg:pb-16">
+    <section class="relative overflow-hidden border-b border-line bg-gradient-to-b from-sapphire-50 to-canvas">
+      <div class="mx-auto max-w-7xl px-4 pb-6 pt-8 lg:px-6 lg:pt-12">
+        <nav class="mb-2 flex items-center gap-1 text-xs text-ink-subtle" aria-label="이동 경로"><NuxtLink to="/" class="hover:text-ink">홈</NuxtLink><AppIcon name="chevron-right" :size="12" /><span>eSIM</span></nav>
+        <h1 class="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">여행 국가의 eSIM 요금제</h1>
+        <p class="mt-2 max-w-2xl text-base text-ink-muted">국가를 고르면 그 나라에서 쓸 수 있는 요금제만 보여드려요.</p>
+        <form class="mt-5 flex max-w-2xl gap-2" role="search" novalidate @submit.prevent="onEnter(draft)">
+          <div class="field-box flex-1"><label for="esim-q" class="field-label">여행 국가</label><SearchAutocomplete v-model="draft" input-id="esim-q" domain="esim" variant="bare" placeholder="예: 일본, 베트남, 미국" @select="onSelect" @enter="onEnter" /></div>
+          <button type="submit" class="btn-primary min-h-[52px] rounded-2xl px-6 text-base"><AppIcon name="search" :size="18" /><span class="hidden sm:inline">찾기</span></button>
+        </form>
+        <div v-if="countries.length" class="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <button type="button" class="chip" :aria-pressed="!picked" @click="clear">전체</button>
+          <button v-for="c in countries" :key="c.code" type="button" class="chip" :aria-pressed="picked?.code === c.code" @click="pick(c.code, c.name)">{{ c.name }}</button>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 검색 및 필터 -->
-    <div class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-      <div class="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-2 md:pb-0">
-        <button
-          v-for="reg in regions"
-          :key="reg"
-          @click="selectedRegion = reg"
-          :class="[
-            'px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap',
-            selectedRegion === reg ? 'bg-slate-900 text-white' : 'bg-slate-50 hover:bg-slate-100 text-slate-600'
-          ]"
-        >
-          {{ reg }}
-        </button>
+    <div class="mx-auto max-w-7xl px-4 lg:px-6">
+      <div class="mt-6 flex items-start gap-3 rounded-card border border-line bg-surface-sunken p-4 text-sm text-ink-muted" role="note">
+        <AppIcon name="esim" class="mt-0.5 shrink-0 text-ink-subtle" />
+        <p><strong class="font-semibold text-ink">eSIM 판매를 준비하고 있어요.</strong> 통신사 제휴가 끝나면 이 화면에서 바로 구매할 수 있어요. 지금은 요금제와 참고가만 볼 수 있고 결제나 QR 발급은 되지 않아요.</p>
       </div>
 
-      <div class="w-full md:w-64">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="국가명, 통신사 검색..."
-          class="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500"
-        />
+      <p v-if="notFound" class="mt-4 text-sm text-ink-muted" role="status">‘{{ notFound }}’에 해당하는 국가를 찾지 못했어요. 목록에서 국가를 골라 주세요.</p>
+
+      <h2 class="pb-3 pt-8 text-xl font-bold tracking-tight text-ink">
+        {{ picked ? `${picked.name} 요금제` : '모든 요금제' }}
+        <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ shown.length }}개</span>
+      </h2>
+
+      <div v-if="state === 'loading'" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div v-for="n in 3" :key="n" class="h-48 animate-pulse rounded-card bg-surface-sunken" />
       </div>
-    </div>
-
-    <!-- 상품 그리드 -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-      <div
-        v-for="plan in filteredPlans"
-        :key="plan.id"
-        class="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-sm hover:shadow-md transition space-y-4 flex flex-col justify-between"
-      >
-        <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <span class="text-2xl">{{ plan.flag }}</span>
-            <span v-if="plan.hot" class="px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 text-[10px] font-black border border-rose-200">
-              인기 베스트
-            </span>
-          </div>
-
-          <div>
-            <span class="text-[10px] font-bold text-slate-400 block mb-0.5">{{ plan.country }}</span>
-            <h3 class="font-black text-sm text-slate-900 leading-snug">{{ plan.title }}</h3>
-          </div>
-
-          <div class="bg-slate-50 p-3 rounded-2xl space-y-1.5 text-xs">
-            <div class="flex justify-between text-slate-600">
-              <span class="text-slate-400">제공 데이터:</span>
-              <span class="font-bold text-slate-900">{{ plan.dataAmount }}</span>
+      <div v-else-if="state === 'error'" class="card p-6 text-center text-sm">
+        <span class="text-ink-muted">요금제를 불러오지 못했어요.</span>
+        <button type="button" class="ml-2 font-semibold text-primary" @click="load">다시 시도</button>
+      </div>
+      <div v-else-if="!shown.length" class="card p-8 text-center">
+        <p class="font-semibold text-ink">{{ picked?.name }}에서 쓸 수 있는 요금제가 아직 없어요.</p>
+        <p class="mt-1 text-sm text-ink-muted">요금제가 있는 국가: {{ countries.map((c) => c.name).join(', ') }}</p>
+        <button type="button" class="btn-secondary mt-4" @click="clear">전체 요금제 보기</button>
+      </div>
+      <ul v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <li v-for="p in shown" :key="p.id" class="card flex flex-col p-5">
+          <p class="text-xs text-ink-subtle">{{ p.country_name }}</p>
+          <h3 class="mt-0.5 text-lg font-bold text-ink">{{ dataLabel(p.data_quota_mb) }} · {{ p.validity_days }}일</h3>
+          <dl class="mb-4 mt-3 space-y-1.5 text-sm">
+            <div class="flex justify-between gap-3"><dt class="text-ink-subtle">통신망</dt><dd class="text-right font-medium text-ink">{{ p.network_carrier }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-ink-subtle">속도</dt><dd class="text-right font-medium text-ink">{{ p.speed_spec }}</dd></div>
+          </dl>
+          <div class="mt-auto flex items-end justify-between gap-3 border-t border-line pt-4">
+            <div>
+              <p class="text-lg font-extrabold text-ink tabular">{{ currency.formatKRW(p.price_minor) }}</p>
+              <p class="text-2xs text-ink-subtle">참고가</p>
             </div>
-            <div class="flex justify-between text-slate-600">
-              <span class="text-slate-400">사용 기간:</span>
-              <span class="font-bold text-slate-900">{{ plan.validityDays }}일</span>
-            </div>
-            <div class="flex justify-between text-slate-600">
-              <span class="text-slate-400">현지 통신망:</span>
-              <span class="font-bold text-blue-600">{{ plan.network }}</span>
-            </div>
+            <button type="button" class="btn-secondary cursor-not-allowed opacity-60" disabled>판매 준비 중</button>
           </div>
-        </div>
-
-        <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
-          <div>
-            <span class="text-[10px] text-slate-400 block">특가 요금</span>
-            <span class="text-lg font-black text-slate-900 font-mono">₩{{ plan.priceKrw.toLocaleString() }}</span>
-          </div>
-          <button
-            @click="buyEsim(plan)"
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black shadow-sm transition"
-          >
-            즉시 구매하기
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- eSIM 즉시 구매 & QR 발급 모달 -->
-    <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden p-6 space-y-6">
-        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div class="flex items-center gap-2">
-            <span class="text-xl">📱</span>
-            <h3 class="font-bold text-slate-900 text-sm">eSIM 즉시 결제 & QR 발급</h3>
-          </div>
-          <button @click="isModalOpen = false" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
-        </div>
-
-        <div v-if="!isSuccess" class="space-y-4 text-xs">
-          <div class="bg-blue-50/70 p-4 rounded-2xl border border-blue-100 space-y-1">
-            <div class="font-bold text-blue-900">{{ selectedPlan?.title }}</div>
-            <div class="text-[11px] text-blue-700">{{ selectedPlan?.country }} · {{ selectedPlan?.network }} 로컬망</div>
-            <div class="text-base font-black text-blue-900 pt-2 font-mono">₩{{ selectedPlan?.priceKrw.toLocaleString() }}</div>
-          </div>
-
-          <div class="space-y-1.5">
-            <label class="font-bold text-slate-700 block">QR 코드 수신 이메일</label>
-            <input
-              v-model="buyerEmail"
-              type="email"
-              placeholder="example@getfortrip.com"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <span class="text-[10px] text-slate-400">결제 완료 시 위 이메일로 활성화 프로파일이 즉시 발송됩니다.</span>
-          </div>
-
-          <button
-            @click="completeEsimPurchase"
-            class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs shadow-md transition"
-          >
-            ₩{{ selectedPlan?.priceKrw.toLocaleString() }} 결제 및 QR 발급
-          </button>
-        </div>
-
-        <!-- 발급 완료 상태 -->
-        <div v-else class="text-center space-y-4 py-2">
-          <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-xl font-black">✓</div>
-          <div class="space-y-1">
-            <h4 class="font-black text-slate-900 text-base">eSIM 발급이 완료되었습니다!</h4>
-            <p class="text-[11px] text-slate-500">{{ buyerEmail }}로 활성화 QR 코드가 전송되었습니다.</p>
-          </div>
-          <div class="bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-300 space-y-2">
-            <div class="text-4xl py-2">📶</div>
-            <div class="text-[10px] text-slate-400 font-mono break-all">{{ qrVoucher }}</div>
-            <div class="text-[11px] font-bold text-blue-600">휴대폰 설정 > 셀룰러 > eSIM 추가에서 등록하세요</div>
-          </div>
-          <button
-            @click="isModalOpen = false"
-            class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"
-          >
-            확인 및 닫기
-          </button>
-        </div>
-      </div>
+        </li>
+      </ul>
     </div>
   </div>
 </template>
-

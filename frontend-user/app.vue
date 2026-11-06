@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useAuthStore } from '~/stores/auth'
 
 const authStore = useAuthStore()
+
+// First-visit onboarding: shown once per browser, never blocks returning users.
+const showOnboarding = ref(false)
+function dismissOnboarding() {
+  showOnboarding.value = false
+  try { localStorage.setItem('getfortrip_onboarded_v1', '1') } catch {}
+}
 
 useHead({
   titleTemplate: (titleChunk) => titleChunk ? `${titleChunk} - getfortrip` : 'getfortrip - 스마트한 전 세계 여행의 시작',
@@ -32,6 +39,9 @@ useHead({
 onMounted(() => {
   // initAuth restores the session and verifies the token with /auth/me (logs out on 401).
   authStore.initAuth()
+  try {
+    if (!localStorage.getItem('getfortrip_onboarded_v1')) showOnboarding.value = true
+  } catch {}
 })
 </script>
 
@@ -43,5 +53,6 @@ onMounted(() => {
     </main>
     <GlobalFooter />
     <MobileBottomNav />
+    <OnboardingModal :open="showOnboarding" @close="dismissOnboarding" />
   </div>
 </template>

@@ -1,7 +1,8 @@
 import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { jwtSecret, rateLimit, requirePartner } from "../lib/auth.ts";
-import { hashPassword, newId, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
+import { hashPassword, newId, randomToken, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
+import * as S from "../services/booking-service.ts";
 
 export async function handlePartner(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
@@ -132,7 +133,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const totalProducts = (h?.c || 0) + (f?.c || 0) + (c?.c || 0) + (tf?.c || 0) + (a?.c || 0);
 
     const orders = await db.prepare(
-      `SELECT id, booking_number, domain_type, title, status, total_price, currency, created_at
+      `SELECT id, booking_number, domain_type, title, status, total_minor, currency, customer_name, service_start, service_end, created_at
        FROM bookings
        WHERE partner_id = ?
        ORDER BY created_at DESC LIMIT 10`
@@ -140,13 +141,28 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
     const profile = await db.prepare("SELECT * FROM partner_profiles WHERE partner_id = ?").bind(pId).first<any>();
 
+    // Real month-to-date gross from this partner's own bookings (dead bookings excluded).
+    const monthStart = new Date().toISOString().slice(0, 7) + "-01";
+    const gross = await db.prepare(
+      `SELECT COALESCE(SUM(total_minor), 0) AS g FROM bookings
+       WHERE partner_id = ? AND created_at >= ? AND status NOT IN ('EXPIRED', 'CANCELLED', 'REFUNDED', 'FAILED')`,
+    ).bind(pId, monthStart).first<{ g: number }>();
+    const grossKrw = Number(gross?.g || 0);
+    const rateBps = profile?.settlement_rate_bps ?? 1000;
     const statsObj = {
       activeProductsCount: totalProducts,
-      monthlyGrossKrw: 18500000,
-      monthlyNetKrw: Math.round(18500000 * ((10000 - (profile?.settlement_rate_bps || 1000)) / 10000)),
+      monthlyGrossKrw: grossKrw,
+      monthlyNetKrw: Math.round((grossKrw * (10000 - rateBps)) / 10000),
       pendingBookingsCount: orders.results?.filter((o: any) => o.status === 'SUPPLIER_BOOKING_PENDING' || o.status === 'AWAITING_PAYMENT').length || 0,
-      commissionRatePercent: (profile?.settlement_rate_bps || 1000) / 100,
+      commissionRatePercent: rateBps / 100,
     };
+
+    const recent = (orders.results || []).map((r: any) => {
+      const name = r.customer_name || "고객";
+      const maskedName = name.length > 2 ? `${name[0]}*${name.slice(2)}` : `${name[0]}*`;
+      const { customer_name: _drop, ...rest } = r;
+      return { ...rest, customerNameMasked: maskedName };
+    });
 
     return json({
       success: true,
@@ -158,7 +174,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       },
       metrics: statsObj,
       stats: statsObj,
-      recentOrders: orders.results || [],
+      recentOrders: recent,
     });
   }
 
@@ -231,6 +247,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   if (path === "/api/v1/partner/inventory" && method === "GET") {
     const itemId = str(url.searchParams.get("itemId"), 100);
     const month = str(url.searchParams.get("month") || new Date().toISOString().slice(0, 7), 7);
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new HttpError(400, "INVALID_MONTH", "월 형식이 올바르지 않습니다 (YYYY-MM).");
     const rows = await db.prepare(
       `SELECT * FROM partner_inventory WHERE partner_id = ? AND (item_id = ? OR ? = '') AND service_date LIKE ? ORDER BY service_date`
     ).bind(pId, itemId || "", itemId || "", `${month}%`).all();
@@ -248,6 +265,18 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const isClosed = b.isClosed ? 1 : 0;
 
     if (!itemId || !serviceDate) throw new HttpError(400, "INVALID_PARAMS", "상품 ID와 날짜는 필수입니다.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(serviceDate) || Number.isNaN(new Date(`${serviceDate}T00:00:00Z`).getTime())) {
+      throw new HttpError(400, "INVALID_DATE", "날짜 형식이 올바르지 않습니다 (YYYY-MM-DD).");
+    }
+    if (!Number.isInteger(allocatedUnits) || allocatedUnits < 0 || allocatedUnits > 100000) {
+      throw new HttpError(400, "INVALID_ALLOCATED_UNITS", "배정 수량은 0~100000 사이의 정수여야 합니다.");
+    }
+    if (priceOverride !== null && (!Number.isInteger(priceOverride) || priceOverride < 0)) {
+      throw new HttpError(400, "INVALID_PRICE", "요금은 0 이상의 정수(원)여야 합니다.");
+    }
+    if (!["HOTEL", "CAR", "ACTIVITY", "TRANSFER", "FLIGHT", "TRAIN"].includes(domain)) {
+      throw new HttpError(400, "INVALID_DOMAIN", "지원하지 않는 상품 도메인입니다.");
+    }
 
     await db.prepare(
       `INSERT INTO partner_inventory (id, partner_id, domain_type, item_id, unit_id, service_date, allocated_units, price_override_minor, is_closed)
@@ -264,17 +293,18 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   // 7. Partner Orders & Booking Fulfillment
   if (path === "/api/v1/partner/orders" && method === "GET") {
     const rows = await db.prepare(
-      `SELECT id, booking_number, domain_type, title, status, total_price, currency, customer_name, created_at
+      `SELECT id, booking_number, domain_type, title, status, total_minor, currency, customer_name, service_start, service_end, created_at
        FROM bookings
        WHERE partner_id = ?
        ORDER BY created_at DESC LIMIT 100`
     ).bind(pId).all<any>();
 
-    // Mask customer name for privacy compliance (김** 등)
+    // Mask customer name for privacy compliance (김** 등); never expose the raw name.
     const masked = (rows.results || []).map((r: any) => {
       const name = r.customer_name || "고객";
       const maskedName = name.length > 2 ? `${name[0]}*${name.slice(2)}` : `${name[0]}*`;
-      return { ...r, customerNameMasked: maskedName };
+      const { customer_name: _drop, ...rest } = r;
+      return { ...rest, customerNameMasked: maskedName };
     });
 
     return json({ success: true, orders: masked });
@@ -285,12 +315,17 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const orderId = m[1];
     const action = m[2];
     // Scope to the caller's own bookings: another partner's order is indistinguishable from a missing one.
-    const b = await db.prepare("SELECT * FROM bookings WHERE id = ? AND partner_id = ?").bind(orderId, pId).first<any>();
-    if (!b) throw new HttpError(404, "ORDER_NOT_FOUND", "주문 정보를 찾을 수 없습니다.");
-
-    const newStatus = action === "confirm" ? "CONFIRMED" : "CANCELLED";
-    await db.prepare("UPDATE bookings SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND partner_id = ?").bind(newStatus, orderId, pId).run();
-    return json({ success: true, bookingId: orderId, status: newStatus });
+    const owned = await db.prepare("SELECT id FROM bookings WHERE id = ? AND partner_id = ?").bind(orderId, pId).first<{ id: string }>();
+    if (!owned) throw new HttpError(404, "ORDER_NOT_FOUND", "주문 정보를 찾을 수 없습니다.");
+    // Same state-machine path as the operator console (transitions, ledger, refunds, vouchers) —
+    // never a raw status write, which would corrupt money state.
+    const body = await readJson(request).catch(() => ({}));
+    const after = await S.adminSupplierDecision(env, { id: pId, email: p.email, role: "PARTNER" }, orderId, {
+      decision: action === "confirm" ? "CONFIRM" : "REJECT",
+      supplierReference: str(body.supplierReference, 80),
+      note: str(body.note, 300) || null,
+    });
+    return json({ success: true, bookingId: orderId, status: (after as any).status });
   }
 
   // 8. Partner Settlements
@@ -299,15 +334,31 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       "SELECT * FROM partner_settlement_batches WHERE partner_id = ? ORDER BY period_start DESC LIMIT 24"
     ).bind(pId).all();
 
+    // Real lifetime totals from this partner's own bookings (dead bookings excluded).
+    const profile = await db.prepare("SELECT settlement_rate_bps, bank_name, bank_account_number FROM partner_profiles WHERE partner_id = ?").bind(pId).first<any>();
+    const rateBps = profile?.settlement_rate_bps ?? 1000;
+    const totals = await db.prepare(
+      `SELECT COALESCE(SUM(total_minor), 0) AS g FROM bookings
+       WHERE partner_id = ? AND status NOT IN ('EXPIRED', 'CANCELLED', 'REFUNDED', 'FAILED')`,
+    ).bind(pId).first<{ g: number }>();
+    const grossKrw = Number(totals?.g || 0);
+    const commissionKrw = Math.round((grossKrw * rateBps) / 10000);
+    // Payouts run on the 20th of each month for the prior month's sales.
+    const now = new Date();
+    const payout = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 20));
+    const acct = String(profile?.bank_account_number || "");
+    const maskedAcct = acct.length > 4 ? `${"*".repeat(Math.max(0, acct.length - 4))}${acct.slice(-4)}` : (acct ? "****" : "");
+    const bank = [profile?.bank_name, maskedAcct].filter(Boolean).join(" ") || null;
+
     return json({
       success: true,
       batches: batches.results || [],
       summary: {
-        totalGrossKrw: 35000000,
-        totalCommissionKrw: 3500000,
-        totalNetPayoutKrw: 31500000,
-        nextPayoutDate: "2026-11-20",
-        payoutBank: "신한은행 110-123-456789",
+        totalGrossKrw: grossKrw,
+        totalCommissionKrw: commissionKrw,
+        totalNetPayoutKrw: grossKrw - commissionKrw,
+        nextPayoutDate: payout.toISOString().slice(0, 10),
+        payoutBank: bank,
       },
     });
   }
@@ -336,5 +387,107 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     return json({ success: true, id }, 201);
   }
 
+  // 10. Partner API Keys (server-to-server auth for PMS/ERP integrations)
+  if (path === "/api/v1/partner/api-keys" && method === "GET") {
+    const rows = await db.prepare(
+      "SELECT id, name, key_prefix, is_active, last_used_at, created_at, revoked_at FROM partner_api_keys WHERE partner_id = ? ORDER BY created_at DESC LIMIT 50",
+    ).bind(pId).all<any>();
+    return json({
+      success: true,
+      keys: (rows.results || []).map((k: any) => ({
+        id: k.id, name: k.name, keyPrefix: k.key_prefix, isActive: k.is_active === 1,
+        lastUsedAt: k.last_used_at, createdAt: k.created_at, revokedAt: k.revoked_at,
+      })),
+    });
+  }
+
+  if (path === "/api/v1/partner/api-keys" && method === "POST") {
+    const b = await readJson(request);
+    const name = str(b.name, 80) || "Default";
+    const count = await db.prepare("SELECT COUNT(*) AS c FROM partner_api_keys WHERE partner_id = ? AND is_active = 1").bind(pId).first<{ c: number }>();
+    if (Number(count?.c || 0) >= 10) throw new HttpError(400, "TOO_MANY_KEYS", "활성 API 키는 최대 10개까지 발급할 수 있습니다. 사용하지 않는 키를 폐기해주세요.");
+    const apiKey = `gft_live_${randomToken(16)}`;
+    const id = newId("pak");
+    await db.prepare(
+      "INSERT INTO partner_api_keys (id, partner_id, name, key_prefix, key_hash) VALUES (?, ?, ?, ?, ?)",
+    ).bind(id, pId, name, `${apiKey.slice(0, 12)}...${apiKey.slice(-4)}`, await sha256Hex(apiKey)).run();
+    // The plaintext key is returned exactly once; it can never be read back.
+    return json({ success: true, id, name, apiKey, keyPrefix: `${apiKey.slice(0, 12)}...${apiKey.slice(-4)}` }, 201);
+  }
+
+  m = path.match(/^\/api\/v1\/partner\/api-keys\/([A-Za-z0-9_-]{4,64})$/);
+  if (m && method === "DELETE") {
+    const r = await db.prepare("UPDATE partner_api_keys SET is_active = 0, revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND partner_id = ? AND is_active = 1")
+      .bind(m[1], pId).run();
+    if (!r.meta.changes) throw new HttpError(404, "KEY_NOT_FOUND", "API 키를 찾을 수 없습니다.");
+    return json({ success: true, id: m[1], revoked: true });
+  }
+
+  // 11. Partner order-event webhook URL (booking.created / booking.cancelled POST here as JSON)
+  if (path === "/api/v1/partner/webhook" && method === "GET") {
+    const pr = await db.prepare("SELECT webhook_url FROM partner_profiles WHERE partner_id = ?").bind(pId).first<{ webhook_url: string | null }>();
+    return json({ success: true, webhookUrl: pr?.webhook_url || null });
+  }
+
+  if (path === "/api/v1/partner/webhook" && (method === "PUT" || method === "PATCH")) {
+    const b = await readJson(request);
+    const webhookUrl = str(b.webhookUrl, 500);
+    if (webhookUrl) {
+      let u: URL;
+      try {
+        u = new URL(webhookUrl);
+      } catch {
+        throw new HttpError(400, "INVALID_WEBHOOK_URL", "웹훅 URL 형식이 올바르지 않습니다.");
+      }
+      if (u.protocol !== "https:") throw new HttpError(400, "WEBHOOK_HTTPS_REQUIRED", "웹훅 URL은 https:// 로 시작해야 합니다.");
+    }
+    await db.prepare("UPDATE partner_profiles SET webhook_url = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE partner_id = ?")
+      .bind(webhookUrl || null, pId).run();
+    return json({ success: true, webhookUrl: webhookUrl || null });
+  }
+
+  // 12. Partner OpenAPI document (what the extranet's "API docs" link points to)
+  if (path === "/api/v1/partner/openapi.json" && method === "GET") {
+    return json(PARTNER_OPENAPI, 200, { "Cache-Control": "public, max-age=3600" });
+  }
+
   throw new HttpError(404, "NOT_FOUND", "요청하신 파트너 API를 찾을 수 없습니다.");
 }
+
+const PARTNER_OPENAPI = {
+  openapi: "3.0.3",
+  info: { title: "getfortrip Partner Extranet API", version: "1.0.0", description: "Server-to-server API for partner PMS/ERP integrations. Authenticate with `Authorization: Bearer gft_live_...` (issue keys in the extranet under API 연동) or a partner JWT." },
+  servers: [{ url: "/api/v1", description: "Same origin as the extranet (or https://ota-hub.dnjstjqppk.workers.dev/api/v1)" }],
+  paths: {
+    "/partner/dashboard": { get: { summary: "Sales metrics and recent orders", tags: ["Partner"] } },
+    "/partner/profile": { get: { summary: "Read company/bank profile", tags: ["Partner"] }, patch: { summary: "Update contact and bank details", tags: ["Partner"] } },
+    "/partner/products": {
+      get: { summary: "List own products (hotel/car/activity)", tags: ["Catalog"] },
+      post: { summary: "Register a product", tags: ["Catalog"] },
+    },
+    "/partner/inventory": {
+      get: { summary: "Read inventory calendar (?itemId=&month=YYYY-MM)", tags: ["Inventory"] },
+      put: { summary: "Upsert a date cell (allocatedUnits, priceOverrideMinor, isClosed)", tags: ["Inventory"] },
+    },
+    "/partner/orders": { get: { summary: "List own orders (customer names masked)", tags: ["Orders"] } },
+    "/partner/orders/{id}/confirm": { post: { summary: "Confirm an order", tags: ["Orders"] } },
+    "/partner/orders/{id}/reject": { post: { summary: "Reject an order", tags: ["Orders"] } },
+    "/partner/settlements": { get: { summary: "Settlement batches and lifetime totals", tags: ["Settlements"] } },
+    "/partner/marketplace/settlements": { get: { summary: "Marketplace (3P) settlements", tags: ["Settlements"] } },
+    "/partner/marketplace/products": { post: { summary: "Register a 3P marketplace product", tags: ["Catalog"] } },
+    "/partner/staff": {
+      get: { summary: "List staff accounts", tags: ["Staff"] },
+      post: { summary: "Invite a staff account", tags: ["Staff"] },
+    },
+    "/partner/api-keys": {
+      get: { summary: "List API keys (prefixes only)", tags: ["Integration"] },
+      post: { summary: "Issue an API key (plaintext returned once)", tags: ["Integration"] },
+    },
+    "/partner/api-keys/{id}": { delete: { summary: "Revoke an API key", tags: ["Integration"] } },
+    "/partner/webhook": {
+      get: { summary: "Read order-event webhook URL", tags: ["Integration"] },
+      put: { summary: "Save order-event webhook URL (https only)", tags: ["Integration"] },
+    },
+    "/partner/ingest/url": { post: { summary: "Ingest a product from a supplier URL", tags: ["Catalog"] } },
+  },
+};

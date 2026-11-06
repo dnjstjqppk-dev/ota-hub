@@ -52,7 +52,7 @@ const positions = [
             <span class="text-xs text-slate-400 font-medium">{{ pos.team }}</span>
           </div>
           <h3 class="text-base font-black text-slate-900">{{ pos.title }}</h3>
-          <p class="text-xs text-slate-500">📍 {{ pos.location }}</p>
+          <p class="flex items-center gap-1 text-xs text-slate-500"><AppIcon name="map-pin" :size="14" />{{ pos.location }}</p>
         </div>
         <a
           href="mailto:careers@getfortrip.com"

@@ -1,181 +1,121 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { adminFetch } from '../config/api'
+/**
+ * Operations dashboard. Every number is read from GET /admin/dashboard and /admin/reconciliation;
+ * when the API fails the page says so instead of showing sample figures.
+ */
+import { computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { api } from '../composables/session'
+import { useResource } from '../composables/useResource'
+import { bookingStatus, dateTime, krw, num } from '../composables/format'
+import PageHeader from '../components/PageHeader.vue'
+import StatCard from '../components/StatCard.vue'
+import StatePanel from '../components/StatePanel.vue'
+import StatusBadge from '../components/StatusBadge.vue'
 
-interface DashboardStats {
-  total_gmv_krw: number
-  total_bookings: number
-  active_users: number
-  domain_breakdown: Record<string, number>
-  status_breakdown: Record<string, number>
-  timestamp: string
-}
+const router = useRouter()
+const dash = useResource(() => api('/admin/dashboard'), null as any)
+const recon = useResource(() => api('/admin/reconciliation'), null as any)
+onMounted(() => { dash.reload(); recon.reload() })
 
-const stats = ref<DashboardStats | null>(null)
-const loading = ref(true)
-
-const fetchStats = async () => {
-  try {
-    loading.value = true
-    const res = await adminFetch('/admin/dashboard')
-    const json = await res.json()
-    if (json.metrics) {
-      const statusMap: Record<string, number> = {}
-      if (Array.isArray(json.byStatus)) {
-        json.byStatus.forEach((s: any) => {
-          statusMap[s.status] = s.c
-        })
-      }
-      stats.value = {
-        total_gmv_krw: Number(json.metrics.grossCapturedMinor || 0) || 485290000,
-        total_bookings: Number(json.metrics.totalBookings || 0),
-        active_users: Number(json.metrics.totalUsers || 0),
-        domain_breakdown: {
-          HOTEL: 620,
-          FLIGHT: 410,
-          TRAIN: 180,
-          CAR: 95,
-          TRANSFER: 45,
-          ACTIVITY: 50,
-          PACKAGE: 20
-        },
-        status_breakdown: statusMap,
-        timestamp: new Date().toISOString()
-      }
-      return
-    }
-  } catch (e) {
-    console.warn('Dashboard API fallback', e)
-  } finally {
-    loading.value = false
-  }
-
-  // Graceful fallback statistics
-  stats.value = {
-    total_gmv_krw: 485290000,
-    total_bookings: 1420,
-    active_users: 8940,
-    domain_breakdown: {
-      HOTEL: 620,
-      FLIGHT: 410,
-      TRAIN: 180,
-      CAR: 95,
-      TRANSFER: 45,
-      ACTIVITY: 50,
-      PACKAGE: 20
-    },
-    status_breakdown: {
-      CONFIRMED: 1320,
-      PENDING: 45,
-      CANCELLED: 35,
-      REFUNDED: 20
-    },
-    timestamp: new Date().toISOString()
-  }
-}
-
-onMounted(() => {
-  fetchStats()
+const m = computed(() => dash.data.value?.metrics || {})
+const byStatus = computed(() => [...(dash.data.value?.byStatus || [])].sort((a: any, b: any) => b.c - a.c))
+const statusMax = computed(() => Math.max(1, ...byStatus.value.map((s: any) => Number(s.c) || 0)))
+const ledger = computed(() => dash.data.value?.ledgerBalances || [])
+const issues = computed(() => {
+  const r = recon.data.value
+  if (!r) return []
+  return [
+    { label: '대차 불일치 분개', n: r.unbalancedJournals?.length || 0 },
+    { label: '결제액 불일치 예약', n: r.paidMismatch?.length || 0 },
+    { label: '환불액 불일치 예약', n: r.refundMismatch?.length || 0 },
+    { label: '종료 예약에 남은 예치금', n: r.strandedDeposits?.length || 0 }
+  ]
 })
+const ACCOUNT: Record<string, string> = {
+  PG_CLEARING: 'PG 정산 대기', CUSTOMER_DEPOSITS: '고객 예치금', SUPPLIER_PAYABLE: '공급사 미지급금',
+  COMMISSION_REVENUE: '수수료 수익', CANCELLATION_FEE_REVENUE: '취소 수수료 수익', PROMOTION_EXPENSE: '프로모션 비용'
+}
 </script>
 
 <template>
-  <div class="p-8 space-y-6">
-    <!-- 헤더 -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-black text-slate-900 tracking-tight">통합 관제 대시보드</h1>
-        <p class="text-sm text-slate-500 mt-1">실시간 총 거래액(GMV), 7대 도메인 예약 현황 및 시스템 헬스</p>
-      </div>
-      <button
-        @click="fetchStats"
-        class="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-xl text-sm font-semibold hover:bg-slate-50 shadow-sm"
-      >
-        <span>🔄</span> 새로고침
-      </button>
-    </div>
+  <div>
+    <PageHeader title="대시보드" description="예약·결제·환불 현황과 회계 정합성을 한눈에 확인해요.">
+      <button type="button" class="btn-secondary btn-sm" @click="dash.reload(); recon.reload()"><AppIcon name="refresh" :size="14" />새로고침</button>
+    </PageHeader>
 
-    <!-- 핵심 KPI 카드 그리드 -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
-      <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
-        <div class="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-          <span>누적 총 거래액 (GMV)</span>
-          <span class="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-mono">KRW</span>
-        </div>
-        <div class="text-3xl font-black text-slate-900 mt-3">
-          ₩{{ stats?.total_gmv_krw.toLocaleString() || '0' }}
-        </div>
-        <div class="flex items-center gap-1.5 text-xs text-emerald-600 font-bold mt-2">
-          <span>↑ 18.4%</span>
-          <span class="text-slate-400 font-normal">전주 대비 성장</span>
-        </div>
-      </div>
+    <StatePanel :state="dash.state.value" :error="dash.error.value" :rows="3" @retry="dash.reload()">
+      <section class="grid grid-cols-2 gap-3 lg:grid-cols-4 [&>*]:min-w-0" aria-label="주요 지표">
+        <StatCard label="확인 필요 · 수동 검토" :value="num(m.manualReview)" icon="alert" :tone="m.manualReview ? 'danger' : 'neutral'" to="/bookings?status=MANUAL_REVIEW_REQUIRED" />
+        <StatCard label="공급사 확정 대기" :value="num(m.supplierPending)" icon="server" :tone="m.supplierPending ? 'warning' : 'neutral'" to="/bookings?status=SUPPLIER_BOOKING_PENDING" />
+        <StatCard label="환불 처리 대기" :value="num(m.pendingRefunds)" icon="refund" :tone="m.pendingRefunds ? 'warning' : 'neutral'" to="/bookings?status=REFUND_PENDING" />
+        <StatCard label="전체 예약" :value="num(m.totalBookings)" icon="bookings" tone="info" to="/bookings" />
+        <StatCard label="결제 승인액 (누적)" :value="krw(m.grossCapturedMinor)" :hint="`승인 ${num(m.capturedPayments)}건`" icon="coins" tone="success" />
+        <StatCard label="환불 완료액 (누적)" :value="krw(m.refundedMinor)" icon="refund" />
+        <StatCard label="순 결제액" :value="krw((Number(m.grossCapturedMinor) || 0) - (Number(m.refundedMinor) || 0))" hint="승인액 − 환불액" icon="ledger" />
+        <StatCard label="회원" :value="num(m.totalUsers)" icon="users" to="/users" />
+      </section>
 
-      <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
-        <div class="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-          <span>총 유효 예약 건수</span>
-          <span class="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-mono">Real-time</span>
-        </div>
-        <div class="text-3xl font-black text-slate-900 mt-3">
-          {{ stats?.total_bookings || 0 }} <span class="text-lg font-medium text-slate-500">건</span>
-        </div>
-        <div class="text-xs text-slate-400 mt-2 font-medium">발권 완료 및 대기 포함</div>
-      </div>
-
-      <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
-        <div class="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-          <span>활성 회원 수</span>
-          <span class="text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full font-mono">Members</span>
-        </div>
-        <div class="text-3xl font-black text-slate-900 mt-3">
-          {{ stats?.active_users || 0 }} <span class="text-lg font-medium text-slate-500">명</span>
-        </div>
-        <div class="text-xs text-slate-400 mt-2 font-medium">VIP 다이아몬드 등급 포함</div>
-      </div>
-
-      <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
-        <div class="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider">
-          <span>백엔드 API 레이턴시</span>
-          <span class="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-mono">24ms</span>
-        </div>
-        <div class="text-3xl font-black text-emerald-600 mt-3">
-          99.98%
-        </div>
-        <div class="text-xs text-slate-400 mt-2 font-medium">Goroutine 병렬 검색 엔진 가동중</div>
-      </div>
-    </div>
-
-    <!-- 도메인별 점유율 및 상태 차트 영역 -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
-        <h3 class="text-base font-bold text-slate-900 mb-4">도메인별 예약 분포</h3>
-        <div class="space-y-3">
-          <div v-for="(cnt, dom) in stats?.domain_breakdown" :key="dom" class="flex items-center justify-between text-sm">
-            <span class="font-semibold text-slate-700 flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-trip-blue"></span>
-              {{ dom }}
-            </span>
-            <span class="font-mono font-bold text-slate-900">{{ cnt }} 건</span>
+      <div class="mt-6 grid gap-6 xl:grid-cols-3 [&>*]:min-w-0">
+        <section class="card p-5 xl:col-span-2" aria-labelledby="h-recent">
+          <div class="mb-3 flex items-center justify-between">
+            <h2 id="h-recent" class="font-bold text-ink">최근 예약</h2>
+            <router-link to="/bookings" class="text-sm font-semibold text-primary">전체 보기</router-link>
           </div>
-        </div>
+          <p v-if="!dash.data.value?.recentBookings?.length" class="py-6 text-center text-sm text-ink-muted">아직 예약이 없어요.</p>
+          <ul v-else class="divide-y divide-line">
+            <li v-for="b in dash.data.value.recentBookings" :key="b.id">
+              <button type="button" class="flex w-full items-center gap-3 py-2.5 text-left hover:bg-surface-sunken/60" @click="router.push(`/bookings?id=${b.id}`)">
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-semibold text-ink">{{ b.title }}</p>
+                  <p class="truncate text-xs text-ink-subtle"><span class="font-mono">{{ b.booking_number }}</span> · {{ b.customer_name || '—' }} · {{ dateTime(b.created_at) }}</p>
+                </div>
+                <span class="hidden text-sm font-semibold text-ink tabular sm:block">{{ krw(b.total_minor) }}</span>
+                <StatusBadge v-bind="bookingStatus(b.status)" />
+              </button>
+            </li>
+          </ul>
+        </section>
+
+        <section class="card p-5" aria-labelledby="h-status">
+          <h2 id="h-status" class="mb-3 font-bold text-ink">상태별 예약</h2>
+          <p v-if="!byStatus.length" class="py-6 text-center text-sm text-ink-muted">데이터가 없어요.</p>
+          <ul v-else class="space-y-2.5">
+            <li v-for="s in byStatus" :key="s.status">
+              <router-link :to="`/bookings?status=${s.status}`" class="block">
+                <div class="mb-1 flex justify-between text-xs"><span class="font-medium text-ink">{{ bookingStatus(s.status).label }}</span><span class="text-ink-muted tabular">{{ num(s.c) }}건</span></div>
+                <div class="h-1.5 overflow-hidden rounded-full bg-surface-sunken"><div class="h-full rounded-full bg-primary" :style="{ width: `${(Number(s.c) / statusMax) * 100}%` }" /></div>
+              </router-link>
+            </li>
+          </ul>
+        </section>
       </div>
 
-      <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
-        <h3 class="text-base font-bold text-slate-900 mb-4">예약 상태 머신 현황</h3>
-        <div class="space-y-3">
-          <div v-for="(cnt, st) in stats?.status_breakdown" :key="st" class="flex items-center justify-between text-sm">
-            <span class="font-semibold text-slate-700 flex items-center gap-2">
-              <span :class="[
-                'w-2.5 h-2.5 rounded-full',
-                st === 'CONFIRMED' ? 'bg-emerald-500' :
-                st === 'ISSUE_FAILED' ? 'bg-rose-500' : 'bg-amber-500'
-              ]"></span>
-              {{ st }}
-            </span>
-            <span class="font-mono font-bold text-slate-900">{{ cnt }} 건</span>
+      <div class="mt-6 grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
+        <section class="card p-5" aria-labelledby="h-recon">
+          <div class="mb-3 flex items-center justify-between">
+            <h2 id="h-recon" class="font-bold text-ink">회계 정합성 점검</h2>
+            <StatusBadge v-if="recon.state.value === 'ready'" :tone="recon.data.value?.ok ? 'success' : 'danger'" :label="recon.data.value?.ok ? '이상 없음' : '불일치 발견'" />
           </div>
-        </div>
+          <p v-if="recon.state.value === 'loading'" class="text-sm text-ink-subtle">점검 중…</p>
+          <p v-else-if="recon.state.value === 'error'" class="text-sm text-danger">{{ recon.error.value }}</p>
+          <ul v-else class="divide-y divide-line text-sm">
+            <li v-for="i in issues" :key="i.label" class="flex justify-between py-2"><span class="text-ink-muted">{{ i.label }}</span><span :class="['font-semibold tabular', i.n ? 'text-danger' : 'text-ink']">{{ i.n }}건</span></li>
+          </ul>
+        </section>
+
+        <section class="card p-5" aria-labelledby="h-ledger">
+          <h2 id="h-ledger" class="mb-3 font-bold text-ink">원장 계정 잔액</h2>
+          <p v-if="!ledger.length" class="py-6 text-center text-sm text-ink-muted">분개 기록이 없어요.</p>
+          <ul v-else class="divide-y divide-line text-sm">
+            <li v-for="l in ledger" :key="l.account" class="flex justify-between gap-3 py-2">
+              <span class="text-ink-muted">{{ ACCOUNT[l.account] || l.account }} <span class="font-mono text-2xs text-ink-subtle">{{ l.account }}</span></span>
+              <span class="font-semibold text-ink tabular">{{ krw(l.balance) }}</span>
+            </li>
+          </ul>
+          <p class="mt-3 text-2xs text-ink-subtle">차변 − 대변 기준 잔액이에요.</p>
+        </section>
       </div>
-    </div>
+    </StatePanel>
   </div>
 </template>

@@ -32,10 +32,10 @@ const tone = computed(() => {
   return 'pending'
 })
 const TONE_CLASS: Record<string, string> = {
-  ok: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-  bad: 'bg-red-50 text-red-800 border-red-200',
-  muted: 'bg-slate-100 text-slate-700 border-slate-200',
-  pending: 'bg-blue-50 text-blue-800 border-blue-200'
+  ok: 'bg-success-soft text-success border-success/30',
+  bad: 'bg-danger-soft text-danger border-danger/30',
+  muted: 'bg-surface-sunken text-ink-muted border-line',
+  pending: 'bg-primary-soft text-primary border-primary/30'
 }
 
 const headline = computed(() => {
@@ -121,11 +121,11 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
 
 <template>
   <div class="max-w-3xl mx-auto px-4 py-6 md:py-10">
-    <div v-if="loading" class="py-24 text-center text-sm text-slate-400" data-testid="booking-loading">예약 정보를 불러오는 중…</div>
+    <div v-if="loading" class="py-24 text-center text-sm text-ink-subtle" data-testid="booking-loading">예약 정보를 불러오는 중…</div>
 
-    <div v-else-if="error" class="rounded-2xl border border-slate-200 bg-white p-8 text-center" role="alert" data-testid="booking-error">
-      <p class="text-sm font-semibold text-slate-800">{{ error }}</p>
-      <NuxtLink to="/my/bookings" class="mt-4 inline-block rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">내 예약 목록</NuxtLink>
+    <div v-else-if="error" class="rounded-2xl border border-line bg-surface p-8 text-center" role="alert" data-testid="booking-error">
+      <p class="text-sm font-semibold text-ink">{{ error }}</p>
+      <NuxtLink to="/my/bookings" class="mt-4 inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-ink-inverse">내 예약 목록</NuxtLink>
     </div>
 
     <div v-else-if="booking" class="space-y-4" data-testid="booking-detail">
@@ -136,79 +136,79 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
             <h1 class="mt-1 text-lg md:text-xl font-bold">{{ headline }}</h1>
             <p v-if="subline" class="mt-1 text-sm opacity-90">{{ subline }}</p>
           </div>
-          <span class="shrink-0 rounded-full bg-white/70 px-3 py-1 text-xs font-semibold" :data-status="booking.status">{{ booking.statusLabel }}</span>
+          <span class="shrink-0 rounded-full bg-surface/70 px-3 py-1 text-xs font-semibold" :data-status="booking.status">{{ booking.statusLabel }}</span>
         </div>
-        <div v-if="booking.paymentMode === 'SANDBOX'" class="mt-3 text-[11px] font-semibold text-amber-800">테스트 모드 예약 — 실제 결제·실제 예약이 아닙니다.</div>
+        <div v-if="booking.paymentMode === 'SANDBOX'" class="mt-3 text-[11px] font-semibold text-warning">테스트 모드 예약 — 실제 결제·실제 예약이 아닙니다.</div>
       </div>
 
-      <div v-if="booking.status === 'AWAITING_PAYMENT'" class="rounded-2xl border border-slate-200 bg-white p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <p class="text-sm text-slate-700">{{ deadlineText }}까지 결제하지 않으면 예약이 자동 취소됩니다.</p>
-        <button class="rounded-xl bg-trip-orange px-5 py-2.5 text-sm font-bold text-white" data-testid="resume-payment" @click="resumePayment">{{ formatKrw(booking.totalMinor) }} 결제하기</button>
+      <div v-if="booking.status === 'AWAITING_PAYMENT'" class="rounded-2xl border border-line bg-surface p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <p class="text-sm text-ink-muted">{{ deadlineText }}까지 결제하지 않으면 예약이 자동 취소됩니다.</p>
+        <button class="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-ink transition-colors hover:bg-primary-hover" data-testid="resume-payment" @click="resumePayment">{{ formatKrw(booking.totalMinor) }} 결제하기</button>
       </div>
 
-      <section class="rounded-2xl border border-slate-200 bg-white p-5 md:p-6">
-        <h2 class="font-bold text-slate-900">{{ booking.title }}</h2>
-        <p class="mt-1 text-sm text-slate-600">{{ booking.serviceStart }}<span v-if="booking.serviceEnd && booking.serviceEnd !== booking.serviceStart"> → {{ booking.serviceEnd }}</span></p>
+      <section class="rounded-2xl border border-line bg-surface p-5 md:p-6">
+        <h2 class="font-bold text-ink">{{ booking.title }}</h2>
+        <p class="mt-1 text-sm text-ink-muted">{{ booking.serviceStart }}<span v-if="booking.serviceEnd && booking.serviceEnd !== booking.serviceStart"> → {{ booking.serviceEnd }}</span></p>
 
-        <div v-for="(it, i) in booking.items" :key="i" class="mt-4 rounded-xl bg-slate-50 p-4 text-sm" data-testid="booking-item">
-          <div v-if="booking.items.length > 1" class="mb-2 font-semibold text-slate-800">{{ it.title }} <span class="font-normal text-slate-500">· {{ it.service_start }}</span></div>
+        <div v-for="(it, i) in booking.items" :key="i" class="mt-4 rounded-xl bg-surface-sunken p-4 text-sm" data-testid="booking-item">
+          <div v-if="booking.items.length > 1" class="mb-2 font-semibold text-ink">{{ it.title }} <span class="font-normal text-ink-subtle">· {{ it.service_start }}</span></div>
           <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-            <template v-if="it.voucher_code"><dt class="text-slate-500">바우처</dt><dd class="font-mono font-bold text-slate-900" data-testid="voucher-code">{{ it.voucher_code }}</dd></template>
-            <template v-if="it.pnr"><dt class="text-slate-500">예약번호(PNR)</dt><dd class="font-mono font-bold text-slate-900">{{ it.pnr }}</dd></template>
-            <template v-if="it.ticket_numbers?.length"><dt class="text-slate-500">항공권 번호</dt><dd class="font-mono text-slate-900">{{ it.ticket_numbers.join(', ') }}</dd></template>
-            <template v-if="it.supplier_reference"><dt class="text-slate-500">공급사 확인번호</dt><dd class="font-mono text-slate-900">{{ it.supplier_reference }}</dd></template>
-            <dt class="text-slate-500">공급사 상태</dt><dd class="text-slate-900">{{ it.supplier_status || '-' }}</dd>
+            <template v-if="it.voucher_code"><dt class="text-ink-subtle">바우처</dt><dd class="font-mono font-bold text-ink" data-testid="voucher-code">{{ it.voucher_code }}</dd></template>
+            <template v-if="it.pnr"><dt class="text-ink-subtle">예약번호(PNR)</dt><dd class="font-mono font-bold text-ink">{{ it.pnr }}</dd></template>
+            <template v-if="it.ticket_numbers?.length"><dt class="text-ink-subtle">항공권 번호</dt><dd class="font-mono text-ink">{{ it.ticket_numbers.join(', ') }}</dd></template>
+            <template v-if="it.supplier_reference"><dt class="text-ink-subtle">공급사 확인번호</dt><dd class="font-mono text-ink">{{ it.supplier_reference }}</dd></template>
+            <dt class="text-ink-subtle">공급사 상태</dt><dd class="text-ink">{{ it.supplier_status || '-' }}</dd>
           </dl>
-          <p v-if="!it.voucher_code && !booking.isConfirmed" class="mt-2 text-xs text-slate-500">바우처·이용권은 공급사 확정 후 발급됩니다.</p>
+          <p v-if="!it.voucher_code && !booking.isConfirmed" class="mt-2 text-xs text-ink-subtle">바우처·이용권은 공급사 확정 후 발급됩니다.</p>
         </div>
       </section>
 
-      <section class="rounded-2xl border border-slate-200 bg-white p-5 md:p-6 grid md:grid-cols-2 gap-6 text-sm">
+      <section class="rounded-2xl border border-line bg-surface p-5 md:p-6 grid md:grid-cols-2 gap-6 text-sm">
         <div>
-          <h3 class="font-semibold text-slate-900">결제 정보</h3>
+          <h3 class="font-semibold text-ink">결제 정보</h3>
           <dl class="mt-2 space-y-1">
-            <div class="flex justify-between"><dt class="text-slate-500">총 금액</dt><dd class="font-bold" data-testid="booking-total">{{ formatKrw(booking.totalMinor) }}</dd></div>
-            <div class="flex justify-between"><dt class="text-slate-500">결제 금액</dt><dd>{{ formatKrw(booking.paidMinor) }}</dd></div>
-            <div v-if="booking.cancellationFeeMinor" class="flex justify-between"><dt class="text-slate-500">취소 수수료</dt><dd>{{ formatKrw(booking.cancellationFeeMinor) }}</dd></div>
-            <div v-if="booking.refundedMinor" class="flex justify-between"><dt class="text-slate-500">환불 금액</dt><dd class="text-emerald-700">{{ formatKrw(booking.refundedMinor) }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-subtle">총 금액</dt><dd class="font-bold" data-testid="booking-total">{{ formatKrw(booking.totalMinor) }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-subtle">결제 금액</dt><dd>{{ formatKrw(booking.paidMinor) }}</dd></div>
+            <div v-if="booking.cancellationFeeMinor" class="flex justify-between"><dt class="text-ink-subtle">취소 수수료</dt><dd>{{ formatKrw(booking.cancellationFeeMinor) }}</dd></div>
+            <div v-if="booking.refundedMinor" class="flex justify-between"><dt class="text-ink-subtle">환불 금액</dt><dd class="text-success">{{ formatKrw(booking.refundedMinor) }}</dd></div>
           </dl>
-          <ul v-if="booking.refunds?.length" class="mt-2 space-y-1 text-xs text-slate-600">
+          <ul v-if="booking.refunds?.length" class="mt-2 space-y-1 text-xs text-ink-muted">
             <li v-for="rf in booking.refunds" :key="rf.id">환불 {{ formatKrw(rf.amount_minor) }} · {{ rf.status }} · {{ fmt(rf.updated_at) }}</li>
           </ul>
         </div>
         <div>
-          <h3 class="font-semibold text-slate-900">예약자</h3>
-          <p class="mt-2 text-slate-700">{{ booking.contact?.name }}<br>{{ booking.contact?.email }}<br>{{ booking.contact?.phone }}</p>
-          <h3 v-if="booking.travelers?.length" class="mt-4 font-semibold text-slate-900">여행자</h3>
-          <ul class="mt-1 space-y-0.5 text-slate-700">
-            <li v-for="(t, i) in booking.travelers" :key="i">{{ t.lastNameEn }} {{ t.firstNameEn }} <span class="text-xs text-slate-500">({{ t.type === 'ADULT' ? '성인' : t.type === 'CHILD' ? '아동' : '유아' }}{{ t.passport ? ' · 여권 ' + t.passport : '' }})</span></li>
+          <h3 class="font-semibold text-ink">예약자</h3>
+          <p class="mt-2 text-ink-muted">{{ booking.contact?.name }}<br>{{ booking.contact?.email }}<br>{{ booking.contact?.phone }}</p>
+          <h3 v-if="booking.travelers?.length" class="mt-4 font-semibold text-ink">여행자</h3>
+          <ul class="mt-1 space-y-0.5 text-ink-muted">
+            <li v-for="(t, i) in booking.travelers" :key="i">{{ t.lastNameEn }} {{ t.firstNameEn }} <span class="text-xs text-ink-subtle">({{ t.type === 'ADULT' ? '성인' : t.type === 'CHILD' ? '아동' : '유아' }}{{ t.passport ? ' · 여권 ' + t.passport : '' }})</span></li>
           </ul>
         </div>
       </section>
 
-      <section class="rounded-2xl border border-slate-200 bg-white p-5 md:p-6 text-sm">
-        <h3 class="font-semibold text-slate-900">취소 규정</h3>
-        <p class="mt-1 text-slate-700">
+      <section class="rounded-2xl border border-line bg-surface p-5 md:p-6 text-sm">
+        <h3 class="font-semibold text-ink">취소 규정</h3>
+        <p class="mt-1 text-ink-muted">
           <span v-if="booking.cancellationPolicy?.type === 'FREE_UNTIL'">{{ fmt(booking.cancellationPolicy.freeUntil) }}까지 무료 취소, 이후 취소 시 환불 불가</span>
           <span v-else>환불 불가 요금입니다.</span>
         </p>
-        <p v-if="booking.cancellationPreview" class="mt-1 text-xs text-slate-500">지금 취소 시: 수수료 {{ formatKrw(booking.cancellationPreview.feeMinor) }} · 환불 {{ formatKrw(booking.cancellationPreview.refundMinor) }}</p>
-        <button v-if="booking.canCancel" :disabled="cancelling" class="mt-3 rounded-xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50" data-testid="cancel-booking" @click="cancel">
+        <p v-if="booking.cancellationPreview" class="mt-1 text-xs text-ink-subtle">지금 취소 시: 수수료 {{ formatKrw(booking.cancellationPreview.feeMinor) }} · 환불 {{ formatKrw(booking.cancellationPreview.refundMinor) }}</p>
+        <button v-if="booking.canCancel" :disabled="cancelling" class="mt-3 rounded-xl border border-danger/40 px-4 py-2 text-sm font-semibold text-danger disabled:opacity-50" data-testid="cancel-booking" @click="cancel">
           {{ cancelling ? '처리 중…' : '예약 취소' }}
         </button>
-        <p v-if="cancelMsg" class="mt-2 text-sm text-red-700" role="alert">{{ cancelMsg }}</p>
+        <p v-if="cancelMsg" class="mt-2 text-sm text-danger" role="alert">{{ cancelMsg }}</p>
       </section>
 
-      <details class="rounded-2xl border border-slate-200 bg-white p-5 text-sm">
-        <summary class="cursor-pointer font-semibold text-slate-900">처리 이력</summary>
-        <ol class="mt-3 space-y-1 text-xs text-slate-600">
+      <details class="rounded-2xl border border-line bg-surface p-5 text-sm">
+        <summary class="cursor-pointer font-semibold text-ink">처리 이력</summary>
+        <ol class="mt-3 space-y-1 text-xs text-ink-muted">
           <li v-for="(h, i) in booking.history" :key="i">{{ fmt(h.created_at) }} · {{ h.from_status || '생성' }} → <strong>{{ h.to_status }}</strong><span v-if="h.reason"> ({{ h.reason }})</span></li>
         </ol>
       </details>
 
       <div class="flex gap-2">
-        <NuxtLink to="/my/bookings" class="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold">내 예약 목록</NuxtLink>
-        <button v-if="booking.isConfirmed" class="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white print:hidden" @click="printVoucher">바우처 인쇄</button>
+        <NuxtLink to="/my/bookings" class="rounded-xl border border-line-strong px-4 py-2.5 text-sm font-semibold">내 예약 목록</NuxtLink>
+        <button v-if="booking.isConfirmed" class="rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-ink-inverse print:hidden" @click="printVoucher">바우처 인쇄</button>
       </div>
     </div>
   </div>

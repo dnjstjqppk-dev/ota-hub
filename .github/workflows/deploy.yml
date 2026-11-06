@@ -18,13 +18,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Setup Go environment
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.23'
 
       - name: Install dependencies
         run: |
@@ -39,6 +39,9 @@ jobs:
         run: |
           cd backend
           go test ./...
+
+      - name: Run Worker & Frontend Unit Tests
+        run: npm test
 
       - name: Build & Deploy to Cloudflare Workers
         run: node scripts/build-and-deploy.js
