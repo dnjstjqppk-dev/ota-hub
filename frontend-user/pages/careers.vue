@@ -35,10 +35,10 @@ const positions = [
       <span class="px-3.5 py-1 bg-blue-50 text-trip-blue rounded-full text-xs font-black uppercase tracking-wider">
         Careers at {{ BRAND.name }}
       </span>
-      <h1 class="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+      <h1 class="text-3xl sm:text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
         글로벌 여행의 미래를 함께 설계할 동료를 찾습니다
       </h1>
-      <p class="text-sm text-slate-500 max-w-xl mx-auto">
+      <p class="text-sm text-slate-500 dark:text-slate-400 max-w-xl mx-auto">
         수백만 여행자의 감동을 만드는 테크 드리븐 OTA {{ BRAND.name }}에서 최고의 역량을 펼치세요.
       </p>
     </div>
@@ -51,8 +51,8 @@ const positions = [
             <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-trip-blue">{{ pos.type }}</span>
             <span class="text-xs text-slate-400 font-medium">{{ pos.team }}</span>
           </div>
-          <h3 class="text-base font-black text-slate-900">{{ pos.title }}</h3>
-          <p class="flex items-center gap-1 text-xs text-slate-500"><AppIcon name="map-pin" :size="14" />{{ pos.location }}</p>
+          <h3 class="text-base font-black text-slate-900 dark:text-slate-100">{{ pos.title }}</h3>
+          <p class="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400"><AppIcon name="map-pin" :size="14" />{{ pos.location }}</p>
         </div>
         <a
           href="mailto:careers@getfortrip.com"

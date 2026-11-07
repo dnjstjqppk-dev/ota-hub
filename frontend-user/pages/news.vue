@@ -32,10 +32,10 @@ const articles = [
       <span class="px-3.5 py-1 bg-blue-50 text-trip-blue rounded-full text-xs font-black uppercase tracking-wider">
         Newsroom
       </span>
-      <h1 class="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+      <h1 class="text-3xl sm:text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
         {{ BRAND.name }} 뉴스룸
       </h1>
-      <p class="text-sm text-slate-500">
+      <p class="text-sm text-slate-500 dark:text-slate-400">
         {{ BRAND.name }}의 최신 보도자료, 파트너십 소식 및 기술 혁신 업데이트를 확인하세요.
       </p>
     </div>
@@ -47,11 +47,11 @@ const articles = [
         class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md transition space-y-2"
       >
         <div class="flex items-center gap-2">
-          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">{{ a.category }}</span>
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 dark:text-slate-200">{{ a.category }}</span>
           <span class="text-xs text-slate-400 font-mono">{{ a.date }}</span>
         </div>
-        <h2 class="text-lg font-black text-slate-900">{{ a.title }}</h2>
-        <p class="text-xs text-slate-600 leading-relaxed">{{ a.summary }}</p>
+        <h2 class="text-lg font-black text-slate-900 dark:text-slate-100">{{ a.title }}</h2>
+        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{{ a.summary }}</p>
       </article>
     </div>
   </div>
