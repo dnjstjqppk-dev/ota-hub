@@ -143,7 +143,7 @@ onMounted(() => {
     <!-- Staff Table -->
     <div class="card overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="table !min-w-[600px] text-xs">
+        <table :class="['table text-xs', loading || staffList.length ? '!min-w-[600px]' : 'w-full !min-w-0']">
           <thead>
             <tr>
               <th>직원 ID</th>
@@ -171,7 +171,7 @@ onMounted(() => {
               :key="s.id"
               class="transition hover:bg-surface-sunken"
             >
-              <td class="font-mono text-ink-subtle">{{ s.id }}</td>
+              <td class="max-w-[170px] truncate font-mono text-ink-subtle" :title="s.id">{{ s.id }}</td>
               <td class="font-bold">{{ s.full_name }}</td>
               <td class="text-ink-muted">{{ s.email }}</td>
               <td>

@@ -159,9 +159,9 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: false,
-    thumbnail_url: 'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
+    thumbnail_url: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
     images: [
-      'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800'
+      'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800'
     ],
     amenities: ['24층 최고층 로비 파노라마 통창', '오셀라스 럭셔리 스파', '실내 온수 인피니티풀', '팀버 하우스 바이닐 바'],
     rooms: [
@@ -336,9 +336,9 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: false,
-    thumbnail_url: 'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
+    thumbnail_url: 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800',
     images: [
-      'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
+      'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800',
       'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800'
     ],
     amenities: ['난카이 난바역 바로 위 위치', '36층 테이블36 파노라마 레스토랑', '실내 온수풀 & 스파', '피트니스 센터'],
@@ -574,8 +574,8 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: false,
-    thumbnail_url: 'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
-    images: ['https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800'],
+    thumbnail_url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
+    images: ['https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800'],
     amenities: ['텐진역 직결 최고의 위치', '17층 전망 레스토랑 레드 플랑', '백화점 쇼핑가 바로 연결', '공항철도 직결'],
     rooms: [
       {

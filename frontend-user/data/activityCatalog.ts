@@ -111,9 +111,9 @@ export const MASTER_ACTIVITY_CATALOG: ActivityProperty[] = [
     free_cancellation: true,
     instant_confirmation: true,
     badge: '인기 테마파크 1위',
-    image_url: 'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
+    image_url: 'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=800',
     gallery: [
-      'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800'
+      'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=800'
     ],
     highlights: [
       '슈퍼 닌텐도 월드 & 해리포터 마법의 세계 입장',

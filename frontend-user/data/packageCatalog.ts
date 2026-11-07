@@ -108,9 +108,9 @@ export const MASTER_PACKAGE_CATALOG: PackageBundle[] = [
     savings_amount_krw: 170000,
     savings_percentage: 19,
     badge: '난바역 직결 호텔',
-    hero_image_url: 'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
+    hero_image_url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
     gallery: [
-      'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
+      'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
       'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'
     ],
     features: [

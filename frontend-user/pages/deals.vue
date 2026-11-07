@@ -22,6 +22,12 @@ const promotions = ref<Promotion[]>([])
 const state = ref<'loading' | 'ready' | 'error'>('loading')
 const copiedCode = ref<string | null>(null)
 
+const DISCOUNT_TYPE_LABEL: Record<string, string> = {
+  PERCENTAGE: '정률 할인',
+  FIXED_AMOUNT: '정액 할인'
+}
+const discountTypeLabel = (t: string) => DISCOUNT_TYPE_LABEL[t] || t
+
 const copyCouponCode = async (code: string) => {
   try {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -75,7 +81,7 @@ onMounted(() => {
         <div v-for="p in promotions" :key="p.id" class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex justify-between items-center gap-4">
           <div class="space-y-1">
             <span class="px-2.5 py-0.5 bg-orange-50 text-orange-600 rounded-full text-[11px] font-bold">
-              {{ p.discount_type }}
+              {{ discountTypeLabel(p.discount_type) }}
             </span>
             <h3 class="font-black text-slate-900 text-lg">{{ p.title }}</h3>
             <p class="text-xs text-slate-500">

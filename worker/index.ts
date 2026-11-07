@@ -120,6 +120,15 @@ async function serveAssets(request: Request, env: Env, url: URL): Promise<Respon
 
   // 4. User Portal Routing (Default)
   let res = await env.ASSETS.fetch(request);
+  // Admin/Partner SPAs use absolute asset URLs (base '/'), so their hub subpath
+  // mounts (/admin/*, /partner/*) request /assets/* at the hub root. Filenames are
+  // content-hashed, so a miss at root unambiguously falls through to each portal copy.
+  if (res.status === 404 && (request.method === "GET" || request.method === "HEAD") && path.startsWith("/assets/")) {
+    for (const prefix of ["/admin", "/partner"]) {
+      const alt = await env.ASSETS.fetch(new Request(`${url.origin}${prefix}${path}${url.search}`, request));
+      if (alt.status === 200) { res = alt; break; }
+    }
+  }
   if (res.status === 404 && (request.method === "GET" || request.method === "HEAD") && !/\.[A-Za-z0-9]{1,8}$/.test(path)) {
     const shell = await spaShell(env, url, request);
     if (shell) res = shell;

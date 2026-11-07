@@ -240,7 +240,7 @@ onMounted(() => {
       </div>
 
       <div class="overflow-x-auto">
-        <table class="table !min-w-[760px] text-xs">
+        <table :class="['table text-xs', loading || orderSettlements.length ? '!min-w-[760px]' : 'w-full !min-w-0']">
           <thead>
             <tr>
               <th>정산 ID / 일시</th>
@@ -319,7 +319,7 @@ onMounted(() => {
       </div>
 
       <div class="overflow-x-auto">
-        <table class="table !min-w-[680px] text-xs">
+        <table :class="['table text-xs', loading || batches.length ? '!min-w-[680px]' : 'w-full !min-w-0']">
           <thead>
             <tr>
               <th>정산 주기 (Period)</th>

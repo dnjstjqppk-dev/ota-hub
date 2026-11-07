@@ -3,7 +3,10 @@ import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
-  base: './',
+  // Absolute asset URLs: relative './' breaks full-page loads on nested routes
+  // (e.g. /orders/:id resolves ./assets/*.js to /orders/assets/*.js -> SPA
+  // fallback serves index.html -> module MIME error -> blank page).
+  base: '/',
   plugins: [vue()],
   resolve: {
     alias: {

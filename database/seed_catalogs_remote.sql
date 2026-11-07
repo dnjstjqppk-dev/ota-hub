@@ -82,8 +82,8 @@ INSERT OR REPLACE INTO hotels (
     1,
     0,
     490000,
-    'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
-    '["https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800"]',
+    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
+    '["https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800"]',
     '["24층 최고층 로비 파노라마 통창","오셀라스 럭셔리 스파","실내 온수 인피니티풀","팀버 하우스 바이닐 바"]',
     '[{"id":"rm_seoul_03_std","name":"파크 킹 룸 (코엑스 시티뷰)","name_ko":"파크 킹 룸 (코엑스 시티뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":42,"base_price_krw":490000,"breakfast_included":false,"free_cancellation":true,"available_inventory":6}]'
   );
@@ -202,8 +202,8 @@ INSERT OR REPLACE INTO hotels (
     1,
     0,
     275000,
-    'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
-    '["https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800","https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800"]',
+    'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800',
+    '["https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800","https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800"]',
     '["난카이 난바역 바로 위 위치","36층 테이블36 파노라마 레스토랑","실내 온수풀 & 스파","피트니스 센터"]',
     '[{"id":"rm_osaka_01_sel","name":"스위스 셀렉트 킹룸","name_ko":"스위스 셀렉트 킹룸","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":32,"base_price_krw":275000,"breakfast_included":false,"free_cancellation":true,"available_inventory":8},{"id":"rm_osaka_01_adv","name":"어드밴티지 이그제큐티브 룸 (라운지 포함)","name_ko":"어드밴티지 이그제큐티브 룸 (라운지 포함)","bed_type":"슈퍼킹베드 1개","max_occupancy":2,"room_size_sqm":38,"base_price_krw":390000,"breakfast_included":true,"free_cancellation":true,"available_inventory":4}]'
   );
@@ -352,8 +352,8 @@ INSERT OR REPLACE INTO hotels (
     1,
     0,
     145000,
-    'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
-    '["https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800"]',
+    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
+    '["https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800"]',
     '["텐진역 직결 최고의 위치","17층 전망 레스토랑 레드 플랑","백화점 쇼핑가 바로 연결","공항철도 직결"]',
     '[{"id":"rm_fuk_02_std","name":"모던 더블룸 (텐진 파크뷰)","name_ko":"모던 더블룸 (텐진 파크뷰)","bed_type":"더블베드 1개","max_occupancy":2,"room_size_sqm":24,"base_price_krw":145000,"breakfast_included":false,"free_cancellation":true,"available_inventory":11}]'
   );
@@ -1123,7 +1123,7 @@ INSERT OR REPLACE INTO activities (
     'FULL_DAY',
     '자유 일정',
     'QR_CODE',
-    'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
+    'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=800',
     '슈퍼 닌텐도 월드 & 해리포터 마법의 세계 입장; 공식 파트너 인증 다이렉트 QR코드 발권; 현장 매표소 교환 없이 개찰구 직행',
     '["USJ 1일 입장권","모바일 입장 QR"]'
   );
@@ -1252,8 +1252,8 @@ INSERT OR REPLACE INTO packages (
     19,
     920000,
     750000,
-    'https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800',
-    '{"features":["아시아나항공 직항 왕복 (수하물 23kg)","난카이 난바역 직결 5성급 호텔 2박","간사이공항 특급 라피트 왕복 승차권 증정","도톤보리 도보 3분 초역세권"],"gallery":["https://images.unsplash.com/photo-1590559899731-a372a146979d?w=800","https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"]}'
+    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
+    '{"features":["아시아나항공 직항 왕복 (수하물 23kg)","난카이 난바역 직결 5성급 호텔 2박","간사이공항 특급 라피트 왕복 승차권 증정","도톤보리 도보 3분 초역세권"],"gallery":["https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800","https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"]}'
   );
 
 INSERT OR REPLACE INTO packages (

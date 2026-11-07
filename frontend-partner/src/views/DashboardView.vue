@@ -155,7 +155,7 @@ onMounted(() => {
       </div>
 
       <div class="overflow-x-auto">
-        <table class="table !min-w-[640px] text-xs">
+        <table :class="['table text-xs', loading || recentOrders.length ? '!min-w-[640px]' : 'w-full !min-w-0']">
           <thead>
             <tr>
               <th>예약번호</th>

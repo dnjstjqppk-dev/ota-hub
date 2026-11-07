@@ -201,7 +201,7 @@ onMounted(() => {
     <!-- Order Table -->
     <div class="card overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="table !min-w-[720px] text-xs">
+        <table :class="['table text-xs', loading || orders.length ? '!min-w-[720px]' : 'w-full !min-w-0']">
           <thead>
             <tr>
               <th>예약 번호</th>

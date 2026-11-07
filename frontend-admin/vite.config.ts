@@ -3,7 +3,10 @@ import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
-  base: './',
+  // Absolute asset URLs: relative './' breaks full-page loads on nested routes
+  // (same class as the partner /orders/:id blank page). Hub subpath mounts
+  // (/admin/*) keep working via the /assets fallback in worker/index.ts.
+  base: '/',
   plugins: [vue()],
   resolve: {
     alias: {
