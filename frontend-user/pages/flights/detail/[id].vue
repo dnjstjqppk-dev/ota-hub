@@ -45,7 +45,7 @@ useHead(() => {
   <DetailShell :state="state" list-path="/flights" list-label="항공권 검색으로" @retry="reload">
     <div v-if="f" class="grid gap-6 lg:grid-cols-[1fr_360px]">
       <div class="min-w-0 space-y-8">
-        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '항공권', to: '/flights' }, { label: f.flight_number }]" :eyebrow="f.airline_name + ' · ' + f.flight_number" :title="f.departure_airport + ' → ' + f.arrival_airport" :facts="facts" testid="flight-detail">
+        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '항공권', to: '/flights' }, { label: f.flight_number }]" :eyebrow="f.airline_name + ' · ' + f.flight_number" :title="f.departure_airport + ' → ' + f.arrival_airport" :facts="facts" testid="flight-detail" :wishlist="{ domain: 'FLIGHT', itemId: f.id, title: `${f.departure_airport} → ${f.arrival_airport} ${f.flight_number}`, priceKrw: f.base_price_krw, thumbnailUrl: null, targetUrl: $route.fullPath }">
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">발권 후에는 환불할 수 없는 운임이에요. 예약 단계에서 탑승객 전원의 여권 정보(영문 성명·여권번호·만료일)가 필요해요. 왕복은 항공권 검색에서 가는 편과 오는 편을 차례로 고르면 한 번에 예약돼요.</p>
         </DetailHero>
         <ReviewsSection domain="FLIGHT" :target-id="f.id" />

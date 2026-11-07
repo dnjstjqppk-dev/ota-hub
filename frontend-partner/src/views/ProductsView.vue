@@ -11,6 +11,58 @@ interface ProductRow {
   is_active: number
 }
 
+const editing = ref<ProductRow | null>(null)
+const editTitle = ref('')
+const editCity = ref('')
+const editPrice = ref(0)
+const editActive = ref(true)
+const editBusy = ref(false)
+const editError = ref('')
+
+function openEdit(p: ProductRow) {
+  editing.value = p
+  editTitle.value = p.title
+  editCity.value = p.city
+  editPrice.value = Number(p.base_price_krw) || 0
+  editActive.value = p.is_active === 1
+  editError.value = ''
+}
+
+async function saveEdit() {
+  if (!editing.value) return
+  editBusy.value = true
+  editError.value = ''
+  try {
+    const res = await fetch(apiUrl(`/partner/products/${editing.value.id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken()}` },
+      body: JSON.stringify({ title: editTitle.value.trim(), city: editCity.value.trim(), price: editPrice.value, isActive: editActive.value })
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(j.error || '수정에 실패했습니다.')
+    editing.value = null
+    await fetchProducts()
+  } catch (e) {
+    editError.value = (e as Error).message
+  } finally {
+    editBusy.value = false
+  }
+}
+
+async function toggleActive(p: ProductRow) {
+  try {
+    const res = await fetch(apiUrl(`/partner/products/${p.id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken()}` },
+      body: JSON.stringify({ isActive: p.is_active !== 1 })
+    })
+    if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as any).error || '상태 변경에 실패했습니다.')
+    await fetchProducts()
+  } catch (e) {
+    error.value = (e as Error).message
+  }
+}
+
 const products = ref<ProductRow[]>([])
 const loading = ref(false)
 const error = ref('')
@@ -204,12 +256,16 @@ onMounted(() => {
                 </span>
               </td>
               <td class="!text-right">
-                <router-link
-                  to="/inventory"
-                  class="rounded-lg bg-surface-sunken px-2.5 py-1 font-bold text-ink-muted transition hover:text-ink"
-                >
-                  재고/가격 캘린더
-                </router-link>
+                <div class="flex items-center justify-end gap-1.5">
+                  <router-link
+                    :to="`/inventory?item=${p.id}`"
+                    class="rounded-lg bg-surface-sunken px-2.5 py-1 font-bold text-ink-muted transition hover:text-ink"
+                  >
+                    재고/가격
+                  </router-link>
+                  <button type="button" class="rounded-lg bg-surface-sunken px-2.5 py-1 font-bold text-ink-muted transition hover:text-ink" @click="openEdit(p)">수정</button>
+                  <button type="button" class="rounded-lg bg-surface-sunken px-2.5 py-1 font-bold text-ink-muted transition hover:text-ink" @click="toggleActive(p)">{{ p.is_active === 1 ? '판매중지' : '판매재개' }}</button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -315,6 +371,48 @@ onMounted(() => {
             >
               {{ submitLoading ? '등록 중...' : '상품 등록 완료' }}
             </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Edit Product Modal -->
+    <div
+      v-if="editing"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-midnight-950/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="상품 정보 수정"
+    >
+      <div class="w-full max-w-md space-y-5 rounded-2xl border border-line bg-surface-raised p-6 shadow-pop">
+        <div class="flex items-center justify-between border-b border-line pb-3">
+          <h3 class="text-base font-black text-ink">상품 정보 수정</h3>
+          <button type="button" aria-label="닫기" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" @click="editing = null"><AppIcon name="close" :size="18" /></button>
+        </div>
+
+        <form class="space-y-4 text-xs" @submit.prevent="saveEdit">
+          <div v-if="editError" class="rounded-xl bg-danger-soft px-3.5 py-2.5 font-medium text-danger" role="alert">{{ editError }}</div>
+          <div class="space-y-1">
+            <label class="label">상품명 (노출명) *</label>
+            <input v-model="editTitle" type="text" required class="input font-medium" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <label class="label">도시 / 지역</label>
+              <input v-model="editCity" type="text" class="input font-medium" />
+            </div>
+            <div class="space-y-1">
+              <label class="label">기본 요금 (KRW)</label>
+              <input v-model.number="editPrice" type="number" step="1000" min="0" class="input font-bold tabular" />
+            </div>
+          </div>
+          <label class="flex cursor-pointer items-center gap-2 font-bold text-ink-muted">
+            <input v-model="editActive" type="checkbox" class="h-4 w-4 rounded accent-success" />
+            <span>판매 중 (끄면 사용자 사이트에서 숨겨져요)</span>
+          </label>
+          <div class="flex items-center justify-end gap-2 border-t border-line pt-2">
+            <button type="button" class="btn-secondary btn-sm" @click="editing = null">취소</button>
+            <button type="submit" :disabled="editBusy" class="btn-primary btn-sm">{{ editBusy ? '저장 중...' : '수정 완료' }}</button>
           </div>
         </form>
       </div>

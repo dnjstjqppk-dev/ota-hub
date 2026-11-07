@@ -10,6 +10,7 @@
   "build": {
     "command": "node scripts/build-all.js"
   },
+  "triggers": { "crons": ["*/5 * * * *"] },
   "d1_databases": [
     {
       "binding": "DB",
@@ -26,6 +27,7 @@
   },
   "vars": {
     "ALLOWED_ORIGINS": "https://getfortrip.com,https://www.getfortrip.com,https://admin.getfortrip.com,https://partner.getfortrip.com,https://ota-hub.dnjstjqppk.workers.dev,https://ota-admin.dnjstjqppk.workers.dev,https://ota-partner.dnjstjqppk.workers.dev,http://localhost:3000,http://localhost:3001,http://localhost:3002",
-    "PUBLIC_SITE_URL": "https://getfortrip.com"
+    "PUBLIC_SITE_URL": "https://getfortrip.com",
+    "PARTNER_SITE_URL": "https://ota-partner.dnjstjqppk.workers.dev"
   }
 }

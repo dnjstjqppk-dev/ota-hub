@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { apiUrl, partnerToken } from '../config/api'
 
 interface InventoryItem {
@@ -13,10 +14,15 @@ interface InventoryItem {
   is_closed: number
 }
 
+const route = useRoute()
 const currentMonth = ref(new Date().toISOString().slice(0, 7))
 const inventory = ref<InventoryItem[]>([])
 const loading = ref(false)
 const error = ref('')
+const products = ref<{ id: string; title: string; domain_type: string }[]>([])
+const selectedProduct = ref('')
+
+const selectedDomain = computed(() => products.value.find((p) => p.id === selectedProduct.value)?.domain_type || 'HOTEL')
 
 const selectedDate = ref('')
 const selectedAlloc = ref(10)
@@ -26,12 +32,33 @@ const isModalOpen = ref(false)
 const saveLoading = ref(false)
 const saveError = ref('')
 
+const fetchProducts = async () => {
+  try {
+    const token = partnerToken()
+    const res = await fetch(apiUrl('/partner/products'), {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (!res.ok) throw new Error('상품 목록을 불러오지 못했습니다.')
+    const json = await res.json()
+    products.value = (json.products || []).filter((p: any) => p.is_active === 1)
+    const fromQuery = String(route.query.item || '')
+    if (fromQuery && products.value.some((p) => p.id === fromQuery)) {
+      selectedProduct.value = fromQuery
+    } else if (!selectedProduct.value && products.value.length) {
+      selectedProduct.value = products.value[0].id
+    }
+  } catch (e: any) {
+    error.value = e.message || '상품 목록을 불러오지 못했습니다.'
+  }
+}
+
 const fetchInventory = async () => {
+  if (!selectedProduct.value) return
   loading.value = true
   error.value = ''
   try {
     const token = partnerToken()
-    const res = await fetch(apiUrl(`/partner/inventory?month=${currentMonth.value}`), {
+    const res = await fetch(apiUrl(`/partner/inventory?month=${currentMonth.value}&itemId=${encodeURIComponent(selectedProduct.value)}`), {
       headers: { Authorization: `Bearer ${token}` }
     })
     if (!res.ok) throw new Error('재고 정보를 불러오지 못했습니다.')
@@ -65,7 +92,8 @@ const handleSaveDate = async () => {
         Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({
-        itemId: 'ptn_default_item',
+        domain: selectedDomain.value,
+        itemId: selectedProduct.value,
         unitId: 'standard',
         serviceDate: selectedDate.value,
         allocatedUnits: selectedAlloc.value,
@@ -101,8 +129,9 @@ const getDayData = (dateStr: string) => {
   return inventory.value.find(item => item.service_date === dateStr)
 }
 
-onMounted(() => {
-  fetchInventory()
+onMounted(async () => {
+  await fetchProducts()
+  await fetchInventory()
 })
 </script>
 
@@ -117,7 +146,16 @@ onMounted(() => {
           성수기/주말 요금 차등 적용, 판매 가능 잔여 객실/차량 수량 및 마감 상태를 설정합니다.
         </p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <select
+          v-model="selectedProduct"
+          aria-label="재고 관리 상품"
+          class="input !w-auto !text-xs font-bold shadow-sm"
+          @change="fetchInventory"
+        >
+          <option v-if="!products.length" value="">등록된 상품 없음</option>
+          <option v-for="p in products" :key="p.id" :value="p.id">{{ p.title }} ({{ p.domain_type }})</option>
+        </select>
         <input
           v-model="currentMonth"
           type="month"

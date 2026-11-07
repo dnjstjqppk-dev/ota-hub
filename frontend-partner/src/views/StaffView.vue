@@ -83,6 +83,27 @@ function roleBadge(role: string) {
   return 'bg-surface-sunken text-ink-muted'
 }
 
+const rowBusy = ref('')
+
+async function patchStaff(s: StaffRow, patch: { role?: string; isActive?: boolean }) {
+  rowBusy.value = s.id
+  error.value = ''
+  try {
+    const res = await fetch(apiUrl(`/partner/staff/${s.id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken()}` },
+      body: JSON.stringify(patch)
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error((j as any).error || '수정에 실패했습니다.')
+    await fetchStaff()
+  } catch (e: any) {
+    error.value = e.message || '수정에 실패했습니다.'
+  } finally {
+    rowBusy.value = ''
+  }
+}
+
 onMounted(() => {
   fetchStaff()
 })
@@ -154,15 +175,41 @@ onMounted(() => {
               <td class="font-bold">{{ s.full_name }}</td>
               <td class="text-ink-muted">{{ s.email }}</td>
               <td>
-                <span :class="['rounded px-2 py-0.5 text-[10px] font-black', roleBadge(s.role)]">
+                <select
+                  v-if="s.role !== 'OWNER'"
+                  :value="s.role"
+                  :disabled="rowBusy === s.id"
+                  :aria-label="`${s.full_name} 역할`"
+                  class="input !min-h-[32px] !w-auto !py-1 !text-[11px] font-bold"
+                  @change="patchStaff(s, { role: ($event.target as HTMLSelectElement).value })"
+                >
+                  <option value="MANAGER">MANAGER</option>
+                  <option value="STAFF">STAFF</option>
+                </select>
+                <span v-else :class="['rounded px-2 py-0.5 text-[10px] font-black', roleBadge(s.role)]">
                   {{ s.role }}
                 </span>
               </td>
               <td>
-                <span :class="[
-                  'rounded-full px-2 py-0.5 text-[10px] font-bold',
-                  s.is_active === 1 ? 'bg-success-soft text-success' : 'bg-surface-sunken text-ink-subtle'
-                ]">
+                <button
+                  v-if="s.role !== 'OWNER'"
+                  type="button"
+                  :disabled="rowBusy === s.id"
+                  :class="[
+                    'rounded-full px-2 py-0.5 text-[10px] font-bold underline',
+                    s.is_active === 1 ? 'bg-success-soft text-success' : 'bg-surface-sunken text-ink-subtle'
+                  ]"
+                  @click="patchStaff(s, { isActive: s.is_active !== 1 })"
+                >
+                  {{ s.is_active === 1 ? '활성 (클릭 시 비활성)' : '비활성 (클릭 시 활성)' }}
+                </button>
+                <span
+                  v-else
+                  :class="[
+                    'rounded-full px-2 py-0.5 text-[10px] font-bold',
+                    s.is_active === 1 ? 'bg-success-soft text-success' : 'bg-surface-sunken text-ink-subtle'
+                  ]"
+                >
                   {{ s.is_active === 1 ? '활성' : '비활성' }}
                 </span>
               </td>

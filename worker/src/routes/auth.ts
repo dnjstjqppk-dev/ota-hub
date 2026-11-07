@@ -5,7 +5,7 @@ import { hashPassword, newId, randomToken, sha256Hex, signJwt, verifyPasswordDet
 import { audit, authCookie, getAuthUser, jwtSecret, rateLimit } from "../lib/auth.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 
-const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
+export const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 
 function validatePassword(pw: string): void {
   if (pw.length < 10 || pw.length > 128) throw new HttpError(400, "WEAK_PASSWORD", "비밀번호는 10자 이상 128자 이하여야 합니다.");

@@ -8,6 +8,8 @@ export interface AuthUser {
   fullName?: string;
   role: "USER" | "ADMIN" | "PARTNER";
   tier?: string;
+  staffId?: string;
+  staffRole?: string;
 }
 
 export function jwtSecret(env: Env): string {
@@ -36,7 +38,7 @@ export async function getAuthUser(request: Request, env: Env): Promise<AuthUser 
   if (!token) return null;
   const p = await verifyJwt(token, secret);
   if (!p || typeof p.id !== "string") return null;
-  return { id: p.id, email: p.email, fullName: p.fullName, role: p.role, tier: p.tier };
+  return { id: p.id, email: p.email, fullName: p.fullName, role: p.role, tier: p.tier, staffId: p.staffId, staffRole: p.staffRole };
 }
 
 export async function requireUser(request: Request, env: Env): Promise<AuthUser> {
@@ -98,6 +100,10 @@ export async function requirePartner(request: Request, env: Env): Promise<AuthUs
   ).bind(u.id).first<any>();
   if (!p || p.is_active !== 1 || (p.profile_status !== "ACTIVE" && u.role !== "ADMIN")) {
     throw new HttpError(403, "PARTNER_SUSPENDED", "승인 대기 중이거나 비활성화된 파트너 계정입니다.");
+  }
+  if (u.staffId) {
+    const s = await env.DB.prepare("SELECT is_active FROM partner_staff WHERE id = ? AND partner_id = ?").bind(u.staffId, u.id).first<any>();
+    if (!s || s.is_active !== 1) throw new HttpError(401, "STAFF_DEACTIVATED", "비활성화된 직원 계정입니다. 다시 로그인해주세요.");
   }
   return { ...u, partnerId: u.id, companyName: p?.company_name || 'GetForTrip 입점 파트너' };
 }

@@ -101,9 +101,14 @@ const handleLogin = async () => {
               <input v-model="rememberMe" type="checkbox" class="h-4 w-4 rounded accent-primary" />
               <span>로그인 유지</span>
             </label>
-            <router-link to="/register" class="inline-flex items-center gap-1 font-bold text-primary hover:underline">
-              입점 신청하기 <AppIcon name="arrow-right" :size="14" />
-            </router-link>
+            <span class="flex items-center gap-3">
+              <router-link to="/forgot-password" class="font-bold text-ink-muted hover:text-primary hover:underline">
+                비밀번호 찾기
+              </router-link>
+              <router-link to="/register" class="inline-flex items-center gap-1 font-bold text-primary hover:underline">
+                입점 신청하기 <AppIcon name="arrow-right" :size="14" />
+              </router-link>
+            </span>
           </div>
 
           <button

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { apiUrl, partnerToken } from '../config/api'
+import PageNav from '../components/PageNav.vue'
 
 interface OrderRow {
   id: string
@@ -17,12 +18,12 @@ interface OrderRow {
 }
 
 const STATUS_GROUPS = [
-  { id: 'ALL', label: '전체 주문', match: (_s: string) => true },
-  { id: 'AWAITING', label: '결제 대기', match: (s: string) => s === 'AWAITING_PAYMENT' },
-  { id: 'ACTIONABLE', label: '확정 대기', match: (s: string) => s === 'SUPPLIER_BOOKING_PENDING' || s === 'PAYMENT_AUTHORIZED' },
-  { id: 'DONE', label: '확정 완료', match: (s: string) => ['SUPPLIER_CONFIRMED', 'VOUCHER_ISSUED', 'TICKETED'].includes(s) },
-  { id: 'DEAD', label: '취소·환불', match: (s: string) => ['CANCELLED', 'REFUNDED', 'FAILED', 'EXPIRED', 'REFUND_PENDING', 'CANCELLATION_REQUESTED'].includes(s) }
-] as const
+  { id: 'ALL', label: '전체 주문', statuses: [] as string[] },
+  { id: 'AWAITING', label: '결제 대기', statuses: ['AWAITING_PAYMENT'] },
+  { id: 'ACTIONABLE', label: '확정 대기', statuses: ['SUPPLIER_BOOKING_PENDING', 'PAYMENT_AUTHORIZED'] },
+  { id: 'DONE', label: '확정 완료', statuses: ['SUPPLIER_CONFIRMED', 'VOUCHER_ISSUED', 'TICKETED'] },
+  { id: 'DEAD', label: '취소·환불', statuses: ['CANCELLED', 'REFUNDED', 'FAILED', 'EXPIRED', 'REFUND_PENDING', 'CANCELLATION_REQUESTED'] }
+]
 
 const TERMINAL = new Set(['SUPPLIER_CONFIRMED', 'VOUCHER_ISSUED', 'TICKETED', 'CANCELLED', 'REFUNDED', 'FAILED', 'EXPIRED', 'REFUND_PENDING', 'CANCELLATION_REQUESTED'])
 
@@ -31,18 +32,33 @@ const loading = ref(false)
 const error = ref('')
 const filterStatus = ref<string>('ALL')
 const searchQuery = ref('')
+const debouncedQuery = ref('')
+const page = ref(1)
+const total = ref(0)
+const totalPages = ref(1)
 const actionLoading = ref('')
 const actionError = ref('')
 
-const filteredOrders = computed(() => {
-  const g = STATUS_GROUPS.find(x => x.id === filterStatus.value) || STATUS_GROUPS[0]
-  return orders.value.filter(o => {
-    const matchQuery = !searchQuery.value ||
-      (o.booking_number && o.booking_number.toLowerCase().includes(searchQuery.value.toLowerCase())) ||
-      (o.title && o.title.toLowerCase().includes(searchQuery.value.toLowerCase()))
-    return g.match(o.status) && matchQuery
-  })
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(searchQuery, (v) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    debouncedQuery.value = v.trim()
+    page.value = 1
+    fetchOrders()
+  }, 400)
 })
+
+function setFilter(id: string) {
+  filterStatus.value = id
+  page.value = 1
+  fetchOrders()
+}
+
+function go(p: number) {
+  page.value = p
+  fetchOrders()
+}
 
 const actionable = (o: OrderRow) => !TERMINAL.has(o.status)
 
@@ -58,12 +74,19 @@ const fetchOrders = async () => {
   error.value = ''
   try {
     const token = partnerToken()
-    const res = await fetch(apiUrl('/partner/orders'), {
+    const g = STATUS_GROUPS.find(x => x.id === filterStatus.value) || STATUS_GROUPS[0]
+    const p = new URLSearchParams()
+    if (g.statuses.length) p.set('status', g.statuses.join(','))
+    if (debouncedQuery.value) p.set('q', debouncedQuery.value)
+    p.set('page', String(page.value))
+    const res = await fetch(apiUrl(`/partner/orders?${p}`), {
       headers: { Authorization: `Bearer ${token}` }
     })
     if (!res.ok) throw new Error('주문 목록을 불러오지 못했습니다.')
     const json = await res.json()
     orders.value = json.orders || []
+    total.value = json.total || 0
+    totalPages.value = json.totalPages || 1
   } catch (e: any) {
     error.value = e.message || '주문 목록을 불러오지 못했습니다.'
   } finally {
@@ -116,7 +139,7 @@ onMounted(() => {
         <h1 class="flex items-center gap-2 text-2xl font-black tracking-tight text-ink">
           <span>주문 / 예약 접수 관리</span>
           <span class="rounded-full bg-primary-soft px-2 py-0.5 text-xs font-bold text-primary">
-            {{ orders.length }}건 접수
+            {{ total }}건 접수
           </span>
         </h1>
         <p class="mt-1 text-sm font-medium text-ink-subtle">
@@ -157,7 +180,7 @@ onMounted(() => {
               : 'bg-surface-sunken text-ink-muted hover:text-ink',
             'flex-shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-bold transition'
           ]"
-          @click="filterStatus = st.id"
+          @click="setFilter(st.id)"
         >
           {{ st.label }}
         </button>
@@ -196,18 +219,18 @@ onMounted(() => {
                 주문 목록을 불러오는 중입니다...
               </td>
             </tr>
-            <tr v-else-if="filteredOrders.length === 0">
+            <tr v-else-if="orders.length === 0">
               <td colspan="7" class="p-8 text-center font-bold text-ink-subtle">
                 일치하는 예약 주문이 없습니다.
               </td>
             </tr>
             <tr
               v-else
-              v-for="o in filteredOrders"
+              v-for="o in orders"
               :key="o.id"
               class="transition hover:bg-surface-sunken"
             >
-              <td class="font-mono font-bold">{{ o.booking_number || o.id }}</td>
+              <td class="font-mono font-bold"><router-link :to="`/orders/${o.id}`" class="text-primary hover:underline">{{ o.booking_number || o.id }}</router-link></td>
               <td class="font-bold">{{ o.title }}</td>
               <td class="text-ink-subtle">
                 {{ o.service_start || '-' }} <span v-if="o.service_end">~ {{ o.service_end }}</span>
@@ -243,6 +266,9 @@ onMounted(() => {
             </tr>
           </tbody>
         </table>
+      </div>
+      <div class="px-4 pb-4">
+        <PageNav :page="page" :total-pages="totalPages" :total="total" @go="go" />
       </div>
     </div>
   </div>

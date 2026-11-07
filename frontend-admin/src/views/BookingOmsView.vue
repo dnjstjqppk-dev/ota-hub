@@ -15,6 +15,7 @@ import StatePanel from '../components/StatePanel.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import SidePanel from '../components/SidePanel.vue'
 import EntitySearch from '../components/EntitySearch.vue'
+import PageNav from '../components/PageNav.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,16 +28,26 @@ function patch(change: Record<string, string>) {
 
 const status = computed(() => qv('status'))
 const q = computed(() => qv('q'))
+const page = computed(() => Math.max(1, parseInt(qv('page') || '1', 10) || 1))
 const draft = ref(q.value)
 watch(q, (v) => { draft.value = v })
 
+const total = ref(0)
+const totalPages = ref(1)
 const list = useResource(async () => {
   const p = new URLSearchParams()
   if (status.value) p.set('status', status.value)
   if (q.value) p.set('q', q.value)
-  return (await api(`/admin/bookings?${p}`)).bookings || []
+  p.set('page', String(page.value))
+  const j = await api(`/admin/bookings?${p}`)
+  total.value = j.total || 0
+  totalPages.value = j.totalPages || 1
+  return j.bookings || []
 }, [] as any[])
-watch([status, q], () => list.reload())
+watch([status, q, page], ([s, qq, pg], [os, oq]) => {
+  if ((s !== os || qq !== oq) && pg !== 1) patch({ page: '' })
+  else list.reload()
+})
 onMounted(list.reload)
 
 const suggest = async (term: string, signal: AbortSignal) =>
@@ -140,7 +151,7 @@ const ACTOR: Record<string, string> = { SYSTEM: '시스템', USER: '고객', ADM
           </tbody>
         </table>
       </div>
-      <p class="mt-2 text-2xs text-ink-subtle">최근 200건까지 표시해요.</p>
+      <PageNav :page="page" :total-pages="totalPages" :total="total" @go="(p) => patch({ page: p === 1 ? '' : String(p) })" />
     </StatePanel>
 
     <SidePanel :open="!!id" wide :title="b ? b.title : '예약 상세'" :subtitle="b ? b.bookingNumber : ''" @close="patch({ id: '' }); form.mode = ''">

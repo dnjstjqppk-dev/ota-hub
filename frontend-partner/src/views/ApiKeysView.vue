@@ -22,8 +22,14 @@ const copied = ref(false)
 const revoking = ref('')
 
 const webhookUrl = ref('')
+const webhookSecret = ref('')
 const webhookBusy = ref(false)
 const webhookMsg = ref('')
+const secretBusy = ref(false)
+const testBusy = ref(false)
+const deliveries = ref<any[]>([])
+const deliveriesLoading = ref(false)
+const copiedSecret = ref(false)
 
 function authHeaders(): Record<string, string> {
   const token = partnerToken()
@@ -43,7 +49,9 @@ async function load() {
     if (w.ok) {
       const j = await w.json()
       webhookUrl.value = j.webhookUrl || ''
+      webhookSecret.value = j.secret || ''
     }
+    await loadDeliveries()
   } catch (e) {
     error.value = (e as Error).message || '불러오기에 실패했습니다.'
   } finally {
@@ -111,6 +119,56 @@ async function saveWebhook() {
   } finally {
     webhookBusy.value = false
   }
+}
+
+async function loadDeliveries() {
+  deliveriesLoading.value = true
+  try {
+    const res = await fetch(apiUrl('/partner/webhook/deliveries'), { headers: authHeaders() })
+    if (res.ok) deliveries.value = ((await res.json()).deliveries || []) as any[]
+  } catch {
+    // deliveries are auxiliary; the main error surface stays on load()
+  } finally {
+    deliveriesLoading.value = false
+  }
+}
+
+async function sendTest() {
+  testBusy.value = true
+  webhookMsg.value = ''
+  try {
+    const res = await fetch(apiUrl('/partner/webhook/test'), { method: 'POST', headers: authHeaders() })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(j.error || '테스트 전송에 실패했습니다.')
+    webhookMsg.value = '테스트 이벤트를 큐에 넣었어요. 아래 발송 이력에서 결과를 확인하세요.'
+    await loadDeliveries()
+  } catch (e) {
+    webhookMsg.value = (e as Error).message
+  } finally {
+    testBusy.value = false
+  }
+}
+
+async function rotateSecret() {
+  if (!confirm('서명 시크릿을 교체할까요? 기존 시크릿으로 검증하던 수신기는 즉시 실패합니다.')) return
+  secretBusy.value = true
+  try {
+    const res = await fetch(apiUrl('/partner/webhook/rotate'), { method: 'POST', headers: authHeaders() })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(j.error || '시크릿 교체에 실패했습니다.')
+    webhookSecret.value = j.secret || ''
+  } catch (e) {
+    webhookMsg.value = (e as Error).message
+  } finally {
+    secretBusy.value = false
+  }
+}
+
+function copySecret() {
+  if (!webhookSecret.value) return
+  navigator.clipboard.writeText(webhookSecret.value)
+  copiedSecret.value = true
+  setTimeout(() => (copiedSecret.value = false), 2000)
 }
 
 const openapiUrl = `${API_BASE}/partner/openapi.json`
@@ -220,8 +278,34 @@ onMounted(load)
         </div>
         <p class="text-[11px] text-ink-subtle">
           신규 예약 접수(<code class="font-mono">booking.created</code>), 취소 요청(<code class="font-mono">booking.cancelled</code>) 발생 시 JSON 페이로드가 POST 전송됩니다. https만 허용돼요.
+          모든 요청에 <code class="font-mono">X-GFT-Signature: sha256=&lt;HMAC&gt;</code> 서명이 포함되니 아래 시크릿으로 검증하세요.
         </p>
+        <div v-if="webhookSecret" class="flex items-center gap-2">
+          <input :value="webhookSecret" readonly aria-label="웹훅 서명 시크릿" class="input font-mono !text-[11px]" />
+          <button type="button" class="btn-secondary btn-sm shrink-0" @click="copySecret">{{ copiedSecret ? '복사됨!' : '복사' }}</button>
+          <button type="button" :disabled="secretBusy" class="btn-ghost btn-sm shrink-0" @click="rotateSecret">{{ secretBusy ? '교체 중…' : '시크릿 교체' }}</button>
+        </div>
+        <p v-else class="text-[11px] text-ink-subtle">첫 이벤트가 접수되면 서명 시크릿이 자동 발급됩니다.</p>
+        <div class="flex items-center gap-2">
+          <button type="button" :disabled="testBusy || !webhookUrl" class="btn-secondary btn-sm" @click="sendTest">{{ testBusy ? '전송 중…' : '연결 테스트 전송' }}</button>
+          <button type="button" class="btn-ghost btn-sm" @click="loadDeliveries">이력 새로고침</button>
+        </div>
         <p v-if="webhookMsg" class="text-[11px] font-bold text-ink-muted">{{ webhookMsg }}</p>
+        <div>
+          <p class="label">최근 발송 이력</p>
+          <p v-if="deliveriesLoading" class="text-[11px] text-ink-subtle">불러오는 중…</p>
+          <p v-else-if="!deliveries.length" class="rounded-xl bg-surface-sunken px-4 py-4 text-center text-[11px] text-ink-subtle">아직 발송 이력이 없어요.</p>
+          <ul v-else class="max-h-64 space-y-1.5 overflow-y-auto">
+            <li v-for="d in deliveries" :key="d.id" class="flex flex-wrap items-center gap-2 rounded-xl border border-line px-3 py-2 font-mono text-[11px]">
+              <span class="font-bold text-ink">{{ d.event_type }}</span>
+              <span :class="['rounded-full px-2 py-0.5 font-bold', d.status === 'SENT' ? 'bg-success-soft text-success' : d.status === 'FAILED' ? 'bg-danger-soft text-danger' : d.status === 'SKIPPED' ? 'bg-surface-sunken text-ink-subtle' : 'bg-warning-soft text-warning']">{{ d.status }}</span>
+              <span class="text-ink-subtle">시도 {{ d.attempts }}회</span>
+              <span v-if="d.last_status_code" class="text-ink-subtle">HTTP {{ d.last_status_code }}</span>
+              <span class="ml-auto text-ink-subtle">{{ (d.created_at || '').slice(0, 16).replace('T', ' ') }}</span>
+              <span v-if="d.last_error && d.status !== 'SENT'" class="w-full truncate text-ink-subtle">{{ d.last_error }}</span>
+            </li>
+          </ul>
+        </div>
       </div>
 
       <div class="space-y-2 rounded-2xl border border-line bg-surface-sunken p-4">

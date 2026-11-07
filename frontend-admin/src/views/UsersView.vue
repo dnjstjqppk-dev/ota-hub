@@ -14,6 +14,7 @@ import StatePanel from '../components/StatePanel.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import SidePanel from '../components/SidePanel.vue'
 import EntitySearch from '../components/EntitySearch.vue'
+import PageNav from '../components/PageNav.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,16 +26,26 @@ function patch(change: Record<string, string>) {
 }
 const q = computed(() => qv('q'))
 const role = computed(() => qv('role'))
+const page = computed(() => Math.max(1, parseInt(qv('page') || '1', 10) || 1))
 const draft = ref(q.value)
 watch(q, (v) => { draft.value = v })
 
+const total = ref(0)
+const totalPages = ref(1)
 const list = useResource(async () => {
   const p = new URLSearchParams()
   if (q.value) p.set('q', q.value)
   if (role.value) p.set('role', role.value)
-  return (await api(`/admin/users?${p}`)).users || []
+  p.set('page', String(page.value))
+  const j = await api(`/admin/users?${p}`)
+  total.value = j.total || 0
+  totalPages.value = j.totalPages || 1
+  return j.users || []
 }, [] as any[])
-watch([q, role], () => list.reload())
+watch([q, role, page], ([qq, r, pg], [oq, orr]) => {
+  if ((qq !== oq || r !== orr) && pg !== 1) patch({ page: '' })
+  else list.reload()
+})
 onMounted(list.reload)
 const suggest = async (term: string, signal: AbortSignal) => (await api(`/admin/users?q=${encodeURIComponent(term)}&limit=8`, { signal })).users || []
 
@@ -123,7 +134,7 @@ async function save() {
           </tbody>
         </table>
       </div>
-      <p class="mt-2 text-2xs text-ink-subtle">최근 가입순 100명까지 표시해요. 더 찾으려면 검색하세요.</p>
+      <PageNav :page="page" :total-pages="totalPages" :total="total" @go="(p) => patch({ page: p === 1 ? '' : String(p) })" />
     </StatePanel>
 
     <SidePanel :open="!!selected" :title="selected?.full_name || selected?.email || ''" :subtitle="selected?.email" @close="selected = null">

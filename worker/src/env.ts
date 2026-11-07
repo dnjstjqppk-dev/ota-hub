@@ -8,6 +8,7 @@ export interface Env {
   PII_ENC_KEY?: string;
   ALLOWED_ORIGINS?: string;
   PUBLIC_SITE_URL?: string;
+  PARTNER_SITE_URL?: string;
   /** "toss" | "sandbox" | unset. Unset = payments disabled. "sandbox" is refused outside development/test. */
   PAYMENT_PROVIDER?: string;
   TOSS_SECRET_KEY?: string;

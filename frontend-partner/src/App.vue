@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { clearPartnerSession } from './config/api'
 
@@ -25,7 +25,13 @@ const partner = computed(() => {
   return { companyName: '공급사 파트너', email: 'partner@getfortrip.com' }
 })
 
-const isPublicPage = computed(() => route.path === '/login' || route.path === '/register')
+const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password']
+const isPublicPage = computed(() => PUBLIC_PATHS.includes(route.path))
+const currentLabel = computed(() => navItems.find((i) => route.path === i.path)?.label ?? '')
+
+// Drawer on phones/tablets (< lg), fixed sidebar on desktop — mirrors the admin shell.
+const drawer = ref(false)
+watch(() => route.fullPath, () => { drawer.value = false })
 
 const dark = ref(false)
 try { dark.value = document.documentElement.classList.contains('dark') } catch {}
@@ -43,10 +49,13 @@ const handleLogout = () => {
 
 <template>
   <div class="flex h-screen overflow-hidden bg-canvas font-sans text-ink antialiased">
-    <!-- Partner Sidebar -->
+    <!-- Partner Sidebar (drawer on < lg) -->
+    <div v-if="drawer && !isPublicPage" class="fixed inset-0 z-30 bg-midnight-950/50 lg:hidden" aria-hidden="true" @click="drawer = false" />
     <aside
       v-if="!isPublicPage"
-      class="z-30 flex w-64 flex-shrink-0 select-none flex-col justify-between border-r border-midnight-800 bg-midnight-900 text-sapphire-200 shadow-2xl"
+      id="partner-nav"
+      :class="['fixed inset-y-0 left-0 z-40 flex w-64 select-none flex-col justify-between border-r border-midnight-800 bg-midnight-900 text-sapphire-200 shadow-2xl transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0', drawer ? 'translate-x-0' : '-translate-x-full']"
+      aria-label="파트너 메뉴"
     >
       <div class="overflow-y-auto">
         <!-- Logo Header -->
@@ -113,7 +122,12 @@ const handleLogout = () => {
 
     <!-- Main Content Area -->
     <main class="flex min-w-0 flex-1 flex-col overflow-y-auto">
-      <div v-if="!isPublicPage" class="mx-auto w-full max-w-7xl p-6 md:p-8">
+      <header v-if="!isPublicPage" class="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-surface/90 px-4 backdrop-blur lg:hidden">
+        <button type="button" class="-ml-1 rounded-lg p-2 text-ink-muted transition hover:bg-surface-sunken hover:text-ink" aria-label="메뉴 열기" aria-controls="partner-nav" :aria-expanded="drawer" @click="drawer = true"><AppIcon name="menu" :size="22" /></button>
+        <p class="truncate text-sm font-bold text-ink">{{ currentLabel }}</p>
+        <img src="/symbol.svg" alt="getfortrip" class="ml-auto h-7 w-7 rounded-lg object-contain" />
+      </header>
+      <div v-if="!isPublicPage" class="mx-auto w-full max-w-7xl p-4 sm:p-6 md:p-8">
         <router-view />
       </div>
       <div v-else class="flex-1">

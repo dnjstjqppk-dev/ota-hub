@@ -42,7 +42,7 @@ useHead(() => {
   <DetailShell :state="state" list-path="/cars" list-label="렌터카 검색으로" @retry="reload">
     <div v-if="c" class="grid gap-6 lg:grid-cols-[1fr_360px]">
       <div class="min-w-0 space-y-8">
-        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '렌터카', to: '/cars' }, { label: c.vehicle_model }]" :eyebrow="c.company_name" :title="c.vehicle_model" :image="c.image_url || null" image-icon="car" :facts="facts" testid="car-detail">
+        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '렌터카', to: '/cars' }, { label: c.vehicle_model }]" :eyebrow="c.company_name" :title="c.vehicle_model" :image="c.image_url || null" image-icon="car" :facts="facts" testid="car-detail" :wishlist="{ domain: 'CAR', itemId: c.id, title: `${c.company_name} ${c.vehicle_model}`, priceKrw: c.daily_price_krw, thumbnailUrl: c.image_url || null, targetUrl: $route.fullPath }">
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">요금은 대여 일수 × 1일 요금에 세금 10%가 더해져 계산돼요. 운전자 자격과 현장 보증금은 렌터카 회사 규정을 따라요.</p>
         </DetailHero>
         <ReviewsSection domain="CAR" :target-id="c.id" />

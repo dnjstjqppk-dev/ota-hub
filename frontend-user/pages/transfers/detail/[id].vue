@@ -40,7 +40,7 @@ useHead(() => {
   <DetailShell :state="state" list-path="/transfers" list-label="공항 이동 검색으로" @retry="reload">
     <div v-if="t" class="grid gap-6 lg:grid-cols-[1fr_360px]">
       <div class="min-w-0 space-y-8">
-        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '공항 이동', to: '/transfers' }, { label: t.service_title }]" :eyebrow="t.vehicle_class" :title="t.service_title" :image="t.image_url || null" image-icon="transfer" :facts="facts" testid="transfer-detail">
+        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '공항 이동', to: '/transfers' }, { label: t.service_title }]" :eyebrow="t.vehicle_class" :title="t.service_title" :image="t.image_url || null" image-icon="transfer" :facts="facts" testid="transfer-detail" :wishlist="{ domain: 'TRANSFER', itemId: t.id, title: t.service_title, priceKrw: t.price_krw, thumbnailUrl: t.image_url || null, targetUrl: $route.fullPath }">
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">차량 1대 편도 요금이에요. 탑승 인원이 최대 인원을 넘으면 예약할 수 없어요.</p>
         </DetailHero>
         <ReviewsSection domain="TRANSFER" :target-id="t.id" />

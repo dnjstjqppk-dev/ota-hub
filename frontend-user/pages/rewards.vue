@@ -1,25 +1,30 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
 
+useHead({
+  title: '내 멤버십',
+  meta: [{ name: 'description', content: 'getfortrip 멤버십 등급과 보유 코인 확인' }]
+})
+
 const authStore = useAuthStore()
 </script>
 
 <template>
   <div class="max-w-6xl mx-auto px-4 py-8 space-y-8">
-    <!-- 회원 등급 히어로 카드 (로그인 시) -->
+    <!-- 회원 등급 카드 (로그인 시, 실데이터) -->
     <div v-if="authStore.isLoggedIn && authStore.user" class="bg-gradient-to-r from-slate-900 via-trip-navy to-slate-800 rounded-3xl p-8 text-white space-y-6 shadow-2xl relative overflow-hidden">
       <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div class="flex items-center gap-4">
           <img v-if="authStore.user.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-16 h-16 rounded-full border-2 border-amber-400 object-cover" />
-        <span v-else class="w-16 h-16 rounded-full bg-trip-blue text-white text-xl font-black flex items-center justify-center" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
+          <span v-else class="w-16 h-16 rounded-full bg-trip-blue text-white text-xl font-black flex items-center justify-center" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
           <div>
             <div class="flex items-center gap-2">
               <h1 class="text-2xl font-black">{{ authStore.user.fullName }} 님</h1>
-              <span class="px-3 py-0.5 bg-amber-400 text-slate-950 font-black text-xs rounded-full">
-                👑 {{ authStore.user.tier }} 등급
+              <span class="inline-flex items-center gap-1 px-3 py-0.5 bg-amber-400 text-slate-950 font-black text-xs rounded-full">
+                <AppIcon name="star" :size="12" /> {{ authStore.user.tier || 'SILVER' }} 등급
               </span>
             </div>
-            <p class="text-xs text-slate-400 mt-1">getfortrip 최상위 VIP 멤버십 혜택 적용 중</p>
+            <p class="text-xs text-slate-400 mt-1">getfortrip 멤버십 회원입니다</p>
           </div>
         </div>
 
@@ -28,35 +33,20 @@ const authStore = useAuthStore()
           <div class="text-3xl font-black text-amber-400 font-mono">
             {{ (authStore.user.tripCoins || 0).toLocaleString() }} <span class="text-base">G</span>
           </div>
-          <div class="text-[11px] text-slate-300 mt-0.5">₩{{ ((authStore.user.tripCoins || 0) * 1).toLocaleString() }}원 상당 결제 할인 가능</div>
+          <div class="text-[11px] text-slate-300 mt-0.5">코인은 이벤트 및 고객지원을 통해 적립됩니다</div>
         </div>
-      </div>
-
-      <!-- 등급 달성 프로그레스 바 -->
-      <div class="space-y-2 pt-4 border-t border-slate-700">
-        <div class="flex justify-between text-xs font-semibold text-slate-300">
-          <span>Silver</span>
-          <span>Gold</span>
-          <span>Platinum</span>
-          <span class="text-amber-400 font-bold">Diamond (현재)</span>
-          <span>Diamond+</span>
-        </div>
-        <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-          <div class="h-full bg-gradient-to-r from-blue-500 via-amber-400 to-amber-500 w-4/5 rounded-full"></div>
-        </div>
-        <div class="text-right text-[11px] text-slate-400">다음 Diamond+ 등급까지 예약 2건 남음</div>
       </div>
     </div>
 
     <!-- 비로그인 게스트용 멤버십 안내 카드 -->
     <div v-else class="bg-gradient-to-r from-slate-900 via-trip-navy to-slate-800 rounded-3xl p-8 sm:p-12 text-white space-y-6 shadow-2xl relative overflow-hidden text-center max-w-3xl mx-auto">
-      <div class="w-16 h-16 rounded-full bg-amber-400/20 text-amber-400 flex items-center justify-center text-3xl mx-auto font-black border border-amber-400/40">
-        👑
+      <div class="w-16 h-16 rounded-full bg-amber-400/20 text-amber-400 flex items-center justify-center mx-auto border border-amber-400/40">
+        <AppIcon name="star" :size="28" />
       </div>
       <div class="space-y-2">
-        <h1 class="text-2xl sm:text-3xl font-black">getfortrip VIP 리워드 멤버십</h1>
+        <h1 class="text-2xl sm:text-3xl font-black">getfortrip 멤버십</h1>
         <p class="text-xs sm:text-sm text-slate-300 max-w-md mx-auto">
-          로그인하시면 예약마다 적립되는 getfortrip Coins와 호텔 최대 20% 추가 회원 특가를 즉시 누리실 수 있습니다.
+          로그인하시면 쿠폰함, 찜 목록, 가격 알림과 예약 관리를 이용하실 수 있습니다.
         </p>
       </div>
       <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -66,26 +56,25 @@ const authStore = useAuthStore()
       </div>
     </div>
 
-    <!-- 멤버십 혜택 안내 -->
+    <!-- 실제 회원 기능 안내 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary"><AppIcon name="hotel" :size="22" /></div>
-        <h3 class="font-bold text-slate-900 text-base">호텔 최대 20% 추가 VIP 특가</h3>
-        <p class="text-xs text-slate-500 leading-relaxed">전 세계 10만 개 이상 호텔에서 전용 회원가 할인이 자동 적용됩니다.</p>
-      </div>
+      <NuxtLink to="/my/coupons" class="block bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2 hover:shadow-md transition">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary"><AppIcon name="gift" :size="22" /></div>
+        <h3 class="font-bold text-slate-900 text-base">쿠폰함</h3>
+        <p class="text-xs text-slate-500 leading-relaxed">받을 수 있는 할인 쿠폰을 확인하고 결제할 때 사용하세요.</p>
+      </NuxtLink>
 
-      <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-warning-soft text-warning"><AppIcon name="trophy" :size="22" /></div>
-        <h3 class="font-bold text-slate-900 text-base">공항 VIP 라운지 연 2회 무료</h3>
-        <p class="text-xs text-slate-500 leading-relaxed">다이아몬드 회원은 전 세계 주요 국제공항 라운지 무료 이용 혜택이 제공됩니다.</p>
-      </div>
+      <NuxtLink to="/my/wishlist" class="block bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2 hover:shadow-md transition">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-warning-soft text-warning"><AppIcon name="heart" :size="22" /></div>
+        <h3 class="font-bold text-slate-900 text-base">찜 목록과 가격 알림</h3>
+        <p class="text-xs text-slate-500 leading-relaxed">관심 상품을 저장하고 가격 변동 알림을 받아보세요.</p>
+      </NuxtLink>
 
-      <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-success-soft text-success"><AppIcon name="coins" :size="22" /></div>
-        <h3 class="font-bold text-slate-900 text-base">getfortrip Coins 적립률 3배 보너스</h3>
-        <p class="text-xs text-slate-500 leading-relaxed">숙박 및 탑승 완료 시 일반 회원 대비 3배 많은 getfortrip 코인이 확정 적립됩니다.</p>
-      </div>
+      <NuxtLink to="/my/bookings" class="block bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2 hover:shadow-md transition">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-success-soft text-success"><AppIcon name="bookings" :size="22" /></div>
+        <h3 class="font-bold text-slate-900 text-base">내 예약 관리</h3>
+        <p class="text-xs text-slate-500 leading-relaxed">예약 내역 조회와 바우처 확인, 취소를 한곳에서 하세요.</p>
+      </NuxtLink>
     </div>
   </div>
 </template>
-

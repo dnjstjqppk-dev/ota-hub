@@ -41,7 +41,7 @@ useHead(() => {
   <DetailShell :state="state" list-path="/trains" list-label="기차표 검색으로" @retry="reload">
     <div v-if="t" class="grid gap-6 lg:grid-cols-[1fr_360px]">
       <div class="min-w-0 space-y-8">
-        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '기차', to: '/trains' }, { label: t.train_number }]" :eyebrow="t.train_type + ' · ' + t.train_number" :title="t.departure_station + ' → ' + t.arrival_station" :facts="facts" testid="train-detail">
+        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '기차', to: '/trains' }, { label: t.train_number }]" :eyebrow="t.train_type + ' · ' + t.train_number" :title="t.departure_station + ' → ' + t.arrival_station" :facts="facts" testid="train-detail" :wishlist="{ domain: 'TRAIN', itemId: t.id, title: `${t.departure_station} → ${t.arrival_station} ${t.train_number}`, priceKrw: t.price_krw, thumbnailUrl: null, targetUrl: $route.fullPath }">
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">{{ t.seat_class }} 좌석으로 판매돼요. 아동도 성인과 같은 요금이 적용되고, 예약 단계에서 탑승객 전원의 영문 성명이 필요해요.</p>
         </DetailHero>
         <ReviewsSection domain="TRAIN" :target-id="t.id" />

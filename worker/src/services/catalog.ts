@@ -71,7 +71,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
   switch (domain) {
     case "HOTEL": {
       const h = await db.prepare("SELECT * FROM hotels WHERE id = ?").bind(itemId).first<any>();
-      if (!h) throw notFound();
+      if (!h || h.is_active === 0) throw notFound();
       const rooms = parseJson<any[]>(h.rooms_json, []);
       const room = unitId ? rooms.find((r) => r.id === unitId) : null;
       if (!room) throw new HttpError(400, "ROOM_REQUIRED", "객실 유형을 선택해주세요.");
@@ -113,7 +113,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
     }
     case "CAR": {
       const c = await db.prepare("SELECT * FROM cars WHERE id = ?").bind(itemId).first<any>();
-      if (!c) throw notFound();
+      if (!c || c.is_active === 0) throw notFound();
       return {
         domain, itemId, unitId: null, supplierId: c.partner_id || "ptn_car_01", currency: "KRW",
         title: `${c.company_name} · ${c.vehicle_model}`,
@@ -132,7 +132,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
     }
     case "ACTIVITY": {
       const a = await db.prepare("SELECT * FROM activities WHERE id = ?").bind(itemId).first<any>();
-      if (!a) throw notFound();
+      if (!a || a.is_active === 0) throw notFound();
       return {
         domain, itemId, unitId: null, supplierId: a.partner_id || "ptn_tour_01", currency: "KRW",
         title: a.title, unitPriceMajor: Number(a.price_krw), capacity: null, maxOccupancy: null,

@@ -34,6 +34,15 @@ function sql(command) {
   return JSON.parse(out)[0].results;
 }
 
+/**
+ * Test isolation for IP rate-limit buckets: the whole suite runs from one IP,
+ * so late registration-heavy tests reset their bucket instead of tripping the
+ * production limit. Production limits themselves are never weakened.
+ */
+function resetLimiter(...buckets) {
+  for (const bucket of buckets) sql(`DELETE FROM login_attempts WHERE ip_address LIKE '${bucket}:%'`);
+}
+
 async function register(tag) {
   const email = `qa_${tag}_${rnd()}@local.test`;
   const r = await api("POST", "/api/v1/auth/register", { body: { email, password: "Passw0rd-QA-1", fullName: `QA ${tag}`, agreeTerms: true, agreePrivacy: true } });
@@ -573,7 +582,10 @@ test("admin: catalog API works across all product tables, search escapes LIKE wi
   const literalUnderscore = sql("SELECT COUNT(*) AS c FROM bookings WHERE booking_number LIKE '%\\_%' ESCAPE '\\' OR customer_email LIKE '%\\_%' ESCAPE '\\' OR customer_name LIKE '%\\_%' ESCAPE '\\' OR title LIKE '%\\_%' ESCAPE '\\' OR id = '_'")[0].c;
   const totalBookings = sql("SELECT COUNT(*) AS c FROM bookings")[0].c;
   assert.ok(totalBookings > literalUnderscore, "wildcard test needs bookings without a literal _ to discriminate");
-  assert.equal((await api("GET", "/api/v1/admin/bookings?q=_", { token: ADMIN })).data.bookings.length, literalUnderscore);
+  const escaped = await api("GET", "/api/v1/admin/bookings?q=_&pageSize=200", { token: ADMIN });
+  assert.equal(escaped.data.bookings.length, literalUnderscore);
+  assert.equal(escaped.data.total, literalUnderscore, "paged total matches the escaped count");
+  assert.equal(escaped.data.page, 1);
   assert.equal((await api("GET", "/api/v1/admin/catalog", { token: A.token })).status, 403);
 });
 
@@ -645,6 +657,272 @@ test("admin: moderation list includes blinded moments; promotions can be toggled
   assert.equal(m.status, 200);
   assert.ok(m.data.moments.every((x) => x.is_blinded === 1));
   assert.equal((await api("POST", "/api/v1/admin/moments/mmt_missing/blind", { token: ADMIN })).status, 404);
+});
+
+test("moments: public feed shape is {moments}; posting requires auth and echoes back", async () => {
+  const feed = await api("GET", "/api/v1/moments");
+  assert.equal(feed.status, 200);
+  assert.ok(Array.isArray(feed.data.moments), "frontend parses .moments, not .data");
+  assert.equal((await api("POST", "/api/v1/moments", { body: { title: "x", content: "y" } })).status, 401);
+  assert.equal((await api("POST", "/api/v1/moments", { token: A.token, body: { title: "" } })).status, 400);
+  const title = `E2E 모먼트 ${rnd()}`;
+  const created = await api("POST", "/api/v1/moments", { token: A.token, body: { title, content: "E2E 여행 기록", city: "서울" } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  const again = await api("GET", "/api/v1/moments");
+  assert.ok(again.data.moments.some((m) => m.title === title), "posted moment appears in feed");
+});
+
+test("inquiries: customers file 1:1 tickets; operators triage them", async () => {
+  assert.equal((await api("POST", "/api/v1/inquiries", { body: { subject: "x", body: "y" } })).status, 401);
+  assert.equal((await api("GET", "/api/v1/inquiries")).status, 401);
+  assert.equal((await api("POST", "/api/v1/inquiries", { token: A.token, body: { subject: "" } })).status, 400);
+  assert.equal((await api("POST", "/api/v1/inquiries", { token: A.token, body: { subject: "x", body: "y", category: "NOPE" } })).status, 400);
+  const subject = `E2E 문의 ${rnd()}`;
+  const filed = await api("POST", "/api/v1/inquiries", { token: A.token, body: { subject, body: "환불이 언제 되나요?", category: "REFUND" } });
+  assert.equal(filed.status, 201, JSON.stringify(filed.data));
+  const mine = await api("GET", "/api/v1/inquiries", { token: A.token });
+  assert.ok(mine.data.inquiries.some((t) => t.subject === subject && t.status === "OPEN"));
+  const other = await api("GET", "/api/v1/inquiries", { token: B.token });
+  assert.ok(!other.data.inquiries.some((t) => t.subject === subject), "tickets are scoped to the owner");
+  assert.equal((await api("GET", "/api/v1/admin/tickets", { token: A.token })).status, 403);
+  const queue = await api("GET", "/api/v1/admin/tickets?status=OPEN", { token: ADMIN });
+  assert.ok(queue.data.tickets.some((t) => t.subject === subject));
+  assert.equal((await api("PATCH", "/api/v1/admin/tickets/tkt_missing", { token: ADMIN, body: { status: "RESOLVED" } })).status, 404);
+  const done = await api("PATCH", `/api/v1/admin/tickets/${filed.data.id}`, { token: ADMIN, body: { status: "RESOLVED", adminNote: "환불 승인됨" } });
+  assert.equal(done.status, 200);
+  const after = await api("GET", "/api/v1/inquiries", { token: A.token });
+  assert.equal(after.data.inquiries.find((t) => t.subject === subject).status, "RESOLVED");
+});
+
+test("partner webhooks: capture/refund enqueue deliveries; dispatch retries; test-send works", async () => {
+  resetLimiter("partner_register", "partner_login");
+  sql(`UPDATE partner_profiles SET webhook_url = 'https://example.invalid/hook' WHERE partner_id = 'ptn_htl_01'`);
+  const { b } = await fullHotelBooking(A.token);
+  const created = sql(`SELECT status, attempts FROM partner_webhook_deliveries WHERE booking_id = '${b.id}' AND event_type = 'booking.created'`);
+  assert.equal(created.length, 1, "capture enqueues booking.created");
+  assert.equal(created[0].status, "PENDING");
+  const secret = sql(`SELECT webhook_secret FROM partner_profiles WHERE partner_id = 'ptn_htl_01'`)[0].webhook_secret;
+  assert.ok(secret && secret.startsWith("whsec_"), "signing secret auto-issued");
+  await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN });
+  const tried = sql(`SELECT status, attempts, last_error FROM partner_webhook_deliveries WHERE booking_id = '${b.id}' AND event_type = 'booking.created'`)[0];
+  assert.equal(tried.attempts, 1, "maintenance attempts delivery");
+  assert.equal(tried.status, "PENDING", "unreachable host stays pending until max attempts");
+  assert.ok(tried.last_error, "failure reason recorded");
+  const fail = await fullHotelBooking(A.token, { supplier: "fail" });
+  const cancelled = sql(`SELECT status FROM partner_webhook_deliveries WHERE booking_id = '${fail.b.id}' AND event_type = 'booking.cancelled'`);
+  assert.equal(cancelled.length, 1, "refund enqueues booking.cancelled");
+  const P = await approvedPartner("hook");
+  assert.equal((await api("POST", "/api/v1/partner/webhook/test", { token: P.token })).status, 400, "test needs a URL first");
+  assert.equal((await api("PUT", "/api/v1/partner/webhook", { token: P.token, body: { webhookUrl: "https://example.invalid/p" } })).status, 200);
+  const t = await api("POST", "/api/v1/partner/webhook/test", { token: P.token });
+  assert.equal(t.status, 201, JSON.stringify(t.data));
+  const log = await api("GET", "/api/v1/partner/webhook/deliveries", { token: P.token });
+  assert.ok(log.data.deliveries.some((d) => d.id === t.data.id && d.event_type === "test"));
+  const before = (await api("GET", "/api/v1/partner/webhook", { token: P.token })).data.secret;
+  const rotated = await api("POST", "/api/v1/partner/webhook/rotate", { token: P.token });
+  assert.ok(rotated.data.secret && rotated.data.secret !== before, "rotation issues a new secret");
+});
+
+test("partner catalog: products patch/toggle; withdrawn products leave the public catalog", async () => {
+  resetLimiter("partner_register", "partner_login");
+  const P = await approvedPartner("cat");
+  const Q = await approvedPartner("cat2");
+  const created = await api("POST", "/api/v1/partner/products", { token: P.token, body: { domain: "HOTEL", title: `E2E 호텔 ${rnd()}`, city: "부산", price: 99000 } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  const id = created.data.id;
+  assert.equal((await api("PATCH", `/api/v1/partner/products/${id}`, { token: Q.token, body: { title: "남의 상품" } })).status, 404);
+  assert.equal((await api("PATCH", `/api/v1/partner/products/${id}`, { token: P.token, body: { price: -1 } })).status, 400);
+  assert.equal((await api("PATCH", `/api/v1/partner/products/${id}`, { token: P.token, body: {} })).status, 400);
+  const title = `E2E 호텔 수정 ${rnd()}`;
+  assert.equal((await api("PATCH", `/api/v1/partner/products/${id}`, { token: P.token, body: { title, price: 129000 } })).status, 200);
+  const list = await api("GET", "/api/v1/partner/products", { token: P.token });
+  const mine = list.data.products.find((p) => p.id === id);
+  assert.equal(mine.title, title);
+  assert.equal(mine.base_price_krw, 129000);
+  assert.equal((await api("PATCH", `/api/v1/partner/products/${id}`, { token: P.token, body: { isActive: false } })).status, 200);
+  const pub = await api("GET", "/api/v1/hotels?limit=100");
+  assert.ok(!pub.data.data.some((h) => h.id === id), "withdrawn product hidden from public list");
+  assert.equal((await api("GET", `/api/v1/hotels/${id}`)).status, 404, "withdrawn product detail 404s");
+  assert.equal((await api("PATCH", `/api/v1/partner/products/${id}`, { token: P.token, body: { isActive: true } })).status, 200);
+  assert.equal((await api("GET", `/api/v1/hotels/${id}`)).status, 200, "re-listed product servable again");
+});
+
+test("partner staff: invite validation, login, role/active management", async () => {
+  resetLimiter("partner_register", "partner_login");
+  const P = await approvedPartner("stf");
+  assert.equal((await api("POST", "/api/v1/partner/staff", { token: P.token, body: { email: "a@x.co", fullName: "A" } })).status, 400, "password required");
+  assert.equal((await api("POST", "/api/v1/partner/staff", { token: P.token, body: { email: "a@x.co", fullName: "A", password: "short" } })).status, 400);
+  assert.equal((await api("POST", "/api/v1/partner/staff", { token: P.token, body: { email: "a@x.co", fullName: "A", password: "Passw0rd-QA-1", role: "OWNER" } })).status, 400);
+  const email = `stf_${rnd()}@local.test`;
+  const inv = await api("POST", "/api/v1/partner/staff", { token: P.token, body: { email, fullName: "E2E 직원", role: "STAFF", password: "Passw0rd-QA-1" } });
+  assert.equal(inv.status, 201, JSON.stringify(inv.data));
+  assert.equal((await api("POST", "/api/v1/partner/staff", { token: P.token, body: { email, fullName: "중복", password: "Passw0rd-QA-1" } })).status, 409);
+  const login = await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } });
+  assert.equal(login.status, 200, JSON.stringify(login.data));
+  assert.equal(login.data.partner.staffRole, "STAFF");
+  assert.equal((await api("GET", "/api/v1/partner/dashboard", { token: login.data.token })).status, 200, "staff token works");
+  assert.equal((await api("PATCH", `/api/v1/partner/staff/${inv.data.id}`, { token: P.token, body: { role: "MANAGER" } })).status, 200);
+  const roster = await api("GET", "/api/v1/partner/staff", { token: P.token });
+  const owner = roster.data.staff.find((s) => s.role === "OWNER");
+  assert.equal((await api("PATCH", `/api/v1/partner/staff/${owner.id}`, { token: P.token, body: { isActive: false } })).status, 403);
+  assert.equal((await api("PATCH", `/api/v1/partner/staff/${inv.data.id}`, { token: P.token, body: { isActive: false } })).status, 200);
+  assert.equal((await api("GET", "/api/v1/partner/dashboard", { token: login.data.token })).status, 401, "deactivated staff token rejected");
+  assert.equal((await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } })).status, 403);
+});
+
+test("partner inventory: writes are scoped to own products", async () => {
+  resetLimiter("partner_register", "partner_login");
+  const P = await approvedPartner("inv");
+  const created = await api("POST", "/api/v1/partner/products", { token: P.token, body: { domain: "CAR", title: `E2E 차량 ${rnd()}`, city: "제주", price: 79000 } });
+  const id = created.data.id;
+  const day = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+  assert.equal((await api("PUT", "/api/v1/partner/inventory", { token: P.token, body: { domain: "CAR", itemId: "ptn_prod_nope", serviceDate: day, allocatedUnits: 3 } })).status, 404);
+  const put = await api("PUT", "/api/v1/partner/inventory", { token: P.token, body: { domain: "CAR", itemId: id, serviceDate: day, allocatedUnits: 3, priceOverrideMinor: 69000 } });
+  assert.equal(put.status, 200, JSON.stringify(put.data));
+  const month = day.slice(0, 7);
+  const got = await api("GET", `/api/v1/partner/inventory?month=${month}&itemId=${id}`, { token: P.token });
+  assert.ok(got.data.inventory.some((r) => r.service_date === day && r.allocated_units === 3 && r.price_override_minor === 69000));
+});
+
+test("pagination: list endpoints return stable pages with totals", async () => {
+  resetLimiter("partner_register", "partner_login");
+  const p1 = await api("GET", "/api/v1/admin/bookings?page=1&pageSize=2", { token: ADMIN });
+  assert.equal(p1.status, 200);
+  assert.equal(p1.data.page, 1);
+  assert.ok(p1.data.total >= p1.data.bookings.length);
+  assert.ok(p1.data.totalPages >= 1);
+  if (p1.data.total > 2) {
+    const p2 = await api("GET", "/api/v1/admin/bookings?page=2&pageSize=2", { token: ADMIN });
+    const ids1 = new Set(p1.data.bookings.map((b) => b.id));
+    assert.ok(p2.data.bookings.every((b) => !ids1.has(b.id)), "pages do not overlap");
+  }
+  for (const path of ["/api/v1/admin/users?page=1&pageSize=5", "/api/v1/admin/partners?page=1&pageSize=5", "/api/v1/admin/tickets?page=1&pageSize=5"]) {
+    const r = await api("GET", path, { token: ADMIN });
+    assert.equal(r.status, 200, path);
+    assert.equal(typeof r.data.total, "number", `${path} exposes total`);
+    assert.equal(typeof r.data.totalPages, "number", `${path} exposes totalPages`);
+  }
+  const P = await approvedPartner("pg");
+  const o = await api("GET", "/api/v1/partner/orders?page=1&pageSize=5", { token: P.token });
+  assert.equal(typeof o.data.total, "number");
+  const f = await api("GET", "/api/v1/partner/orders?status=CANCELLED,REFUNDED", { token: P.token });
+  assert.ok((f.data.orders || []).every((x) => ["CANCELLED", "REFUNDED"].includes(x.status)));
+});
+
+test("promotions: operators issue codes that quotes honor", async () => {
+  assert.equal((await api("POST", "/api/v1/admin/promotions", { token: ADMIN, body: { code: "x", title: "t", discountType: "FIXED_AMOUNT", discountValue: 1000 } })).status, 400);
+  assert.equal((await api("POST", "/api/v1/admin/promotions", { token: ADMIN, body: { code: "E2E-BAD", title: "t", discountType: "PERCENTAGE", discountValue: 150 } })).status, 400);
+  assert.equal((await api("POST", "/api/v1/admin/promotions", { token: ADMIN, body: { code: "E2E-BAD", title: "t", discountType: "FIXED_AMOUNT", discountValue: 1000, validFrom: day(10), validUntil: day(5) } })).status, 400);
+  const code = `E2E-${Date.now().toString(36).toUpperCase()}${rnd().slice(0, 4).toUpperCase()}`;
+  const created = await api("POST", "/api/v1/admin/promotions", { token: ADMIN, body: { code, title: "E2E 10% 쿠폰", discountType: "PERCENTAGE", discountValue: 10, minOrderAmountKrw: 0, maxDiscountKrw: 5000, validFrom: day(0), validUntil: day(30) } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  assert.equal((await api("POST", "/api/v1/admin/promotions", { token: ADMIN, body: { code, title: "dup", discountType: "FIXED_AMOUNT", discountValue: 1 } })).status, 409);
+  const pub = await api("GET", "/api/v1/promotions");
+  assert.ok(pub.data.promotions.some((p) => p.code === code), "active code publicly listed");
+  const q = await quote(A.token, { promotionCode: code });
+  assert.ok(q.data.quote.discountMinor > 0, "quote honors the new code");
+  assert.ok(q.data.quote.totalMinor < 605000);
+});
+
+test("partner password reset: forgot issues single-use links for owners and staff", async (t) => {
+  resetLimiter("partner_register", "partner_login", "partner_forgot");
+  const P = await approvedPartner("rst");
+  const ownerEmail = `qa_ptn_rst_${rnd()}@local.test`;
+  const reg = await api("POST", "/api/v1/partner/register", { body: { email: ownerEmail, password: "Passw0rd-QA-1", companyName: "QA reset", businessNumber: "000-00-00000" } });
+  sql(`UPDATE partner_profiles SET status = 'ACTIVE' WHERE partner_id = '${reg.data.partnerId}'`);
+  assert.equal((await api("POST", "/api/v1/partner/forgot-password", { body: { email: "nobody@local.test" } })).status, 200, "no enumeration");
+  assert.equal((await api("POST", "/api/v1/partner/forgot-password", { body: { email: ownerEmail } })).status, 200);
+  const outbox = await api("GET", "/api/v1/auth/dev-outbox");
+  const row = outbox.data.outbox.find((o) => o.recipient === ownerEmail && o.template === "PASSWORD_RESET");
+  assert.ok(row, "reset email queued");
+  const token = new URL(JSON.parse(row.payload_json).link).searchParams.get("token");
+  assert.ok(token);
+  assert.equal((await api("POST", "/api/v1/partner/reset-password", { body: { token, newPassword: "short" } })).status, 400);
+  assert.equal((await api("POST", "/api/v1/partner/reset-password", { body: { token, newPassword: "BrandNew-Pass-9" } })).status, 200);
+  assert.equal((await api("POST", "/api/v1/partner/login", { body: { email: ownerEmail, password: "Passw0rd-QA-1" } })).status, 401);
+  assert.equal((await api("POST", "/api/v1/partner/login", { body: { email: ownerEmail, password: "BrandNew-Pass-9" } })).status, 200);
+  assert.equal((await api("POST", "/api/v1/partner/reset-password", { body: { token, newPassword: "Another-Pass-9" } })).status, 400, "single use");
+  const staffEmail = `rst_stf_${rnd()}@local.test`;
+  await api("POST", "/api/v1/partner/staff", { token: P.token, body: { email: staffEmail, fullName: "리셋 직원", password: "Passw0rd-QA-1" } });
+  assert.equal((await api("POST", "/api/v1/partner/forgot-password", { body: { email: staffEmail } })).status, 200);
+  const outbox2 = await api("GET", "/api/v1/auth/dev-outbox");
+  const row2 = outbox2.data.outbox.find((o) => o.recipient === staffEmail);
+  const token2 = new URL(JSON.parse(row2.payload_json).link).searchParams.get("token");
+  assert.equal((await api("POST", "/api/v1/partner/reset-password", { body: { token: token2, newPassword: "StaffNew-Pass-9" } })).status, 200);
+  assert.equal((await api("POST", "/api/v1/partner/login", { body: { email: staffEmail, password: "StaffNew-Pass-9" } })).status, 200);
+});
+
+test("partner order detail: own booking with payments and history, PII contained", async () => {
+  resetLimiter("partner_register", "partner_login");
+  const P = await approvedPartner("ord");
+  const Q = await approvedPartner("ord2");
+  const { b } = await fullHotelBooking(A.token);
+  sql(`UPDATE bookings SET partner_id = '${P.id}' WHERE id = '${b.id}'`);
+  assert.equal((await api("GET", `/api/v1/partner/orders/${b.id}`, { token: Q.token })).status, 404);
+  const d = await api("GET", `/api/v1/partner/orders/${b.id}`, { token: P.token });
+  assert.equal(d.status, 200, JSON.stringify(d.data));
+  assert.equal(d.data.booking.id, b.id);
+  assert.ok(d.data.booking.customerNameMasked && !("customer_email" in d.data.booking), "email excluded");
+  assert.ok(!("customer_phone" in d.data.booking), "phone excluded");
+  assert.ok(Array.isArray(d.data.payments) && d.data.payments.length > 0);
+  assert.ok(!("raw_json" in d.data.payments[0]), "PG raw payload excluded");
+  assert.ok(Array.isArray(d.data.history) && d.data.history.length > 0);
+  assert.equal((await api("GET", "/api/v1/partner/orders/bkg_missing", { token: P.token })).status, 404);
+});
+
+test("wishlist: save, list and remove sync per user", async () => {
+  assert.equal((await api("POST", "/api/v1/wishlist", { body: { itemId: "htl_seoul_01" } })).status, 401);
+  assert.equal((await api("POST", "/api/v1/wishlist", { token: A.token, body: {} })).status, 400);
+  const add = await api("POST", "/api/v1/wishlist", { token: A.token, body: { domainType: "HOTEL", itemId: "htl_seoul_01", itemTitle: "E2E 찜", priceKrw: 550000 } });
+  assert.equal(add.status, 201, JSON.stringify(add.data));
+  const mine = await api("GET", "/api/v1/wishlist", { token: A.token });
+  assert.ok(mine.data.wishlist.some((w) => w.item_id === "htl_seoul_01"));
+  const other = await api("GET", "/api/v1/wishlist", { token: B.token });
+  assert.ok(!other.data.wishlist.some((w) => w.item_id === "htl_seoul_01"), "wishlists are per-user");
+  assert.equal((await api("DELETE", "/api/v1/wishlist/htl_seoul_01", { token: A.token })).status, 200);
+  const after = await api("GET", "/api/v1/wishlist", { token: A.token });
+  assert.ok(!after.data.wishlist.some((w) => w.item_id === "htl_seoul_01"));
+});
+
+test("coins: spend at checkout, restore on cancel; claimed coupons consumed", async () => {
+  const C = await register("coin");
+  const me = async () => (await api("GET", "/api/v1/auth/me", { token: C.token })).data;
+  const grant = await api("PATCH", `/api/v1/admin/users/${C.id}`, { token: ADMIN, body: { coinAdjustment: 20000, note: "e2e coins" } });
+  assert.equal(grant.status, 200, JSON.stringify(grant.data));
+  assert.equal(grant.data.coinBalance, 20000);
+  const code = `E2E-C${Date.now().toString(36).toUpperCase()}${rnd().slice(0, 4).toUpperCase()}`;
+  const created = await api("POST", "/api/v1/admin/promotions", { token: ADMIN, body: { code, title: "E2E 코인쿠폰", discountType: "FIXED_AMOUNT", discountValue: 1000, minOrderAmountKrw: 0, validFrom: day(0), validUntil: day(30) } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  assert.equal((await api("POST", "/api/v1/user/coupons/claim", { token: C.token, body: { code } })).status, 200);
+
+  assert.equal((await quote(C.token, { coinAmount: 20001 })).data.code, "INSUFFICIENT_COINS");
+  assert.equal((await quote(C.token, { coinAmount: -5 })).status, 400);
+  const qr = await quote(C.token, { promotionCode: code, coinAmount: 5000 });
+  assert.equal(qr.status, 201, JSON.stringify(qr.data));
+  const q = qr.data.quote;
+  assert.equal(q.coinsMinor, 5000);
+  assert.equal(q.totalMinor, q.grossMinor - 5000, "cash due drops by the coin amount");
+  assert.ok(q.discountMinor >= 6000, "promo 1000 + coins 5000 both in discount");
+
+  const b = (await book(C.token, q)).data.booking;
+  assert.equal(b.coinsUsedMinor, 5000);
+  assert.equal((await me()).tripCoins ?? (await me()).trip_coins, 15000, "coins deducted at booking");
+  assert.equal(sql(`SELECT is_used AS u FROM user_coupons WHERE user_id = '${C.id}' AND coupon_code = '${code}'`)[0].u, 1, "claimed coupon consumed");
+  assert.equal(sql(`SELECT delta AS d FROM coin_ledger WHERE user_id = '${C.id}' AND reason = 'COIN_SPENT'`).length, 1);
+
+  // Unpaid cancel restores coins too.
+  const q2 = (await quote(C.token, { coinAmount: 3000 })).data.quote;
+  const b2 = (await book(C.token, q2)).data.booking;
+  assert.equal((await me()).tripCoins ?? (await me()).trip_coins, 12000);
+  assert.equal((await api("POST", `/api/v1/bookings/${b2.id}/cancel`, { token: C.token })).data.booking.status, "CANCELLED");
+  assert.equal((await me()).tripCoins ?? (await me()).trip_coins, 15000);
+
+  const p = await pay(C.token, b);
+  assert.equal(p.data.booking.status, "VOUCHER_ISSUED");
+  const c = await api("POST", `/api/v1/bookings/${b.id}/cancel`, { token: C.token });
+  assert.equal(c.data.booking.status, "REFUNDED");
+  assert.equal((await me()).tripCoins ?? (await me()).trip_coins, 20000, "coins fully restored on cancel");
+  assert.equal(sql(`SELECT COALESCE(SUM(delta), 0) AS s FROM coin_ledger WHERE user_id = '${C.id}'`)[0].s, 20000, "ledger nets to the grant");
 });
 
 test("ledger: every journal balanced; no payment/refund/deposit mismatch (run last)", async () => {

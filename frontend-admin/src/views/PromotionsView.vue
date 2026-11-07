@@ -25,6 +25,41 @@ function state(p: any): { label: string; tone: any } {
 }
 const benefit = (p: any) => (p.discount_type === 'PERCENTAGE' ? `${num(p.discount_value)}% 할인${p.max_discount_krw ? ` (최대 ${krw(p.max_discount_krw)})` : ''}` : `${krw(p.discount_value)} 할인`)
 
+const showCreate = ref(false)
+const form = ref({ code: '', title: '', discountType: 'FIXED_AMOUNT', discountValue: '', minOrderAmountKrw: '', maxDiscountKrw: '', validFrom: '', validUntil: '' })
+const createBusy = ref(false)
+const createError = ref('')
+
+function openCreate() {
+  form.value = { code: '', title: '', discountType: 'FIXED_AMOUNT', discountValue: '', minOrderAmountKrw: '', maxDiscountKrw: '', validFrom: '', validUntil: '' }
+  createError.value = ''
+  showCreate.value = true
+}
+
+async function create() {
+  createBusy.value = true
+  createError.value = ''
+  try {
+    const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
+    await api('/admin/promotions', {
+      method: 'POST',
+      json: {
+        code: form.value.code,
+        title: form.value.title,
+        discountType: form.value.discountType,
+        discountValue: num(form.value.discountValue),
+        minOrderAmountKrw: num(form.value.minOrderAmountKrw),
+        maxDiscountKrw: num(form.value.maxDiscountKrw),
+        validFrom: form.value.validFrom || undefined,
+        validUntil: form.value.validUntil || undefined
+      }
+    })
+    toast(`${form.value.code.toUpperCase()} 코드를 발급했어요.`)
+    showCreate.value = false
+    list.reload()
+  } catch (e) { createError.value = (e as Error).message } finally { createBusy.value = false }
+}
+
 const busy = ref('')
 async function toggle(p: any) {
   const next = !p.is_active
@@ -40,7 +75,9 @@ async function toggle(p: any) {
 
 <template>
   <div>
-    <PageHeader title="프로모션" description="할인 코드를 켜고 꺼요. 코드는 견적 단계에서 서버가 검증해 적용해요." />
+    <PageHeader title="프로모션" description="할인 코드를 발급하고 켜고 꺼요. 코드는 견적 단계에서 서버가 검증해 적용해요.">
+      <button type="button" class="btn-primary btn-sm" @click="openCreate">새 코드 발급</button>
+    </PageHeader>
     <StatePanel :state="list.state.value" :error="list.error.value" :empty="!list.data.value.length" empty-text="등록된 프로모션이 없어요." @retry="list.reload()">
       <div class="table-wrap">
         <table class="table">
@@ -57,7 +94,32 @@ async function toggle(p: any) {
           </tbody>
         </table>
       </div>
-      <p class="mt-2 text-2xs text-ink-subtle">새 코드 발급은 아직 화면에서 지원하지 않아요.</p>
     </StatePanel>
+    <div v-if="showCreate" class="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" role="dialog" aria-modal="true" aria-label="새 프로모션 코드 발급">
+      <form class="card w-full max-w-md space-y-4 p-6" @submit.prevent="create">
+        <h2 class="text-base font-bold text-ink">새 코드 발급</h2>
+        <p v-if="createError" class="rounded-xl bg-danger-soft px-3 py-2 text-xs font-semibold text-danger" role="alert">{{ createError }}</p>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="label" for="promo-code">코드 *</label><input id="promo-code" v-model="form.code" class="input font-mono uppercase" required minlength="4" maxlength="32" placeholder="SUMMER-10" /></div>
+          <div><label class="label" for="promo-title">제목 *</label><input id="promo-title" v-model="form.title" class="input" required maxlength="200" placeholder="여름 성수기 할인" /></div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="label" for="promo-type">할인 방식</label><select id="promo-type" v-model="form.discountType" class="input"><option value="FIXED_AMOUNT">정액 (원)</option><option value="PERCENTAGE">정률 (%)</option></select></div>
+          <div><label class="label" for="promo-value">할인값 *</label><input id="promo-value" v-model="form.discountValue" type="number" min="0" step="any" class="input tabular" required placeholder="10000" /></div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="label" for="promo-min">최소 주문금액 (원)</label><input id="promo-min" v-model="form.minOrderAmountKrw" type="number" min="0" step="any" class="input tabular" placeholder="0" /></div>
+          <div><label class="label" for="promo-max">최대 할인액 (원)</label><input id="promo-max" v-model="form.maxDiscountKrw" type="number" min="0" step="any" class="input tabular" placeholder="0 = 상한 없음" /></div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="label" for="promo-from">시작일</label><input id="promo-from" v-model="form.validFrom" type="date" class="input" /></div>
+          <div><label class="label" for="promo-until">종료일</label><input id="promo-until" v-model="form.validUntil" type="date" class="input" /></div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" class="btn-secondary btn-sm" @click="showCreate = false">취소</button>
+          <button type="submit" class="btn-primary btn-sm" :disabled="createBusy">{{ createBusy ? '발급 중…' : '발급하기' }}</button>
+        </div>
+      </form>
+    </div>
   </div>
 </template>

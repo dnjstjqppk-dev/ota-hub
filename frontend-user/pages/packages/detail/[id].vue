@@ -35,7 +35,7 @@ useHead(() => {
   <DetailShell :state="state" list-path="/packages" list-label="항공+호텔 둘러보기" @retry="reload">
     <div v-if="p" class="grid gap-6 lg:grid-cols-[1fr_360px]">
       <div class="min-w-0 space-y-8">
-        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '항공+호텔', to: '/packages' }, { label: p.destination_city || p.title }]" :title="p.title" :subtitle="p.destination_city ? '목적지 ' + p.destination_city : ''" :image="p.hero_image_url || p.thumbnail_url || null" image-icon="package" :facts="[]" testid="package-detail">
+        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '항공+호텔', to: '/packages' }, { label: p.destination_city || p.title }]" :title="p.title" :subtitle="p.destination_city ? '목적지 ' + p.destination_city : ''" :image="p.hero_image_url || p.thumbnail_url || null" image-icon="package" :facts="[]" testid="package-detail" :wishlist="{ domain: 'PACKAGE', itemId: p.id, title: p.title, priceKrw: price, thumbnailUrl: p.hero_image_url || p.thumbnail_url || null, targetUrl: $route.fullPath }">
           <template #badges><span v-if="p.badge" class="mt-3 inline-block rounded-full bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary">{{ p.badge }}</span></template>
           <p v-if="original && price && original > price" class="mt-4 text-sm text-ink-muted">
             개별 정가 합계 <span class="line-through">{{ formatKrw(original) }}</span> → 패키지가 <strong class="text-ink">{{ formatKrw(price) }}</strong>

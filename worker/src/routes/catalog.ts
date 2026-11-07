@@ -71,7 +71,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       const sortBy = url.searchParams.get("sortBy") || "recommended";
       const limit = parseInt(url.searchParams.get("limit") || "50", 10);
 
-      let q = "SELECT * FROM hotels WHERE 1=1";
+      let q = "SELECT * FROM hotels WHERE is_active = 1";
       const p: any[] = [];
       if (city) {
         q += " AND (city LIKE ? ESCAPE '\\' OR name_ko LIKE ? ESCAPE '\\' OR name_en LIKE ? ESCAPE '\\' OR neighborhood LIKE ? ESCAPE '\\')";
@@ -124,8 +124,8 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
     }
     if (path.startsWith("/api/v1/hotels/")) {
       const id = path.replace("/api/v1/hotels/", "");
-      const row = await env.DB.prepare("SELECT * FROM hotels WHERE id = ?").bind(id).first();
-      if (!row) return json({ success: false, error: "Hotel not found", code: "NOT_FOUND" }, 404);
+      const row = await env.DB.prepare("SELECT * FROM hotels WHERE id = ?").bind(id).first<any>();
+      if (!row || row.is_active === 0) return json({ success: false, error: "Hotel not found", code: "NOT_FOUND" }, 404);
       return json({ success: true, data: annotate([formatHotel(row)], bmap, "ptn_htl_01")[0] });
     }
 
@@ -254,7 +254,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       const transmission = url.searchParams.get("transmission") || "";
       const sortBy = url.searchParams.get("sortBy") || "price_asc";
 
-      let q = "SELECT * FROM cars WHERE 1=1";
+      let q = "SELECT * FROM cars WHERE is_active = 1";
       const p: any[] = [];
       if (loc) {
         q += " AND (pickup_location LIKE ? ESCAPE '\\' OR company_name LIKE ? ESCAPE '\\' OR vehicle_model LIKE ? ESCAPE '\\')";
@@ -281,8 +281,8 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
     }
     if (path.startsWith("/api/v1/cars/")) {
       const id = path.replace("/api/v1/cars/", "");
-      const row = await env.DB.prepare("SELECT * FROM cars WHERE id = ?").bind(id).first();
-      if (!row) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
+      const row = await env.DB.prepare("SELECT * FROM cars WHERE id = ?").bind(id).first<any>();
+      if (!row || row.is_active === 0) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
       return json({ success: true, data: annotate([row], bmap, "ptn_car_01")[0] });
     }
 
@@ -329,7 +329,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       const maxPrice = parseFloat(url.searchParams.get("maxPrice") || "999999999");
       const sortBy = url.searchParams.get("sortBy") || "recommended";
 
-      let q = "SELECT * FROM activities WHERE 1=1";
+      let q = "SELECT * FROM activities WHERE is_active = 1";
       const p: any[] = [];
       if (qKeyword) {
         q += " AND (title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR city LIKE ? ESCAPE '\\')";
@@ -375,8 +375,8 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
     }
     if (path.startsWith("/api/v1/activities/")) {
       const id = path.replace("/api/v1/activities/", "");
-      const row = await env.DB.prepare("SELECT * FROM activities WHERE id = ?").bind(id).first();
-      if (!row) return json({ success: false, error: "Activity not found", code: "NOT_FOUND" }, 404);
+      const row = await env.DB.prepare("SELECT * FROM activities WHERE id = ?").bind(id).first<any>();
+      if (!row || row.is_active === 0) return json({ success: false, error: "Activity not found", code: "NOT_FOUND" }, 404);
       let included: any[] = [];
       try { included = JSON.parse((row as any).packages_json || '[]'); } catch (e) {}
       return json({

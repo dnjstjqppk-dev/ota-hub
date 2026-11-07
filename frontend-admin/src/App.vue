@@ -26,6 +26,7 @@ const NAV = [
     { path: '/url-ingest', label: 'URL 상품 수집', icon: 'link' },
     { path: '/community', label: '커뮤니티', icon: 'chat' },
     { path: '/support', label: '공지사항', icon: 'megaphone' },
+    { path: '/tickets', label: '1:1 문의', icon: 'support' },
     { path: '/promotions', label: '프로모션', icon: 'gift' }
   ] },
   { group: '재무·설정', items: [

@@ -46,7 +46,7 @@ useHead(() => {
   <DetailShell :state="state" list-path="/things-to-do" list-label="투어·티켓 둘러보기" @retry="reload">
     <div v-if="a" class="grid gap-6 lg:grid-cols-[1fr_360px]">
       <div class="min-w-0 space-y-8">
-        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '투어·티켓', to: '/things-to-do' }, { label: a.city || a.title }]" :title="a.title" :image="a.image_url || a.thumbnail_url || null" image-icon="ticket" :facts="facts" testid="activity-detail">
+        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '투어·티켓', to: '/things-to-do' }, { label: a.city || a.title }]" :title="a.title" :image="a.image_url || a.thumbnail_url || null" image-icon="ticket" :facts="facts" testid="activity-detail" :wishlist="{ domain: 'ACTIVITY', itemId: a.id, title: a.title, priceKrw: a.price_krw, thumbnailUrl: a.image_url || a.thumbnail_url || null, targetUrl: $route.fullPath }">
           <template #badges>
             <p v-if="a.review_score" class="mt-2 flex items-center gap-1.5 text-sm text-ink-muted">
               <span class="rounded-lg bg-primary px-2 py-0.5 text-sm font-bold text-primary-ink tabular">{{ Number(a.review_score).toFixed(1) }}</span>

@@ -12,6 +12,7 @@ defineProps<{
   imageIcon?: string
   facts: [string, string][]
   testid?: string
+  wishlist?: { domain: 'HOTEL' | 'FLIGHT' | 'TRAIN' | 'CAR' | 'TRANSFER' | 'ACTIVITY' | 'PACKAGE'; itemId: string; title: string; priceKrw?: number | null; thumbnailUrl?: string | null; targetUrl: string } | null
 }>()
 </script>
 
@@ -27,7 +28,18 @@ defineProps<{
     <SmartImg v-if="image !== undefined" :src="image" :alt="title" :icon="imageIcon || 'map-pin'" img-class="h-56 w-full object-cover sm:h-72 md:h-80" />
     <div class="p-5 sm:p-7">
       <p v-if="eyebrow" class="text-sm font-semibold text-ink-muted">{{ eyebrow }}</p>
-      <h1 class="mt-1 text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ title }}</h1>
+      <div class="mt-1 flex flex-wrap items-start justify-between gap-3">
+        <h1 class="min-w-0 flex-1 text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ title }}</h1>
+        <WishlistButton
+          v-if="wishlist"
+          :domain="wishlist.domain"
+          :item-id="wishlist.itemId"
+          :title="wishlist.title"
+          :price-krw="wishlist.priceKrw"
+          :thumbnail-url="wishlist.thumbnailUrl"
+          :target-url="wishlist.targetUrl"
+        />
+      </div>
       <p v-if="subtitle" class="mt-1 text-sm text-ink-muted">{{ subtitle }}</p>
       <slot name="badges" />
       <dl v-if="facts.length" class="mt-6 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2">

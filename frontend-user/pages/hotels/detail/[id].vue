@@ -185,6 +185,7 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
           <span class="rounded-xl bg-primary px-2.5 py-1.5 text-lg font-bold text-primary-ink tabular">{{ score.toFixed(1) }}</span>
           <span class="text-xs leading-tight text-ink-muted">5점 만점<br /><template v-if="hotel.review_count">평가 {{ Number(hotel.review_count).toLocaleString('ko-KR') }}건</template></span>
         </div>
+        <WishlistButton domain="HOTEL" :item-id="hotel.id" :title="hotel.name_ko || hotel.name" :price-krw="minRoomPrice" :thumbnail-url="gallery[0] || null" :target-url="$route.fullPath" />
         <PriceAlertButton domain="HOTEL" :item-id="hotel.id" :label="hotel.name_ko || hotel.name" :current-price="minRoomPrice" />
       </div>
     </header>

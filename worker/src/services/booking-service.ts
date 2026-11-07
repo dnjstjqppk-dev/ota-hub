@@ -21,6 +21,22 @@ import { adapterFor, type Simulation, type SupplierContext } from "../suppliers/
 import { getPaymentProvider, requirePaymentProvider } from "../payments/provider.ts";
 import { createOrderSettlement } from "./marketplace-service.ts";
 import { flushOutbox } from "./email-service.ts";
+import { flushPartnerWebhooks, hookEnqueueStmts, loadPartnerHook } from "./webhook-service.ts";
+
+/** Snapshot stored with a partner order-event delivery (read at dispatch time). */
+function hookSnapshot(b: BookingRow, status: string, extra: Record<string, unknown> = {}) {
+  return {
+    booking_id: b.id,
+    booking_number: b.booking_number || null,
+    domain_type: b.domain_type || null,
+    item_id: b.item_id || null,
+    status,
+    total_minor: Number(b.total_minor || 0),
+    currency: "KRW",
+    occurred_at: new Date().toISOString(),
+    ...extra,
+  };
+}
 
 const QUOTE_TTL_MS = 15 * 60_000;
 const PAYMENT_WINDOW_MS = 15 * 60_000;
@@ -33,6 +49,7 @@ type Actor = { type: "CUSTOMER" | "SYSTEM" | "ADMIN" | "SUPPLIER" | "PAYMENT_PRO
 export interface BookingRow {
   id: string;
   user_id: string;
+  partner_id: string | null;
   booking_number: string;
   domain_type: Domain;
   item_id: string;
@@ -43,6 +60,7 @@ export interface BookingRow {
   paid_minor: number;
   refunded_minor: number;
   discount_amount_krw: number;
+  trip_coins_used: number;
   cancellation_fee_minor: number;
   currency: string;
   payment_status: string;
@@ -90,6 +108,22 @@ function transition(
     db.prepare(sql).bind(to, reason, ...cols.map((c) => set[c]), b.id),
     db.prepare("INSERT INTO booking_status_history (id, booking_id, from_status, to_status, actor_type, actor_id, reason) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .bind(newId("bsh"), b.id, b.status, to, actor.type, actor.id, reason),
+  ];
+}
+
+/**
+ * Coins are a platform-funded discount (1 coin = 1 KRW). They reduce the cash
+ * due and sit inside the discount leg, so supplier settlement (gross-based)
+ * and the ledger need no coin-specific accounts. Every movement is appended
+ * to coin_ledger; the balance column is only ever changed together with one.
+ */
+function coinRestoreStmts(db: D1Database, b: Pick<BookingRow, "id" | "user_id" | "trip_coins_used">): Stmt[] {
+  const used = Number(b.trip_coins_used || 0);
+  if (!Number.isSafeInteger(used) || used <= 0) return [];
+  return [
+    db.prepare("UPDATE users SET trip_coins = trip_coins + ? WHERE id = ?").bind(used, b.user_id),
+    db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, 'COIN_REFUNDED', ?)")
+      .bind(newId("coin"), b.user_id, used, b.id),
   ];
 }
 
@@ -262,6 +296,18 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
   const inbound = await loadInbound(env, domain, params);
   const promo = await loadPromotion(env, body.promotionCode ? str(body.promotionCode, 40) : null);
   const q = priceOrder(product, inbound, params, promo);
+  const coinRaw = body.coinAmount === undefined || body.coinAmount === null || body.coinAmount === "" ? 0 : Number(body.coinAmount);
+  if (!Number.isSafeInteger(coinRaw) || coinRaw < 0) throw new HttpError(400, "INVALID_COIN_AMOUNT", "코인 사용 금액이 올바르지 않습니다.");
+  let coinsMinor = 0;
+  if (coinRaw > 0) {
+    const bal = await env.DB.prepare("SELECT trip_coins FROM users WHERE id = ?").bind(user.id).first<{ trip_coins: number }>();
+    const balance = Number(bal?.trip_coins || 0);
+    if (coinRaw > balance) throw new HttpError(400, "INSUFFICIENT_COINS", "보유 코인이 부족합니다.", { balance });
+    if (coinRaw > q.totalMinor) throw new HttpError(400, "COINS_EXCEED_TOTAL", "코인 사용액은 결제 금액을 초과할 수 없습니다.", { maxUsable: q.totalMinor });
+    coinsMinor = coinRaw;
+  }
+  const cashDueMinor = q.totalMinor - coinsMinor;
+  const discountMinor = q.discountMinor + coinsMinor;
   const title = inbound ? `왕복 · ${product.title} / ${inbound.title}` : product.title;
 
   const need = holdQuantity(domain, params);
@@ -272,14 +318,14 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
   }
 
   const displayCurrency = str(body.displayCurrency || "KRW", 3).toUpperCase();
-  let displayTotal = q.totalMinor;
+  let displayTotal = cashDueMinor;
   let fxRate: number | null = null;
   if (displayCurrency !== "KRW") {
     const rates = await env.DB.prepare("SELECT currency, rate_to_krw FROM fx_rates").all<{ currency: string; rate_to_krw: number }>();
     const table: Record<string, number> = {};
     for (const r of rates.results || []) table[r.currency] = Number(r.rate_to_krw);
     if (table[displayCurrency]) {
-      displayTotal = convertMinor(q.totalMinor, "KRW", displayCurrency, table);
+      displayTotal = convertMinor(cashDueMinor, "KRW", displayCurrency, table);
       fxRate = table[displayCurrency];
     }
   }
@@ -287,11 +333,11 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
   const id = newId("qt");
   const expiresAt = new Date(Date.now() + QUOTE_TTL_MS).toISOString();
   await env.DB.prepare(
-    `INSERT INTO quotes (id, user_id, domain_type, item_id, unit_id, supplier_id, title, currency, base_minor, tax_minor, fee_minor, discount_minor, total_minor,
+    `INSERT INTO quotes (id, user_id, domain_type, item_id, unit_id, supplier_id, title, currency, base_minor, tax_minor, fee_minor, discount_minor, total_minor, coins_minor,
       display_currency, display_total_minor, fx_rate_snapshot, promotion_code, lines_json, params_json, cancellation_policy_json, service_start, service_end, priced_units, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'KRW', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'KRW', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
-    id, user.id, domain, itemId, product.unitId, product.supplierId, title, q.baseMinor, q.taxMinor, q.feeMinor, q.discountMinor, q.totalMinor,
+    id, user.id, domain, itemId, product.unitId, product.supplierId, title, q.baseMinor, q.taxMinor, q.feeMinor, discountMinor, cashDueMinor, coinsMinor,
     fxRate ? displayCurrency : "KRW", displayTotal, fxRate, q.promotionCode, JSON.stringify(q.lines), JSON.stringify(params), JSON.stringify(q.cancellationPolicy),
     q.serviceStart, q.serviceEnd, q.pricedUnits, expiresAt,
   ).run();
@@ -300,7 +346,8 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
     quoteId: id, expiresAt, domain, itemId, unitId: product.unitId, title, currency: "KRW",
     roundTrip: Boolean(inbound), returnItemId: inbound?.itemId ?? null, legs: q.legs ?? null,
     ratePlanId: product.ratePlanId ?? null,
-    lines: q.lines, baseMinor: q.baseMinor, taxMinor: q.taxMinor, feeMinor: q.feeMinor, discountMinor: q.discountMinor, totalMinor: q.totalMinor,
+    lines: q.lines, baseMinor: q.baseMinor, taxMinor: q.taxMinor, feeMinor: q.feeMinor, discountMinor, totalMinor: cashDueMinor,
+    coinsMinor, grossMinor: q.totalMinor,
     display: fxRate ? { currency: displayCurrency, totalMinor: displayTotal, fxRateToKrw: fxRate, note: "표시용 환산 금액이며 실제 결제는 KRW로 청구됩니다." } : null,
     serviceStart: q.serviceStart, serviceEnd: q.serviceEnd, cancellationPolicy: q.cancellationPolicy,
     travelers: params.travelers, rooms: params.rooms ?? null,
@@ -417,9 +464,11 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   const bk = bookabilityOf(env, supplier);
   if (!bk.bookable) throw new HttpError(409, "NOT_DIRECTLY_BOOKABLE", "이 상품은 현재 직접 예약할 수 없습니다.", { reason: bk.reason });
   const fresh = priceOrder(product, inbound, params, await loadPromotion(env, quote.promotion_code));
-  if (fresh.totalMinor !== quote.total_minor) {
+  const coinsMinor = Number(quote.coins_minor || 0);
+  const freshCashDue = fresh.totalMinor - coinsMinor;
+  if (freshCashDue !== quote.total_minor) {
     await env.DB.prepare("UPDATE quotes SET status = 'EXPIRED' WHERE id = ?").bind(quote.id).run();
-    throw new HttpError(409, "PRICE_CHANGED", "가격이 변경되었습니다. 변경된 금액을 확인해주세요.", { previousTotalMinor: quote.total_minor, newTotalMinor: fresh.totalMinor });
+    throw new HttpError(409, "PRICE_CHANGED", "가격이 변경되었습니다. 변경된 금액을 확인해주세요.", { previousTotalMinor: quote.total_minor, newTotalMinor: freshCashDue });
   }
   const entity = await activeEntity(env);
   if (!entity) throw new HttpError(503, "SALES_NOT_ENABLED", "판매 주체(사업자) 정보가 활성화되지 않았습니다.");
@@ -443,20 +492,26 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   const db = env.DB;
   const id = newId("bkg");
   const number = newBookingNumber();
+  // Deduct coins before the booking batch so a lost balance race never creates
+  // an underfunded booking; compensated below if the batch itself fails.
+  if (coinsMinor > 0) {
+    const spent = await db.prepare("UPDATE users SET trip_coins = trip_coins - ? WHERE id = ? AND trip_coins >= ?").bind(coinsMinor, user.id, coinsMinor).run();
+    if (!spent.meta.changes) throw new HttpError(409, "INSUFFICIENT_COINS", "보유 코인이 부족합니다. 금액을 다시 확인해주세요.");
+  }
   const lockExpires = new Date(Date.now() + PAYMENT_WINDOW_MS).toISOString();
   const stmts: Stmt[] = [
     db.prepare(
       `INSERT INTO bookings (id, user_id, partner_id, booking_number, domain_type, item_id, title, base_amount_krw, tax_amount_krw, service_fee_krw, discount_amount_krw,
         total_price, currency, status, customer_name, customer_email, customer_phone, details_json, inventory_lock_expires_at,
         quote_id, entity_id, supplier_id, total_minor, payment_status, supplier_status, idempotency_key, version, service_start, service_end,
-        cancellation_policy_json, payment_mode, transaction_model)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'KRW', 'AWAITING_PAYMENT', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNPAID', 'NOT_REQUESTED', ?, 0, ?, ?, ?, ?, ?)`,
+        cancellation_policy_json, payment_mode, transaction_model, trip_coins_used)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'KRW', 'AWAITING_PAYMENT', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNPAID', 'NOT_REQUESTED', ?, 0, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id, user.id, supplier.id, number, quote.domain_type, quote.item_id, quote.title, quote.base_minor, quote.tax_minor, quote.fee_minor, quote.discount_minor,
       quote.total_minor, contactName, contactEmail, contactPhone,
       JSON.stringify({ travelers: params.travelers, rooms: params.rooms ?? null, simulation, specialRequests: str(body.specialRequests, 500) }),
       lockExpires, quote.id, entity.id, supplier.id, quote.total_minor, idemKey, quote.service_start, quote.service_end,
-      quote.cancellation_policy_json, bk.mode === "SIMULATED" ? "SANDBOX" : "LIVE", supplier.transaction_model,
+      quote.cancellation_policy_json, bk.mode === "SIMULATED" ? "SANDBOX" : "LIVE", supplier.transaction_model, coinsMinor,
     ),
     ...itemRows(quote, product, inbound, fresh.legs).map((it) =>
       db.prepare(
@@ -467,6 +522,14 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
     db.prepare("UPDATE quotes SET status = 'CONSUMED' WHERE id = ?").bind(quote.id),
     db.prepare("INSERT INTO booking_status_history (id, booking_id, from_status, to_status, actor_type, actor_id, reason) VALUES (?, ?, NULL, 'AWAITING_PAYMENT', 'CUSTOMER', ?, 'BOOKING_CREATED')")
       .bind(newId("bsh"), id, user.id),
+    ...(coinsMinor > 0
+      ? [db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, 'COIN_SPENT', ?)")
+          .bind(newId("coin"), user.id, -coinsMinor, id)]
+      : []),
+    // A claimed coupon is single-use: booking with its code consumes the claim.
+    ...(quote.promotion_code
+      ? [db.prepare("UPDATE user_coupons SET is_used = 1 WHERE user_id = ? AND coupon_code = ? AND is_used = 0").bind(user.id, quote.promotion_code)]
+      : []),
   ];
   for (const [i, t] of travelers.entries()) {
     const enc = t.passportNumber ? await encryptField(t.passportNumber, env.PII_ENC_KEY!) : null;
@@ -491,7 +554,21 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   } catch (e) {
     // A concurrent request with the same Idempotency-Key may have won the race.
     const winner = await env.DB.prepare("SELECT id FROM bookings WHERE user_id = ? AND idempotency_key = ?").bind(user.id, idemKey).first<{ id: string }>();
-    if (winner) return { replayed: true, booking: await serializeBooking(env, (await getBooking(env, winner.id))!, user) };
+    if (winner) {
+      if (coinsMinor > 0) {
+        // The winner already spent its own coins: return this attempt's deduct.
+        await db.prepare("UPDATE users SET trip_coins = trip_coins + ? WHERE id = ?").bind(coinsMinor, user.id).run();
+        await db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, 'COIN_SPENT_COMPENSATED', ?)")
+          .bind(newId("coin"), user.id, coinsMinor, winner.id).run();
+      }
+      return { replayed: true, booking: await serializeBooking(env, (await getBooking(env, winner.id))!, user) };
+    }
+    if (coinsMinor > 0) {
+      // No booking was created: return the pre-deducted coins.
+      await db.prepare("UPDATE users SET trip_coins = trip_coins + ? WHERE id = ?").bind(coinsMinor, user.id).run();
+      await db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, 'COIN_SPENT_COMPENSATED', ?)")
+        .bind(newId("coin"), user.id, coinsMinor, id).run();
+    }
     throw e;
   }
   return { replayed: false, booking: await serializeBooking(env, (await getBooking(env, id))!, user) };
@@ -549,12 +626,14 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
   }
 
   if (r.outcome === "CAPTURED") {
+    const hook = await loadPartnerHook(db, b.partner_id);
     await runBatch(db, [
       ...transition(db, cur, "PAYMENT_AUTHORIZED", { type: "PAYMENT_PROVIDER", id: provider.name }, null, { payment_status: "CAPTURED", paid_minor: r.amountMinor }),
       db.prepare("UPDATE payments SET status = 'CAPTURED', provider_payment_key = ?, method = ?, approved_at = ?, raw_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
         .bind(r.paymentKey, r.method, r.approvedAt, JSON.stringify(r.raw ?? null).slice(0, 8000), paymentId),
       db.prepare("UPDATE inventory_holds SET status = 'COMMITTED' WHERE booking_id = ? AND status = 'HELD'").bind(b.id),
       ...journalStmts(db, L.paymentCaptured(paymentId, r.amountMinor), cur),
+      ...hookEnqueueStmts(db, hook, "booking.created", hookSnapshot(b, "PAYMENT_AUTHORIZED", { paid_minor: r.amountMinor, payment_id: paymentId })),
     ]);
     cur = await fulfil(env, await mustGet(env, b.id));
     return { alreadyProcessed: false, booking: await serializeBooking(env, cur, user) };
@@ -735,6 +814,7 @@ export async function processRefund(env: Env, refundId: string): Promise<void> {
   const r = await provider.refund({ paymentKey: pay.provider_payment_key, amountMinor: rf.amount_minor, reason: rf.reason, idempotencyKey: rf.id });
   if (r.outcome === "SUCCEEDED") {
     const newRefunded = pay.refunded_minor + rf.amount_minor;
+    const hook = await loadPartnerHook(db, b.partner_id);
     await runBatch(db, [
       ...transition(db, b, "REFUNDED", { type: "PAYMENT_PROVIDER", id: provider.name }, null, {
         refunded_minor: b.refunded_minor + rf.amount_minor,
@@ -745,6 +825,7 @@ export async function processRefund(env: Env, refundId: string): Promise<void> {
       db.prepare("UPDATE payments SET refunded_minor = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
         .bind(newRefunded, newRefunded >= pay.amount_minor ? "REFUNDED" : "PARTIALLY_REFUNDED", pay.id),
       ...journalStmts(db, L.refundPaid(rf.id, rf.amount_minor), b),
+      ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "REFUNDED", { refunded_minor: newRefunded, refund_id: rf.id })),
     ]);
     return;
   }
@@ -772,9 +853,12 @@ export async function cancelByCustomer(env: Env, user: AuthUser, bookingId: stri
     throw new HttpError(409, "NOT_CANCELLABLE", `현재 상태(${STATUS_LABEL_KO[b.status] || b.status})에서는 취소할 수 없습니다.`);
   }
   if (b.status === "AWAITING_PAYMENT") {
+    const hook = await loadPartnerHook(db, b.partner_id);
     await runBatch(db, [
       ...transition(db, b, "CANCELLED", actor, "CANCELLED_BEFORE_PAYMENT"),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+      ...coinRestoreStmts(db, b),
+      ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "CANCELLED")),
     ]);
     return serializeBooking(env, await mustGet(env, b.id), user);
   }
@@ -805,9 +889,13 @@ export async function cancelByCustomer(env: Env, user: AuthUser, bookingId: stri
     ...journalStmts(db, L.cancellationFeeRetained(b.id, feeMinor), cur),
     db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
     db.prepare("UPDATE booking_items SET supplier_status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(b.id),
+    // The coin portion is always restored in full on cancel; any fee comes from cash.
+    ...coinRestoreStmts(db, b),
   ];
   if (refundMinor <= 0) {
-    await runBatch(db, [...transition(db, cur, "CANCELLED", { type: "SUPPLIER", id: b.supplier_id }, "CANCELLED_NO_REFUND_DUE", { supplier_status: "CANCELLED" }), ...ledger]);
+    const hook = await loadPartnerHook(db, b.partner_id);
+    await runBatch(db, [...transition(db, cur, "CANCELLED", { type: "SUPPLIER", id: b.supplier_id }, "CANCELLED_NO_REFUND_DUE", { supplier_status: "CANCELLED" }), ...ledger,
+      ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "CANCELLED"))]);
     return serializeBooking(env, await mustGet(env, b.id), user);
   }
   await runBatch(db, [...transition(db, cur, "REFUND_PENDING", { type: "SUPPLIER", id: b.supplier_id }, null, { supplier_status: "CANCELLED" }), ...ledger]);
@@ -825,6 +913,7 @@ export async function expireBooking(env: Env, b: BookingRow, reason: string): Pr
     await runBatch(env.DB, [
       ...transition(env.DB, b, "EXPIRED", { type: "SYSTEM", id: null }, reason),
       env.DB.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ? AND status = 'HELD'").bind(b.id),
+      ...coinRestoreStmts(env.DB, b),
     ]);
   } catch (e) {
     if (!(e instanceof HttpError && e.code === "CONCURRENT_MODIFICATION")) throw e;
@@ -847,11 +936,13 @@ export async function reconcilePaymentByLookup(env: Env, paymentId: string): Pro
   const b = await mustGet(env, p.booking_id);
   if (b.status !== "MANUAL_REVIEW_REQUIRED") return "SKIPPED";
   if (r.outcome === "CAPTURED" && r.amountMinor === p.amount_minor) {
+    const hook = await loadPartnerHook(env.DB, b.partner_id);
     await runBatch(env.DB, [
       ...transition(env.DB, b, "PAYMENT_AUTHORIZED", { type: "PAYMENT_PROVIDER", id: provider.name }, "RECONCILED_CAPTURED", { payment_status: "CAPTURED", paid_minor: r.amountMinor }),
       env.DB.prepare("UPDATE payments SET status = 'CAPTURED', provider_payment_key = ?, method = ?, approved_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(r.paymentKey, r.method, r.approvedAt, p.id),
       env.DB.prepare("UPDATE inventory_holds SET status = 'COMMITTED' WHERE booking_id = ? AND status = 'HELD'").bind(b.id),
       ...journalStmts(env.DB, L.paymentCaptured(p.id, r.amountMinor), b),
+      ...hookEnqueueStmts(env.DB, hook, "booking.created", hookSnapshot(b, "PAYMENT_AUTHORIZED", { paid_minor: r.amountMinor, payment_id: p.id })),
     ]);
     await fulfil(env, await mustGet(env, b.id));
     return "RECONCILED";
@@ -891,6 +982,9 @@ export async function runMaintenance(env: Env): Promise<Record<string, number>> 
   const mail = await flushOutbox(env);
   stats.emailsSent = mail.sent;
   stats.emailsPending = mail.pending;
+  const hooks = await flushPartnerWebhooks(env);
+  stats.webhooksSent = hooks.sent;
+  stats.webhooksPending = hooks.pending;
   // Ephemeral rows must not grow forever: rate-limit buckets older than any window,
   // spent txn-guard rows, and dead password-reset tokens.
   const epoch = Math.floor(Date.now() / 1000);
@@ -985,6 +1079,7 @@ export async function serializeBooking(env: Env, b: BookingRow, viewer: AuthUser
     totalMinor: b.total_minor,
     paidMinor: b.paid_minor,
     refundedMinor: b.refunded_minor,
+    coinsUsedMinor: Number(b.trip_coins_used || 0),
     cancellationFeeMinor: b.cancellation_fee_minor,
     serviceStart: b.service_start,
     serviceEnd: b.service_end,

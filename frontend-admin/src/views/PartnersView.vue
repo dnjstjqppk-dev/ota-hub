@@ -13,6 +13,7 @@ import StatePanel from '../components/StatePanel.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import SidePanel from '../components/SidePanel.vue'
 import EntitySearch from '../components/EntitySearch.vue'
+import PageNav from '../components/PageNav.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,16 +25,26 @@ function patch(change: Record<string, string>) {
 }
 const q = computed(() => qv('q'))
 const status = computed(() => qv('status'))
+const page = computed(() => Math.max(1, parseInt(qv('page') || '1', 10) || 1))
 const draft = ref(q.value)
 watch(q, (v) => { draft.value = v })
 
+const total = ref(0)
+const totalPages = ref(1)
 const list = useResource(async () => {
   const p = new URLSearchParams()
   if (q.value) p.set('q', q.value)
   if (status.value) p.set('status', status.value)
-  return (await api(`/admin/partners?${p}`)).partners || []
+  p.set('page', String(page.value))
+  const j = await api(`/admin/partners?${p}`)
+  total.value = j.total || 0
+  totalPages.value = j.totalPages || 1
+  return j.partners || []
 }, [] as any[])
-watch([q, status], () => list.reload())
+watch([q, status, page], ([qq, s, pg], [oq, os]) => {
+  if ((qq !== oq || s !== os) && pg !== 1) patch({ page: '' })
+  else list.reload()
+})
 onMounted(list.reload)
 const suggest = async (term: string, signal: AbortSignal) => (await api(`/admin/partners?q=${encodeURIComponent(term)}&limit=8`, { signal })).partners || []
 
@@ -122,6 +133,7 @@ function submitStatus() {
           </tbody>
         </table>
       </div>
+      <PageNav :page="page" :total-pages="totalPages" :total="total" @go="(p) => patch({ page: p === 1 ? '' : String(p) })" />
     </StatePanel>
 
     <SidePanel :open="!!selected" :title="selected?.company_name || ''" :subtitle="selected?.email" @close="selected = null">

@@ -54,7 +54,6 @@ export default defineNuxtConfig({
         '/things-to-do/detail/act_fuji_tour',
         '/packages',
         '/packages/list',
-        '/packages/builder',
         '/packages/detail',
         '/packages/detail/pkg_tokyo_4d3n',
         '/packages/detail/pkg_osaka_3d2n',

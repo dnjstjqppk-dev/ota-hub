@@ -13,6 +13,7 @@ import LoginView from '../views/LoginView.vue'
 import FeatureFlagsView from '../views/FeatureFlagsView.vue'
 import UrlIngestionView from '../views/UrlIngestionView.vue'
 import SuppliersView from '../views/SuppliersView.vue'
+import TicketsView from '../views/TicketsView.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -95,6 +96,12 @@ const routes: RouteRecordRaw[] = [
     path: '/support',
     name: 'Support',
     component: SupportView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/tickets',
+    name: 'Tickets',
+    component: TicketsView,
     meta: { requiresAuth: true }
   },
   {

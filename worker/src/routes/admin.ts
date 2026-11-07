@@ -6,6 +6,7 @@ import { BOOKING_STATUSES } from "../domain/state-machine.ts";
 import { newId } from "../lib/crypto.ts";
 import { invalidateSupplierCache } from "../services/catalog.ts";
 import { likeEscape } from "../services/suggest-service.ts";
+import { pageMeta, pageParams } from "../lib/pagination.ts";
 
 const PARTNER_STATUSES = ["ACTIVE", "REJECTED", "SUSPENDED", "PENDING_APPROVAL"] as const;
 const USER_ROLES = ["USER", "ADMIN"] as const;
@@ -47,22 +48,22 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   if (path === "/api/v1/admin/bookings" && method === "GET") {
     const status = str(url.searchParams.get("status"), 40);
     const q = str(url.searchParams.get("q"), 80);
-    let sql = "SELECT id, booking_number, domain_type, title, status, status_reason, total_minor, paid_minor, refunded_minor, currency, payment_status, supplier_status, payment_mode, customer_name, customer_email, service_start, created_at FROM bookings WHERE 1=1";
+    const cols = "id, booking_number, domain_type, title, status, status_reason, total_minor, paid_minor, refunded_minor, currency, payment_status, supplier_status, payment_mode, customer_name, customer_email, service_start, created_at";
+    let where = "1=1";
     const p: unknown[] = [];
     if (status && (BOOKING_STATUSES as readonly string[]).includes(status)) {
-      sql += " AND status = ?";
+      where += " AND status = ?";
       p.push(status);
     }
     if (q) {
       const like = `%${likeEscape(q)}%`;
-      sql += " AND (booking_number LIKE ? ESCAPE '\\' OR customer_email LIKE ? ESCAPE '\\' OR customer_name LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR id = ?)";
+      where += " AND (booking_number LIKE ? ESCAPE '\\' OR customer_email LIKE ? ESCAPE '\\' OR customer_name LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR id = ?)";
       p.push(like, like, like, like, q);
     }
-    const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit") || "200", 10) || 200));
-    sql += " ORDER BY created_at DESC LIMIT ?";
-    p.push(limit);
-    const rows = await db.prepare(sql).bind(...p).all();
-    return json({ success: true, bookings: rows.results, statuses: BOOKING_STATUSES });
+    const pg = pageParams(url);
+    const total = ((await db.prepare(`SELECT COUNT(*) AS total FROM bookings WHERE ${where}`).bind(...p).first<{ total: number }>())?.total || 0) as number;
+    const rows = await db.prepare(`SELECT ${cols} FROM bookings WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...p, pg.pageSize, pg.offset).all();
+    return json({ success: true, bookings: rows.results, statuses: BOOKING_STATUSES, ...pageMeta(total, pg.page, pg.pageSize) });
   }
 
   let m = path.match(/^\/api\/v1\/admin\/bookings\/([A-Za-z0-9_-]+)$/);
@@ -222,28 +223,26 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   if (path === "/api/v1/admin/partners" && method === "GET") {
     const q = str(url.searchParams.get("q"), 80);
     const status = str(url.searchParams.get("status"), 20).toUpperCase();
-    const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit") || "100", 10) || 100));
-    let sql = `SELECT p.id, p.email, p.company_name, p.partner_type, p.business_number, p.contact_phone, p.is_active,
+    const cols = `p.id, p.email, p.company_name, p.partner_type, p.business_number, p.contact_phone, p.is_active,
               COALESCE(pr.status, 'ACTIVE') AS profile_status, COALESCE(pr.settlement_rate_bps, 1000) AS settlement_rate_bps,
               pr.representative_name, pr.bank_name, pr.bank_account_number, pr.bank_account_holder, pr.tax_invoice_email,
-              pr.rejection_reason, pr.created_at, pr.approved_at, pr.approved_by
-       FROM partners p
-       LEFT JOIN partner_profiles pr ON pr.partner_id = p.id
-       WHERE 1=1`;
+              pr.rejection_reason, pr.created_at, pr.approved_at, pr.approved_by`;
+    const from = "partners p LEFT JOIN partner_profiles pr ON pr.partner_id = p.id";
+    let where = "1=1";
     const p: unknown[] = [];
     if (q) {
       const like = `%${likeEscape(q)}%`;
-      sql += " AND (p.company_name LIKE ? ESCAPE '\\' OR p.email LIKE ? ESCAPE '\\' OR p.business_number LIKE ? ESCAPE '\\' OR p.id = ?)";
+      where += " AND (p.company_name LIKE ? ESCAPE '\\' OR p.email LIKE ? ESCAPE '\\' OR p.business_number LIKE ? ESCAPE '\\' OR p.id = ?)";
       p.push(like, like, like, q);
     }
     if ((PARTNER_STATUSES as readonly string[]).includes(status)) {
-      sql += " AND COALESCE(pr.status, 'ACTIVE') = ?";
+      where += " AND COALESCE(pr.status, 'ACTIVE') = ?";
       p.push(status);
     }
-    sql += " ORDER BY pr.created_at DESC LIMIT ?";
-    p.push(limit);
-    const rows = await db.prepare(sql).bind(...p).all();
-    return json({ success: true, partners: rows.results || [] });
+    const pg = pageParams(url);
+    const total = ((await db.prepare(`SELECT COUNT(*) AS total FROM ${from} WHERE ${where}`).bind(...p).first<{ total: number }>())?.total || 0) as number;
+    const rows = await db.prepare(`SELECT ${cols} FROM ${from} WHERE ${where} ORDER BY pr.created_at DESC LIMIT ? OFFSET ?`).bind(...p, pg.pageSize, pg.offset).all();
+    return json({ success: true, partners: rows.results || [], ...pageMeta(total, pg.page, pg.pageSize) });
   }
 
   m = path.match(/^\/api\/v1\/admin\/partners\/([A-Za-z0-9_-]+)$/);
@@ -291,23 +290,23 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   if (path === "/api/v1/admin/users" && method === "GET") {
     const q = str(url.searchParams.get("q"), 80);
     const role = str(url.searchParams.get("role"), 20).toUpperCase();
-    const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit") || "100", 10) || 100));
     // No is_active column exists on users, so none is reported (accounts cannot be suspended yet).
-    let sql = "SELECT id, email, full_name, phone_number, role, tier, trip_coins AS coin_balance, created_at FROM users WHERE 1=1";
+    const cols = "id, email, full_name, phone_number, role, tier, trip_coins AS coin_balance, created_at";
+    let where = "1=1";
     const p: unknown[] = [];
     if (q) {
       const like = `%${likeEscape(q)}%`;
-      sql += " AND (email LIKE ? ESCAPE '\\' OR full_name LIKE ? ESCAPE '\\' OR phone_number LIKE ? ESCAPE '\\' OR id = ?)";
+      where += " AND (email LIKE ? ESCAPE '\\' OR full_name LIKE ? ESCAPE '\\' OR phone_number LIKE ? ESCAPE '\\' OR id = ?)";
       p.push(like, like, like, q);
     }
     if ((USER_ROLES as readonly string[]).includes(role)) {
-      sql += " AND role = ?";
+      where += " AND role = ?";
       p.push(role);
     }
-    sql += " ORDER BY created_at DESC LIMIT ?";
-    p.push(limit);
-    const rows = await db.prepare(sql).bind(...p).all();
-    return json({ success: true, users: rows.results || [] });
+    const pg = pageParams(url);
+    const total = ((await db.prepare(`SELECT COUNT(*) AS total FROM users WHERE ${where}`).bind(...p).first<{ total: number }>())?.total || 0) as number;
+    const rows = await db.prepare(`SELECT ${cols} FROM users WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...p, pg.pageSize, pg.offset).all();
+    return json({ success: true, users: rows.results || [], ...pageMeta(total, pg.page, pg.pageSize) });
   }
 
   m = path.match(/^\/api\/v1\/admin\/users\/([A-Za-z0-9_-]+)$/);
@@ -359,6 +358,38 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   if (path === "/api/v1/admin/promotions" && method === "GET") {
     const rows = await db.prepare("SELECT * FROM promotions ORDER BY is_active DESC, valid_until DESC").all();
     return json({ success: true, promotions: rows.results || [] });
+  }
+  if (path === "/api/v1/admin/promotions" && method === "POST") {
+    const b = await readJson(request);
+    const code = str(b.code, 32).toUpperCase();
+    const title = str(b.title, 200);
+    const discountType = str(b.discountType || "FIXED_AMOUNT", 20).toUpperCase();
+    const discountValue = Number(b.discountValue);
+    const minOrder = b.minOrderAmountKrw === undefined ? 0 : Number(b.minOrderAmountKrw);
+    const maxDiscount = b.maxDiscountKrw === undefined ? 0 : Number(b.maxDiscountKrw);
+    const validFrom = b.validFrom ? str(b.validFrom, 30) : null;
+    const validUntil = b.validUntil ? str(b.validUntil, 30) : null;
+    if (!/^[A-Z0-9-]{4,32}$/.test(code)) throw new HttpError(400, "INVALID_CODE", "코드는 4~32자의 영문 대문자·숫자·하이픈이어야 합니다.");
+    if (!title) throw new HttpError(400, "TITLE_REQUIRED", "프로모션 제목을 입력해주세요.");
+    if (!["PERCENTAGE", "FIXED_AMOUNT"].includes(discountType)) throw new HttpError(400, "INVALID_DISCOUNT_TYPE", "할인 방식은 PERCENTAGE 또는 FIXED_AMOUNT이어야 합니다.");
+    if (!Number.isFinite(discountValue) || discountValue <= 0) throw new HttpError(400, "INVALID_DISCOUNT_VALUE", "할인값은 0보다 커야 합니다.");
+    if (discountType === "PERCENTAGE" && discountValue > 100) throw new HttpError(400, "INVALID_DISCOUNT_VALUE", "정률 할인은 100%를 넘을 수 없습니다.");
+    if (!Number.isFinite(minOrder) || minOrder < 0) throw new HttpError(400, "INVALID_MIN_ORDER", "최소 주문금액은 0 이상이어야 합니다.");
+    if (!Number.isFinite(maxDiscount) || maxDiscount < 0) throw new HttpError(400, "INVALID_MAX_DISCOUNT", "최대 할인액은 0 이상이어야 합니다.");
+    for (const [label, v] of [["시작일", validFrom], ["종료일", validUntil]] as const) {
+      if (v && Number.isNaN(Date.parse(v))) throw new HttpError(400, "INVALID_DATE", `${label} 형식이 올바르지 않습니다.`);
+    }
+    if (validFrom && validUntil && Date.parse(validUntil) <= Date.parse(validFrom)) {
+      throw new HttpError(400, "INVALID_PERIOD", "종료일은 시작일보다 뒤여야 합니다.");
+    }
+    const dup = await db.prepare("SELECT id FROM promotions WHERE code = ?").bind(code).first();
+    if (dup) throw new HttpError(409, "CODE_EXISTS", "이미 등록된 코드입니다.");
+    const id = newId("promo");
+    await db.prepare(
+      "INSERT INTO promotions (id, code, title, discount_type, discount_value, min_order_amount_krw, max_discount_krw, valid_from, valid_until, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)"
+    ).bind(id, code, title, discountType, discountValue, minOrder, maxDiscount, validFrom, validUntil).run();
+    await audit(env, admin.id, "CREATE_PROMOTION", "PROMOTION", id, { code });
+    return json({ success: true, id, code }, 201);
   }
   m = path.match(/^\/api\/v1\/admin\/promotions\/([A-Za-z0-9_-]+)$/);
   if (m && method === "PATCH") {

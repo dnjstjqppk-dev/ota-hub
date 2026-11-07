@@ -26,6 +26,20 @@ export interface PriceAlertItem {
   createdAt: string
 }
 
+const DETAIL_BASE: Record<string, string> = {
+  HOTEL: 'hotels',
+  FLIGHT: 'flights',
+  TRAIN: 'trains',
+  CAR: 'cars',
+  TRANSFER: 'transfers',
+  ACTIVITY: 'things-to-do',
+  PACKAGE: 'packages'
+}
+
+export function detailUrl(domainType: string, itemId: string): string {
+  return `/${DETAIL_BASE[domainType] || 'hotels'}/detail/${itemId}`
+}
+
 export const useWishlistStore = defineStore('wishlist', {
   state: () => ({
     items: [] as WishlistItem[],
@@ -61,7 +75,7 @@ export const useWishlistStore = defineStore('wishlist', {
                 title: w.item_title,
                 priceKrw: w.price_krw || 0,
                 thumbnailUrl: w.thumbnail_url || '',
-                targetUrl: `/${(w.domain_type || 'hotel').toLowerCase()}s/detail/${w.item_id}`,
+                targetUrl: detailUrl(w.domain_type || 'HOTEL', w.item_id),
                 createdAt: w.created_at
               }))
             }

@@ -1,14 +1,18 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { partnerToken } from '../config/api'
 import DashboardView from '../views/DashboardView.vue'
 import ProductsView from '../views/ProductsView.vue'
 import InventoryCalendarView from '../views/InventoryCalendarView.vue'
 import OrdersView from '../views/OrdersView.vue'
+import OrderDetailView from '../views/OrderDetailView.vue'
 import SettlementsView from '../views/SettlementsView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import StaffView from '../views/StaffView.vue'
 import ApiKeysView from '../views/ApiKeysView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
+import ForgotPasswordView from '../views/ForgotPasswordView.vue'
+import ResetPasswordView from '../views/ResetPasswordView.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -21,6 +25,18 @@ const routes: RouteRecordRaw[] = [
     path: '/register',
     name: 'Register',
     component: RegisterView,
+    meta: { public: true }
+  },
+  {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: ForgotPasswordView,
+    meta: { public: true }
+  },
+  {
+    path: '/reset-password',
+    name: 'ResetPassword',
+    component: ResetPasswordView,
     meta: { public: true }
   },
   {
@@ -49,6 +65,12 @@ const routes: RouteRecordRaw[] = [
     path: '/orders',
     name: 'Orders',
     component: OrdersView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/orders/:id',
+    name: 'OrderDetail',
+    component: OrderDetailView,
     meta: { requiresAuth: true }
   },
   {
@@ -91,7 +113,7 @@ const router = createRouter({
 
 // Authentication Route Guard
 router.beforeEach((to, _from, next) => {
-  const token = localStorage.getItem('getfortrip_partner_token')
+  const token = partnerToken()
   const isPublic = to.meta.public === true
 
   if (!isPublic && !token) {

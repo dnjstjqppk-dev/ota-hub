@@ -33,6 +33,8 @@ const adults = ref(qInt(q.adults, domain === 'HOTEL' ? 2 : 1, 1, 9))
 const children = ref(qInt(q.children, 0, 0, 8))
 const infants = ref(qInt(q.infants, 0, 0, 4))
 const promotionCode = ref('')
+const useCoins = ref(0)
+const coinBalance = computed(() => auth.user?.tripCoins || 0)
 
 type Step = 'details' | 'travelers' | 'payment'
 const step = ref<Step>('details')
@@ -83,17 +85,22 @@ function idemKeyFor(quoteId: string) {
 }
 
 const datesReady = computed(() => !!startDate.value && (!needsEnd || endDate.value > startDate.value) && (!returnItemId || returnDate.value >= startDate.value))
-async function getQuote() {
+async function getQuote(retry = true) {
   error.value = ''
   if (!datesReady.value) { error.value = needsEnd ? '시작일과 종료일을 선택해 주세요.' : returnItemId ? '가는 날과 오는 날을 선택해 주세요.' : '이용일을 선택해 주세요.'; return }
   busy.value = true
   const r = await apiFetch('/quotes', {
     method: 'POST',
-    body: { domain, itemId, unitId, ratePlanId, returnItemId, returnDate: returnItemId ? returnDate.value : undefined, startDate: startDate.value, endDate: needsEnd ? endDate.value : null, rooms: domain === 'HOTEL' ? rooms.value : undefined, travelers: { adults: adults.value, children: children.value, infants: infants.value }, promotionCode: promotionCode.value || undefined }
+    body: { domain, itemId, unitId, ratePlanId, returnItemId, returnDate: returnItemId ? returnDate.value : undefined, startDate: startDate.value, endDate: needsEnd ? endDate.value : null, rooms: domain === 'HOTEL' ? rooms.value : undefined, travelers: { adults: adults.value, children: children.value, infants: infants.value }, promotionCode: promotionCode.value || undefined, coinAmount: useCoins.value > 0 ? Math.floor(useCoins.value) : undefined }
   })
   busy.value = false
   if (r.status === 401) return goLogin()
   if (!r.ok) {
+    // The server knows the payable total: clamp an over-large coin request once and retry.
+    if (r.data.code === 'COINS_EXCEED_TOTAL' && retry && typeof r.data.details?.maxUsable === 'number') {
+      useCoins.value = r.data.details.maxUsable
+      return getQuote(false)
+    }
     if (['NOT_DIRECTLY_BOOKABLE', 'SALES_NOT_ENABLED', 'PAYMENTS_DISABLED'].includes(r.data.code || '')) blocked.value = { code: r.data.code!, message: r.data.error || '' }
     else error.value = r.data.error || '가격을 확인할 수 없습니다.'
     return
@@ -246,6 +253,14 @@ onBeforeUnmount(() => clearInterval(timer))
               <span class="field-label">쿠폰 코드 (선택)</span>
               <input v-model="promotionCode" type="text" :disabled="!!quote" :class="[FIELD, 'uppercase']" placeholder="예: WELCOME10" />
             </label>
+            <div class="rounded-2xl border border-line bg-surface-sunken p-3.5 sm:col-span-2">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs font-semibold text-ink-subtle">코인 사용 · 보유 {{ coinBalance.toLocaleString('ko-KR') }} G</span>
+                <button v-if="coinBalance > 0 && !quote" type="button" class="text-xs font-bold text-primary" @click="useCoins = coinBalance">전액 사용</button>
+              </div>
+              <input v-model.number="useCoins" type="number" min="0" :max="coinBalance" step="100" :disabled="!!quote || coinBalance <= 0" :class="[FIELD, 'mt-2']" placeholder="0" data-testid="coin-amount" />
+              <p class="mt-1.5 text-xs text-ink-subtle">1코인 = 1원, 결제 금액에서 차감돼요. 취소하면 사용한 코인을 전액 돌려받아요.</p>
+            </div>
           </div>
 
           <div class="mt-5 flex flex-wrap gap-2">
@@ -303,6 +318,7 @@ onBeforeUnmount(() => clearInterval(timer))
           <dl class="mt-3 grid gap-2 rounded-2xl bg-surface-sunken p-4 text-sm sm:grid-cols-2">
             <div><dt class="text-xs text-ink-subtle">예약번호</dt><dd class="font-semibold text-ink tabular" data-testid="booking-number">{{ booking.bookingNumber }}</dd></div>
             <div><dt class="text-xs text-ink-subtle">결제 가능 시간</dt><dd :class="['font-semibold tabular', paySecondsLeft < 120 ? 'text-danger' : 'text-ink']">{{ mmss(paySecondsLeft) }}</dd></div>
+            <div v-if="booking.coinsUsedMinor > 0"><dt class="text-xs text-ink-subtle">코인 사용</dt><dd class="font-semibold text-success tabular">{{ formatKrw(-booking.coinsUsedMinor) }}</dd></div>
           </dl>
           <p class="mt-3 flex items-start gap-1.5 text-sm text-ink-muted"><AppIcon name="check" :size="16" class="mt-0.5 text-ink-subtle" />결제가 끝나도 공급사가 확정하기 전까지는 예약이 확정되지 않아요. 확정에 실패하면 결제 금액을 전액 환불해요.</p>
           <label v-if="payConfig?.provider === 'sandbox'" class="mt-4 block text-sm text-ink">테스트 결제 결과
@@ -326,6 +342,9 @@ onBeforeUnmount(() => clearInterval(timer))
           <dl class="mt-4 space-y-2 border-t border-line pt-4 text-sm">
             <div v-for="l in quote.lines" :key="l.code" class="flex justify-between gap-3">
               <dt class="text-ink-muted">{{ l.label }}</dt><dd :class="['tabular', l.amountMinor < 0 ? 'font-semibold text-success' : 'text-ink']">{{ formatKrw(l.amountMinor) }}</dd>
+            </div>
+            <div v-if="quote.coinsMinor > 0" class="flex justify-between gap-3">
+              <dt class="text-ink-muted">코인 사용</dt><dd class="tabular font-semibold text-success">{{ formatKrw(-quote.coinsMinor) }}</dd>
             </div>
             <div class="flex justify-between border-t border-line pt-3 text-base font-extrabold text-ink"><dt>총 결제 금액</dt><dd class="tabular" data-testid="total">{{ formatKrw(quote.totalMinor) }}</dd></div>
           </dl>
