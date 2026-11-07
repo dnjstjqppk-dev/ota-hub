@@ -44,8 +44,8 @@ const positions = [
     </div>
 
     <!-- 채용 공고 목록 -->
-    <div class="bg-white rounded-3xl border border-slate-200/90 shadow-sm divide-y divide-slate-100 overflow-hidden">
-      <div v-for="pos in positions" :key="pos.title" class="p-6 hover:bg-slate-50/80 transition flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm divide-y divide-slate-100 dark:divide-slate-700 overflow-hidden">
+      <div v-for="pos in positions" :key="pos.title" class="p-6 hover:bg-slate-50/80 dark:hover:bg-slate-700/60 transition flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div class="space-y-1">
           <div class="flex items-center gap-2">
             <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-trip-blue">{{ pos.type }}</span>

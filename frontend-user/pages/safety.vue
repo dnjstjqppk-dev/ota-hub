@@ -17,7 +17,7 @@ import { BRAND } from '~/config/brand'
     </div>
 
     <div class="space-y-6">
-      <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-4">
         <h2 class="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <span>📋</span>
           <span>출국 전 필수 점검 4단계</span>
@@ -30,7 +30,7 @@ import { BRAND } from '~/config/brand'
         </ul>
       </div>
 
-      <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-4">
         <h2 class="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <span>🚨</span>
           <span>해외 현지 긴급 상황 지원</span>
@@ -42,7 +42,7 @@ import { BRAND } from '~/config/brand'
           <NuxtLink to="/help" class="px-4 py-2 bg-trip-blue text-white rounded-xl text-xs font-bold shadow-sm">
             24/7 고객센터 연결 →
           </NuxtLink>
-          <a href="tel:+82-2-1588-0000" class="px-4 py-2 bg-slate-100 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200">
+          <a href="tel:+82-2-1588-0000" class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700">
             📞 긴급 전화: 1588-0000
           </a>
         </div>

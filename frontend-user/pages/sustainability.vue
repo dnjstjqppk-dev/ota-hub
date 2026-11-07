@@ -17,7 +17,7 @@ import { BRAND } from '~/config/brand'
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
         <div class="text-3xl">🌿</div>
         <h3 class="text-base font-black text-slate-900 dark:text-slate-100">탄소 배출 저감 친환경 숙소 인증</h3>
         <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -25,7 +25,7 @@ import { BRAND } from '~/config/brand'
         </p>
       </div>
 
-      <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
         <div class="text-3xl">🚅</div>
         <h3 class="text-base font-black text-slate-900 dark:text-slate-100">저탄소 철도 여행 장려</h3>
         <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -33,7 +33,7 @@ import { BRAND } from '~/config/brand'
         </p>
       </div>
 
-      <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
         <div class="text-3xl">📄</div>
         <h3 class="text-base font-black text-slate-900 dark:text-slate-100">100% 디지털 페이퍼리스 바우처</h3>
         <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -41,7 +41,7 @@ import { BRAND } from '~/config/brand'
         </p>
       </div>
 
-      <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
         <div class="text-3xl">🤝</div>
         <h3 class="text-base font-black text-slate-900 dark:text-slate-100">현지 로컬 커뮤니티 상생</h3>
         <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">

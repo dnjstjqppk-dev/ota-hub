@@ -18,7 +18,7 @@ import { BRAND } from '~/config/brand'
 
     <div class="space-y-6">
       <!-- 1. 호텔 -->
-      <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
         <h2 class="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <AppIcon name="hotel" :size="18" class="text-primary" />
           <span>호텔 및 숙소 취소 규정</span>
@@ -31,7 +31,7 @@ import { BRAND } from '~/config/brand'
       </div>
 
       <!-- 2. 항공권 -->
-      <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
         <h2 class="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <span>✈️</span>
           <span>항공권 취소 및 환불 규정</span>
@@ -44,7 +44,7 @@ import { BRAND } from '~/config/brand'
       </div>
 
       <!-- 3. 기차표/렌터카/투어 -->
-      <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
         <h2 class="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <span>🚗</span>
           <span>렌터카, 기차표, 투어·티켓 취소 규정</span>

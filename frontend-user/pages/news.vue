@@ -44,10 +44,10 @@ const articles = [
       <article
         v-for="a in articles"
         :key="a.id"
-        class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-md transition space-y-2"
+        class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm hover:shadow-md transition space-y-2"
       >
         <div class="flex items-center gap-2">
-          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 dark:text-slate-200">{{ a.category }}</span>
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">{{ a.category }}</span>
           <span class="text-xs text-slate-400 font-mono">{{ a.date }}</span>
         </div>
         <h2 class="text-lg font-black text-slate-900 dark:text-slate-100">{{ a.title }}</h2>

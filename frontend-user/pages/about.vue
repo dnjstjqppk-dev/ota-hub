@@ -19,7 +19,7 @@ import { BRAND } from '~/config/brand'
 
     <!-- 핵심 가치 3대 기둥 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
         <div class="w-12 h-12 rounded-2xl bg-blue-50 text-trip-blue flex items-center justify-center text-2xl font-black">
           💎
         </div>
@@ -29,7 +29,7 @@ import { BRAND } from '~/config/brand'
         </p>
       </div>
 
-      <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
         <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl font-black">
           🛡️
         </div>
@@ -39,7 +39,7 @@ import { BRAND } from '~/config/brand'
         </p>
       </div>
 
-      <div class="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
         <div class="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center text-2xl font-black">
           🎧
         </div>

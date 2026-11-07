@@ -4,7 +4,7 @@ import { BRAND } from '~/config/brand'
 
 <template>
   <div class="max-w-4xl mx-auto px-4 py-12 space-y-8">
-    <div class="space-y-2 border-b border-slate-200 pb-6">
+    <div class="space-y-2 border-b border-slate-200 dark:border-slate-700 pb-6">
       <span class="text-xs font-bold text-trip-blue">Terms of Service</span>
       <h1 class="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">{{ BRAND.name }} 서비스 이용약관</h1>
       <p class="text-xs text-slate-400">최종 개정일: 2026년 10월 1일</p>
