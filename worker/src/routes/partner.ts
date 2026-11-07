@@ -320,7 +320,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     // Same state-machine path as the operator console (transitions, ledger, refunds, vouchers) —
     // never a raw status write, which would corrupt money state.
     const body = await readJson(request).catch(() => ({}));
-    const after = await S.adminSupplierDecision(env, { id: pId, email: p.email, role: "PARTNER" }, orderId, {
+    const after = await S.adminSupplierDecision(env, { id: pId, email: partner.email, role: "PARTNER" }, orderId, {
       decision: action === "confirm" ? "CONFIRM" : "REJECT",
       supplierReference: str(body.supplierReference, 80),
       note: str(body.note, 300) || null,

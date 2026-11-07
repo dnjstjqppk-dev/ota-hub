@@ -536,22 +536,24 @@ test("partner webhook + money: https-only URL storage, dashboard/settlement tota
 test("partner orders: confirm/reject run the booking state machine (no raw status writes)", async () => {
   const P = await approvedPartner("decide");
   const Q = await approvedPartner("decideq");
-  async function paidPending(tag) {
-    const q = (await quote(A.token)).data.quote;
-    const b = (await book(A.token, q)).data.booking;
-    const total = Number(sql(`SELECT total_minor FROM bookings WHERE id = '${b.id}'`)[0].total_minor);
-    sql(`UPDATE bookings SET partner_id = '${P.id}', supplier_id = 'ptn_htl_01', status = 'SUPPLIER_BOOKING_PENDING', payment_status = 'CAPTURED', paid_minor = ${total} WHERE id = '${b.id}'`);
-    sql(`INSERT INTO payments (id, booking_id, provider, mode, order_id, provider_payment_key, amount_minor, currency, status, method) VALUES ('pay_${tag}_${b.id}', '${b.id}', 'sandbox', 'SANDBOX', '${b.id}', 'sbx_ok_${tag}_${b.id}', ${total}, 'KRW', 'CAPTURED', 'CARD')`);
-    return b.id;
+  async function paidPending() {
+    // Real payment flow (never raw-SQL capture): the PAYMENT_CAPTURED journal
+    // must exist or the run-last ledger test flags a stranded deposit.
+    const { p } = await fullHotelBooking(A.token, { supplier: "timeout" });
+    const bk = p.data.booking;
+    assert.equal(bk.status, "MANUAL_REVIEW_REQUIRED");
+    assert.equal(bk.paymentStatus, "CAPTURED");
+    sql(`UPDATE bookings SET partner_id = '${P.id}', supplier_id = 'ptn_htl_01' WHERE id = '${bk.id}'`);
+    return bk.id;
   }
-  const cId = await paidPending("cfm");
+  const cId = await paidPending();
   assert.equal((await api("POST", `/api/v1/partner/orders/${cId}/confirm`, { token: P.token, body: {} })).status, 400, "reference required");
   assert.equal((await api("POST", `/api/v1/partner/orders/${cId}/confirm`, { token: Q.token, body: { supplierReference: "X" } })).status, 404);
   const c = await api("POST", `/api/v1/partner/orders/${cId}/confirm`, { token: P.token, body: { supplierReference: "HTL-8819" } });
   assert.equal(c.data.status, "VOUCHER_ISSUED");
   assert.equal(sql(`SELECT supplier_reference FROM bookings WHERE id = '${cId}'`)[0].supplier_reference, "HTL-8819");
   assert.ok(sql(`SELECT voucher_code FROM booking_items WHERE booking_id = '${cId}'`)[0].voucher_code, "voucher issued");
-  const rId = await paidPending("rej");
+  const rId = await paidPending();
   const r = await api("POST", `/api/v1/partner/orders/${rId}/reject`, { token: P.token, body: { note: "sold out" } });
   assert.equal(r.data.status, "REFUNDED");
   const pay = sql(`SELECT status, refunded_minor, amount_minor FROM payments WHERE booking_id = '${rId}'`)[0];
