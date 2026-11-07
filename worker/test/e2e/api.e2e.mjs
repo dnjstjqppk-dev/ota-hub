@@ -989,3 +989,156 @@ test("autocomplete: places carry codes/ids, typos and 초성 match, wildcards es
   const tf = (await api("GET", `/api/v1/transfers?airport=${encodeURIComponent("인천국제공항")}`)).data.data || [];
   assert.ok(tf.length > 0 && tf.every((x) => x.airport_code === "ICN"), "transfer airport names must resolve to codes");
 });
+
+test("admin catalog CRUD: create/detail/patch/deactivate/delete hotel cycle", async () => {
+  const created = await api("POST", "/api/v1/admin/catalog/HOTEL", { token: ADMIN, body: {
+    name_ko: "E2E 테스트 호텔", name_en: "E2E Test Hotel", city: "서울", country: "대한민국",
+    address: "서울시 중구", base_price_krw: 100000, star_rating: 4,
+  } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  assert.ok(created.data.id.startsWith("htl_"), `server id must carry domain prefix, got ${created.data.id}`);
+  const id = created.data.id;
+  const detail = (await api("GET", `/api/v1/admin/catalog/HOTEL/${id}`, { token: ADMIN })).data.product;
+  assert.equal(detail.name_ko, "E2E 테스트 호텔");
+  assert.equal(detail.base_price_krw, 100000);
+  assert.equal((await api("PATCH", `/api/v1/admin/catalog/HOTEL/${id}`, { token: ADMIN, body: { base_price_krw: 123456, is_active: 0 } })).status, 200);
+  const after = (await api("GET", `/api/v1/admin/catalog/HOTEL/${id}`, { token: ADMIN })).data.product;
+  assert.equal(after.base_price_krw, 123456);
+  assert.equal(after.is_active, 0);
+  const inactive = (await api("GET", "/api/v1/admin/catalog?domain=HOTEL&status=inactive", { token: ADMIN })).data.items;
+  assert.ok(inactive.some((i) => i.id === id), "deactivated product listed under status=inactive");
+  assert.equal((await api("DELETE", `/api/v1/admin/catalog/HOTEL/${id}`, { token: ADMIN })).status, 200);
+  assert.equal((await api("GET", `/api/v1/admin/catalog/HOTEL/${id}`, { token: ADMIN })).status, 404);
+  assert.equal((await api("DELETE", `/api/v1/admin/catalog/HOTEL/${id}`, { token: ADMIN })).status, 404);
+});
+
+test("admin catalog CRUD: red paths", async () => {
+  assert.equal((await api("POST", "/api/v1/admin/catalog/BOAT", { token: ADMIN, body: {} })).data.code, "INVALID_DOMAIN");
+  assert.equal((await api("POST", "/api/v1/admin/catalog/HOTEL", { token: ADMIN, body: { name_ko: "X" } })).data.code, "FIELD_REQUIRED");
+  assert.equal((await api("POST", "/api/v1/admin/catalog/HOTEL", { token: ADMIN, body: {
+    name_ko: "X", name_en: "X", city: "X", country: "X", address: "X", base_price_krw: 1, nope_field: 1,
+  } })).data.code, "UNKNOWN_FIELD");
+  assert.equal((await api("POST", "/api/v1/admin/catalog/HOTEL", { token: ADMIN, body: {
+    name_ko: "X", name_en: "X", city: "X", country: "X", address: "X", base_price_krw: -5,
+  } })).data.code, "INVALID_FIELD");
+  const id = `e2e_dup_${Date.now().toString(36)}`;
+  const base = { id, name_ko: "X", name_en: "X", city: "X", country: "X", address: "X", base_price_krw: 1 };
+  assert.equal((await api("POST", "/api/v1/admin/catalog/HOTEL", { token: ADMIN, body: base })).status, 201);
+  assert.equal((await api("POST", "/api/v1/admin/catalog/HOTEL", { token: ADMIN, body: base })).data.code, "ID_EXISTS");
+  assert.equal((await api("PATCH", `/api/v1/admin/catalog/HOTEL/${id}`, { token: ADMIN, body: { id: "other" } })).data.code, "IMMUTABLE_FIELD");
+  assert.equal((await api("PATCH", `/api/v1/admin/catalog/HOTEL/${id}`, { token: ADMIN, body: {} })).data.code, "EMPTY_UPDATE");
+  assert.equal((await api("PATCH", "/api/v1/admin/catalog/HOTEL/htl_missing", { token: ADMIN, body: { city: "X" } })).status, 404);
+  assert.equal((await api("GET", "/api/v1/admin/catalog/HOTEL/htl_missing", { token: ADMIN })).status, 404);
+  assert.equal((await api("GET", `/api/v1/admin/catalog/HOTEL/${id}`)).status, 401);
+  assert.equal((await api("POST", "/api/v1/admin/catalog/HOTEL", { body: {} })).status, 401);
+  assert.equal((await api("DELETE", `/api/v1/admin/catalog/HOTEL/${id}`, { token: ADMIN })).status, 200);
+});
+
+test("admin catalog bulk: upsert, partial failure, rerun convergence, caps", async () => {
+  const tag = Date.now().toString(36);
+  const r1 = `e2e_bulk_trn_${tag}_1`;
+  const r2 = `e2e_bulk_trn_${tag}_2`;
+  const train = (id) => ({ id, train_number: "KTX-999", train_type: "KTX", departure_station: "서울", arrival_station: "부산", departure_time: "09:00", arrival_time: "11:30", duration_minutes: 150, price_krw: 59800 });
+  const res = await api("POST", "/api/v1/admin/catalog/bulk", { token: ADMIN, body: { domain: "TRAIN", rows: [
+    train(r1), train(r2),
+    { id: "e2e_bulk_bad", train_number: "X" },
+    { id: "e2e_bulk_bad2", ...train("x"), bogus: 1 },
+  ] } });
+  assert.equal(res.status, 200, JSON.stringify(res.data));
+  assert.equal(res.data.created, 2);
+  assert.equal(res.data.failed.length, 2);
+  assert.deepEqual(res.data.failed.map((f) => f.index), [2, 3]);
+  assert.equal((await api("GET", `/api/v1/admin/catalog/TRAIN/${r1}`, { token: ADMIN })).data.product.train_number, "KTX-999");
+  const rerun = await api("POST", "/api/v1/admin/catalog/bulk", { token: ADMIN, body: { domain: "TRAIN", rows: [{ id: r1, price_krw: 60000 }, { id: r2, price_krw: 60000 }] } });
+  assert.equal(rerun.data.created, 0);
+  assert.equal(rerun.data.updated, 2);
+  assert.equal((await api("GET", `/api/v1/admin/catalog/TRAIN/${r1}`, { token: ADMIN })).data.product.price_krw, 60000);
+  assert.equal((await api("POST", "/api/v1/admin/catalog/bulk", { token: ADMIN, body: { domain: "BOAT", rows: [{}] } })).data.code, "INVALID_DOMAIN");
+  assert.equal((await api("POST", "/api/v1/admin/catalog/bulk", { token: ADMIN, body: { domain: "TRAIN", rows: [] } })).data.code, "ROWS_REQUIRED");
+  assert.equal((await api("POST", "/api/v1/admin/catalog/bulk", { token: ADMIN, body: { domain: "TRAIN", rows: new Array(501).fill({}) } })).data.code, "TOO_MANY_ROWS");
+  assert.equal((await api("DELETE", `/api/v1/admin/catalog/TRAIN/${r1}`, { token: ADMIN })).status, 200);
+  assert.equal((await api("DELETE", `/api/v1/admin/catalog/TRAIN/${r2}`, { token: ADMIN })).status, 200);
+});
+
+test("admin catalog delete: blocked while bookings reference the product", async () => {
+  const id = `e2e_guard_car_${Date.now().toString(36)}`;
+  assert.equal((await api("POST", "/api/v1/admin/catalog/CAR", { token: ADMIN, body: {
+    id, company_name: "E2E 렌터카", vehicle_model: "아반떼", daily_price_krw: 50000, pickup_location: "김포공항",
+  } })).status, 201);
+  const bn = `GFT-E2E-${Date.now().toString(36).toUpperCase()}`;
+  sql("DELETE FROM bookings WHERE id = 'e2e_guard_b_1'");
+  sql(`INSERT INTO bookings (id, booking_number, domain_type, item_id, title, total_price, currency, status, customer_name, customer_email) VALUES ('e2e_guard_b_1', '${bn}', 'CAR', '${id}', 'E2E guard', 50000, 'KRW', 'PENDING_PAYMENT', 'Guard', 'guard@e2e.test')`);
+  const blocked = await api("DELETE", `/api/v1/admin/catalog/CAR/${id}`, { token: ADMIN });
+  assert.equal(blocked.data.code, "REFERENCED_BY_BOOKING");
+  assert.equal(blocked.data.details.count, 1);
+  sql("DELETE FROM bookings WHERE id = 'e2e_guard_b_1'");
+  assert.equal((await api("DELETE", `/api/v1/admin/catalog/CAR/${id}`, { token: ADMIN })).status, 200);
+});
+
+test("admin affiliate: clicks/conversions lists + summary", async () => {
+  sql("DELETE FROM affiliate_conversions WHERE id = 'e2e_cnv_1'");
+  sql("DELETE FROM affiliate_clicks WHERE click_id = 'e2e_clk_1'");
+  sql(`INSERT INTO affiliate_clicks (click_id, domain_type, item_id, item_title, partner_name, outlink_url, sub_id, status) VALUES ('e2e_clk_1', 'HOTEL', 'htl_seoul_01', 'E2E click', 'e2e_trip', 'https://example.com/deep', 's1', 'CLICKED')`);
+  sql(`INSERT INTO affiliate_conversions (id, click_id, partner_name, order_id, amount, currency, commission, status) VALUES ('e2e_cnv_1', 'e2e_clk_1', 'e2e_trip', 'e2e_ord_1', 100000, 'KRW', 5000, 'CONFIRMED')`);
+  const clicks = (await api("GET", "/api/v1/admin/affiliate/clicks?partner=e2e_trip", { token: ADMIN })).data;
+  assert.ok(clicks.clicks.some((c) => c.click_id === "e2e_clk_1"));
+  assert.ok(clicks.total >= 1 && clicks.page === 1);
+  const q = (await api("GET", "/api/v1/admin/affiliate/clicks?q=e2e_clk_1", { token: ADMIN })).data;
+  assert.ok(q.clicks.some((c) => c.click_id === "e2e_clk_1"));
+  const conv = (await api("GET", "/api/v1/admin/affiliate/conversions", { token: ADMIN })).data;
+  const row = conv.conversions.find((c) => c.id === "e2e_cnv_1");
+  assert.ok(row && row.amount === 100000 && row.commission === 5000);
+  const sum = (await api("GET", "/api/v1/admin/affiliate/summary", { token: ADMIN })).data.summary;
+  assert.ok(sum.clicks >= 1 && sum.conversions >= 1 && sum.gmv >= 100000);
+  assert.equal((await api("GET", "/api/v1/admin/affiliate/clicks")).status, 401);
+  sql("DELETE FROM affiliate_conversions WHERE id = 'e2e_cnv_1'");
+  sql("DELETE FROM affiliate_clicks WHERE click_id = 'e2e_clk_1'");
+});
+
+test("admin product policy: upsert/get/validation + public read", async () => {
+  const before = await api("GET", "/api/v1/admin/catalog/HOTEL/htl_seoul_01/policy", { token: ADMIN });
+  assert.equal(before.status, 200);
+  const put = await api("PUT", "/api/v1/admin/catalog/HOTEL/htl_seoul_01/policy", { token: ADMIN, body: {
+    free_cancel_hours: 48, change_allowed: true, no_show_fee_bps: 1000,
+    tiers: [{ hours_before: 24, refund_bps: 5000 }, { hours_before: 72, refund_bps: 10000, note: "얼리버드" }],
+    note: "E2E 정책",
+  } });
+  assert.equal(put.status, 200, JSON.stringify(put.data));
+  const got = (await api("GET", "/api/v1/admin/catalog/HOTEL/htl_seoul_01/policy", { token: ADMIN })).data.policy;
+  assert.equal(got.free_cancel_hours, 48);
+  assert.equal(got.change_allowed, 1);
+  assert.deepEqual(got.tiers.map((t) => t.hours_before), [72, 24], "tiers stored sorted desc");
+  const pub = (await api("GET", "/api/v1/policies?domain=HOTEL&itemId=htl_seoul_01")).data.policy;
+  assert.equal(pub.note, "E2E 정책");
+  assert.equal((await api("GET", "/api/v1/policies")).data.policy, null);
+  assert.equal((await api("PUT", "/api/v1/admin/catalog/HOTEL/htl_seoul_01/policy", { token: ADMIN, body: { tiers: [{ hours_before: 1, refund_bps: 20000 }] } })).data.code, "INVALID_POLICY");
+  assert.equal((await api("PUT", "/api/v1/admin/catalog/HOTEL/htl_missing/policy", { token: ADMIN, body: {} })).status, 404);
+  assert.equal((await api("GET", "/api/v1/admin/catalog/HOTEL/htl_missing/policy", { token: ADMIN })).status, 404);
+  sql("DELETE FROM product_policies WHERE domain_type = 'HOTEL' AND item_id = 'htl_seoul_01'");
+  assert.equal((await api("GET", "/api/v1/admin/catalog/HOTEL/htl_seoul_01/policy", { token: ADMIN })).data.policy, null);
+});
+
+test("admin legal registry: list/get/patch + public read", async () => {
+  const list = (await api("GET", "/api/v1/legal")).data.documents;
+  assert.ok(list.length >= 4 && list.some((d) => d.slug === "terms"));
+  assert.equal((await api("GET", "/api/v1/legal/nope")).status, 404);
+  const admin = (await api("GET", "/api/v1/admin/legal", { token: ADMIN })).data.documents;
+  const prev = admin.find((d) => d.slug === "terms").version;
+  assert.equal((await api("PATCH", "/api/v1/admin/legal/terms", { token: ADMIN, body: { version: "9.9" } })).status, 200);
+  assert.equal((await api("GET", "/api/v1/legal/terms")).data.document.version, "9.9");
+  assert.equal((await api("PATCH", "/api/v1/admin/legal/terms", { token: ADMIN, body: { version: "x" } })).data.code, "INVALID_VERSION");
+  assert.equal((await api("PATCH", "/api/v1/admin/legal/nope", { token: ADMIN, body: { version: "1.0" } })).status, 404);
+  assert.equal((await api("PATCH", "/api/v1/admin/legal/terms", { token: ADMIN, body: {} })).data.code, "EMPTY_UPDATE");
+  assert.equal((await api("PATCH", "/api/v1/admin/legal/terms", { token: ADMIN, body: { version: prev } })).status, 200);
+});
+
+test("admin catalog list: status filter + pagination", async () => {
+  const active = (await api("GET", "/api/v1/admin/catalog?domain=HOTEL&status=active&pageSize=50", { token: ADMIN })).data;
+  assert.ok(active.items.length > 0);
+  assert.ok(active.items.every((i) => i.is_active === 1 && i.domain_type === "HOTEL"));
+  const p1 = (await api("GET", "/api/v1/admin/catalog?page=1&pageSize=2", { token: ADMIN })).data;
+  assert.equal(p1.items.length, 2);
+  assert.ok(p1.total >= 2 && p1.totalPages >= 1 && p1.page === 1);
+  const p2 = (await api("GET", "/api/v1/admin/catalog?page=2&pageSize=2", { token: ADMIN })).data;
+  assert.ok(p2.items.every((i) => !p1.items.some((a) => a.domain_type === i.domain_type && a.id === i.id)), "pages must not overlap");
+});

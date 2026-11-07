@@ -63,7 +63,11 @@ const PATHS: Record<string, string> = {
   moon: 'M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z',
   eye: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   'eye-off': 'M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.1 3.9M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2',
-  server: 'M4 4h16v6H4zm0 10h16v6H4zm3-7h.01M7 17h.01'
+  server: 'M4 4h16v6H4zm0 10h16v6H4zm3-7h.01M7 17h.01',
+  edit: 'M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z',
+  trash: 'M4 7h16M10 4h4M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6',
+  pause: 'M9 5v14M15 5v14',
+  play: 'M7 4.5v15l13-7.5z'
 }
 
 const props = withDefaults(defineProps<{ name: string; size?: number | string; stroke?: number | string; label?: string }>(), { size: 20, stroke: 1.8 })

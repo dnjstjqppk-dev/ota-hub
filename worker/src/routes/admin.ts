@@ -1,6 +1,6 @@
 import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
-import { audit, requireAdmin } from "../lib/auth.ts";
+import { audit, rateLimit, requireAdmin } from "../lib/auth.ts";
 import * as S from "../services/booking-service.ts";
 import { BOOKING_STATUSES } from "../domain/state-machine.ts";
 import { newId } from "../lib/crypto.ts";
@@ -14,6 +14,133 @@ const MAX_COIN_ADJUSTMENT = 10_000_000;
 // Mirrors the CHECK constraints on `suppliers` (migrations/0002_ota_core.sql).
 const SUPPLIER_ADAPTERS = ["none", "direct_contract", "simulator", "api"] as const;
 const SUPPLIER_STATUSES = ["LIVE", "SANDBOX_VERIFIED", "DEV_DONE_CONTRACT_PENDING", "CONTRACTED_IN_DEV", "EXTERNAL_LINK_ONLY", "NOT_INTEGRATED", "BLOCKED"] as const;
+
+// ---------------------------------------------------------------------------
+// Admin product catalog: per-domain tables, one validated CRUD surface.
+// Column names mirror worker/migrations/0001 (+0014/+0017 is_active).
+// ---------------------------------------------------------------------------
+type CatalogFieldType = "text" | "int" | "num" | "bool" | "json";
+interface CatalogField { col: string; type: CatalogFieldType; max?: number; required?: boolean; min?: number; maxv?: number; array?: boolean }
+interface CatalogDomain { table: string; prefix: string; fields: CatalogField[] }
+const CATALOG_DOMAINS: Record<string, CatalogDomain> = {
+  HOTEL: { table: "hotels", prefix: "htl", fields: [
+    { col: "partner_id", type: "text", max: 100 }, { col: "name_ko", type: "text", max: 200, required: true },
+    { col: "name_en", type: "text", max: 200, required: true }, { col: "city", type: "text", max: 100, required: true },
+    { col: "country", type: "text", max: 100, required: true }, { col: "address", type: "text", max: 300, required: true },
+    { col: "latitude", type: "num" }, { col: "longitude", type: "num" }, { col: "star_rating", type: "int", min: 1, maxv: 7 },
+    { col: "property_type", type: "text", max: 20 }, { col: "review_score", type: "num", min: 0 }, { col: "review_count", type: "int", min: 0 },
+    { col: "neighborhood", type: "text", max: 200 }, { col: "subway_nearby", type: "text", max: 200 },
+    { col: "free_cancellation", type: "bool" }, { col: "free_breakfast", type: "bool" },
+    { col: "base_price_krw", type: "num", min: 0, required: true }, { col: "thumbnail_url", type: "text", max: 500 },
+    { col: "images_json", type: "json", array: true }, { col: "amenities_json", type: "json", array: true },
+    { col: "rooms_json", type: "json", array: true }, { col: "is_active", type: "bool" },
+  ] },
+  FLIGHT: { table: "flights", prefix: "flt", fields: [
+    { col: "partner_id", type: "text", max: 100 }, { col: "flight_number", type: "text", max: 50, required: true },
+    { col: "airline_name", type: "text", max: 100, required: true }, { col: "airline_code", type: "text", max: 10, required: true },
+    { col: "departure_airport", type: "text", max: 10, required: true }, { col: "arrival_airport", type: "text", max: 10, required: true },
+    { col: "departure_city", type: "text", max: 100, required: true }, { col: "arrival_city", type: "text", max: 100, required: true },
+    { col: "departure_time", type: "text", max: 30, required: true }, { col: "arrival_time", type: "text", max: 30, required: true },
+    { col: "duration_minutes", type: "int", min: 0, required: true }, { col: "stops", type: "int", min: 0 },
+    { col: "departure_time_slot", type: "text", max: 20 }, { col: "cabin_class", type: "text", max: 20 },
+    { col: "base_price_krw", type: "num", min: 0, required: true }, { col: "free_baggage_kg", type: "int", min: 0 },
+    { col: "available_seats", type: "int", min: 0 }, { col: "is_active", type: "bool" },
+  ] },
+  TRAIN: { table: "trains", prefix: "trn", fields: [
+    { col: "train_number", type: "text", max: 50, required: true }, { col: "train_type", type: "text", max: 50, required: true },
+    { col: "departure_station", type: "text", max: 100, required: true }, { col: "arrival_station", type: "text", max: 100, required: true },
+    { col: "departure_time", type: "text", max: 30, required: true }, { col: "arrival_time", type: "text", max: 30, required: true },
+    { col: "duration_minutes", type: "int", min: 0, required: true }, { col: "seat_class", type: "text", max: 50 },
+    { col: "price_krw", type: "num", min: 0, required: true }, { col: "available_seats", type: "int", min: 0 },
+    { col: "is_active", type: "bool" },
+  ] },
+  CAR: { table: "cars", prefix: "car", fields: [
+    { col: "partner_id", type: "text", max: 100 }, { col: "company_name", type: "text", max: 200, required: true },
+    { col: "vehicle_model", type: "text", max: 200, required: true }, { col: "vehicle_type", type: "text", max: 50 },
+    { col: "seats", type: "int", min: 0 }, { col: "transmission", type: "text", max: 20 },
+    { col: "daily_price_krw", type: "num", min: 0, required: true }, { col: "pickup_location", type: "text", max: 300, required: true },
+    { col: "insurance_included", type: "bool" }, { col: "image_url", type: "text", max: 500 },
+    { col: "available_stock", type: "int", min: 0 }, { col: "is_active", type: "bool" },
+  ] },
+  TRANSFER: { table: "transfers", prefix: "trf", fields: [
+    { col: "partner_id", type: "text", max: 100 }, { col: "service_title", type: "text", max: 300, required: true },
+    { col: "airport_code", type: "text", max: 20, required: true }, { col: "destination_area", type: "text", max: 300, required: true },
+    { col: "vehicle_class", type: "text", max: 50 }, { col: "max_passengers", type: "int", min: 0 },
+    { col: "max_luggage", type: "int", min: 0 }, { col: "price_krw", type: "num", min: 0, required: true },
+    { col: "flight_tracking", type: "bool" }, { col: "image_url", type: "text", max: 500 }, { col: "is_active", type: "bool" },
+  ] },
+  ACTIVITY: { table: "activities", prefix: "act", fields: [
+    { col: "partner_id", type: "text", max: 100 }, { col: "title", type: "text", max: 300, required: true },
+    { col: "category", type: "text", max: 50, required: true }, { col: "city", type: "text", max: 100, required: true },
+    { col: "country", type: "text", max: 100, required: true }, { col: "price_krw", type: "num", min: 0, required: true },
+    { col: "review_score", type: "num", min: 0 }, { col: "review_count", type: "int", min: 0 },
+    { col: "instant_confirmation", type: "bool" }, { col: "free_cancellation", type: "bool" },
+    { col: "duration_type", type: "text", max: 50 }, { col: "guide_language", type: "text", max: 50 },
+    { col: "voucher_type", type: "text", max: 50 }, { col: "thumbnail_url", type: "text", max: 500 },
+    { col: "description", type: "text", max: 2000 }, { col: "packages_json", type: "json", array: true },
+    { col: "is_active", type: "bool" },
+  ] },
+  PACKAGE: { table: "packages", prefix: "pkg", fields: [
+    { col: "title", type: "text", max: 300, required: true }, { col: "destination_city", type: "text", max: 100, required: true },
+    { col: "hotel_id", type: "text", max: 100 }, { col: "flight_id", type: "text", max: 100 },
+    { col: "package_discount_rate", type: "num", min: 0 }, { col: "total_original_krw", type: "num", min: 0, required: true },
+    { col: "total_package_krw", type: "num", min: 0, required: true }, { col: "thumbnail_url", type: "text", max: 500 },
+    { col: "details_json", type: "json" }, { col: "is_active", type: "bool" },
+  ] },
+};
+
+const CATALOG_ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
+
+/** Coerce one admin-supplied product field; throws 400 naming the field. */
+function coerceCatalogField(spec: CatalogField, raw: unknown): unknown {
+  const bad = (msg: string): never => { throw new HttpError(400, "INVALID_FIELD", `${spec.col}: ${msg}`, { field: spec.col }); };
+  if (raw === undefined || raw === null || raw === "") {
+    if (spec.required) throw new HttpError(400, "FIELD_REQUIRED", `${spec.col}은(는) 필수 항목입니다.`, { field: spec.col });
+    return null;
+  }
+  switch (spec.type) {
+    case "text": {
+      const v = str(raw, spec.max || 500);
+      if (spec.required && !v) throw new HttpError(400, "FIELD_REQUIRED", `${spec.col}은(는) 필수 항목입니다.`, { field: spec.col });
+      return v;
+    }
+    case "int": {
+      const v = typeof raw === "number" ? raw : Number(str(raw, 20));
+      if (!Number.isInteger(v)) bad("정수여야 합니다.");
+      if (spec.min !== undefined && v < spec.min) bad(`${spec.min} 이상이어야 합니다.`);
+      if (spec.maxv !== undefined && v > spec.maxv) bad(`${spec.maxv} 이하여야 합니다.`);
+      return v;
+    }
+    case "num": {
+      const v = typeof raw === "number" ? raw : Number(str(raw, 20));
+      if (!Number.isFinite(v)) bad("숫자여야 합니다.");
+      if (spec.min !== undefined && v < spec.min) bad(`${spec.min} 이상이어야 합니다.`);
+      if (spec.maxv !== undefined && v > spec.maxv) bad(`${spec.maxv} 이하여야 합니다.`);
+      return v;
+    }
+    case "bool": {
+      if (raw === true || raw === 1 || raw === "1") return 1;
+      if (raw === false || raw === 0 || raw === "0") return 0;
+      bad("true/false(0/1)여야 합니다.");
+    }
+    case "json": {
+      let v: unknown = raw;
+      if (typeof v === "string") {
+        try { v = JSON.parse(v); } catch { bad("올바른 JSON이어야 합니다."); }
+      }
+      if (spec.array && !Array.isArray(v)) bad("배열 JSON이어야 합니다.");
+      const s = JSON.stringify(v);
+      if (s.length > 100000) bad("100KB를 넘을 수 없습니다.");
+      return s;
+    }
+  }
+}
+
+function catalogSpec(domain: string): CatalogDomain {
+  const d = CATALOG_DOMAINS[domain];
+  if (!d) throw new HttpError(400, "INVALID_DOMAIN", `domain은 ${Object.keys(CATALOG_DOMAINS).join(" | ")} 중 하나여야 합니다.`);
+  return d;
+}
 
 export async function handleAdmin(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
@@ -196,27 +323,311 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     // `title`/`subtitle` are what the admin list shows; `search` is what `q` matches.
     const q = str(url.searchParams.get("q"), 80);
     const domain = str(url.searchParams.get("domain"), 20).toUpperCase();
-    const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit") || "100", 10) || 100));
+    const status = str(url.searchParams.get("status"), 20).toLowerCase();
+    const pg = pageParams(url, 100, 200);
     const sources: Record<string, string> = {
-      HOTEL: "SELECT id, 'HOTEL' AS domain_type, name_ko AS title, city AS subtitle, base_price_krw AS price, partner_id, name_ko || ' ' || COALESCE(name_en,'') || ' ' || COALESCE(city,'') AS search FROM hotels",
-      FLIGHT: "SELECT id, 'FLIGHT' AS domain_type, airline_name || ' ' || flight_number AS title, departure_airport || ' → ' || arrival_airport AS subtitle, base_price_krw AS price, partner_id, airline_name || ' ' || flight_number || ' ' || departure_airport || ' ' || arrival_airport || ' ' || COALESCE(departure_city,'') || ' ' || COALESCE(arrival_city,'') AS search FROM flights",
-      TRAIN: "SELECT id, 'TRAIN' AS domain_type, train_type || ' ' || train_number AS title, departure_station || ' → ' || arrival_station AS subtitle, price_krw AS price, NULL AS partner_id, train_type || ' ' || train_number || ' ' || departure_station || ' ' || arrival_station AS search FROM trains",
-      CAR: "SELECT id, 'CAR' AS domain_type, vehicle_model AS title, company_name || ' · ' || COALESCE(pickup_location,'') AS subtitle, daily_price_krw AS price, partner_id, vehicle_model || ' ' || company_name || ' ' || COALESCE(pickup_location,'') AS search FROM cars",
-      TRANSFER: "SELECT id, 'TRANSFER' AS domain_type, service_title AS title, airport_code || ' · ' || COALESCE(destination_area,'') AS subtitle, price_krw AS price, partner_id, service_title || ' ' || airport_code || ' ' || COALESCE(destination_area,'') AS search FROM transfers",
-      ACTIVITY: "SELECT id, 'ACTIVITY' AS domain_type, title, COALESCE(city,'') AS subtitle, price_krw AS price, partner_id, title || ' ' || COALESCE(city,'') || ' ' || COALESCE(category,'') AS search FROM activities",
-      PACKAGE: "SELECT id, 'PACKAGE' AS domain_type, title, COALESCE(destination_city,'') AS subtitle, total_package_krw AS price, NULL AS partner_id, title || ' ' || COALESCE(destination_city,'') AS search FROM packages",
+      HOTEL: "SELECT id, 'HOTEL' AS domain_type, name_ko AS title, city AS subtitle, base_price_krw AS price, partner_id, is_active, name_ko || ' ' || COALESCE(name_en,'') || ' ' || COALESCE(city,'') AS search FROM hotels",
+      FLIGHT: "SELECT id, 'FLIGHT' AS domain_type, airline_name || ' ' || flight_number AS title, departure_airport || ' → ' || arrival_airport AS subtitle, base_price_krw AS price, partner_id, is_active, airline_name || ' ' || flight_number || ' ' || departure_airport || ' ' || arrival_airport || ' ' || COALESCE(departure_city,'') || ' ' || COALESCE(arrival_city,'') AS search FROM flights",
+      TRAIN: "SELECT id, 'TRAIN' AS domain_type, train_type || ' ' || train_number AS title, departure_station || ' → ' || arrival_station AS subtitle, price_krw AS price, NULL AS partner_id, is_active, train_type || ' ' || train_number || ' ' || departure_station || ' ' || arrival_station AS search FROM trains",
+      CAR: "SELECT id, 'CAR' AS domain_type, vehicle_model AS title, company_name || ' · ' || COALESCE(pickup_location,'') AS subtitle, daily_price_krw AS price, partner_id, is_active, vehicle_model || ' ' || company_name || ' ' || COALESCE(pickup_location,'') AS search FROM cars",
+      TRANSFER: "SELECT id, 'TRANSFER' AS domain_type, service_title AS title, airport_code || ' · ' || COALESCE(destination_area,'') AS subtitle, price_krw AS price, partner_id, is_active, service_title || ' ' || airport_code || ' ' || COALESCE(destination_area,'') AS search FROM transfers",
+      ACTIVITY: "SELECT id, 'ACTIVITY' AS domain_type, title, COALESCE(city,'') AS subtitle, price_krw AS price, partner_id, is_active, title || ' ' || COALESCE(city,'') || ' ' || COALESCE(category,'') AS search FROM activities",
+      PACKAGE: "SELECT id, 'PACKAGE' AS domain_type, title, COALESCE(destination_city,'') AS subtitle, total_package_krw AS price, NULL AS partner_id, is_active, title || ' ' || COALESCE(destination_city,'') AS search FROM packages",
     };
     // D1 caps the number of terms in a compound SELECT, so each table is queried on its own (in parallel)
     // and the results are merged here.
     const picked = domain && sources[domain] ? [domain] : Object.keys(sources);
-    const where = q ? " WHERE search LIKE ? ESCAPE '\\' OR id = ?" : "";
-    const binds: unknown[] = q ? [`%${likeEscape(q)}%`, q, limit] : [limit];
+    const conds: string[] = [];
+    const binds: unknown[] = [];
+    if (q) { conds.push("(search LIKE ? ESCAPE '\\' OR id = ?)"); binds.push(`%${likeEscape(q)}%`, q); }
+    if (status === "active" || status === "inactive") { conds.push("is_active = ?"); binds.push(status === "active" ? 1 : 0); }
+    const where = conds.length ? ` WHERE ${conds.join(" AND ")}` : "";
     const parts = await Promise.all(picked.map((d) =>
-      db.prepare(`SELECT id, domain_type, title, subtitle, price, partner_id FROM (${sources[d]})${where} ORDER BY title LIMIT ?`).bind(...binds).all()));
-    const items = parts.flatMap((p) => p.results || [])
-      .sort((a: any, b: any) => String(a.domain_type).localeCompare(String(b.domain_type)) || String(a.title).localeCompare(String(b.title), "ko"))
-      .slice(0, limit);
-    return json({ success: true, items, domains: Object.keys(sources) });
+      db.prepare(`SELECT id, domain_type, title, subtitle, price, partner_id, is_active FROM (${sources[d]})${where} ORDER BY title LIMIT 200`).bind(...binds).all()));
+    const merged = parts.flatMap((p) => p.results || [])
+      .sort((a: any, b: any) => String(a.domain_type).localeCompare(String(b.domain_type)) || String(a.title).localeCompare(String(b.title), "ko"));
+    const items = merged.slice(pg.offset, pg.offset + pg.pageSize);
+    return json({ success: true, items, domains: Object.keys(sources), ...pageMeta(merged.length, pg.page, pg.pageSize) });
+  }
+
+  // Admin product detail: full row for the edit form.
+  m = path.match(/^\/api\/v1\/admin\/catalog\/([A-Z]+)\/([A-Za-z0-9_-]+)$/);
+  if (m && method === "GET" && !path.endsWith("/policy")) {
+    const spec = catalogSpec(m[1]);
+    const row = await db.prepare(`SELECT * FROM ${spec.table} WHERE id = ?`).bind(m[2]).first();
+    if (!row) throw new HttpError(404, "PRODUCT_NOT_FOUND", "상품을 찾을 수 없습니다.");
+    return json({ success: true, domain: m[1], product: row });
+  }
+
+  // Admin product create.
+  m = path.match(/^\/api\/v1\/admin\/catalog\/([A-Z]+)$/);
+  if (m && method === "POST") {
+    const spec = catalogSpec(m[1]);
+    const b = await readJson(request);
+    const id = b.id !== undefined ? str(b.id, 100) : newId(spec.prefix);
+    if (!CATALOG_ID_RE.test(id)) throw new HttpError(400, "INVALID_ID", "id는 100자 이하의 영문·숫자·-_만 허용됩니다.");
+    if (await db.prepare(`SELECT id FROM ${spec.table} WHERE id = ?`).bind(id).first()) {
+      throw new HttpError(409, "ID_EXISTS", "이미 등록된 상품 ID입니다.");
+    }
+    const byCol = new Map(spec.fields.map((f) => [f.col, f]));
+    for (const k of Object.keys(b)) {
+      if (k !== "id" && !byCol.has(k)) throw new HttpError(400, "UNKNOWN_FIELD", `알 수 없는 필드입니다: ${k}`, { field: k });
+    }
+    const cols = ["id"];
+    const vals: unknown[] = [id];
+    for (const f of spec.fields) {
+      if (b[f.col] === undefined) {
+        if (f.required) throw new HttpError(400, "FIELD_REQUIRED", `${f.col}은(는) 필수 항목입니다.`, { field: f.col });
+        continue; // DB default applies
+      }
+      cols.push(f.col);
+      vals.push(coerceCatalogField(f, b[f.col]));
+    }
+    await db.prepare(`INSERT INTO ${spec.table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`).bind(...vals).run();
+    await audit(env, admin.id, "CREATE_PRODUCT", m[1], id, { table: spec.table });
+    return json({ success: true, id, domain: m[1] }, 201);
+  }
+
+  // Admin product update (partial; id/domain immutable).
+  m = path.match(/^\/api\/v1\/admin\/catalog\/([A-Z]+)\/([A-Za-z0-9_-]+)$/);
+  if (m && method === "PATCH" && !path.endsWith("/policy")) {
+    const spec = catalogSpec(m[1]);
+    const b = await readJson(request);
+    if (b.id !== undefined || b.domain !== undefined) throw new HttpError(400, "IMMUTABLE_FIELD", "id/domain은 변경할 수 없습니다.");
+    const byCol = new Map(spec.fields.map((f) => [f.col, f]));
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    for (const [k, v] of Object.entries(b)) {
+      const f = byCol.get(k);
+      if (!f) throw new HttpError(400, "UNKNOWN_FIELD", `알 수 없는 필드입니다: ${k}`, { field: k });
+      sets.push(`${f.col} = ?`);
+      vals.push(coerceCatalogField(f, v));
+    }
+    if (!sets.length) throw new HttpError(400, "EMPTY_UPDATE", "변경할 필드가 없습니다.");
+    const r = await db.prepare(`UPDATE ${spec.table} SET ${sets.join(", ")} WHERE id = ?`).bind(...vals, m[2]).run();
+    if (!r.meta.changes) throw new HttpError(404, "PRODUCT_NOT_FOUND", "상품을 찾을 수 없습니다.");
+    await audit(env, admin.id, "UPDATE_PRODUCT", m[1], m[2], { fields: Object.keys(b) });
+    return json({ success: true });
+  }
+
+  // Admin product delete: blocked while bookings (or package components) reference it.
+  m = path.match(/^\/api\/v1\/admin\/catalog\/([A-Z]+)\/([A-Za-z0-9_-]+)$/);
+  if (m && method === "DELETE") {
+    const spec = catalogSpec(m[1]);
+    const refs = await db.prepare("SELECT COUNT(*) AS c FROM bookings WHERE domain_type = ? AND item_id = ?").bind(m[1], m[2]).first<{ c: number }>();
+    if (Number(refs?.c || 0) > 0) {
+      const sample = await db.prepare("SELECT booking_number FROM bookings WHERE domain_type = ? AND item_id = ? LIMIT 5").bind(m[1], m[2]).all();
+      throw new HttpError(409, "REFERENCED_BY_BOOKING", `예약 ${refs!.c}건이 참조 중이라 삭제할 수 없습니다. 판매중지(is_active=0)를 사용하세요.`,
+        { count: refs!.c, samples: (sample.results || []).map((s: any) => s.booking_number) });
+    }
+    if (m[1] === "HOTEL" || m[1] === "FLIGHT") {
+      const col = m[1] === "HOTEL" ? "hotel_id" : "flight_id";
+      const pkg = await db.prepare(`SELECT COUNT(*) AS c FROM packages WHERE ${col} = ?`).bind(m[2]).first<{ c: number }>();
+      if (Number(pkg?.c || 0) > 0) throw new HttpError(409, "REFERENCED_BY_PACKAGE", `패키지 ${pkg!.c}건이 참조 중이라 삭제할 수 없습니다.`, { count: pkg!.c });
+    }
+    const r = await db.prepare(`DELETE FROM ${spec.table} WHERE id = ?`).bind(m[2]).run();
+    if (!r.meta.changes) throw new HttpError(404, "PRODUCT_NOT_FOUND", "상품을 찾을 수 없습니다.");
+    await audit(env, admin.id, "DELETE_PRODUCT", m[1], m[2], { table: spec.table });
+    return json({ success: true });
+  }
+
+  // Admin bulk upsert: { domain, rows: [{...fields, id?}] }. Re-running the same
+  // payload converges (upsert by id), so no idempotency key is needed.
+  if (path === "/api/v1/admin/catalog/bulk" && method === "POST") {
+    await rateLimit(request, env, "admin_bulk", 30, 3600);
+    const b = await readJson(request, 2 * 1024 * 1024);
+    const spec = catalogSpec(str(b.domain, 20).toUpperCase());
+    const rows = Array.isArray(b.rows) ? b.rows : null;
+    if (!rows || !rows.length) throw new HttpError(400, "ROWS_REQUIRED", "rows 배열(1~500건)가 필요합니다.");
+    if (rows.length > 500) throw new HttpError(400, "TOO_MANY_ROWS", "한 번에 500건까지 업로드할 수 있습니다.");
+    const byCol = new Map(spec.fields.map((f) => [f.col, f]));
+    const failed: Array<{ index: number; id: string | null; error: string }> = [];
+    // Phase 1: id shape check, so existence is known before field validation.
+    const withIds: Array<{ index: number; row: any; id: string }> = [];
+    rows.forEach((row: any, index: number) => {
+      try {
+        if (!row || typeof row !== "object") throw new HttpError(400, "INVALID_ROW", "행은 객체여야 합니다.");
+        const id = row.id !== undefined ? str(row.id, 100) : newId(spec.prefix);
+        if (!CATALOG_ID_RE.test(id)) throw new HttpError(400, "INVALID_ID", "id는 100자 이하의 영문·숫자·-_만 허용됩니다.");
+        withIds.push({ index, row, id });
+      } catch (e: any) {
+        failed.push({ index, id: row && typeof row.id === "string" ? row.id.slice(0, 100) : null, error: e instanceof HttpError ? e.message : "행 처리 실패" });
+      }
+    });
+    const existing = new Set<string>();
+    for (let i = 0; i < withIds.length; i += 200) {
+      const chunk = withIds.slice(i, i + 200);
+      const found = await db.prepare(`SELECT id FROM ${spec.table} WHERE id IN (${chunk.map(() => "?").join(",")})`)
+        .bind(...chunk.map((r) => r.id)).all<{ id: string }>();
+      for (const r of found.results || []) existing.add(r.id);
+    }
+    // Phase 2: new ids need every required field; existing ids accept partial rows.
+    const valid: Array<{ id: string; cols: string[]; vals: unknown[]; isNew: boolean }> = [];
+    for (const { index, row, id } of withIds) {
+      try {
+        const isNew = !existing.has(id);
+        const cols = ["id"];
+        const vals: unknown[] = [id];
+        for (const [k, v] of Object.entries(row)) {
+          if (k === "id") continue;
+          const f = byCol.get(k);
+          if (!f) throw new HttpError(400, "UNKNOWN_FIELD", `알 수 없는 필드입니다: ${k}`, { field: k });
+          cols.push(f.col);
+          vals.push(coerceCatalogField(f, v));
+        }
+        if (isNew) {
+          for (const f of spec.fields) {
+            if (f.required && row[f.col] === undefined) {
+              throw new HttpError(400, "FIELD_REQUIRED", `${f.col}은(는) 신규 등록 시 필수 항목입니다.`, { field: f.col });
+            }
+          }
+        }
+        valid.push({ id, cols, vals, isNew });
+      } catch (e: any) {
+        failed.push({ index, id, error: e instanceof HttpError ? e.message : "행 처리 실패" });
+      }
+    }
+    // D1 rejects partial-column INSERTs (NOT NULL check runs before ON CONFLICT
+    // resolution), so existence — already known — picks INSERT vs UPDATE.
+    let created = 0;
+    let updated = 0;
+    for (let i = 0; i < valid.length; i += 50) {
+      const stmts = [];
+      for (const r of valid.slice(i, i + 50)) {
+        if (r.isNew) {
+          created++;
+          stmts.push(db.prepare(`INSERT INTO ${spec.table} (${r.cols.join(", ")}) VALUES (${r.cols.map(() => "?").join(", ")})`).bind(...r.vals));
+        } else {
+          updated++;
+          const dataCols = r.cols.filter((c) => c !== "id");
+          if (!dataCols.length) continue; // id-only row: nothing to change
+          stmts.push(db.prepare(`UPDATE ${spec.table} SET ${dataCols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`).bind(...r.vals.slice(1), r.id));
+        }
+      }
+      if (stmts.length) await db.batch(stmts);
+    }
+    await audit(env, admin.id, "BULK_UPSERT_PRODUCT", spec.table, `${created + updated}/${rows.length}`, { domain: str(b.domain, 20).toUpperCase(), created, updated, failed: failed.length });
+    return json({ success: true, created, updated, failed });
+  }
+
+  // Affiliate click log (outlink tracking). Reads only; rows are written by /out/* redirects.
+  if (path === "/api/v1/admin/affiliate/clicks" && method === "GET") {
+    const partner = str(url.searchParams.get("partner"), 100).toLowerCase();
+    const status = str(url.searchParams.get("status"), 20).toUpperCase();
+    const q = str(url.searchParams.get("q"), 100);
+    const conds: string[] = [];
+    const p: unknown[] = [];
+    if (partner) { conds.push("partner_name = ?"); p.push(partner); }
+    if (status) { conds.push("status = ?"); p.push(status); }
+    if (q) { const like = `%${likeEscape(q)}%`; conds.push("(click_id LIKE ? ESCAPE '\\' OR item_id LIKE ? ESCAPE '\\' OR partner_name LIKE ? ESCAPE '\\')"); p.push(like, like, like); }
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+    const pg = pageParams(url);
+    const total = (await db.prepare(`SELECT COUNT(*) AS total FROM affiliate_clicks ${where}`).bind(...p).first<{ total: number }>())?.total || 0;
+    const rows = await db.prepare(`SELECT click_id, domain_type, item_id, item_title, partner_name, sub_id, status, created_at FROM affiliate_clicks ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...p, pg.pageSize, pg.offset).all();
+    return json({ success: true, clicks: rows.results || [], ...pageMeta(total, pg.page, pg.pageSize) });
+  }
+
+  // Affiliate conversion log (postback-verified orders). Reads only.
+  if (path === "/api/v1/admin/affiliate/conversions" && method === "GET") {
+    const partner = str(url.searchParams.get("partner"), 100).toLowerCase();
+    const status = str(url.searchParams.get("status"), 20).toUpperCase();
+    const q = str(url.searchParams.get("q"), 100);
+    const conds: string[] = [];
+    const p: unknown[] = [];
+    if (partner) { conds.push("partner_name = ?"); p.push(partner); }
+    if (status) { conds.push("status = ?"); p.push(status); }
+    if (q) { const like = `%${likeEscape(q)}%`; conds.push("(order_id LIKE ? ESCAPE '\\' OR click_id LIKE ? ESCAPE '\\')"); p.push(like, like); }
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+    const pg = pageParams(url);
+    const total = (await db.prepare(`SELECT COUNT(*) AS total FROM affiliate_conversions ${where}`).bind(...p).first<{ total: number }>())?.total || 0;
+    const rows = await db.prepare(`SELECT id, click_id, partner_name, order_id, amount, currency, commission, status, created_at FROM affiliate_conversions ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...p, pg.pageSize, pg.offset).all();
+    return json({ success: true, conversions: rows.results || [], ...pageMeta(total, pg.page, pg.pageSize) });
+  }
+
+  // Affiliate funnel summary.
+  if (path === "/api/v1/admin/affiliate/summary" && method === "GET") {
+    const clicks = await db.prepare("SELECT COUNT(*) AS c FROM affiliate_clicks").first<{ c: number }>();
+    const conv = await db.prepare("SELECT COUNT(*) AS c, COALESCE(SUM(amount), 0) AS gmv, COALESCE(SUM(commission), 0) AS commission FROM affiliate_conversions").first<any>();
+    const byPartner = await db.prepare(`SELECT partner_name, COUNT(*) AS clicks,
+      (SELECT COUNT(*) FROM affiliate_conversions c WHERE c.partner_name = k.partner_name) AS conversions,
+      (SELECT COALESCE(SUM(amount), 0) FROM affiliate_conversions c WHERE c.partner_name = k.partner_name) AS gmv
+      FROM affiliate_clicks k GROUP BY partner_name ORDER BY clicks DESC LIMIT 50`).all();
+    return json({ success: true, summary: { clicks: clicks?.c || 0, conversions: conv?.c || 0, gmv: conv?.gmv || 0, commission: conv?.commission || 0 }, byPartner: byPartner.results || [] });
+  }
+
+  // Product policy read (null when the product follows domain defaults).
+  m = path.match(/^\/api\/v1\/admin\/catalog\/([A-Z]+)\/([A-Za-z0-9_-]+)\/policy$/);
+  if (m && method === "GET") {
+    const spec = catalogSpec(m[1]);
+    if (!await db.prepare(`SELECT id FROM ${spec.table} WHERE id = ?`).bind(m[2]).first()) {
+      throw new HttpError(404, "PRODUCT_NOT_FOUND", "상품을 찾을 수 없습니다.");
+    }
+    const row = await db.prepare("SELECT domain_type, item_id, free_cancel_hours, change_allowed, no_show_fee_bps, tiers_json, note, updated_at FROM product_policies WHERE domain_type = ? AND item_id = ?").bind(m[1], m[2]).first();
+    return json({ success: true, policy: row ? { ...row as object, tiers: JSON.parse((row as any).tiers_json || "[]") } : null });
+  }
+
+  // Product policy upsert (full replace).
+  m = path.match(/^\/api\/v1\/admin\/catalog\/([A-Z]+)\/([A-Za-z0-9_-]+)\/policy$/);
+  if (m && (method === "PUT" || method === "PATCH")) {
+    const spec = catalogSpec(m[1]);
+    if (!await db.prepare(`SELECT id FROM ${spec.table} WHERE id = ?`).bind(m[2]).first()) {
+      throw new HttpError(404, "PRODUCT_NOT_FOUND", "상품을 찾을 수 없습니다.");
+    }
+    const b = await readJson(request);
+    const freeHours = b.free_cancel_hours === undefined || b.free_cancel_hours === null ? null : Number(b.free_cancel_hours);
+    if (freeHours !== null && (!Number.isInteger(freeHours) || freeHours < 0)) throw new HttpError(400, "INVALID_POLICY", "free_cancel_hours는 0 이상의 정수여야 합니다.");
+    const changeAllowed = b.change_allowed === undefined ? 0 : (b.change_allowed === true || b.change_allowed === 1 || b.change_allowed === "1" ? 1 : 0);
+    if (b.change_allowed !== undefined && !(b.change_allowed === true || b.change_allowed === false || b.change_allowed === 1 || b.change_allowed === 0 || b.change_allowed === "1" || b.change_allowed === "0")) {
+      throw new HttpError(400, "INVALID_POLICY", "change_allowed는 true/false여야 합니다.");
+    }
+    const noShow = b.no_show_fee_bps === undefined || b.no_show_fee_bps === null ? null : Number(b.no_show_fee_bps);
+    if (noShow !== null && (!Number.isInteger(noShow) || noShow < 0 || noShow > 10000)) throw new HttpError(400, "INVALID_POLICY", "no_show_fee_bps는 0~10000(bps) 정수여야 합니다.");
+    const tiersIn = b.tiers === undefined ? [] : b.tiers;
+    if (!Array.isArray(tiersIn) || tiersIn.length > 10) throw new HttpError(400, "INVALID_POLICY", "tiers는 최대 10개의 배열이어야 합니다.");
+    const tiers = tiersIn.map((t: any) => {
+      const h = Number(t?.hours_before);
+      const r = Number(t?.refund_bps);
+      if (!Number.isInteger(h) || h < 0) throw new HttpError(400, "INVALID_POLICY", "tiers[].hours_before는 0 이상의 정수여야 합니다.");
+      if (!Number.isInteger(r) || r < 0 || r > 10000) throw new HttpError(400, "INVALID_POLICY", "tiers[].refund_bps는 0~10000(bps) 정수여야 합니다.");
+      return { hours_before: h, refund_bps: r, note: str(t?.note, 200) };
+    }).sort((a, b2) => b2.hours_before - a.hours_before);
+    const note = b.note === undefined || b.note === null ? null : str(b.note, 1000);
+    await db.prepare(`INSERT INTO product_policies (domain_type, item_id, free_cancel_hours, change_allowed, no_show_fee_bps, tiers_json, note, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      ON CONFLICT(domain_type, item_id) DO UPDATE SET free_cancel_hours = excluded.free_cancel_hours, change_allowed = excluded.change_allowed,
+      no_show_fee_bps = excluded.no_show_fee_bps, tiers_json = excluded.tiers_json, note = excluded.note, updated_at = excluded.updated_at`)
+      .bind(m[1], m[2], freeHours, changeAllowed, noShow, JSON.stringify(tiers), note).run();
+    await audit(env, admin.id, "UPSERT_PRODUCT_POLICY", m[1], m[2], { tiers: tiers.length });
+    return json({ success: true });
+  }
+
+  // Legal document version registry.
+  if (path === "/api/v1/admin/legal" && method === "GET") {
+    const rows = await db.prepare("SELECT slug, version, title, effective_from, updated_at FROM legal_documents ORDER BY slug").all();
+    return json({ success: true, documents: rows.results || [] });
+  }
+  m = path.match(/^\/api\/v1\/admin\/legal\/([a-z-]+)$/);
+  if (m && method === "PATCH") {
+    const b = await readJson(request);
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    if (b.version !== undefined) {
+      const v = str(b.version, 20);
+      if (!/^\d+\.\d+$/.test(v)) throw new HttpError(400, "INVALID_VERSION", "version은 '2.0' 형식이어야 합니다.");
+      sets.push("version = ?"); vals.push(v);
+    }
+    if (b.title !== undefined) { sets.push("title = ?"); vals.push(str(b.title, 200)); }
+    if (b.effective_from !== undefined) {
+      const d = str(b.effective_from, 30);
+      if (Number.isNaN(Date.parse(d))) throw new HttpError(400, "INVALID_DATE", "effective_from 형식이 올바르지 않습니다.");
+      sets.push("effective_from = ?"); vals.push(d);
+    }
+    if (!sets.length) throw new HttpError(400, "EMPTY_UPDATE", "변경할 필드가 없습니다.");
+    sets.push("updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')");
+    const r = await db.prepare(`UPDATE legal_documents SET ${sets.join(", ")} WHERE slug = ?`).bind(...vals, m[1]).run();
+    if (!r.meta.changes) throw new HttpError(404, "LEGAL_NOT_FOUND", "약관 문서를 찾을 수 없습니다.");
+    await audit(env, admin.id, "UPDATE_LEGAL", "LEGAL", m[1], { fields: Object.keys(b) });
+    return json({ success: true });
   }
 
   // Admin Partners Management & Approvals

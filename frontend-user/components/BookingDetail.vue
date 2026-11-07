@@ -193,6 +193,12 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
           <span v-else>환불 불가 요금입니다.</span>
         </p>
         <p v-if="booking.cancellationPreview" class="mt-1 text-xs text-ink-subtle">지금 취소 시: 수수료 {{ formatKrw(booking.cancellationPreview.feeMinor) }} · 환불 {{ formatKrw(booking.cancellationPreview.refundMinor) }}</p>
+        <PolicyNotice :domain="booking.domain" :item-id="booking.itemId" v-slot="{ policy, hoursLabel, pct }">
+          <ul v-if="policy && policy.tiers?.length" class="mt-2 space-y-1 text-xs text-ink-muted">
+            <li v-for="(t, i) in policy.tiers" :key="i">· 이용 {{ hoursLabel(t.hours_before) }} 전 취소 시 {{ pct(t.refund_bps) }} 환불{{ t.note ? ` (${t.note})` : '' }}</li>
+            <li v-if="policy.no_show_fee_bps">· 노쇼 시 요금의 {{ pct(policy.no_show_fee_bps) }} 위약금</li>
+          </ul>
+        </PolicyNotice>
         <button v-if="booking.canCancel" :disabled="cancelling" class="mt-3 rounded-xl border border-danger/40 px-4 py-2 text-sm font-semibold text-danger disabled:opacity-50" data-testid="cancel-booking" @click="cancel">
           {{ cancelling ? '처리 중…' : '예약 취소' }}
         </button>

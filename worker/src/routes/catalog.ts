@@ -5,7 +5,7 @@
  * `price_notice` because catalog prices are not supplier-verified.
  */
 import type { Env } from "../env.ts";
-import { json } from "../lib/http.ts";
+import { json, str } from "../lib/http.ts";
 import { hotelRatePlans, supplierBookabilityMap, type Bookability } from "../services/catalog.ts";
 import { airportsForCityCode, airportsForPlaceName, likeEscape, parseDomain, suggest } from "../services/suggest-service.ts";
 
@@ -37,6 +37,29 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
         { "Cache-Control": "public, max-age=60, s-maxage=300" },
       );
     }
+
+  // Structured cancellation policy for one product (null = domain defaults apply).
+  if (path === "/api/v1/policies") {
+    const domain = str(url.searchParams.get("domain"), 20).toUpperCase();
+    const itemId = str(url.searchParams.get("itemId") || url.searchParams.get("item_id"), 100);
+    if (!domain || !itemId) return json({ success: true, policy: null });
+    const row = await env.DB.prepare("SELECT domain_type, item_id, free_cancel_hours, change_allowed, no_show_fee_bps, tiers_json, note, updated_at FROM product_policies WHERE domain_type = ? AND item_id = ?").bind(domain, itemId).first<any>();
+    return json({ success: true, policy: row ? { ...row, tiers: JSON.parse(row.tiers_json || "[]") } : null });
+  }
+
+  // Legal document version registry (bodies live in the versioned frontend pages).
+  if (path === "/api/v1/legal") {
+    const rows = await env.DB.prepare("SELECT slug, version, title, effective_from, updated_at FROM legal_documents ORDER BY slug").all();
+    return json({ success: true, documents: rows.results || [] });
+  }
+  {
+    const lm = path.match(/^\/api\/v1\/legal\/([a-z-]+)$/);
+    if (lm) {
+      const row = await env.DB.prepare("SELECT slug, version, title, effective_from, updated_at FROM legal_documents WHERE slug = ?").bind(lm[1]).first();
+      if (!row) return json({ error: "약관 문서를 찾을 수 없습니다.", code: "LEGAL_NOT_FOUND" }, 404);
+      return json({ success: true, document: row });
+    }
+  }
 
   const bmap = await supplierBookabilityMap(env);
 

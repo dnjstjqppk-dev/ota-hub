@@ -14,6 +14,8 @@ import FeatureFlagsView from '../views/FeatureFlagsView.vue'
 import UrlIngestionView from '../views/UrlIngestionView.vue'
 import SuppliersView from '../views/SuppliersView.vue'
 import TicketsView from '../views/TicketsView.vue'
+import AffiliateView from '../views/AffiliateView.vue'
+import LegalView from '../views/LegalView.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -108,6 +110,18 @@ const routes: RouteRecordRaw[] = [
     path: '/settlements',
     name: 'Settlements',
     component: SettlementsView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/affiliate',
+    name: 'Affiliate',
+    component: AffiliateView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/legal',
+    name: 'Legal',
+    component: LegalView,
     meta: { requiresAuth: true }
   },
   {

@@ -292,6 +292,16 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
             <li class="flex gap-2"><AppIcon name="check" :size="16" class="mt-0.5 text-ink-subtle" />숙소가 예약을 확정한 뒤에 바우처를 발급해요. 확정에 실패하면 결제 금액을 전액 환불해요.</li>
             <li class="flex gap-2"><AppIcon name="support" :size="16" class="mt-0.5 text-ink-subtle" />체크인·체크아웃 시간과 현장 이용 규정은 숙소에 따라 달라요. 바우처에 안내된 내용을 확인해 주세요.</li>
           </ul>
+          <PolicyNotice domain="HOTEL" :item-id="hotelId" v-slot="{ policy, loaded, hoursLabel, pct }">
+            <ul v-if="policy" class="mt-3 space-y-2 border-t border-line pt-3 text-sm text-ink-muted">
+              <li v-if="policy.free_cancel_hours !== null && policy.free_cancel_hours !== undefined" class="flex gap-2"><AppIcon name="check" :size="16" class="mt-0.5 text-success" />체크인 {{ hoursLabel(policy.free_cancel_hours) }} 전까지 무료 취소</li>
+              <li v-for="(t, i) in (policy.tiers || [])" :key="i" class="flex gap-2"><AppIcon name="refund" :size="16" class="mt-0.5 text-ink-subtle" />체크인 {{ hoursLabel(t.hours_before) }} 전 취소 시 {{ pct(t.refund_bps) }} 환불{{ t.note ? ` · ${t.note}` : '' }}</li>
+              <li v-if="policy.no_show_fee_bps" class="flex gap-2"><AppIcon name="refund" :size="16" class="mt-0.5 text-ink-subtle" />노쇼 시 요금의 {{ pct(policy.no_show_fee_bps) }} 위약금</li>
+              <li class="flex gap-2"><AppIcon name="check" :size="16" class="mt-0.5 text-ink-subtle" />일정 변경 {{ policy.change_allowed ? '가능' : '불가' }}</li>
+              <li v-if="policy.note" class="flex gap-2 text-xs text-ink-subtle">{{ policy.note }}</li>
+            </ul>
+            <p v-else-if="loaded" class="mt-3 border-t border-line pt-3 text-xs text-ink-subtle">이 숙소는 <NuxtLink to="/refund-policy" class="underline">표준 취소·환불 규정</NuxtLink>을 따릅니다.</p>
+          </PolicyNotice>
         </section>
       </div>
 

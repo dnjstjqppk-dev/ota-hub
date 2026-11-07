@@ -79,10 +79,25 @@ defineExpose({ askDates })
         <p v-if="overCapacity" class="rounded-xl bg-warning-soft px-3 py-2 text-sm text-ink">이 상품은 최대 {{ maxPeople }}명까지 이용할 수 있어요.</p>
       </template>
 
-      <p class="flex items-center gap-1.5 text-sm font-semibold" :class="cancellation === 'FREE' ? 'text-success' : 'text-danger'">
-        <AppIcon :name="cancellation === 'FREE' ? 'check' : 'close'" :size="16" />
-        {{ cancellation === 'FREE' ? '이용 전날까지 무료 취소 (정확한 기한은 결제 전 표시)' : '환불 불가 상품' }}
-      </p>
+      <PolicyNotice :domain="domain" :item-id="item.id" v-slot="{ policy, loaded, hoursLabel, pct }">
+        <div v-if="policy" class="space-y-1 text-sm">
+          <p v-if="policy.free_cancel_hours !== null && policy.free_cancel_hours !== undefined" class="flex items-center gap-1.5 font-semibold text-success">
+            <AppIcon name="check" :size="16" />이용 {{ hoursLabel(policy.free_cancel_hours) }} 전까지 무료 취소
+          </p>
+          <ul v-if="policy.tiers?.length" class="space-y-0.5 text-ink-muted">
+            <li v-for="(t, i) in policy.tiers" :key="i" class="flex items-center gap-1.5">
+              <AppIcon name="refund" :size="14" class="text-ink-subtle" />{{ hoursLabel(t.hours_before) }} 전 취소 시 {{ pct(t.refund_bps) }} 환불{{ t.note ? ` · ${t.note}` : '' }}
+            </li>
+          </ul>
+          <p v-if="policy.no_show_fee_bps" class="text-ink-muted">노쇼 시 요금의 {{ pct(policy.no_show_fee_bps) }} 위약금</p>
+          <p class="text-ink-muted">일정 변경 {{ policy.change_allowed ? '가능' : '불가' }}</p>
+          <p v-if="policy.note" class="text-xs text-ink-subtle">{{ policy.note }}</p>
+        </div>
+        <p v-else-if="loaded" class="flex items-center gap-1.5 text-sm font-semibold" :class="cancellation === 'FREE' ? 'text-success' : 'text-danger'">
+          <AppIcon :name="cancellation === 'FREE' ? 'check' : 'close'" :size="16" />
+          {{ cancellation === 'FREE' ? '이용 전날까지 무료 취소 (정확한 기한은 결제 전 표시)' : '환불 불가 상품' }}
+        </p>
+      </PolicyNotice>
 
       <template v-if="item.bookable">
         <NuxtLink v-if="datesReady && !overCapacity" :to="{ path: '/checkout', query }" class="btn-primary w-full py-3" data-testid="book-now">예약하기</NuxtLink>

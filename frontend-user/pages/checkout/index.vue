@@ -328,6 +328,7 @@ onBeforeUnmount(() => clearInterval(timer))
           <button type="button" :disabled="busy || !payConfig?.enabled || paySecondsLeft === 0" class="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3.5 text-base font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40" data-testid="pay" @click="pay">
             <AppIcon name="lock" :size="18" />{{ busy ? '결제 처리 중…' : `${formatKrw(booking.totalMinor)} 결제하기` }}
           </button>
+          <p class="mt-3 text-xs leading-relaxed text-ink-subtle">결제하면 <NuxtLink to="/terms" class="underline">이용약관</NuxtLink>과 <NuxtLink to="/refund-policy" class="underline">취소·환불 규정</NuxtLink>에 동의한 것으로 봅니다. getfortrip은 통신판매를 중개하며, 실제 여행 서비스는 각 공급사가 제공해요.</p>
         </div>
 
         <p v-if="error" class="flex items-start gap-2 rounded-2xl bg-danger-soft px-4 py-3 text-sm font-medium text-danger" role="alert" data-testid="error"><AppIcon name="close" :size="16" class="mt-0.5" />{{ error }}</p>

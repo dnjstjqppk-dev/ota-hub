@@ -16,7 +16,8 @@ const NAV = [
     { path: '/dashboard', label: '대시보드', icon: 'dashboard' },
     { path: '/bookings', label: '예약 관리', icon: 'bookings' },
     { path: '/catalog', label: '상품', icon: 'package' },
-    { path: '/suppliers', label: '공급사 연동', icon: 'server' }
+    { path: '/suppliers', label: '공급사 연동', icon: 'server' },
+    { path: '/affiliate', label: '제휴 전환', icon: 'swap' }
   ] },
   { group: '회원·파트너', items: [
     { path: '/partners', label: '파트너', icon: 'building' },
@@ -32,7 +33,8 @@ const NAV = [
   { group: '재무·설정', items: [
     { path: '/settlements', label: '정산·감사 로그', icon: 'ledger' },
     { path: '/pricing', label: '환율', icon: 'exchange' },
-    { path: '/feature-flags', label: '기능 플래그', icon: 'flag' }
+    { path: '/feature-flags', label: '기능 플래그', icon: 'flag' },
+    { path: '/legal', label: '약관 버전', icon: 'shield' }
   ] }
 ]
 const flat = NAV.flatMap((g) => g.items)
