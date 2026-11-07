@@ -73,6 +73,17 @@ async function spaShell(env: Env, url: URL, request: Request): Promise<Response 
   return new Response(request.method === "HEAD" ? null : r.body, { status: 200, headers: h });
 }
 
+/** Fetch a portal shell, following the directory-index redirect ASSETS answers with. */
+async function fetchIndex(env: Env, url: URL, request: Request, indexPath: string): Promise<Response | null> {
+  const init = { method: "GET", headers: request.headers };
+  let r = await env.ASSETS.fetch(new Request(`${url.origin}${indexPath}`, init));
+  if (r.status === 307 || r.status === 308) {
+    const loc = r.headers.get("Location");
+    if (loc) r = await env.ASSETS.fetch(new Request(new URL(loc, url.origin).toString(), init));
+  }
+  return r.status === 200 ? r : null;
+}
+
 async function serveAssets(request: Request, env: Env, url: URL): Promise<Response> {
   const host = url.hostname.toLowerCase();
   const path = url.pathname;
@@ -86,8 +97,8 @@ async function serveAssets(request: Request, env: Env, url: URL): Promise<Respon
     }
     const a = await env.ASSETS.fetch(new Request(`${url.origin}/admin${path}`, request));
     if (a.status === 200) return a;
-    const idx = await env.ASSETS.fetch(new Request(`${url.origin}/admin/index.html`, request));
-    if (idx.status === 200) return idx;
+    const idx = await fetchIndex(env, url, request, "/admin/index.html");
+    if (idx) return idx;
   }
 
   // 2. Partner Host Dispatching (e.g. ota-partner.dnjstjqppk.workers.dev or partner.getfortrip.com)
@@ -97,8 +108,8 @@ async function serveAssets(request: Request, env: Env, url: URL): Promise<Respon
     }
     const a = await env.ASSETS.fetch(new Request(`${url.origin}/partner${path}`, request));
     if (a.status === 200) return a;
-    const idx = await env.ASSETS.fetch(new Request(`${url.origin}/partner/index.html`, request));
-    if (idx.status === 200) return idx;
+    const idx = await fetchIndex(env, url, request, "/partner/index.html");
+    if (idx) return idx;
   }
 
   // 3. Backwards-compatible path routing on default host (ota-hub)
@@ -106,16 +117,16 @@ async function serveAssets(request: Request, env: Env, url: URL): Promise<Respon
   if (path.startsWith("/admin/")) {
     const a = await env.ASSETS.fetch(request);
     if (a.status === 200) return a;
-    const idx = await env.ASSETS.fetch(new Request(`${url.origin}/admin/index.html`, request));
-    if (idx.status === 200) return idx;
+    const idx = await fetchIndex(env, url, request, "/admin/index.html");
+    if (idx) return idx;
   }
 
   if (path === "/partner") return Response.redirect(`${url.origin}/partner/`, 301);
   if (path.startsWith("/partner/")) {
     const a = await env.ASSETS.fetch(request);
     if (a.status === 200) return a;
-    const idx = await env.ASSETS.fetch(new Request(`${url.origin}/partner/index.html`, request));
-    if (idx.status === 200) return idx;
+    const idx = await fetchIndex(env, url, request, "/partner/index.html");
+    if (idx) return idx;
   }
 
   // 4. User Portal Routing (Default)

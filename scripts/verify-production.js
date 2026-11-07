@@ -551,13 +551,35 @@ async function runVerificationSuite() {
   // ---------------------------------------------------------------------------
   let partnerToken = '';
   await test("Partner Auth: Login with valid credentials and receive JWT token", async () => {
-    const res = await fetch(`${BASE_URL}/api/v1/partner/login`, {
+    // Self-contained: register a fresh QA partner, approve it as admin, then log in.
+    // (Legacy seed credentials were neutralized by migration 0010, so no fixed account exists.)
+    const qaEmail = `verify_${rand}@partner.getfortrip.com`;
+    const qaPass = `Verify${rand}!Partner`;
+    const regRes = await fetch(`${BASE_URL}/api/v1/partner/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: 'hotel_partner@getfortrip.com',
-        password: 'Partner2026!SecureKey',
+        email: qaEmail,
+        password: qaPass,
+        companyName: `검증용 QA 파트너 (${rand})`,
+        partnerType: 'HOTEL',
+        businessNumber: `VERIFY-${rand}`,
+        contactPhone: '010-0000-0000',
+        representativeName: 'Verify QA',
       }),
+    });
+    if (!regRes.ok) throw new Error(`QA partner registration failed: HTTP ${regRes.status}`);
+    const regJson = await regRes.json();
+    const apprRes = await fetch(`${BASE_URL}/api/v1/admin/partners/${regJson.partnerId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ status: 'ACTIVE' }),
+    });
+    if (!apprRes.ok) throw new Error(`QA partner approval failed: HTTP ${apprRes.status}`);
+    const res = await fetch(`${BASE_URL}/api/v1/partner/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: qaEmail, password: qaPass }),
     });
     if (!res.ok) {
       const errText = await res.text();
@@ -797,18 +819,22 @@ async function runVerificationSuite() {
       throw new Error(`Invalid history response: ${JSON.stringify(hist)}`);
     }
 
-    // Pick first draft and publish
-    const targetDraft = hist.items.find((i) => i.status !== 'PUBLISHED') || hist.items[0];
-    if (targetDraft) {
-      const pubRes = await fetch(`${BASE_URL}/api/v1/admin/ingest/${targetDraft.id}/publish`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${adminToken}` }
-      });
-      if (!pubRes.ok) throw new Error(`Publish draft failed: HTTP ${pubRes.status}`);
-      const pubJson = await pubRes.json();
-      if (!pubJson.success || !pubJson.published_item_id) {
-        throw new Error(`Invalid publish response: ${JSON.stringify(pubJson)}`);
-      }
+    // Publish only a genuinely publishable draft (unpublished, not rejected).
+    // The full draft->PATCH->publish->once-only flow is covered by the local E2E
+    // suite; this live check exercises publish only when a draft happens to exist.
+    const targetDraft = hist.items.find((i) => (i.status === 'DRAFT' || i.status === 'REVIEWED') && !i.published_item_id);
+    if (!targetDraft) {
+      console.log('(no publishable draft in history; publish step skipped)');
+      return;
+    }
+    const pubRes = await fetch(`${BASE_URL}/api/v1/admin/ingest/${targetDraft.id}/publish`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    if (!pubRes.ok) throw new Error(`Publish draft failed: HTTP ${pubRes.status}`);
+    const pubJson = await pubRes.json();
+    if (!pubJson.success || !pubJson.published_item_id) {
+      throw new Error(`Invalid publish response: ${JSON.stringify(pubJson)}`);
     }
   });
 
