@@ -1,8 +1,9 @@
 /**
  * Payment provider abstraction.
  *
- * - "toss": Toss Payments server-side confirm/cancel/lookup. Implemented against
- *   the public API contract; NOT verified end-to-end (no merchant contract / keys).
+ * - "toss": Toss Payments server-side confirm/cancel/lookup. Request/response
+ *   shapes are contract-tested against a stub (worker/test/unit/toss.test.ts);
+ *   only real merchant keys are still pending (test_ first, then live_).
  * - "sandbox": deterministic local simulator for automated tests. Refused unless
  *   APP_ENV is development/test, and every payment it produces is tagged
  *   mode=SANDBOX in the database and UI.
@@ -76,8 +77,8 @@ export function sandboxProvider(): PaymentProvider {
 // ---------------------------------------------------------------------------
 // Toss Payments (server-to-server). Docs: https://docs.tosspayments.com/reference
 // ---------------------------------------------------------------------------
-export function tossProvider(secretKey: string, clientKey: string | undefined): PaymentProvider {
-  const base = "https://api.tosspayments.com/v1";
+export function tossProvider(secretKey: string, clientKey: string | undefined, apiBase?: string): PaymentProvider {
+  const base = (apiBase || "").trim() || "https://api.tosspayments.com/v1";
   const auth = "Basic " + btoa(`${secretKey}:`);
   const mode: "LIVE" | "SANDBOX" = secretKey.startsWith("test_") ? "SANDBOX" : "LIVE";
 
@@ -133,7 +134,11 @@ export function getPaymentProvider(env: Env): PaymentProvider | null {
     if (!isNonProduction(env)) return null; // never in production
     return sandboxProvider();
   }
-  if (p === "toss" && env.TOSS_SECRET_KEY) return tossProvider(env.TOSS_SECRET_KEY, env.TOSS_CLIENT_KEY);
+  if (p === "toss" && env.TOSS_SECRET_KEY) {
+    // TOSS_API_BASE exists only to aim the contract tests at a stub. Production always talks to Toss.
+    const stub = isNonProduction(env) ? (env.TOSS_API_BASE || "").trim() : "";
+    return tossProvider(env.TOSS_SECRET_KEY, env.TOSS_CLIENT_KEY, stub || undefined);
+  }
   return null;
 }
 

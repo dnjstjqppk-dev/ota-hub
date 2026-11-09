@@ -299,6 +299,53 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     return json({ success: true });
   }
 
+  // Entity contracts (PG / supplier / settlement / insurance). The supplier
+  // LIVE switch requires an ACTIVE SUPPLIER contract, so onboarding any
+  // supplier — including first-party direct sales — starts here.
+  if (path === "/api/v1/admin/contracts" && method === "POST") {
+    const b = await readJson(request);
+    const entityId = str(b.entityId, 64);
+    const type = str(b.contractType, 20).toUpperCase();
+    const counterparty = str(b.counterparty, 200);
+    if (!entityId || !counterparty) throw new HttpError(400, "FIELD_REQUIRED", "entityId와 counterparty는 필수 항목입니다.");
+    if (!["PG", "SUPPLIER", "SETTLEMENT_ACCOUNT", "INSURANCE", "OTHER"].includes(type)) {
+      throw new HttpError(400, "INVALID_CONTRACT_TYPE", "contractType은 PG | SUPPLIER | SETTLEMENT_ACCOUNT | INSURANCE | OTHER 중 하나여야 합니다.");
+    }
+    const ent = await db.prepare("SELECT id FROM business_entities WHERE id = ?").bind(entityId).first();
+    if (!ent) throw new HttpError(400, "ENTITY_NOT_FOUND", "등록된 사업자 엔터티가 아닙니다.");
+    const id = b.id !== undefined ? str(b.id, 64) : newId("ect");
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new HttpError(400, "INVALID_ID", "id는 64자 이하의 영문·숫자·-_만 허용됩니다.");
+    if (await db.prepare("SELECT id FROM entity_contracts WHERE id = ?").bind(id).first()) {
+      throw new HttpError(409, "ID_EXISTS", "이미 등록된 계약 ID입니다.");
+    }
+    await db.prepare("INSERT INTO entity_contracts (id, entity_id, contract_type, counterparty, reference, status, effective_from, effective_to, notes) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)")
+      .bind(id, entityId, type, counterparty, b.reference !== undefined ? str(b.reference, 200) || null : null,
+        b.effectiveFrom !== undefined ? str(b.effectiveFrom, 30) || null : null,
+        b.effectiveTo !== undefined ? str(b.effectiveTo, 30) || null : null,
+        b.notes !== undefined ? str(b.notes, 500) || null : null).run();
+    await audit(env, admin.id, "CREATE_CONTRACT", "CONTRACT", id, { entityId, type });
+    return json({ success: true, id }, 201);
+  }
+  m = path.match(/^\/api\/v1\/admin\/contracts\/([A-Za-z0-9_-]+)$/);
+  if (m && method === "PATCH") {
+    const b = await readJson(request);
+    const before = await db.prepare("SELECT * FROM entity_contracts WHERE id = ?").bind(m[1]).first<any>();
+    if (!before) throw new HttpError(404, "CONTRACT_NOT_FOUND", "계약을 찾을 수 없습니다.");
+    const status = b.status !== undefined ? str(b.status, 20).toUpperCase() : before.status;
+    if (!["PENDING", "ACTIVE", "EXPIRED", "TERMINATED"].includes(status)) {
+      throw new HttpError(400, "INVALID_STATUS", "status는 PENDING | ACTIVE | EXPIRED | TERMINATED 중 하나여야 합니다.");
+    }
+    const counterparty = b.counterparty !== undefined ? str(b.counterparty, 200) : before.counterparty;
+    const reference = b.reference !== undefined ? str(b.reference, 200) || null : before.reference;
+    const notes = b.notes !== undefined ? str(b.notes, 500) || null : before.notes;
+    if (!counterparty) throw new HttpError(400, "FIELD_REQUIRED", "counterparty는 필수 항목입니다.");
+    await db.prepare("UPDATE entity_contracts SET status = ?, counterparty = ?, reference = ?, notes = ? WHERE id = ?")
+      .bind(status, counterparty, reference, notes, m[1]).run();
+    invalidateSupplierCache();
+    await audit(env, admin.id, "UPDATE_CONTRACT", "CONTRACT", m[1], { before: before.status, after: status });
+    return json({ success: true });
+  }
+
   if (path === "/api/v1/admin/audit-logs" && method === "GET") {
     const rows = await db.prepare("SELECT * FROM admin_audit_logs ORDER BY created_at DESC LIMIT 200").all();
     return json({ success: true, logs: rows.results });

@@ -1142,3 +1142,55 @@ test("admin catalog list: status filter + pagination", async () => {
   const p2 = (await api("GET", "/api/v1/admin/catalog?page=2&pageSize=2", { token: ADMIN })).data;
   assert.ok(p2.items.every((i) => !p1.items.some((a) => a.domain_type === i.domain_type && a.id === i.id)), "pages must not overlap");
 });
+
+test("1P direct sales: register on ptn_direct_01, go LIVE, sell, operator-confirms, voucher, cancel+refund", async () => {
+  const tag = Date.now().toString(36);
+  const hotelId = `e2e_direct_htl_${tag}`;
+  const roomId = `e2e_direct_rm_${tag}`;
+  // 1. Direct supplier ships NOT_INTEGRATED: nothing is bookable until the admin flips it LIVE.
+  const sup0 = (await api("GET", "/api/v1/admin/suppliers", { token: ADMIN })).data.suppliers.find((s) => s.id === "ptn_direct_01");
+  assert.ok(sup0, "migration 0020 must seed ptn_direct_01");
+  assert.equal((await api("PATCH", "/api/v1/admin/suppliers/ptn_direct_01", { token: ADMIN, body: { adapter: "direct_contract", integrationStatus: "NOT_INTEGRATED" } })).status, 200);
+  const created = await api("POST", "/api/v1/admin/catalog/HOTEL", { token: ADMIN, body: {
+    id: hotelId, partner_id: "ptn_direct_01", name_ko: "E2E 직영 호텔", name_en: "E2E Direct Hotel",
+    city: "서울", country: "대한민국", address: "서울시 중구", base_price_krw: 200000, star_rating: 4,
+    free_cancellation: 1, rooms_json: [{ id: roomId, name_ko: "디럭스", base_price_krw: 200000, available_inventory: 5, max_occupancy: 2 }],
+  } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  const dark = (await api("GET", `/api/v1/hotels/${hotelId}`)).data.data;
+  assert.equal(dark.bookable, false);
+  assert.equal((await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "HOTEL", itemId: hotelId, unitId: roomId, startDate: day(60), endDate: day(61), travelers: { adults: 2 } } })).data.code, "NOT_DIRECTLY_BOOKABLE");
+  // 2. Admin registers + activates the supplier contract, then flips the direct supplier LIVE.
+  const ectId = `e2e_ect_${tag}`;
+  assert.equal((await api("POST", "/api/v1/admin/contracts", { token: ADMIN, body: { id: ectId, entityId: "ent_primary", contractType: "SUPPLIER", counterparty: "E2E 직영 자사계약" } })).status, 201);
+  assert.equal((await api("POST", "/api/v1/admin/contracts", { token: ADMIN, body: { id: ectId, entityId: "ent_primary", contractType: "SUPPLIER", counterparty: "x" } })).data.code, "ID_EXISTS");
+  assert.equal((await api("POST", "/api/v1/admin/contracts", { token: ADMIN, body: { entityId: "ent_primary", contractType: "SUPPLIER" } })).data.code, "FIELD_REQUIRED");
+  assert.equal((await api("POST", "/api/v1/admin/contracts", { token: ADMIN, body: { entityId: "ent_missing", contractType: "SUPPLIER", counterparty: "x" } })).data.code, "ENTITY_NOT_FOUND");
+  assert.equal((await api("PATCH", `/api/v1/admin/contracts/${ectId}`, { token: ADMIN, body: { status: "ACTIVE" } })).status, 200);
+  assert.equal((await api("PATCH", "/api/v1/admin/contracts/ect_missing", { token: ADMIN, body: { status: "ACTIVE" } })).status, 404);
+  assert.equal((await api("PATCH", "/api/v1/admin/suppliers/ptn_direct_01", { token: ADMIN, body: { adapter: "direct_contract", integrationStatus: "LIVE", contractId: ectId } })).status, 200);
+  const lit = (await api("GET", `/api/v1/hotels/${hotelId}`)).data.data;
+  assert.equal(lit.bookable, true);
+  assert.equal(lit.fulfilment_mode, "LIVE");
+  // 3. Customer quote -> book -> sandbox pay. Direct-contract fulfilment waits for the operator.
+  const q = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "HOTEL", itemId: hotelId, unitId: roomId, startDate: day(60), endDate: day(61), rooms: 1, travelers: { adults: 2 } } })).data.quote;
+  assert.equal(q.totalMinor, 220000); // 1 night x 200,000 + 10% tax
+  assert.equal(q.fulfilmentMode, "LIVE");
+  const b = (await book(A.token, q)).data.booking;
+  assert.equal(b.paymentMode, "LIVE");
+  const p = await pay(A.token, b, "ok");
+  assert.equal(p.data.booking.status, "SUPPLIER_BOOKING_PENDING", JSON.stringify(p.data.booking));
+  assert.equal(p.data.booking.items[0].voucher_code, null);
+  // 4. Operator confirms in the OMS with the supplier reference: voucher issued.
+  assert.equal((await api("POST", `/api/v1/admin/bookings/${b.id}/supplier-decision`, { token: ADMIN, body: { decision: "CONFIRM" } })).data.code, "SUPPLIER_REFERENCE_REQUIRED");
+  const conf = await api("POST", `/api/v1/admin/bookings/${b.id}/supplier-decision`, { token: ADMIN, body: { decision: "CONFIRM", supplierReference: `DC-E2E-${tag}`, note: "E2E operator confirm" } });
+  assert.equal(conf.data.booking.status, "VOUCHER_ISSUED", JSON.stringify(conf.data));
+  assert.match(conf.data.booking.items[0].voucher_code, /^GFV-/);
+  // 5. Free-cancel window: full cash refund through the PG, coins untouched.
+  const c = await api("POST", `/api/v1/bookings/${b.id}/cancel`, { token: A.token });
+  assert.equal(c.data.booking.status, "REFUNDED");
+  assert.equal(c.data.booking.refundedMinor, 220000);
+  assert.equal(c.data.booking.cancellationFeeMinor, 0);
+  // 6. Leave the shared local fixture as found.
+  assert.equal((await api("PATCH", "/api/v1/admin/suppliers/ptn_direct_01", { token: ADMIN, body: { integrationStatus: "NOT_INTEGRATED" } })).status, 200);
+});
