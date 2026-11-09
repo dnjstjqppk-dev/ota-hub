@@ -92,7 +92,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
     }
     case "FLIGHT": {
       const f = await db.prepare("SELECT * FROM flights WHERE id = ?").bind(itemId).first<any>();
-      if (!f) throw notFound();
+    if (!f || f.is_active === 0) throw notFound();
       return {
         domain, itemId, unitId: f.cabin_class || "ECONOMY", supplierId: f.partner_id || "ptn_flt_01", currency: "KRW",
         title: `${f.airline_name} ${f.flight_number} ${f.departure_airport}→${f.arrival_airport}`,
@@ -103,7 +103,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
     }
     case "TRAIN": {
       const t = await db.prepare("SELECT * FROM trains WHERE id = ?").bind(itemId).first<any>();
-      if (!t) throw notFound();
+    if (!t || t.is_active === 0) throw notFound();
       return {
         domain, itemId, unitId: t.seat_class || "STANDARD", supplierId: "unassigned_train", currency: "KRW",
         title: `${t.train_type} ${t.train_number} ${t.departure_station}→${t.arrival_station}`,
@@ -123,7 +123,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
     }
     case "TRANSFER": {
       const t = await db.prepare("SELECT * FROM transfers WHERE id = ?").bind(itemId).first<any>();
-      if (!t) throw notFound();
+    if (!t || t.is_active === 0) throw notFound();
       return {
         domain, itemId, unitId: null, supplierId: t.partner_id || "unassigned_transfer", currency: "KRW",
         title: t.service_title, unitPriceMajor: Number(t.price_krw), capacity: null, maxOccupancy: Number(t.max_passengers) || null,
@@ -141,7 +141,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
     }
     case "PACKAGE": {
       const p = await db.prepare("SELECT * FROM packages WHERE id = ?").bind(itemId).first<any>();
-      if (!p) throw notFound();
+    if (!p || p.is_active === 0) throw notFound();
       return {
         domain, itemId, unitId: null, supplierId: "unassigned_package", currency: "KRW",
         title: p.title, unitPriceMajor: Number(p.total_package_krw), capacity: null, maxOccupancy: null,

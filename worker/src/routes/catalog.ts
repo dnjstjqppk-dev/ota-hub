@@ -47,7 +47,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
     const domain = str(url.searchParams.get("domain"), 20).toUpperCase();
     const itemId = str(url.searchParams.get("itemId") || url.searchParams.get("item_id"), 100);
     if (!domain || !itemId) return json({ success: true, policy: null });
-    const row = await env.DB.prepare("SELECT domain_type, item_id, free_cancel_hours, change_allowed, no_show_fee_bps, tiers_json, note, updated_at FROM product_policies WHERE domain_type = ? AND item_id = ?").bind(domain, itemId).first<any>();
+    const row = await env.DB.prepare("SELECT domain_type, item_id, free_cancel_hours, change_allowed, no_show_fee_bps, tiers_json, floor_price_minor, note, updated_at FROM product_policies WHERE domain_type = ? AND item_id = ?").bind(domain, itemId).first<any>();
     return json({ success: true, policy: row ? { ...row, tiers: JSON.parse(row.tiers_json || "[]") } : null });
   }
 
@@ -174,7 +174,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       const sortBy = url.searchParams.get("sortBy") || "cheapest";
       const limit = parseInt(url.searchParams.get("limit") || "50", 10);
 
-      let q = "SELECT * FROM flights WHERE 1=1";
+      let q = "SELECT * FROM flights WHERE is_active = 1";
       const p: any[] = [];
       // A metropolitan city code (TYO, SEL, LON...) searches every airport of that city.
       // A place name picked from autocomplete ("서울", "인천국제공항") resolves to its airports as well.
@@ -228,7 +228,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
     if (path.startsWith("/api/v1/flights/")) {
       const id = path.replace("/api/v1/flights/", "");
       const row = await env.DB.prepare("SELECT * FROM flights WHERE id = ?").bind(id).first();
-      if (!row) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
+      if (!row || (row as any).is_active === 0) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
       return json({ success: true, data: annotate([row], bmap, "ptn_flt_01", "FLIGHT")[0] });
     }
 
@@ -242,7 +242,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       const dep = cleanStation(rawDep);
       const arr = cleanStation(rawArr);
 
-      let q = "SELECT * FROM trains WHERE 1=1";
+      let q = "SELECT * FROM trains WHERE is_active = 1";
       const p: any[] = [];
       if (dep) {
         q += " AND (departure_station LIKE ? ESCAPE '\\' OR ? LIKE '%' || departure_station || '%')";
@@ -270,7 +270,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
     if (path.startsWith("/api/v1/trains/")) {
       const id = path.replace("/api/v1/trains/", "");
       const row = await env.DB.prepare("SELECT * FROM trains WHERE id = ?").bind(id).first();
-      if (!row) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
+      if (!row || (row as any).is_active === 0) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
       return json({ success: true, data: annotate([row], bmap, "unassigned_train")[0] });
     }
 
@@ -321,7 +321,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       const cleanAirport = rawAirport.replace(/\s*\([^)]*\)/g, "").trim();
       const cleanDest = rawDest.replace(/\s*\([^)]*\)/g, "").trim();
 
-      let q = "SELECT * FROM transfers WHERE 1=1";
+      let q = "SELECT * FROM transfers WHERE is_active = 1";
       const p: any[] = [];
       // "인천국제공항" / "서울" picked from autocomplete carries no code: resolve it to IATA airport codes.
       const named = !airportCode && cleanAirport ? await airportsForPlaceName(env, cleanAirport) : [];
@@ -343,7 +343,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
     if (path.startsWith("/api/v1/transfers/")) {
       const id = path.replace("/api/v1/transfers/", "");
       const row = await env.DB.prepare("SELECT * FROM transfers WHERE id = ?").bind(id).first();
-      if (!row) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
+      if (!row || (row as any).is_active === 0) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
       return json({ success: true, data: annotate([row], bmap, "unassigned_transfer")[0] });
     }
 
@@ -400,6 +400,21 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       });
       return json({ success: true, count: list.length, data: annotate(list, bmap, "ptn_tour_01") });
     }
+    // 13. Activity Time Slots & Availability: GET /api/v1/activities/:id/slots.
+    // Must precede the detail prefix-match below, which would otherwise swallow it.
+    const slotMatch = path.match(/^\/api\/v1\/activities\/([A-Za-z0-9_]+)\/slots$/);
+    if (slotMatch) {
+      const activityId = slotMatch[1];
+      const targetDate = url.searchParams.get("date") || new Date().toISOString().slice(0, 10);
+      const rows = await env.DB.prepare(
+        "SELECT * FROM activity_time_slots WHERE activity_id = ? AND slot_date = ? AND is_closed = 0 ORDER BY start_time ASC"
+      ).bind(activityId, targetDate).all();
+
+      // No fabrication: an activity without registered slots reports none.
+      // (Previously this endpoint invented 3 slots with fake bookings.)
+      const slots = rows.results || [];
+      return json({ success: true, activity_id: activityId, date: targetDate, slots });
+    }
     if (path.startsWith("/api/v1/activities/")) {
       const id = path.replace("/api/v1/activities/", "");
       const row = await env.DB.prepare("SELECT * FROM activities WHERE id = ?").bind(id).first<any>();
@@ -418,7 +433,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
 
     if (path === "/api/v1/packages") {
       const dest = url.searchParams.get("dest") || url.searchParams.get("city") || "";
-      let q = "SELECT * FROM packages WHERE 1=1";
+      let q = "SELECT * FROM packages WHERE is_active = 1";
       const p: any[] = [];
       if (dest) {
         q += " AND (destination_city LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\')";
@@ -447,7 +462,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
     if (path.startsWith("/api/v1/packages/")) {
       const id = path.replace("/api/v1/packages/", "");
       const row = await env.DB.prepare("SELECT * FROM packages WHERE id = ?").bind(id).first();
-      if (!row) return json({ success: false, error: "Package not found", code: "NOT_FOUND" }, 404);
+      if (!row || (row as any).is_active === 0) return json({ success: false, error: "Package not found", code: "NOT_FOUND" }, 404);
       let details: any = {};
       try { details = JSON.parse((row as any).details_json || '{}'); } catch (e) {}
       return json({
@@ -505,27 +520,6 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
         duration_days: durationDays
       }));
       return json({ success: true, plans: calculated, duration_days: durationDays });
-    }
-
-    // 13. Activity Time Slots & Availability: GET /api/v1/activities/:id/slots
-    const slotMatch = path.match(/^\/api\/v1\/activities\/([A-Za-z0-9_]+)\/slots$/);
-    if (slotMatch) {
-      const activityId = slotMatch[1];
-      const targetDate = url.searchParams.get("date") || new Date().toISOString().slice(0, 10);
-      const rows = await env.DB.prepare(
-        "SELECT * FROM activity_time_slots WHERE activity_id = ? AND slot_date = ? AND is_closed = 0 ORDER BY start_time ASC"
-      ).bind(activityId, targetDate).all();
-
-      let slots = rows.results;
-      if (!slots || slots.length === 0) {
-        slots = [
-          { id: `slot_${activityId}_0900`, activity_id: activityId, slot_date: targetDate, start_time: "09:30", end_time: "11:30", max_capacity: 30, booked_count: 8, price_adult_minor: 25000, price_child_minor: 18000, is_closed: 0 },
-          { id: `slot_${activityId}_1330`, activity_id: activityId, slot_date: targetDate, start_time: "13:30", end_time: "15:30", max_capacity: 30, booked_count: 14, price_adult_minor: 25000, price_child_minor: 18000, is_closed: 0 },
-          { id: `slot_${activityId}_1600`, activity_id: activityId, slot_date: targetDate, start_time: "16:00", end_time: "18:00", max_capacity: 30, booked_count: 5, price_adult_minor: 28000, price_child_minor: 20000, is_closed: 0 }
-        ];
-      }
-
-      return json({ success: true, activity_id: activityId, date: targetDate, slots });
     }
 
     // 14. External Supplier Registry Status: GET /api/v1/suppliers/registry

@@ -216,3 +216,44 @@
   TOSS_CLIENT_KEY·EMAIL_FROM은 실값 없어 미선언 (문서 4·6단계가 담당).
 
 검증: 유닛 63/63 · E2E 63/63 · tsc 0 · 브랜딩 PASS · Go ok · 3포털 빌드 exit 0.
+
+## 조치 현황 (2026-11-09 2차 — 감사 잔여 전부 해소, 미커밋)
+
+- **A 돈·장부 8건**: 합성 정산행 폐지→`attribution_source`(CATALOG/SUPPLIER_FALLBACK)+실제
+  `booking_item_id(bki_*)`·판매자 귀속. issue() 원자화(`planOrderSettlement`+배치).
+  전액환불 시 정산행 REFUNDED+settle 거부. 코인 CAS(`meta.changes` 확인)+Idempotency-Key
+  (precheck/replay/store, 409 race). 하한가 0023+정책 API+견적·예약 게이트. settle 시
+  파트너 판매분을 `partner_settlement_batches`로 롤업. 마이그레이션 0022 귀속 컬럼.
+- **B 보안**: 견적/예약/결제/취소/쿠폰 rateLimit. requireUser DB 역할 재조회(강등 즉시 차단).
+  파트너 OWNER vs MANAGER/STAFF 분리(은행·스태프 OWNER 전용, 주문 MANAGER+).
+  파트너 비번 정책 통일+리셋 single-use. 로그아웃 폐기+resetSubjectSessions+0024
+  (revoked_tokens/session_resets)+prune. 레거시 해시 reconciliation 집계.
+  `SANDBOX_WEBHOOK_SECRET` 제거, Sentry 스크럽 확대, 운영 CORS localhost 제거,
+  어드민 목록 감사. **신규 버그 수정**: 초 단위 비교로 같은 초 토큰이 리셋 후 생존 →
+  `reset_at = floor+1` (같은 초 재로그인은 stillborn·재시도, 주석 명시).
+- **F 죽은 기능 6종 부활**: 항공/열차/픽업/패키지 is_active 강제(목록·상세·견적),
+  슬롯 날조 제거(DB 실조회)+라우트 순서 수정, 파트너 객실 PATCH+rooms 파싱,
+  파트너 재고 읽기(마감일 SOLD_OUT), 가격알림 발화(크론+템플릿+outbox), FX 쓰기 API.
+  E2E revived 1종으로 전부 회귀. **정책 대기 2종**: 어필리에이트(영구 404·UNKNOWN,
+  config INSERT 경로 없음 — 유지/삭제/스펙변경 결정 필요), ESIM/보험 견적
+  (7도메인 고정+airalo 미배선 — 동일).
+- **C 프론트**: currency `json.rates`+8787+검증. checkout displayCurrency 전송+
+  `formatMinor`+BELOW_FLOOR_PRICE/FLIGHT_TICKETING_UNSUPPORTED 처리. wishlist 데드
+  액션 제거+서버 병합 수정.
+- **D 테스트**: E2E 63→73 (정산 귀속/환불, 하한가, 배치, 보안 4종, revived, entities
+  게이트, notices, 여권지갑, smoke, small 4종). notices/PII/0건라우트/T11/T27 해소.
+  **스위트 내구 수정 2건**: (1) 리셋 테스트 후 A토큰 재로그인(세션파기 정상동작 대응),
+  (2) 항공 고정날짜 런오염 → `fday()` per-run 시프트(9석/일, COMMITTED 영구소진.
+  방치 시 72/1→71/2→70/3 열화 관측). 연속 2회 73/73으로 재실행 가능성 입증.
+- **E Go/문서/스키마**: go.work 1.23 고정, backend/.env.example 실제 env로 재작성,
+  ARCHITECTURE 워커+D1 정정, admin 프록시 8787. 0022~0026(귀속/하한가/세션폐기/
+  시드위생/모먼트좋아요). 0025/0026 로컬 적용済.
+- **사고·복구**: `Set-Content`로 E2E 파일 한글 70줄 손상 → HEAD 대조+수기 매핑으로
+  전량 복원(`node --check` 통과, diff=순수 변경분만 검증). `idempotency.ts`의 생
+  NUL 1바이트 → `\u0000` 이스케이프 텍스트로 정정(동작 동일).
+
+검증(본 세션 관측): 유닛 63/63 · E2E **73/73 연속 2회** · tsc exit 0 ·
+3포털 빌드 exit 0 · `go test ./backend/...` ok · 브랜딩 PASS.
+로컬 픽스처 `ptn_direct_01` NOT_INTEGRATED + `ect_direct_01` PENDING 유지 확인.
+미실시: 운영 D1 0022~0026 적용, 운영 verify(사용자 `TEST_ADMIN_PASSWORD` 필요),
+T41 실정산(미테스트·dry-run 기본).

@@ -17,12 +17,12 @@ export const useCurrencyStore = defineStore('currency', {
     async fetchRates() {
       try {
         const config = useRuntimeConfig()
-        const apiBase = config.public.apiBase || 'http://localhost:8080/api/v1'
+        const apiBase = config.public.apiBase || 'http://localhost:8787/api/v1'
         const res = await fetch(`${apiBase}/fx-rates`)
         const json = await res.json()
-        if (json.data) {
-          json.data.forEach((r: any) => {
-            this.rates[r.currency] = r.rate_to_krw
+        if (Array.isArray(json.rates)) {
+          json.rates.forEach((r: any) => {
+            if (r?.currency && Number.isFinite(Number(r.rate_to_krw))) this.rates[r.currency] = Number(r.rate_to_krw)
           })
         }
       } catch (e) {

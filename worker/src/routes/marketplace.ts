@@ -75,7 +75,7 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     const id = settleMatch[1];
     const now = new Date().toISOString();
 
-    const before = await env.DB.prepare('SELECT settlement_status FROM marketplace_order_settlements WHERE id = ?').bind(id).first<any>();
+    const before = await env.DB.prepare('SELECT * FROM marketplace_order_settlements WHERE id = ?').bind(id).first<any>();
     if (!before) throw new HttpError(404, 'SETTLEMENT_NOT_FOUND', '정산 내역을 찾을 수 없습니다.');
     // Conditional update: a settlement is paid out at most once, and never after a refund.
     const r = await env.DB.prepare(`
@@ -85,6 +85,23 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     `).bind(now, id).run();
     if (!r.meta.changes) {
       throw new HttpError(409, 'SETTLEMENT_NOT_PAYABLE', `지급할 수 없는 정산 상태입니다. (${before.settlement_status})`);
+    }
+    // Roll partner-seller payouts into their open monthly batch so the partner
+    // settlements endpoint (partner_settlement_batches) reflects reality (audit [M]).
+    const seller = await env.DB.prepare('SELECT id FROM partners WHERE id = ?').bind(before.seller_id).first<any>();
+    if (seller) {
+      const ym = now.slice(0, 7);
+      const y = Number(ym.slice(0, 4));
+      const m = Number(ym.slice(5, 7));
+      const batchId = `psb_${seller.id}_${ym}`;
+      const periodEnd = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+      await env.DB.batch([
+        env.DB.prepare(`INSERT OR IGNORE INTO partner_settlement_batches (id, partner_id, period_start, period_end, status) VALUES (?, ?, ?, ?, 'CONFIRMED')`)
+          .bind(batchId, seller.id, `${ym}-01`, periodEnd),
+        env.DB.prepare(`UPDATE partner_settlement_batches SET gross_minor = gross_minor + ?, commission_minor = commission_minor + ?, payout_minor = payout_minor + ? WHERE id = ?`)
+          .bind(Number(before.gross_amount_minor) || 0, Number(before.commission_amount_minor) || 0, Number(before.seller_payout_minor) || 0, batchId),
+        env.DB.prepare(`UPDATE marketplace_order_settlements SET payout_batch_id = ? WHERE id = ?`).bind(batchId, id),
+      ]);
     }
     await audit(env, admin.id, 'MARKETPLACE_SETTLEMENT_PAYOUT', 'SETTLEMENT', id, { from: before.settlement_status, to: 'SETTLED', settled_at: now });
 

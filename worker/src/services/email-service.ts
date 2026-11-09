@@ -39,6 +39,16 @@ export function renderOutboxEmail(template: string, payloadJson: string, site: s
       html: `<p>안녕하세요. 비밀번호 재설정을 요청하셨어요.</p><p><a href="${esc(link)}">비밀번호 재설정하기</a> (30분 동안 유효해요)</p><p>요청하지 않으셨다면 이 메일을 무시하세요.</p>`,
     };
   }
+  if (template === "PRICE_ALERT") {
+    const what = String(p.routeOrHotel || "");
+    const cur = Number(p.currentPrice);
+    const tgt = Number(p.targetPrice);
+    if (!what || !Number.isFinite(cur) || !Number.isFinite(tgt)) return null;
+    return {
+      subject: `[${brand}] 목표가 도달 — ${what} ${cur.toLocaleString("ko-KR")}원`,
+      html: `<p>${esc(what)} 상품이 목표가(${tgt.toLocaleString("ko-KR")}원) 이하로 내려갔어요. 현재가: <b>${cur.toLocaleString("ko-KR")}원</b></p><p>가격은 변동될 수 있으니 서둘러 예약하세요.</p>`,
+    };
+  }
   if (template === "BOOKING_CONFIRMED" || template === "FLIGHT_TICKETED") {
     const num = String(p.bookingNumber || p.bookingId || "");
     if (!num) return null;

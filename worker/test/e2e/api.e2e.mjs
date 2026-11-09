@@ -1,6 +1,11 @@
 /**
- * End-to-end API scenarios against a running LOCAL worker (wrangler dev -c wrangler.local.jsonc).
- *   BASE=http://127.0.0.1:8799 ADMIN_PASSWORD=... node --test worker/test/e2e/api.e2e.mjs
+ * End-to-end API scenarios against a running LOCAL worker.
+ *   1. npx wrangler d1 migrations apply ota_local --local -c wrangler.local.jsonc
+ *   2. node scripts/dev-seed.mjs LocalAdmin2026!x
+ *   3. npx wrangler dev -c wrangler.local.jsonc --port 8799
+ *   4. ADMIN_PASSWORD=LocalAdmin2026!x node --test worker/test/e2e/api.e2e.mjs
+ * BASE defaults to http://127.0.0.1:8799 and ADMIN_PASSWORD to LocalAdmin2026!x;
+ * pass the seed password explicitly when dev-seed used another one.
  * Uses the sandbox PG and the supplier simulator only. Never point this at production.
  */
 import { test, before } from "node:test";
@@ -57,6 +62,11 @@ const contact = { name: "김민지", email: "qa@local.test", phone: "+82-10-1111
 // Each hotel quote uses its own stay dates so tests do not exhaust the room's
 // capacity (5/night) — sold-out behaviour is covered by its own test.
 let stayOffset = 30 + (Date.now() % 150);
+// Flight seats are finite per date (9) and committed holds never release, so
+// flight service dates shift by a per-run offset too: without this, repeated
+// local runs SELL OUT day(50..64) and the suite rots run over run.
+const flightShift = Date.now() % 120;
+const fday = (n) => day(n + flightShift);
 async function quote(token, extra = {}) {
   stayOffset += 2;
   return api("POST", "/api/v1/quotes", { token, body: { ...HOTEL, startDate: day(stayOffset), endDate: day(stayOffset + 1), rooms: 1, travelers: { adults: 2 }, ...extra } });
@@ -104,7 +114,11 @@ test("auth: password reset never returns the token; token is single-use", async 
   const token = new URL(JSON.parse(mail.payload_json).link).searchParams.get("token");
   assert.equal((await api("POST", "/api/v1/auth/reset-password", { body: { token, newPassword: "NewPassw0rd-QA-2" } })).status, 200);
   assert.equal((await api("POST", "/api/v1/auth/reset-password", { body: { token, newPassword: "NewPassw0rd-QA-3" } })).status, 400);
-  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: A.email, password: "NewPassw0rd-QA-2" } })).status, 200);
+  await new Promise((r) => setTimeout(r, 1200)); // revocation granularity is 1s; relogin must land after the cutoff
+  const relogin = await api("POST", "/api/v1/auth/login", { body: { email: A.email, password: "NewPassw0rd-QA-2" } });
+  assert.equal(relogin.status, 200);
+  A.token = relogin.data.token; // reset revokes all sessions; later tests need the fresh token
+  assert.equal((await api("GET", "/api/v1/auth/me", { token: A.token })).status, 200, "relogin token survives the cutoff");
 });
 
 test("quote: server computes price; client price fields ignored; invalid inputs rejected", async () => {
@@ -246,7 +260,7 @@ test("outbox email: without a provider key, rows stay queued and maintenance say
 });
 
 test("flight: passport required & encrypted; PNR and ticket are separate steps", async () => {
-  const fq = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: day(50), travelers: { adults: 1, infants: 1 } } })).data.quote;
+  const fq = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: fday(50), travelers: { adults: 1, infants: 1 } } })).data.quote;
   assert.equal(fq.requiresPassport, true);
   const noPass = await book(A.token, fq, { travelers: [{ type: "ADULT", lastNameEn: "KIM", firstNameEn: "MINJI" }, { type: "INFANT", lastNameEn: "KIM", firstNameEn: "SEOA" }] });
   assert.equal(noPass.data.code, "BIRTH_DATE_REQUIRED");
@@ -266,7 +280,7 @@ test("flight: passport required & encrypted; PNR and ticket are separate steps",
 });
 
 test("flight: ticketing failure after payment voids PNR and refunds in full", async () => {
-  const fq = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: day(51), travelers: { adults: 1 } } })).data.quote;
+  const fq = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: fday(51), travelers: { adults: 1 } } })).data.quote;
   const b = (await book(A.token, fq, { simulation: { ticketing: "fail" }, travelers: [{ type: "ADULT", lastNameEn: "LEE", firstNameEn: "JUN", birthDate: "1988-02-02", passportNumber: "M7654321", passportExpiry: day(900) }] })).data.booking;
   const p = await pay(A.token, b);
   assert.equal(p.data.booking.status, "REFUNDED");
@@ -280,7 +294,7 @@ test("cancellation: free window refunds 100%; non-refundable keeps 100% as fee",
   assert.equal(c.data.booking.refundedMinor, p.data.booking.totalMinor);
   assert.equal(c.data.booking.cancellationFeeMinor, 0);
 
-  const fq = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: day(52), travelers: { adults: 1 } } })).data.quote;
+  const fq = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: fday(52), travelers: { adults: 1 } } })).data.quote;
   const fb = (await book(A.token, fq, { travelers: [{ type: "ADULT", lastNameEn: "PARK", firstNameEn: "SO", birthDate: "1991-03-03", passportNumber: "M1112223", passportExpiry: day(900) }] })).data.booking;
   const fp = await pay(A.token, fb);
   assert.equal(fp.data.booking.cancellationPreview.refundMinor, 0);
@@ -400,22 +414,22 @@ test("hotel rate plans: API exposes catalog plans; unknown plan rejected; plan s
 
 test("round-trip flight: one booking, one PNR, two legs with holds on each date", async () => {
   const pax = (fn) => ({ type: "ADULT", lastNameEn: "CHOI", firstNameEn: fn, birthDate: "1990-04-04", passportNumber: "M5556667", passportExpiry: day(900) });
-  const body = { domain: "FLIGHT", itemId: "flt_ke703", returnItemId: "flt_ke704_ret", startDate: day(60), returnDate: day(64), travelers: { adults: 1 } };
+  const body = { domain: "FLIGHT", itemId: "flt_ke703", returnItemId: "flt_ke704_ret", startDate: fday(60), returnDate: fday(64), travelers: { adults: 1 } };
   const r = await api("POST", "/api/v1/quotes", { token: A.token, body });
   assert.equal(r.status, 201, JSON.stringify(r.data));
   const q = r.data.quote;
   assert.equal(q.roundTrip, true);
-  assert.equal(q.serviceStart, day(60));
-  assert.equal(q.serviceEnd, day(64));
-  const one = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: day(60), travelers: { adults: 1 } } })).data.quote;
-  const back = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke704_ret", startDate: day(64), travelers: { adults: 1 } } })).data.quote;
+  assert.equal(q.serviceStart, fday(60));
+  assert.equal(q.serviceEnd, fday(64));
+  const one = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: fday(60), travelers: { adults: 1 } } })).data.quote;
+  const back = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke704_ret", startDate: fday(64), travelers: { adults: 1 } } })).data.quote;
   assert.equal(q.totalMinor, one.totalMinor + back.totalMinor);
 
   const b = (await book(A.token, q, { travelers: [pax("YUNA")] })).data.booking;
   assert.equal(b.items.length, 2);
   assert.equal(b.items.reduce((s, i) => s + i.total_minor, 0), b.totalMinor);
   const holds = sql(`SELECT item_id, service_date FROM inventory_holds WHERE booking_id = '${b.id}' ORDER BY service_date`);
-  assert.deepEqual(holds.map((h) => [h.item_id, h.service_date]), [["flt_ke703", day(60)], ["flt_ke704_ret", day(64)]]);
+  assert.deepEqual(holds.map((h) => [h.item_id, h.service_date]), [["flt_ke703", fday(60)], ["flt_ke704_ret", fday(64)]]);
 
   const paid = (await pay(A.token, b)).data.booking;
   assert.equal(paid.status, "TICKETED");
@@ -424,10 +438,10 @@ test("round-trip flight: one booking, one PNR, two legs with holds on each date"
 });
 
 test("round-trip flight: wrong direction, return before departure, missing return date are rejected", async () => {
-  const base = { domain: "FLIGHT", itemId: "flt_ke703", startDate: day(61), travelers: { adults: 1 } };
-  const wrong = await api("POST", "/api/v1/quotes", { token: A.token, body: { ...base, returnItemId: "flt_ke723", returnDate: day(65) } });
+  const base = { domain: "FLIGHT", itemId: "flt_ke703", startDate: fday(61), travelers: { adults: 1 } };
+  const wrong = await api("POST", "/api/v1/quotes", { token: A.token, body: { ...base, returnItemId: "flt_ke723", returnDate: fday(65) } });
   assert.equal(wrong.data.code, "ROUND_TRIP_ROUTE_MISMATCH");
-  const early = await api("POST", "/api/v1/quotes", { token: A.token, body: { ...base, returnItemId: "flt_ke704_ret", returnDate: day(59) } });
+  const early = await api("POST", "/api/v1/quotes", { token: A.token, body: { ...base, returnItemId: "flt_ke704_ret", returnDate: fday(59) } });
   assert.equal(early.data.code, "INVALID_RETURN_DATE");
   const none = await api("POST", "/api/v1/quotes", { token: A.token, body: { ...base, returnItemId: "flt_ke704_ret" } });
   assert.equal(none.data.code, "RETURN_DATE_REQUIRED");
@@ -601,14 +615,23 @@ test("admin: member suspension is refused (no schema support); coin adjustments 
   assert.equal((await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, body: { role: "SUPER" } })).status, 400);
   assert.equal((await api("PATCH", "/api/v1/admin/users/usr_does_not_exist", { token: ADMIN, body: { coinAdjustment: 10 } })).status, 404);
   const before = Number(sql(`SELECT trip_coins FROM users WHERE id = '${A.id}'`)[0].trip_coins);
-  const up = await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, body: { coinAdjustment: 250, note: "e2e" } });
+  assert.equal((await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, body: { coinAdjustment: 10 } })).data.code, "IDEMPOTENCY_KEY_REQUIRED");
+  const up = await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, headers: { "Idempotency-Key": idem() }, body: { coinAdjustment: 250, note: "e2e" } });
   assert.equal(up.status, 200, JSON.stringify(up.data));
   assert.equal(up.data.coinBalance, before + 250);
   // Over-deduction clamps at zero and the ledger records only what was actually removed.
-  const down = await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, body: { coinAdjustment: -(before + 1000) } });
+  const down = await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, headers: { "Idempotency-Key": idem() }, body: { coinAdjustment: -(before + 1000) } });
   assert.equal(down.data.coinBalance, 0);
   const ledger = sql(`SELECT delta FROM coin_ledger WHERE user_id = '${A.id}' AND reason LIKE 'ADMIN_ADJUSTMENT%' ORDER BY created_at, rowid`).map((r) => Number(r.delta));
   assert.deepEqual(ledger.slice(-2), [250, -(before + 250)]);
+  // Replay: same key returns the stored response without touching balance or ledger.
+  const rkey = idem();
+  const r1 = await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, headers: { "Idempotency-Key": rkey }, body: { coinAdjustment: 40 } });
+  const r2 = await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, headers: { "Idempotency-Key": rkey }, body: { coinAdjustment: 40 } });
+  assert.deepEqual(r2.data, r1.data);
+  assert.equal(Number(sql(`SELECT trip_coins FROM users WHERE id = '${A.id}'`)[0].trip_coins), r1.data.coinBalance);
+  assert.equal(sql(`SELECT COUNT(*) AS c FROM coin_ledger WHERE user_id = '${A.id}' AND delta = 40`)[0].c, 1);
+  assert.equal((await api("PATCH", `/api/v1/admin/users/${A.id}`, { token: ADMIN, headers: { "Idempotency-Key": rkey }, body: { coinAdjustment: 41 } })).data.code, "IDEMPOTENCY_KEY_REUSED");
   const users = await api("GET", `/api/v1/admin/users?q=${encodeURIComponent(A.email)}`, { token: ADMIN });
   assert.equal(users.data.users[0].is_active, undefined, "no fabricated is_active column");
 });
@@ -767,7 +790,12 @@ test("partner staff: invite validation, login, role/active management", async ()
   assert.equal(login.status, 200, JSON.stringify(login.data));
   assert.equal(login.data.partner.staffRole, "STAFF");
   assert.equal((await api("GET", "/api/v1/partner/dashboard", { token: login.data.token })).status, 200, "staff token works");
+  assert.equal((await api("PATCH", "/api/v1/partner/profile", { token: login.data.token, body: { bankName: "X" } })).data.code, "OWNER_ONLY");
+  assert.equal((await api("POST", "/api/v1/partner/staff", { token: login.data.token, body: { email: `n_${rnd()}@local.test`, fullName: "N", password: "Passw0rd-QA-1" } })).status, 403);
+  assert.equal((await api("POST", "/api/v1/partner/orders/bkg_nope/confirm", { token: login.data.token, body: {} })).data.code, "MANAGER_ONLY");
   assert.equal((await api("PATCH", `/api/v1/partner/staff/${inv.data.id}`, { token: P.token, body: { role: "MANAGER" } })).status, 200);
+  const mlogin = await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } });
+  assert.equal((await api("POST", "/api/v1/partner/orders/bkg_nope/confirm", { token: mlogin.data.token, body: {} })).status, 404, "manager passes RBAC, order missing");
   const roster = await api("GET", "/api/v1/partner/staff", { token: P.token });
   const owner = roster.data.staff.find((s) => s.role === "OWNER");
   assert.equal((await api("PATCH", `/api/v1/partner/staff/${owner.id}`, { token: P.token, body: { isActive: false } })).status, 403);
@@ -893,7 +921,7 @@ test("wishlist: save, list and remove sync per user", async () => {
 test("coins: spend at checkout, restore on cancel; claimed coupons consumed", async () => {
   const C = await register("coin");
   const me = async () => (await api("GET", "/api/v1/auth/me", { token: C.token })).data;
-  const grant = await api("PATCH", `/api/v1/admin/users/${C.id}`, { token: ADMIN, body: { coinAdjustment: 20000, note: "e2e coins" } });
+  const grant = await api("PATCH", `/api/v1/admin/users/${C.id}`, { token: ADMIN, headers: { "Idempotency-Key": idem() }, body: { coinAdjustment: 20000, note: "e2e coins" } });
   assert.equal(grant.status, 200, JSON.stringify(grant.data));
   assert.equal(grant.data.coinBalance, 20000);
   const code = `E2E-C${Date.now().toString(36).toUpperCase()}${rnd().slice(0, 4).toUpperCase()}`;
@@ -1264,4 +1292,246 @@ test("direct-contract flights cannot quote: no ticketing exists", async () => {
   // Leave the shared fixture as found (status + seeded self-contract).
   assert.equal((await api("PATCH", "/api/v1/admin/suppliers/ptn_direct_01", { token: ADMIN, body: { integrationStatus: "NOT_INTEGRATED" } })).status, 200);
   sql(`UPDATE suppliers SET contract_id = 'ect_direct_01' WHERE id = 'ptn_direct_01'; DELETE FROM entity_contracts WHERE id = '${ectId}'`);
+});
+
+test("settlement: fulfilled booking writes a real attributed row; full refund marks it REFUNDED", async () => {
+  const { b, p } = await fullHotelBooking(A.token, {}, "ok");
+  assert.equal(p.data.booking.status, "VOUCHER_ISSUED");
+  const rows = sql(`SELECT * FROM marketplace_order_settlements WHERE booking_id = '${b.id}'`);
+  assert.equal(rows.length, 1, "exactly one settlement row per fulfilled booking");
+  const s = rows[0];
+  const supplierId = sql(`SELECT supplier_id AS v FROM bookings WHERE id = '${b.id}'`)[0].v;
+  assert.equal(s.attribution_source, "SUPPLIER_FALLBACK");
+  assert.equal(s.seller_id, supplierId, "seller is the real supplier of record");
+  assert.equal(s.supplier_id, supplierId);
+  assert.match(s.booking_item_id, /^bki_/, "booking item id is real, never fabricated");
+  assert.equal(s.settlement_status, "PENDING");
+  // Full refund takes the row out of the payable set; settle then refuses.
+  const c = await api("POST", `/api/v1/bookings/${b.id}/cancel`, { token: A.token });
+  assert.equal(c.data.booking.status, "REFUNDED");
+  assert.equal(sql(`SELECT settlement_status AS v FROM marketplace_order_settlements WHERE booking_id = '${b.id}'`)[0].v, "REFUNDED");
+  assert.equal((await api("PATCH", `/api/v1/admin/marketplace/settlements/${s.id}/settle`, { token: ADMIN })).data.code, "SETTLEMENT_NOT_PAYABLE");
+});
+
+test("floor price: quotes under the product floor are refused at quote and booking", async () => {
+  const tag = Date.now().toString(36);
+  const hotelId = `e2e_floor_htl_${tag}`;
+  const roomId = `e2e_floor_rm_${tag}`;
+  assert.equal((await api("POST", "/api/v1/admin/catalog/HOTEL", { token: ADMIN, body: {
+    id: hotelId, partner_id: "ptn_htl_01", name_ko: "E2E 하한 호텔", name_en: "E2E Floor Hotel",
+    city: "서울", country: "대한민국", address: "서울시 중구", base_price_krw: 100000, star_rating: 3,
+    rooms_json: [{ id: roomId, name_ko: "스탠다드", base_price_krw: 100000, available_inventory: 5, max_occupancy: 2 }],
+  } })).status, 201);
+  const qbody = { domain: "HOTEL", itemId: hotelId, unitId: roomId, startDate: day(90), endDate: day(91), travelers: { adults: 2 } };
+  const plain = (await api("POST", "/api/v1/quotes", { token: A.token, body: qbody })).data.quote;
+  assert.ok(plain.quoteId, "no policy row means no floor");
+  assert.equal((await api("PUT", `/api/v1/admin/catalog/HOTEL/${hotelId}/policy`, { token: ADMIN, body: { floor_price_minor: plain.totalMinor + 1 } })).status, 200);
+  const blocked = await api("POST", "/api/v1/quotes", { token: A.token, body: qbody });
+  assert.equal(blocked.data.code, "BELOW_FLOOR_PRICE");
+  assert.equal(blocked.data.details.floorPriceMinor, plain.totalMinor + 1);
+  assert.equal((await api("PUT", `/api/v1/admin/catalog/HOTEL/${hotelId}/policy`, { token: ADMIN, body: { floor_price_minor: plain.totalMinor } })).status, 200);
+  assert.ok((await api("POST", "/api/v1/quotes", { token: A.token, body: qbody })).data.quote.quoteId, "total at the floor passes");
+  assert.equal((await api("PUT", `/api/v1/admin/catalog/HOTEL/${hotelId}/policy`, { token: ADMIN, body: { floor_price_minor: null } })).status, 200);
+  const pol = (await api("GET", `/api/v1/admin/catalog/HOTEL/${hotelId}/policy`, { token: ADMIN })).data.policy;
+  assert.equal(pol.floor_price_minor, null);
+  sql(`DELETE FROM product_policies WHERE domain_type = 'HOTEL' AND item_id = '${hotelId}'`);
+});
+
+test("settlement batches: settling a partner-seller row rolls into the monthly batch", async () => {
+  const P = await approvedPartner("batch");
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 배치 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
+  const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 배치 투어", domain: "ACTIVITY", city: "서울", price: 50000 } });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
+  const itemId = reg.data.product.item_id;
+  const q = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "ACTIVITY", itemId, startDate: day(95), travelers: { adults: 1 } } })).data.quote;
+  const b = (await book(A.token, q)).data.booking;
+  const paid = (await pay(A.token, b)).data.booking;
+  assert.equal(paid.status, "VOUCHER_ISSUED");
+  const s = sql(`SELECT * FROM marketplace_order_settlements WHERE booking_id = '${b.id}'`)[0];
+  assert.equal(s.attribution_source, "CATALOG");
+  assert.equal(s.seller_id, P.id);
+  assert.equal((await api("PATCH", `/api/v1/admin/marketplace/settlements/${s.id}/settle`, { token: ADMIN })).status, 200);
+  const row = sql(`SELECT settlement_status AS st, payout_batch_id AS batch FROM marketplace_order_settlements WHERE id = '${s.id}'`)[0];
+  assert.equal(row.st, "SETTLED");
+  assert.ok(row.batch && row.batch.startsWith(`psb_${P.id}_`));
+  const batch = sql(`SELECT * FROM partner_settlement_batches WHERE id = '${row.batch}'`)[0];
+  assert.equal(batch.partner_id, P.id);
+  assert.equal(batch.gross_minor, s.gross_amount_minor);
+  assert.equal(batch.payout_minor, s.seller_payout_minor);
+});
+
+test("security: logout/reset revoke sessions; roles re-read; money paths throttled; list audited", async () => {
+  // Logout kills the token.
+  const D = await register("logout");
+  assert.equal((await api("GET", "/api/v1/auth/me", { token: D.token })).status, 200);
+  assert.equal((await api("POST", "/api/v1/auth/logout", { token: D.token })).status, 200);
+  assert.equal((await api("GET", "/api/v1/auth/me", { token: D.token })).status, 401);
+  // Password reset kills all sessions of the subject.
+  const E = await register("resetsess");
+  const login1 = await api("POST", "/api/v1/auth/login", { body: { email: E.email, password: "Passw0rd-QA-1" } });
+  assert.equal((await api("POST", "/api/v1/auth/forgot-password", { body: { email: E.email } })).status, 200);
+  const outbox = await api("GET", "/api/v1/auth/dev-outbox");
+  const mail = outbox.data.outbox.find((m) => m.recipient === E.email && m.template === "PASSWORD_RESET");
+  const token = new URL(JSON.parse(mail.payload_json).link).searchParams.get("token");
+  assert.equal((await api("POST", "/api/v1/auth/reset-password", { body: { token, newPassword: "NewPassw0rd-QA-9" } })).status, 200);
+  assert.equal((await api("GET", "/api/v1/auth/me", { token: login1.data.token })).status, 401, "pre-reset token dead");
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: E.email, password: "NewPassw0rd-QA-9" } })).status, 200);
+  // Roles come from the DB: a demoted admin's ADMIN-claimed token stops passing admin checks.
+  const F = await register("demote");
+  sql(`UPDATE users SET role = 'ADMIN' WHERE id = '${F.id}'`);
+  const admLogin = await api("POST", "/api/v1/auth/login", { body: { email: F.email, password: "Passw0rd-QA-1" } });
+  sql(`UPDATE users SET role = 'USER' WHERE id = '${F.id}'`);
+  const q = (await quote(A.token)).data.quote;
+  const b = (await book(A.token, q)).data.booking;
+  assert.equal((await api("GET", `/api/v1/bookings/${b.id}`, { token: admLogin.data.token })).status, 403);
+  // Money paths consume rate-limit buckets (wiring proof; thresholds stay above suite volume).
+  for (const bucket of ["quotes:", "bookings:"]) {
+    assert.ok(sql(`SELECT COUNT(*) AS c FROM login_attempts WHERE ip_address LIKE '${bucket}%'`)[0].c > 0, `${bucket} bucket missing`);
+  }
+  // Admin list views are audited like detail views; reconciliation tracks legacy hashes.
+  assert.equal((await api("GET", "/api/v1/admin/bookings?pageSize=1", { token: ADMIN })).status, 200);
+  assert.ok(sql("SELECT COUNT(*) AS c FROM admin_audit_logs WHERE action = 'ADMIN_LIST_BOOKINGS'")[0].c > 0);
+  const rec = (await api("GET", "/api/v1/admin/reconciliation", { token: ADMIN })).data;
+  assert.equal(typeof rec.legacyPasswordHashes, "number");
+});
+
+test("revived surfaces: is_active enforced, slots honest, partner rooms/inventory work, alerts fire, FX writable", async () => {
+  // is_active: deactivating hides from lists/details and refuses quotes (restored after).
+  sql("UPDATE flights SET is_active = 0 WHERE id = 'flt_ke703'");
+  try {
+    assert.ok(!(await api("GET", "/api/v1/flights?limit=100")).data.data.some((f) => f.id === "flt_ke703"));
+    assert.equal((await api("GET", "/api/v1/flights/flt_ke703")).status, 404);
+    assert.equal((await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: fday(60), travelers: { adults: 1 } } })).data.code, "PRODUCT_NOT_FOUND");
+  } finally {
+    sql("UPDATE flights SET is_active = 1 WHERE id = 'flt_ke703'");
+  }
+  // Slots: no fabrication — every returned slot has a DB row.
+  const date = day(100);
+  const slots = (await api("GET", `/api/v1/activities/act_disney_tokyo/slots?date=${date}`)).data.slots;
+  assert.equal(slots.length, sql(`SELECT COUNT(*) AS c FROM activity_time_slots WHERE activity_id = 'act_disney_tokyo' AND slot_date = '${date}' AND is_closed = 0`)[0].c);
+  // Partner hotel without rooms is unquotable; PATCHing rooms makes it sellable.
+  const P = await approvedPartner("rooms");
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 객실 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
+  const created = await api("POST", "/api/v1/partner/products", { token: P.token, body: { title: "E2E 객실 호텔", domain: "HOTEL", city: "서울", price: 80000 } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  const hid = created.data.id;
+  assert.equal((await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "HOTEL", itemId: hid, startDate: day(101), endDate: day(102), travelers: { adults: 2 } } })).data.code, "ROOM_REQUIRED");
+  const roomId = `e2e_ptn_rm_${Date.now().toString(36)}`;
+  assert.equal((await api("PATCH", `/api/v1/partner/products/${hid}`, { token: P.token, body: { rooms: [{ id: roomId, name_ko: "디럭스", base_price_krw: 80000, available_inventory: 3, max_occupancy: 2 }] } })).status, 200);
+  const hq = { domain: "HOTEL", itemId: hid, unitId: roomId, startDate: day(101), endDate: day(102), travelers: { adults: 2 } };
+  assert.ok((await api("POST", "/api/v1/quotes", { token: A.token, body: hq })).data.quote.quoteId, "quotable after rooms set");
+  // Partner inventory: closing the date sells nothing; reopening restores.
+  assert.equal((await api("PUT", "/api/v1/partner/inventory", { token: P.token, body: { domain: "HOTEL", itemId: hid, unitId: roomId, serviceDate: day(101), allocatedUnits: 3, isClosed: true } })).status, 200);
+  assert.equal((await api("POST", "/api/v1/quotes", { token: A.token, body: hq })).data.code, "SOLD_OUT");
+  assert.equal((await api("PUT", "/api/v1/partner/inventory", { token: P.token, body: { domain: "HOTEL", itemId: hid, unitId: roomId, serviceDate: day(101), allocatedUnits: 3 } })).status, 200);
+  assert.ok((await api("POST", "/api/v1/quotes", { token: A.token, body: hq })).data.quote.quoteId, "quotable after reopen");
+  // Price alerts fire through maintenance exactly once.
+  const G = await register("alertfire");
+  const alert = await api("POST", "/api/v1/price-alerts", { token: G.token, body: { domainType: "ACTIVITY", itemId: "act_disney_tokyo", routeOrHotel: "도쿄", targetPrice: 99999999 } });
+  assert.equal(alert.status, 201);
+  const maint = await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN });
+  assert.equal(maint.status, 200, JSON.stringify(maint.data));
+  assert.ok(maint.data.stats.alertsFired >= 1);
+  assert.equal(sql(`SELECT is_active AS v FROM price_alerts WHERE id = '${alert.data.id}'`)[0].v, 0);
+  assert.ok(sql(`SELECT COUNT(*) AS c FROM notification_outbox WHERE template = 'PRICE_ALERT' AND recipient = '${G.email}'`)[0].c >= 1);
+  // FX rates are writable by ops.
+  assert.equal((await api("PUT", "/api/v1/admin/fx-rates", { token: ADMIN, body: { rates: [{ currency: "USD", symbol: "$", rate_to_krw: 1400.5 }] } })).status, 200);
+  assert.equal((await api("PUT", "/api/v1/admin/fx-rates", { token: ADMIN, body: { rates: [{ currency: "US", rate_to_krw: 1 }] } })).status, 400);
+  const fx = (await api("GET", "/api/v1/fx-rates")).data.rates.find((r) => r.currency === "USD");
+  assert.equal(fx.rate_to_krw, 1400.5);
+});
+
+test("entities: go-live gate transitions are validated and logged", async () => {
+  const list = (await api("GET", "/api/v1/admin/entities", { token: ADMIN })).data;
+  assert.ok(list.entities.some((e) => e.id === "ent_primary"));
+  assert.equal((await api("PATCH", "/api/v1/admin/entities/ent_nope", { token: ADMIN, body: { status: "ACTIVE" } })).status, 404);
+  const tag = Date.now().toString(36);
+  const eid = `ent_e2e_${tag}`;
+  sql(`INSERT INTO business_entities (id, entity_type, legal_name, status) VALUES ('${eid}', 'CORPORATION', 'E2E 법인', 'DRAFT')`);
+  try {
+    assert.equal((await api("PATCH", `/api/v1/admin/entities/${eid}`, { token: ADMIN, body: { status: "ACTIVE" } })).data.code, "ENTITY_INCOMPLETE");
+    const full = { status: "ACTIVE", business_registration_no: "111-22-33333", travel_agency_license_no: "제2026-1호", ecommerce_registration_no: "제2026-서울-1호", representative_name: "김대표", cs_phone: "02-111-2222" };
+    assert.equal((await api("PATCH", `/api/v1/admin/entities/${eid}`, { token: ADMIN, body: full })).status, 200);
+    const after = (await api("GET", "/api/v1/admin/entities", { token: ADMIN })).data.entities.find((e) => e.id === eid);
+    assert.equal(after.status, "ACTIVE");
+    assert.ok(after.effective_from, "ACTIVE stamps effective_from");
+    assert.ok(sql(`SELECT COUNT(*) AS c FROM entity_change_log WHERE entity_id = '${eid}'`)[0].c >= 1);
+  } finally {
+    sql(`DELETE FROM entity_change_log WHERE entity_id = '${eid}'; DELETE FROM business_entities WHERE id = '${eid}'`);
+  }
+});
+
+test("notices: publish, surface publicly, toggle", async () => {
+  assert.equal((await api("POST", "/api/v1/admin/notices", { token: ADMIN, body: { title: "x" } })).status, 400);
+  const title = `E2E 공지 ${Date.now().toString(36)}`;
+  const created = await api("POST", "/api/v1/admin/notices", { token: ADMIN, body: { title, content: "내용", bannerActive: true } });
+  assert.equal(created.status, 201);
+  assert.ok((await api("GET", "/api/v1/notices")).data.notices.some((n) => n.title === title));
+  assert.equal((await api("PATCH", `/api/v1/admin/notices/${created.data.id}`, { token: ADMIN, body: { bannerActive: false } })).status, 200);
+  assert.ok(!(await api("GET", "/api/v1/notices")).data.notices.some((n) => n.title === title));
+});
+
+test("passport wallet: encrypted at rest, masked in reads, owner-scoped", async () => {
+  const H = await register("pax");
+  const passport = "M7654321";
+  const saved = await api("POST", "/api/v1/user/passengers", { token: H.token, body: { nameKo: "홍길동", lastNameEn: "HONG", firstNameEn: "GILDONG", passportNumber: passport, passportExpiry: day(900), nationality: "KOR" } });
+  assert.equal(saved.status, 201, JSON.stringify(saved.data));
+  const stored = sql(`SELECT passport_number AS v FROM saved_travelers WHERE id = '${saved.data.id}'`)[0].v;
+  assert.ok(stored.startsWith("v1:"), "ciphertext at rest");
+  assert.ok(!stored.includes(passport));
+  const mine = (await api("GET", "/api/v1/user/passengers", { token: H.token })).data.passengers;
+  const row = mine.find((p) => p.id === saved.data.id);
+  assert.ok(row, "row readable by owner");
+  assert.equal(row.passport_masked, true);
+  assert.ok(!String(row.passport_number).includes(passport), "masked in reads");
+  assert.equal((await api("GET", "/api/v1/user/passengers", { token: A.token })).data.passengers.some((p) => p.id === saved.data.id), false, "not visible to others");
+  assert.equal((await api("DELETE", `/api/v1/user/passengers/${saved.data.id}`, { token: H.token })).status, 200);
+});
+
+test("surface smoke: read-only endpoints answer; dead affiliate surface stays safe; 410 stubs hold", async () => {
+  assert.equal((await api("GET", "/api/v1/feature-flags")).status, 200);
+  assert.equal((await api("GET", "/api/v1/admin/feature-flags", { token: ADMIN })).status, 200);
+  assert.equal((await api("GET", "/api/v1/suppliers/registry")).status, 200);
+  assert.equal((await api("GET", "/api/v1/esim/plans")).status, 200);
+  assert.equal((await api("GET", "/api/v1/insurance/plans")).status, 200);
+  assert.equal((await api("GET", "/api/v1/payments/config")).data.success, true);
+  assert.equal((await api("GET", "/api/v1/marketplace/catalog?model=3P")).status, 200);
+  assert.equal((await api("GET", "/api/v1/user/coupons", { token: A.token })).status, 200);
+  assert.equal((await api("POST", "/api/v1/bookings/calculate", { token: A.token, body: {} })).status, 410);
+  assert.equal((await api("POST", "/api/v1/bookings/bkg_x/pay", { token: A.token, body: {} })).status, 410);
+  assert.equal((await api("GET", "/out/no_such_partner/xyz")).data.code, "PARTNER_LINK_UNAVAILABLE");
+  assert.equal((await api("POST", "/api/v1/webhooks/postback", { body: { partner: "nope", click_id: "c", order_id: "o", amount: 1 } })).data.code, "MISSING_SIGNATURE");
+  const ts = String(Math.floor(Date.now() / 1000));
+  assert.equal((await api("POST", "/api/v1/webhooks/postback", { headers: { "X-Signature": "x", "X-Timestamp": ts }, body: { partner: "nope", click_id: "c", order_id: "o", amount: 1 } })).data.code, "UNKNOWN_PARTNER");
+});
+
+test("small surfaces: moment likes toggle, entity changes read, traveler import, completion cron", async () => {
+  const mm = await api("POST", "/api/v1/moments", { token: A.token, body: { title: "E2E 모먼트", content: "내용", city: "서울" } });
+  assert.equal(mm.status, 201);
+  assert.equal((await api("POST", `/api/v1/moments/${mm.data.id}/like`, { token: A.token })).data.likesCount, 1);
+  assert.equal((await api("POST", `/api/v1/moments/${mm.data.id}/like`, { token: A.token })).data.likesCount, 1, "like is idempotent");
+  assert.equal((await api("DELETE", `/api/v1/moments/${mm.data.id}/like`, { token: A.token })).data.likesCount, 0);
+  assert.equal((await api("POST", "/api/v1/moments/mmt_nope/like", { token: A.token })).status, 404);
+  const ch = (await api("GET", "/api/v1/admin/entities/ent_primary/changes", { token: ADMIN })).data;
+  assert.ok(Array.isArray(ch.changes));
+  assert.equal((await api("GET", "/api/v1/admin/entities/ent_nope/changes", { token: ADMIN })).status, 404);
+  // Saved traveler import: wallet row (encrypted) becomes the booking traveler.
+  const I = await register("import");
+  const pax = await api("POST", "/api/v1/user/passengers", { token: I.token, body: { nameKo: "김여행", lastNameEn: "KIM", firstNameEn: "YOHENG", birthDate: "1990-01-01", passportNumber: "M1122334", passportExpiry: day(900), nationality: "KOR" } });
+  assert.equal(pax.status, 201);
+  const fq = (await api("POST", "/api/v1/quotes", { token: I.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: fday(60), travelers: { adults: 1 } } })).data.quote;
+  const fb = (await api("POST", "/api/v1/bookings", { token: I.token, headers: { "Idempotency-Key": idem() }, body: { quoteId: fq.quoteId, contact, travelers: [{ savedTravelerId: pax.data.id }] } })).data.booking;
+  const det = (await api("GET", `/api/v1/bookings/${fb.id}`, { token: I.token })).data.booking;
+  assert.equal(det.travelers[0].lastNameEn, "KIM");
+  assert.equal(det.travelers[0].firstNameEn, "YOHENG");
+  assert.ok(det.travelers[0].passport, "imported passport stored");
+  assert.ok(!JSON.stringify(det.travelers[0]).includes("M1122334"), "passport number never serialized");
+  const fq2 = (await api("POST", "/api/v1/quotes", { token: I.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: fday(60), travelers: { adults: 1 } } })).data.quote;
+  assert.equal((await api("POST", "/api/v1/bookings", { token: I.token, headers: { "Idempotency-Key": idem() }, body: { quoteId: fq2.quoteId, contact, travelers: [{ savedTravelerId: "stv_nope" }] } })).data.code, "SAVED_TRAVELER_NOT_FOUND");
+  // Completion: fulfilled + past service_end completes through maintenance.
+  const { b } = await fullHotelBooking(A.token, {});
+  sql(`UPDATE bookings SET service_end = '2020-01-02' WHERE id = '${b.id}'`);
+  const mstat = (await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN })).data.stats;
+  assert.ok(mstat.completed >= 1);
+  assert.equal((await api("GET", `/api/v1/bookings/${b.id}`, { token: A.token })).data.booking.status, "COMPLETED");
 });

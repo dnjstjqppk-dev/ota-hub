@@ -32,9 +32,17 @@ export function parseDsn(dsn: string): ParsedDsn | null {
 
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const SECRET_QUERY_RE = /([?&](token|key|secret|password|passwd|auth|authorization|signature|sig|code|session)=)[^&#\s]*/gi;
+const BEARER_RE = /\bBearer\s+[A-Za-z0-9\-._~+/=]+/gi;
+const KR_PHONE_RE = /\b01[016789]-?\d{3,4}-?\d{4}\b/g;
+const KR_RRN_RE = /\b\d{6}-\d{7}\b/g;
 
 export function scrubPII(text: string): string {
-  return String(text).replace(EMAIL_RE, "[email]").replace(SECRET_QUERY_RE, "$1[redacted]");
+  return String(text)
+    .replace(EMAIL_RE, "[email]")
+    .replace(SECRET_QUERY_RE, "$1[redacted]")
+    .replace(BEARER_RE, "Bearer [redacted]")
+    .replace(KR_PHONE_RE, "[phone]")
+    .replace(KR_RRN_RE, "[rrn]");
 }
 
 interface StackFrame {

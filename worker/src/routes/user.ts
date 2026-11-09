@@ -52,7 +52,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     await db.prepare(
       "INSERT INTO price_alerts (id, user_id, email, domain_type, item_id, route_or_hotel, current_price_krw, target_price, currency, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'KRW', 1)",
     ).bind(id, u.id, u.email, str(b.domainType || "HOTEL", 20).toUpperCase(), str(b.itemId || "general", 100), routeOrHotel, Number(b.currentPriceKrw || 0) || 0, target).run();
-    return json({ success: true, id, notice: "가격 알림 발송 기능(이메일)은 아직 연동되지 않았습니다." }, 201);
+    return json({ success: true, id, notice: "목표가에 도달하면 이메일로 알려드립니다." }, 201);
   }
   if (path.startsWith("/api/v1/price-alerts/") && method === "DELETE") {
     const u = await requireUser(request, env);
@@ -114,6 +114,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     const u = await requireUser(request, env);
     const b = await readJson(request);
     const code = str(b.code || b.couponCode, 40).toUpperCase();
+    await rateLimit(request, env, "coupon_claim", 60, 60);
     const p = await db.prepare("SELECT * FROM promotions WHERE code = ? AND is_active = 1").bind(code).first<any>();
     if (!p) throw new HttpError(404, "PROMO_NOT_FOUND", "존재하지 않거나 종료된 쿠폰입니다.");
     if (p.valid_until && p.valid_until < new Date().toISOString()) throw new HttpError(409, "PROMO_EXPIRED", "사용 기간이 만료된 쿠폰입니다.");
@@ -171,6 +172,28 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
   if (path === "/api/v1/moments" && method === "GET") {
     const res = await db.prepare("SELECT id, user_name, user_avatar, city, title, content, photos_json, likes_count, is_featured, created_at FROM trip_moments WHERE is_blinded = 0 ORDER BY is_featured DESC, created_at DESC LIMIT 30").all();
     return json({ success: true, moments: res.results });
+  }
+  const likeMatch = path.match(/^\/api\/v1\/moments\/([A-Za-z0-9_-]+)\/like$/);
+  if (likeMatch && method === "POST") {
+    const u = await requireUser(request, env);
+    await rateLimit(request, env, "moment_like", 60, 3600);
+    const m = await db.prepare("SELECT id FROM trip_moments WHERE id = ? AND is_blinded = 0").bind(likeMatch[1]).first();
+    if (!m) throw new HttpError(404, "MOMENT_NOT_FOUND", "모먼트를 찾을 수 없습니다.");
+    const r = await db.prepare("INSERT OR IGNORE INTO moment_likes (moment_id, user_id) VALUES (?, ?)").bind(likeMatch[1], u.id).run();
+    if (r.meta.changes) {
+      await db.prepare("UPDATE trip_moments SET likes_count = likes_count + 1 WHERE id = ?").bind(likeMatch[1]).run();
+    }
+    const c = await db.prepare("SELECT likes_count FROM trip_moments WHERE id = ?").bind(likeMatch[1]).first<{ likes_count: number }>();
+    return json({ success: true, liked: true, likesCount: Number(c?.likes_count || 0) });
+  }
+  if (likeMatch && method === "DELETE") {
+    const u = await requireUser(request, env);
+    const r = await db.prepare("DELETE FROM moment_likes WHERE moment_id = ? AND user_id = ?").bind(likeMatch[1], u.id).run();
+    if (r.meta.changes) {
+      await db.prepare("UPDATE trip_moments SET likes_count = MAX(0, likes_count - 1) WHERE id = ?").bind(likeMatch[1]).run();
+    }
+    const c = await db.prepare("SELECT likes_count FROM trip_moments WHERE id = ?").bind(likeMatch[1]).first<{ likes_count: number }>();
+    return json({ success: true, liked: false, likesCount: Number(c?.likes_count || 0) });
   }
   if (path === "/api/v1/moments" && method === "POST") {
     const u = await requireUser(request, env);

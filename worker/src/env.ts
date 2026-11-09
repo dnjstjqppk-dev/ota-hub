@@ -15,8 +15,6 @@ export interface Env {
   TOSS_CLIENT_KEY?: string;
   /** Contract-test stub base URL for the Toss provider. Honored in development/test only; production always uses api.tosspayments.com. */
   TOSS_API_BASE?: string;
-  /** Shared secret used to sign sandbox payment webhooks in tests. */
-  SANDBOX_WEBHOOK_SECRET?: string;
   /** "true" allows suppliers with adapter=simulator to fulfil bookings. Refused outside development/test. */
   ALLOW_SIMULATED_SUPPLIERS?: string;
   /** "true" lets development run with a DRAFT business entity. Refused outside development/test. */

@@ -8,12 +8,14 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '~/stores/auth'
-import { apiFetch, formatKrw } from '~/composables/useApi'
+import { useCurrencyStore } from '~/stores/currency'
+import { apiFetch, formatKrw, formatMinor } from '~/composables/useApi'
 import { fmtDay, qDate, qInt, todayIso } from '~/composables/useUrlQuery'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const currency = useCurrencyStore()
 
 const DOMAIN_LABEL: Record<string, string> = { HOTEL: '숙소', FLIGHT: '항공권', TRAIN: '기차', CAR: '렌터카', TRANSFER: '공항 이동', ACTIVITY: '투어·티켓', PACKAGE: '패키지' }
 const q = route.query as Record<string, string>
@@ -91,7 +93,7 @@ async function getQuote(retry = true) {
   busy.value = true
   const r = await apiFetch('/quotes', {
     method: 'POST',
-    body: { domain, itemId, unitId, ratePlanId, returnItemId, returnDate: returnItemId ? returnDate.value : undefined, startDate: startDate.value, endDate: needsEnd ? endDate.value : null, rooms: domain === 'HOTEL' ? rooms.value : undefined, travelers: { adults: adults.value, children: children.value, infants: infants.value }, promotionCode: promotionCode.value || undefined, coinAmount: useCoins.value > 0 ? Math.floor(useCoins.value) : undefined }
+    body: { domain, itemId, unitId, ratePlanId, returnItemId, returnDate: returnItemId ? returnDate.value : undefined, startDate: startDate.value, endDate: needsEnd ? endDate.value : null, rooms: domain === 'HOTEL' ? rooms.value : undefined, travelers: { adults: adults.value, children: children.value, infants: infants.value }, promotionCode: promotionCode.value || undefined, coinAmount: useCoins.value > 0 ? Math.floor(useCoins.value) : undefined, displayCurrency: currency.activeCurrency !== 'KRW' ? currency.activeCurrency : undefined }
   })
   busy.value = false
   if (r.status === 401) return goLogin()
@@ -101,7 +103,7 @@ async function getQuote(retry = true) {
       useCoins.value = r.data.details.maxUsable
       return getQuote(false)
     }
-    if (['NOT_DIRECTLY_BOOKABLE', 'SALES_NOT_ENABLED', 'PAYMENTS_DISABLED'].includes(r.data.code || '')) blocked.value = { code: r.data.code!, message: r.data.error || '' }
+    if (['NOT_DIRECTLY_BOOKABLE', 'SALES_NOT_ENABLED', 'PAYMENTS_DISABLED', 'BELOW_FLOOR_PRICE', 'FLIGHT_TICKETING_UNSUPPORTED'].includes(r.data.code || '')) blocked.value = { code: r.data.code!, message: r.data.error || '' }
     else error.value = r.data.error || '가격을 확인할 수 없습니다.'
     return
   }
@@ -349,7 +351,7 @@ onBeforeUnmount(() => clearInterval(timer))
             </div>
             <div class="flex justify-between border-t border-line pt-3 text-base font-extrabold text-ink"><dt>총 결제 금액</dt><dd class="tabular" data-testid="total">{{ formatKrw(quote.totalMinor) }}</dd></div>
           </dl>
-          <p v-if="quote.display" class="mt-1 text-right text-xs text-ink-subtle">≈ {{ (quote.display.totalMinor / 100).toLocaleString() }} {{ quote.display.currency }} · {{ quote.display.note }}</p>
+          <p v-if="quote.display" class="mt-1 text-right text-xs text-ink-subtle">≈ {{ formatMinor(quote.display.totalMinor, quote.display.currency) }} · {{ quote.display.note }}</p>
           <div class="mt-4 rounded-2xl bg-surface-sunken p-3.5 text-sm">
             <p class="font-semibold text-ink">취소 규정</p>
             <p v-if="quote.cancellationPolicy.type === 'FREE_UNTIL'" class="mt-0.5 text-success">{{ new Date(quote.cancellationPolicy.freeUntil).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }) }}까지 무료 취소<span class="text-ink-muted">, 이후에는 환불되지 않아요</span></p>

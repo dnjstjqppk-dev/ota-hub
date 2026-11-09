@@ -26,7 +26,7 @@
     "run_worker_first": true
   },
   "vars": {
-    "ALLOWED_ORIGINS": "https://getfortrip.com,https://www.getfortrip.com,https://admin.getfortrip.com,https://partner.getfortrip.com,https://ota-hub.dnjstjqppk.workers.dev,https://ota-admin.dnjstjqppk.workers.dev,https://ota-partner.dnjstjqppk.workers.dev,http://localhost:3000,http://localhost:3001,http://localhost:3002",
+    "ALLOWED_ORIGINS": "https://getfortrip.com,https://www.getfortrip.com,https://admin.getfortrip.com,https://partner.getfortrip.com,https://ota-hub.dnjstjqppk.workers.dev,https://ota-admin.dnjstjqppk.workers.dev,https://ota-partner.dnjstjqppk.workers.dev",
     "PUBLIC_SITE_URL": "https://getfortrip.com",
     "PARTNER_SITE_URL": "https://ota-partner.dnjstjqppk.workers.dev",
     // Declared provider with no key yet: /health stays DISABLED until TOSS_SECRET_KEY

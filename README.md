@@ -22,7 +22,8 @@ backend/ (Go 1.23, :8080) ── 참조용 인메모리 구현 (프로덕션 경
 
 - **API**: `worker/` (TypeScript, Cloudflare Workers + D1). 라우팅은 `worker/index.ts`,
   규칙은 `src/domain/`, 오케스트레이션은 `src/services/`, HTTP는 `src/routes/`, PG는 `src/payments/`.
-- **DB**: D1 SQLite. `worker/migrations/0001~0008` (wrangler가 배포 시 자동 적용).
+- **DB**: D1 SQLite. `worker/migrations/` (0024까지). CI가 적용 가능 여부만 검증하고,
+  운영 반영은 수동 적용(`npx wrangler d1 migrations apply ota_production --remote`).
 - **결제**: Toss Payments 서버 승인/취소/조회 + PG 웹훅(`/api/v1/webhooks/toss`,
   힌트 수신 후 lookup 재확인). 미설정 시 결제는 비활성으로 정직 응답.
 - **메일**: Resend. 미설정 시 outbox에 적재되고 API가 `NOT_CONFIGURED`로 응답.
@@ -37,8 +38,9 @@ backend/ (Go 1.23, :8080) ── 참조용 인메모리 구현 (프로덕션 경
 
 ```powershell
 npm install
-npx wrangler d1 migrations apply ota_production --local   # 또는: node scripts/migrate-d1.js
-npx wrangler dev -c wrangler.local.jsonc                  # http://127.0.0.1:8799
+npx wrangler d1 migrations apply ota_local --local -c wrangler.local.jsonc
+node scripts/dev-seed.mjs LocalAdmin2026!x   # 로컬 어드민 + 시뮬레이터 시드
+npx wrangler dev -c wrangler.local.jsonc --port 8799   # E2E 기본 포트
 ```
 
 ### 2. 사용자 웹 (Nuxt 3)
@@ -89,14 +91,15 @@ go run cmd/api/main.go   # http://localhost:8080
 ## 테스트·품질 게이트
 
 ```powershell
-npm test          # Worker 단위 테스트 + 프론트 컴포넌트 테스트 (node:test)
-npm run test:e2e  # 로컬 워커 대상 E2E (BASE=... ADMIN_PASSWORD=... 필요, README 상단 주석 참조)
+npm test           # Worker 단위 테스트 + 프론트 컴포넌트 테스트 (node:test)
+npm run typecheck  # worker 타입체크 (tsc --noEmit)
+npm run test:e2e   # 로컬 워커 대상 E2E (:8799 기동 후, ADMIN_PASSWORD=시드비번)
 cd backend; go test ./...
 npm run check:branding   # 브랜드 거버넌스 (CI 필수 게이트)
 ```
 
-CI(`.github/workflows/deploy.yml`): 브랜딩 → Go 테스트 → Worker/프론트 단위 테스트 →
-3포털 빌드·배포.
+CI(`.github/workflows/deploy.yml`): gate잡(브랜딩 → Go → 유닛 → 타입체크 →
+마이그레이션 검증 → E2E) 전부 통과 시에만 deploy잡이 3포털 빌드·배포.
 
 ## 환경 변수
 

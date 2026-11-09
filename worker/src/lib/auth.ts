@@ -38,13 +38,57 @@ export async function getAuthUser(request: Request, env: Env): Promise<AuthUser 
   if (!token) return null;
   const p = await verifyJwt(token, secret);
   if (!p || typeof p.id !== "string") return null;
+  // Revocation: logged-out JTIs and pre-reset sessions stop here (audit [m]).
+  if (typeof p.jti === "string") {
+    const revoked = await env.DB.prepare("SELECT 1 AS x FROM revoked_tokens WHERE jti = ?").bind(p.jti).first();
+    if (revoked) return null;
+  }
+  if (typeof p.iat === "number") {
+    const rs = await env.DB.prepare("SELECT reset_at FROM session_resets WHERE subject_id = ?").bind(p.id).first<{ reset_at: number }>();
+    if (rs && p.iat < Number(rs.reset_at)) return null;
+  }
   return { id: p.id, email: p.email, fullName: p.fullName, role: p.role, tier: p.tier, staffId: p.staffId, staffRole: p.staffRole };
+}
+
+/** Kill one JWT (logout). No-op when the token is absent or already invalid. */
+export async function revokeCurrentToken(request: Request, env: Env): Promise<void> {
+  let secret: string;
+  try {
+    secret = jwtSecret(env);
+  } catch {
+    return;
+  }
+  let token = "";
+  const h = request.headers.get("Authorization");
+  if (h?.startsWith("Bearer ")) token = h.slice(7).trim();
+  if (!token) {
+    const cookies = request.headers.get("Cookie") || "";
+    const m = cookies.match(/(?:^|;\s*)getfortrip_(?:partner_|admin_)?jwt=([^;]+)/);
+    token = m?.[1] || "";
+  }
+  if (!token) return;
+  const p = await verifyJwt(token, secret);
+  if (!p || typeof p.jti !== "string" || typeof p.exp !== "number") return;
+  await env.DB.prepare("INSERT OR IGNORE INTO revoked_tokens (jti, expires_at) VALUES (?, ?)").bind(p.jti, p.exp).run();
+}
+
+/** Kill every session of a subject (password reset/change). */
+export async function resetSubjectSessions(env: Env, subjectId: string): Promise<void> {
+  // +1: JWT iat has second granularity, so a same-second cutoff would spare
+  // tokens minted earlier in this second. Same-second post-reset logins get a
+  // stillborn token and must retry.
+  await env.DB.prepare("INSERT INTO session_resets (subject_id, reset_at) VALUES (?, ?) ON CONFLICT(subject_id) DO UPDATE SET reset_at = excluded.reset_at")
+    .bind(subjectId, Math.floor(Date.now() / 1000) + 1).run();
 }
 
 export async function requireUser(request: Request, env: Env): Promise<AuthUser> {
   const u = await getAuthUser(request, env);
   if (!u || (u.role !== "USER" && u.role !== "ADMIN")) throw new HttpError(401, "UNAUTHORIZED", "로그인이 필요합니다.");
-  return u;
+  // Roles come from the database, never from JWT claims alone: a demoted
+  // admin's still-valid token must not pass admin claim checks (audit [M]).
+  const row = await env.DB.prepare("SELECT role FROM users WHERE id = ?").bind(u.id).first<{ role: string }>();
+  if (!row || (row.role !== "USER" && row.role !== "ADMIN")) throw new HttpError(401, "UNAUTHORIZED", "로그인이 필요합니다.");
+  return { ...u, role: row.role as AuthUser["role"] };
 }
 
 /**

@@ -15,17 +15,6 @@ export interface WishlistItem {
   createdAt: string
 }
 
-export interface PriceAlertItem {
-  id: string
-  email: string
-  routeOrHotel: string
-  targetPrice: number
-  currentPriceKrw: number
-  currency: string
-  isActive: boolean
-  createdAt: string
-}
-
 const DETAIL_BASE: Record<string, string> = {
   HOTEL: 'hotels',
   FLIGHT: 'flights',
@@ -42,8 +31,7 @@ export function detailUrl(domainType: string, itemId: string): string {
 
 export const useWishlistStore = defineStore('wishlist', {
   state: () => ({
-    items: [] as WishlistItem[],
-    alerts: [] as PriceAlertItem[]
+    items: [] as WishlistItem[]
   }),
   getters: {
     count: (state) => state.items.length,
@@ -55,8 +43,6 @@ export const useWishlistStore = defineStore('wishlist', {
       try {
         const raw = localStorage.getItem('getfortrip_wishlist')
         if (raw) this.items = JSON.parse(raw)
-        const rawAlerts = localStorage.getItem('getfortrip_price_alerts')
-        if (rawAlerts) this.alerts = JSON.parse(rawAlerts)
       } catch (e) {}
 
       const authStore = useAuthStore()
@@ -67,18 +53,20 @@ export const useWishlistStore = defineStore('wishlist', {
           })
           if (res.ok) {
             const json = await res.json()
-            if (Array.isArray(json.wishlist) && json.wishlist.length > 0) {
-              this.items = json.wishlist.map((w: any) => ({
-                id: w.id,
-                domainType: w.domain_type || 'HOTEL',
-                itemId: w.item_id,
-                title: w.item_title,
-                priceKrw: w.price_krw || 0,
-                thumbnailUrl: w.thumbnail_url || '',
-                targetUrl: detailUrl(w.domain_type || 'HOTEL', w.item_id),
-                createdAt: w.created_at
-              }))
-            }
+            // Merge: server wins, but items saved while logged out are kept.
+            const serverItems = (Array.isArray(json.wishlist) ? json.wishlist : []).map((w: any) => ({
+              id: w.id,
+              domainType: w.domain_type || 'HOTEL',
+              itemId: w.item_id,
+              title: w.item_title,
+              priceKrw: w.price_krw || 0,
+              thumbnailUrl: w.thumbnail_url || '',
+              targetUrl: detailUrl(w.domain_type || 'HOTEL', w.item_id),
+              createdAt: w.created_at
+            }))
+            const seen = new Set(serverItems.map((i: WishlistItem) => i.itemId))
+            this.items = [...this.items.filter((i) => !seen.has(i.itemId)), ...serverItems]
+            localStorage.setItem('getfortrip_wishlist', JSON.stringify(this.items))
           }
         } catch (e) {}
       }
@@ -126,39 +114,5 @@ export const useWishlistStore = defineStore('wishlist', {
         return true
       }
     },
-    async addPriceAlert(payload: { email: string; routeOrHotel: string; targetPrice: number; currentPriceKrw?: number; currency?: string }) {
-      const authStore = useAuthStore()
-      const alertItem: PriceAlertItem = {
-        id: 'pal_' + Date.now(),
-        email: payload.email,
-        routeOrHotel: payload.routeOrHotel,
-        targetPrice: payload.targetPrice,
-        currentPriceKrw: payload.currentPriceKrw || payload.targetPrice,
-        currency: payload.currency || 'KRW',
-        isActive: true,
-        createdAt: new Date().toISOString()
-      }
-      this.alerts.unshift(alertItem)
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('getfortrip_price_alerts', JSON.stringify(this.alerts))
-      }
-      if (authStore.token) {
-        await fetch(useApiUrl('/price-alerts'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${authStore.token}`
-          },
-          body: JSON.stringify(payload)
-        }).catch(() => {})
-      }
-      return alertItem
-    },
-    removePriceAlert(id: string) {
-      this.alerts = this.alerts.filter((a) => a.id !== id)
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('getfortrip_price_alerts', JSON.stringify(this.alerts))
-      }
-    }
   }
 })

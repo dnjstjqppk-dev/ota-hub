@@ -2,15 +2,16 @@ import type { Env } from "../env.ts";
 import { isNonProduction } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { hashPassword, newId, randomToken, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
-import { audit, authCookie, getAuthUser, jwtSecret, rateLimit } from "../lib/auth.ts";
+import { audit, authCookie, getAuthUser, jwtSecret, rateLimit, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 
 export const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 
-function validatePassword(pw: string): void {
+export function validatePasswordPolicy(pw: string): void {
   if (pw.length < 10 || pw.length > 128) throw new HttpError(400, "WEAK_PASSWORD", "비밀번호는 10자 이상 128자 이하여야 합니다.");
   if (!/[A-Za-z]/.test(pw) || !/\d/.test(pw)) throw new HttpError(400, "WEAK_PASSWORD", "비밀번호는 영문자와 숫자를 각각 1자 이상 포함해야 합니다.");
 }
+const validatePassword = validatePasswordPolicy;
 
 function publicUser(u: any) {
   return { id: u.id, email: u.email, fullName: u.full_name, phoneNumber: u.phone_number, role: u.role || "USER", tier: u.tier, tripCoins: u.trip_coins, avatarUrl: u.avatar_url };
@@ -68,6 +69,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
   }
 
   if (path === "/api/v1/auth/logout" && method === "POST") {
+    await revokeCurrentToken(request, env);
     return json({ success: true }, 200, { "Set-Cookie": "getfortrip_jwt=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" });
   }
 
@@ -136,6 +138,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
       env.DB.prepare("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(await hashPassword(pw), rec.user_id),
     ]);
     if (!r[0].meta.changes) throw new HttpError(400, "INVALID_RESET_TOKEN", "이미 사용된 링크입니다.");
+    await resetSubjectSessions(env, rec.user_id);
     return json({ success: true, message: "비밀번호가 재설정되었습니다." });
   }
 

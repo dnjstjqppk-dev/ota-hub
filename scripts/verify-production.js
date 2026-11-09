@@ -259,9 +259,14 @@ async function runVerificationSuite() {
         travelers: { adults: 2 },
       }),
     });
-    // In production, uncontracted suppliers are safely rejected with 409 NOT_DIRECTLY_BOOKABLE (or 400 validation error)
-    if (res.status !== 409 && res.status !== 400) {
+    // rm_seoul_01_dlx is a real room, so validation passes and the only lawful
+    // refusal is the uncontracted-supplier guard (2026-11-09 audit [m]).
+    if (res.status !== 409) {
       throw new Error(`Uncontracted supplier quote unexpectedly allowed! Received HTTP ${res.status}`);
+    }
+    const guard = await res.json();
+    if (guard.code !== 'NOT_DIRECTLY_BOOKABLE') {
+      throw new Error(`Expected NOT_DIRECTLY_BOOKABLE, got: ${JSON.stringify(guard)}`);
     }
   });
 
@@ -533,20 +538,15 @@ async function runVerificationSuite() {
   // 27. 3-PORTAL INDEPENDENT URL & BACKWARD COMPATIBILITY VERIFICATION
   // ---------------------------------------------------------------------------
   await test("3-Portal Architecture: User, Admin, Partner independent URLs & Hub paths return HTTP 200", async () => {
-    const userRes = await fetch('https://ota-hub.dnjstjqppk.workers.dev');
-    if (!userRes.ok) throw new Error(`User portal failed: HTTP ${userRes.status}`);
-
-    const adminRes = await fetch('https://ota-admin.dnjstjqppk.workers.dev');
-    if (!adminRes.ok) throw new Error(`Admin portal failed: HTTP ${adminRes.status}`);
-
-    const partnerRes = await fetch('https://ota-partner.dnjstjqppk.workers.dev');
-    if (!partnerRes.ok) throw new Error(`Partner portal failed: HTTP ${partnerRes.status}`);
-
-    const hubAdminRes = await fetch('https://ota-hub.dnjstjqppk.workers.dev/admin/');
-    if (!hubAdminRes.ok) throw new Error(`Hub /admin/ path fallback failed: HTTP ${hubAdminRes.status}`);
-
-    const hubPartnerRes = await fetch('https://ota-hub.dnjstjqppk.workers.dev/partner/');
-    if (!hubPartnerRes.ok) throw new Error(`Hub /partner/ path fallback failed: HTTP ${hubPartnerRes.status}`);
+    // Portal roots derive from env (BASE_URL for hub, *_URL for the consoles) so the
+    // suite can target staging as well as production (2026-11-09 audit [m]).
+    const hub = (process.env.BASE_URL || 'https://ota-hub.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+    const adminRoot = (process.env.ADMIN_URL || 'https://ota-admin.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+    const partnerRoot = (process.env.PARTNER_URL || 'https://ota-partner.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+    for (const [label, url] of [['User portal', hub], ['Admin portal', adminRoot], ['Partner portal', partnerRoot], ['Hub /admin/ fallback', `${hub}/admin/`], ['Hub /partner/ fallback', `${hub}/partner/`]]) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${label} failed: HTTP ${res.status} (${url})`);
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -827,6 +827,7 @@ async function runVerificationSuite() {
     // suite; this live check exercises publish only when a draft happens to exist.
     const targetDraft = hist.items.find((i) => (i.status === 'DRAFT' || i.status === 'REVIEWED') && !i.published_item_id);
     if (!targetDraft) {
+      skipped++;
       console.log('(no publishable draft in history; publish step skipped)');
       return;
     }

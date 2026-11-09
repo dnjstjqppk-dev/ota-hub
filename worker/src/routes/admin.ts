@@ -7,6 +7,7 @@ import { newId } from "../lib/crypto.ts";
 import { invalidateSupplierCache } from "../services/catalog.ts";
 import { likeEscape } from "../services/suggest-service.ts";
 import { pageMeta, pageParams } from "../lib/pagination.ts";
+import { idempotencyPrecheck, idempotencyStore } from "../lib/idempotency.ts";
 
 const PARTNER_STATUSES = ["ACTIVE", "REJECTED", "SUSPENDED", "PENDING_APPROVAL"] as const;
 const USER_ROLES = ["USER", "ADMIN"] as const;
@@ -190,6 +191,8 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const pg = pageParams(url);
     const total = ((await db.prepare(`SELECT COUNT(*) AS total FROM bookings WHERE ${where}`).bind(...p).first<{ total: number }>())?.total || 0) as number;
     const rows = await db.prepare(`SELECT ${cols} FROM bookings WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...p, pg.pageSize, pg.offset).all();
+    // The list carries customer PII like the audited detail view, so list views are audited too (audit [m]).
+    await audit(env, admin.id, "ADMIN_LIST_BOOKINGS", "BOOKING", "*", { status: status || null, filtered: Boolean(q), count: (rows.results || []).length });
     return json({ success: true, bookings: rows.results, statuses: BOOKING_STATUSES, ...pageMeta(total, pg.page, pg.pageSize) });
   }
 
@@ -231,8 +234,16 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const strandedDeposits = await db.prepare(
       "SELECT l.booking_id, b.status, SUM(CASE WHEN l.direction='CREDIT' THEN l.amount_minor ELSE -l.amount_minor END) AS deposit FROM ledger_entries l JOIN bookings b ON b.id = l.booking_id WHERE l.account = 'CUSTOMER_DEPOSITS' AND b.status IN ('REFUNDED','CANCELLED','FAILED','VOUCHER_ISSUED','TICKETED','COMPLETED') GROUP BY l.booking_id HAVING deposit != 0",
     ).all();
+    // Legacy static-salt SHA-256 password hashes still on record (users + partners + staff).
+    // Sunset is blocked on email delivery (Resend): forcing rotation now would lock out
+    // users with no recovery path. Tracked here until then (2026-11-09 audit [M]).
+    const legacy = await db.prepare(
+      `SELECT (SELECT COUNT(*) FROM users WHERE LENGTH(password_hash) = 64 AND password_hash GLOB '[0-9a-f]*')
+        + (SELECT COUNT(*) FROM partners WHERE LENGTH(password_hash) = 64 AND password_hash GLOB '[0-9a-f]*')
+        + (SELECT COUNT(*) FROM partner_staff WHERE LENGTH(password_hash) = 64 AND password_hash GLOB '[0-9a-f]*') AS c`,
+    ).first<{ c: number }>();
     const ok = !unbalanced.results.length && !paidMismatch.results.length && !refundMismatch.results.length && !strandedDeposits.results.length;
-    return json({ success: true, ok, unbalancedJournals: unbalanced.results, paidMismatch: paidMismatch.results, refundMismatch: refundMismatch.results, strandedDeposits: strandedDeposits.results });
+    return json({ success: true, ok, unbalancedJournals: unbalanced.results, paidMismatch: paidMismatch.results, refundMismatch: refundMismatch.results, strandedDeposits: strandedDeposits.results, legacyPasswordHashes: Number(legacy?.c || 0) });
   }
 
   if (path === "/api/v1/admin/suppliers" && method === "GET") {
@@ -275,6 +286,13 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const entities = await db.prepare("SELECT * FROM business_entities ORDER BY created_at").all();
     const contracts = await db.prepare("SELECT * FROM entity_contracts ORDER BY created_at").all();
     return json({ success: true, entities: entities.results, contracts: contracts.results });
+  }
+  m = path.match(/^\/api\/v1\/admin\/entities\/([A-Za-z0-9_-]+)\/changes$/);
+  if (m && method === "GET") {
+    const ent = await db.prepare("SELECT id FROM business_entities WHERE id = ?").bind(m[1]).first();
+    if (!ent) throw new HttpError(404, "ENTITY_NOT_FOUND", "사업자 정보를 찾을 수 없습니다.");
+    const rows = await db.prepare("SELECT * FROM entity_change_log WHERE entity_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 100").bind(m[1]).all();
+    return json({ success: true, changes: rows.results });
   }
   m = path.match(/^\/api\/v1\/admin\/entities\/([A-Za-z0-9_-]+)$/);
   if (m && method === "PATCH") {
@@ -611,7 +629,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     if (!await db.prepare(`SELECT id FROM ${spec.table} WHERE id = ?`).bind(m[2]).first()) {
       throw new HttpError(404, "PRODUCT_NOT_FOUND", "상품을 찾을 수 없습니다.");
     }
-    const row = await db.prepare("SELECT domain_type, item_id, free_cancel_hours, change_allowed, no_show_fee_bps, tiers_json, note, updated_at FROM product_policies WHERE domain_type = ? AND item_id = ?").bind(m[1], m[2]).first();
+    const row = await db.prepare("SELECT domain_type, item_id, free_cancel_hours, change_allowed, no_show_fee_bps, tiers_json, floor_price_minor, note, updated_at FROM product_policies WHERE domain_type = ? AND item_id = ?").bind(m[1], m[2]).first();
     return json({ success: true, policy: row ? { ...row as object, tiers: JSON.parse((row as any).tiers_json || "[]") } : null });
   }
 
@@ -641,12 +659,14 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       return { hours_before: h, refund_bps: r, note: str(t?.note, 200) };
     }).sort((a, b2) => b2.hours_before - a.hours_before);
     const note = b.note === undefined || b.note === null ? null : str(b.note, 1000);
-    await db.prepare(`INSERT INTO product_policies (domain_type, item_id, free_cancel_hours, change_allowed, no_show_fee_bps, tiers_json, note, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    const floor = b.floor_price_minor === undefined || b.floor_price_minor === null ? null : Number(b.floor_price_minor);
+    if (floor !== null && (!Number.isInteger(floor) || floor < 0)) throw new HttpError(400, "INVALID_POLICY", "floor_price_minor는 0 이상의 정수(마이너 단위)여야 합니다.");
+    await db.prepare(`INSERT INTO product_policies (domain_type, item_id, free_cancel_hours, change_allowed, no_show_fee_bps, tiers_json, floor_price_minor, note, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
       ON CONFLICT(domain_type, item_id) DO UPDATE SET free_cancel_hours = excluded.free_cancel_hours, change_allowed = excluded.change_allowed,
-      no_show_fee_bps = excluded.no_show_fee_bps, tiers_json = excluded.tiers_json, note = excluded.note, updated_at = excluded.updated_at`)
-      .bind(m[1], m[2], freeHours, changeAllowed, noShow, JSON.stringify(tiers), note).run();
-    await audit(env, admin.id, "UPSERT_PRODUCT_POLICY", m[1], m[2], { tiers: tiers.length });
+      no_show_fee_bps = excluded.no_show_fee_bps, tiers_json = excluded.tiers_json, floor_price_minor = excluded.floor_price_minor, note = excluded.note, updated_at = excluded.updated_at`)
+      .bind(m[1], m[2], freeHours, changeAllowed, noShow, JSON.stringify(tiers), floor, note).run();
+    await audit(env, admin.id, "UPSERT_PRODUCT_POLICY", m[1], m[2], { tiers: tiers.length, floor_price_minor: floor });
     return json({ success: true });
   }
 
@@ -798,17 +818,27 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     }
     let coinBalance = Number(user.trip_coins || 0);
     if (coinAdjustment !== null) {
+      // Money-moving admin op: Idempotency-Key is required so a retried or
+      // double-submitted request replays instead of double-applying (audit [M]).
+      const idemKey = str(request.headers.get("Idempotency-Key"), 100);
+      if (!idemKey) throw new HttpError(400, "IDEMPOTENCY_KEY_REQUIRED", "코인 조정에는 Idempotency-Key 헤더가 필요합니다.");
+      const idem = await idempotencyPrecheck(env, "admin:coin-adjust", idemKey, [admin.id, userId, String(coinAdjustment), note || ""]);
+      if (idem.replay) return json(idem.replay.body as any, idem.replay.status);
       // Balance never goes below zero; the ledger records the change actually applied.
       const next = Math.max(0, coinBalance + coinAdjustment);
       const applied = next - coinBalance;
       if (applied !== 0) {
-        await db.batch([
-          db.prepare("UPDATE users SET trip_coins = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND trip_coins = ?").bind(next, userId, coinBalance),
-          db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, ?, ?)").bind(newId("coin"), userId, applied, `ADMIN_ADJUSTMENT${note ? `: ${note}` : ""}`, admin.id),
-        ]);
+        // CAS first and CHECK it: without the changes check a lost race would
+        // still insert the ledger row and diverge balance from ledger (audit [M]).
+        const cas = await db.prepare("UPDATE users SET trip_coins = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND trip_coins = ?").bind(next, userId, coinBalance).run();
+        if (!cas.meta.changes) throw new HttpError(409, "CONCURRENT_MODIFICATION", "잔액이 방금 변경되었습니다. 새로고침 후 다시 시도해주세요.");
+        await db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, ?, ?)").bind(newId("coin"), userId, applied, `ADMIN_ADJUSTMENT${note ? `: ${note}` : ""}`, admin.id).run();
       }
       await audit(env, admin.id, "ADJUST_USER_COINS", "USER", userId, { requested: coinAdjustment, applied, note });
       coinBalance = next;
+      const body = { success: true, message: "사용자 정보가 변경되었습니다.", coinBalance };
+      await idempotencyStore(env, "admin:coin-adjust", idemKey, 200, body);
+      return json(body);
     }
 
     return json({ success: true, message: "사용자 정보가 변경되었습니다.", coinBalance });
@@ -890,6 +920,26 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     if (!r.meta.changes) throw new HttpError(404, "NOTICE_NOT_FOUND", "공지를 찾을 수 없습니다.");
     await audit(env, admin.id, "UPDATE_NOTICE", "NOTICE", m[1], { bannerActive: b.bannerActive, isEmergency: b.isEmergency });
     return json({ success: true });
+  }
+
+  // FX rates manual update. No automatic rate feed exists yet, so operations
+  // refreshes rates by hand from the treasury source (2026-11-09 audit [M]).
+  if (path === "/api/v1/admin/fx-rates" && method === "PUT") {
+    const b = await readJson(request);
+    const rates = b.rates;
+    if (!Array.isArray(rates) || !rates.length || rates.length > 100) throw new HttpError(400, "INVALID_RATES", "rates 배열(1~100개)이 필요합니다.");
+    for (const r of rates) {
+      const cur = str(r?.currency, 8).toUpperCase();
+      const rate = Number(r?.rate_to_krw);
+      if (!/^[A-Z]{3}$/.test(cur)) throw new HttpError(400, "INVALID_RATES", "통화 코드는 영문 3자여야 합니다.");
+      if (!Number.isFinite(rate) || rate <= 0) throw new HttpError(400, "INVALID_RATES", `${cur} 환율이 올바르지 않습니다.`);
+    }
+    await db.batch(rates.map((r: any) =>
+      db.prepare("INSERT INTO fx_rates (currency, symbol, rate_to_krw, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(currency) DO UPDATE SET rate_to_krw = excluded.rate_to_krw, updated_at = excluded.updated_at")
+        .bind(str(r.currency, 8).toUpperCase(), str(r.symbol, 8) || str(r.currency, 8).toUpperCase(), Number(r.rate_to_krw)),
+    ));
+    await audit(env, admin.id, "UPDATE_FX_RATES", "FX", "*", { count: rates.length });
+    return json({ success: true, updated: rates.length });
   }
 
   throw new HttpError(404, "NOT_FOUND", "요청하신 관리자 API를 찾을 수 없습니다.");

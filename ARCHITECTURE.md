@@ -10,6 +10,12 @@
 
 ## 🛠️ 1. 확정 기술 스택 (Tech Stack Specification)
 
+> 정정 (2026-11-09): 아래 표의 Backend·Database 행은 초기 설계안이다.
+> 실제 서빙 스택은 **Cloudflare Workers(worker/, TypeScript) + D1(SQLite)** 이며,
+> Go(`backend/`)·PostgreSQL·Redis는 배포 배선에 포함되지 않는다.
+> Go 서비스는 테스트만 유지되는 보조 구현이다. 상세: 전수 감사 리포트
+> [FULL_AUDIT_20261109](reports/FULL_AUDIT_20261109.md) §Go 백엔드.
+
 | 계층 | 기술 스택 | 버전 / 도구 | 선정 근거 및 핵심 역할 |
 | :--- | :--- | :--- | :--- |
 | **User Web Frontend** | TypeScript, Vue 3, Nuxt 3, Tailwind CSS, Pinia | Nuxt 4/3.13+, Vue 3.5+, Tailwind v3.4+ | getfortrip 사용자 웹, 다통화/다국어 실시간 반응형 UI, URL 동기화 검색 필터, Cloudflare Workers 배포 |

@@ -1,13 +1,29 @@
 import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
-import { jwtSecret, rateLimit, requirePartner } from "../lib/auth.ts";
+import { jwtSecret, rateLimit, requirePartner, resetSubjectSessions } from "../lib/auth.ts";
 import { hashPassword, newId, randomToken, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
-import { EMAIL_RE } from "./auth.ts";
+import { EMAIL_RE, validatePasswordPolicy } from "./auth.ts";
 import * as S from "../services/booking-service.ts";
 import { BOOKING_STATUSES } from "../domain/state-machine.ts";
 import { pageMeta, pageParams } from "../lib/pagination.ts";
 import { likeEscape } from "../services/suggest-service.ts";
+
+/** Validate partner-supplied hotel rooms. Absent input means "no rooms yet" ([]). */
+function parseRooms(input: unknown): Array<{ id: string; name_ko: string; base_price_krw: number; available_inventory: number; max_occupancy: number }> {
+  if (input === undefined || input === null) return [];
+  if (!Array.isArray(input) || input.length > 50) throw new HttpError(400, "INVALID_ROOMS", "객실은 최대 50개까지 배열로 전달해주세요.");
+  return input.map((r: any, i: number) => {
+    const name = str(r?.name_ko || r?.name, 100);
+    const price = Number(r?.base_price_krw);
+    const inv = Number(r?.available_inventory);
+    const occ = Number(r?.max_occupancy ?? 2);
+    if (!name) throw new HttpError(400, "INVALID_ROOMS", `${i + 1}번째 객실명이 비어 있습니다.`);
+    if (!Number.isInteger(price) || price < 0) throw new HttpError(400, "INVALID_ROOMS", `${i + 1}번째 객실 요금이 올바르지 않습니다.`);
+    if (!Number.isInteger(inv) || inv < 0) throw new HttpError(400, "INVALID_ROOMS", `${i + 1}번째 객실 재고가 올바르지 않습니다.`);
+    return { id: str(r?.id, 64) || `rm_${Date.now().toString(36)}_${i}`, name_ko: name, base_price_krw: price, available_inventory: inv, max_occupancy: Number.isInteger(occ) && occ > 0 ? occ : 2 };
+  });
+}
 
 export async function handlePartner(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
@@ -32,9 +48,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     if (!email || !companyName || !password || !businessNumber) {
       throw new HttpError(400, "MISSING_FIELDS", "회사명, 이메일, 비밀번호, 사업자등록번호는 필수 항목입니다.");
     }
-    if (password.length < 8) {
-      throw new HttpError(400, "WEAK_PASSWORD", "비밀번호는 최소 8자 이상이어야 합니다.");
-    }
+    validatePasswordPolicy(password);
 
     const existing = await db.prepare("SELECT id FROM partners WHERE email = ?").bind(email).first();
     if (existing) {
@@ -188,7 +202,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const b = await readJson(request);
     const token = str(b.token, 128);
     const pw = String(b.newPassword || b.password || "");
-    if (pw.length < 8 || pw.length > 128) throw new HttpError(400, "WEAK_PASSWORD", "비밀번호는 8자 이상 128자 이하여야 합니다.");
+    validatePasswordPolicy(pw);
     const now = Math.floor(Date.now() / 1000);
     const rec = await env.DB.prepare("SELECT token, email, partner_id FROM password_reset_tokens WHERE token_hash = ? AND used = 0 AND expires_at > ? AND partner_id IS NOT NULL")
       .bind(await sha256Hex(token), now).first<{ token: string; email: string; partner_id: string }>();
@@ -200,7 +214,10 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     } else {
       stmts.push(env.DB.prepare("UPDATE partner_staff SET password_hash = ? WHERE email = ?").bind(await hashPassword(pw), rec.email));
     }
-    await env.DB.batch(stmts);
+    const done = await env.DB.batch(stmts);
+    // Same single-use guard as the user flow: a raced twin finds used = 1 and fails here.
+    if (!done[0].meta.changes) throw new HttpError(400, "INVALID_RESET_TOKEN", "만료되었거나 이미 사용된 링크입니다.");
+    await resetSubjectSessions(env, rec.partner_id);
     return json({ success: true, message: "비밀번호를 변경했어요. 새 비밀번호로 로그인해주세요." });
   }
 
@@ -209,6 +226,13 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   // -------------------------------------------------------------------------
   const partner = await requirePartner(request, env);
   const pId = partner.partnerId;
+  // Role split (2026-11-09 audit [M]): the owner has no staff row; MANAGER and
+  // STAFF come from partner_staff. Money infrastructure (bank details, staff
+  // management) is OWNER-only; order decisions need MANAGER or above.
+  const staffRole = partner.staffId ? String(partner.staffRole || "STAFF").toUpperCase() : "OWNER";
+  const isOwner = staffRole === "OWNER";
+  const canDecideOrders = isOwner || staffRole === "MANAGER";
+  const needOwner = () => { if (!isOwner) throw new HttpError(403, "OWNER_ONLY", "대표 계정만 수행할 수 있습니다."); };
 
   // 3. Partner Dashboard Metrics
   if (path === "/api/v1/partner/dashboard" && method === "GET") {
@@ -278,6 +302,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
   if (path === "/api/v1/partner/profile" && method === "PATCH") {
     const b = await readJson(request);
+    if (b.bankName !== undefined || b.bankAccountNumber !== undefined || b.bankAccountHolder !== undefined || b.taxInvoiceEmail !== undefined) needOwner();
     const contactPhone = str(b.contactPhone, 50);
     const bankName = str(b.bankName, 50);
     const bankAccountNumber = str(b.bankAccountNumber, 50);
@@ -319,9 +344,12 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     if (!title) throw new HttpError(400, "TITLE_REQUIRED", "상품명을 입력해주세요.");
 
     if (domain === "HOTEL") {
+      // Rooms are required for bookability (loadProduct throws ROOM_REQUIRED
+      // without them), so creation accepts them and PATCH can add them later.
+      const rooms = parseRooms(b.rooms);
       await db.prepare(
-        "INSERT INTO hotels (id, partner_id, name_ko, name_en, city, country, address, base_price_krw) VALUES (?, ?, ?, ?, ?, '대한민국', '상세 주소', ?)"
-      ).bind(id, pId, title, title, city, price).run();
+        "INSERT INTO hotels (id, partner_id, name_ko, name_en, city, country, address, base_price_krw, rooms_json) VALUES (?, ?, ?, ?, ?, '대한민국', '상세 주소', ?, ?)"
+      ).bind(id, pId, title, title, city, price, JSON.stringify(rooms)).run();
     } else if (domain === "CAR") {
       await db.prepare(
         "INSERT INTO cars (id, partner_id, company_name, vehicle_model, pickup_location, daily_price_krw) VALUES (?, ?, ?, ?, '공항 지점', ?)"
@@ -343,9 +371,10 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const city = b.city !== undefined ? str(b.city, 100) : null;
     const price = b.price !== undefined ? Number(b.price) : null;
     const isActive = b.isActive !== undefined ? (b.isActive ? 1 : 0) : null;
+    const rooms = b.rooms !== undefined ? parseRooms(b.rooms) : null;
     if (title !== null && !title) throw new HttpError(400, "TITLE_REQUIRED", "상품명을 입력해주세요.");
     if (price !== null && (!Number.isInteger(price) || price < 0)) throw new HttpError(400, "INVALID_PRICE", "요금은 0 이상의 정수(원)여야 합니다.");
-    if (title === null && city === null && price === null && isActive === null) {
+    if (title === null && city === null && price === null && isActive === null && rooms === null) {
       throw new HttpError(400, "NOTHING_TO_UPDATE", "수정할 항목이 없습니다.");
     }
     const pid = prodMatch[1];
@@ -357,9 +386,13 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     for (const cfg of tables) {
       const own = await db.prepare(`SELECT id FROM ${cfg.t} WHERE id = ? AND partner_id = ?`).bind(pid, pId).first();
       if (!own) continue;
+      if (rooms !== null && cfg.t !== "hotels") throw new HttpError(400, "ROOMS_HOTEL_ONLY", "객실 정보는 호텔 상품에만 설정할 수 있습니다.");
       await db.prepare(
         `UPDATE ${cfg.t} SET ${cfg.titleCol} = COALESCE(?, ${cfg.titleCol}), ${cfg.cityCol} = COALESCE(?, ${cfg.cityCol}), ${cfg.priceCol} = COALESCE(?, ${cfg.priceCol}), is_active = COALESCE(?, is_active) WHERE id = ?`
       ).bind(title, city, price, isActive, pid).run();
+      if (rooms !== null && cfg.t === "hotels") {
+        await db.prepare("UPDATE hotels SET rooms_json = ? WHERE id = ?").bind(JSON.stringify(rooms), pid).run();
+      }
       return json({ success: true, id: pid });
     }
     throw new HttpError(404, "PRODUCT_NOT_FOUND", "본인의 상품에 대해서만 수정할 수 있습니다.");
@@ -479,6 +512,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
   let m = path.match(/^\/api\/v1\/partner\/orders\/([A-Za-z0-9_-]+)\/(confirm|reject)$/);
   if (m && method === "POST") {
+    if (!canDecideOrders) throw new HttpError(403, "MANAGER_ONLY", "주문 확정·거절은 매니저 이상만 수행할 수 있습니다.");
     const orderId = m[1];
     const action = m[2];
     // Scope to the caller's own bookings: another partner's order is indistinguishable from a missing one.
@@ -537,6 +571,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   }
 
   if (path === "/api/v1/partner/staff" && method === "POST") {
+    needOwner();
     const b = await readJson(request);
     const email = str(b.email, 254).toLowerCase();
     const name = str(b.fullName, 100);
@@ -545,7 +580,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
     if (!email || !name) throw new HttpError(400, "FIELDS_REQUIRED", "이메일과 이름을 입력해주세요.");
     if (!["MANAGER", "STAFF"].includes(role)) throw new HttpError(400, "INVALID_ROLE", "직원 역할은 MANAGER 또는 STAFF여야 합니다.");
-    if (pass.length < 8) throw new HttpError(400, "WEAK_PASSWORD", "직원 초기 비밀번호는 8자 이상이어야 합니다.");
+    validatePasswordPolicy(pass);
     const dup = await db.prepare("SELECT id FROM partner_staff WHERE partner_id = ? AND email = ?").bind(pId, email).first();
     if (dup) throw new HttpError(409, "STAFF_EXISTS", "이미 등록된 직원 이메일입니다.");
     const passHash = await hashPassword(pass);
@@ -561,6 +596,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   // 9b. Update staff role / active flag. OWNER rows are immutable (lockout guard).
   const staffMatch = path.match(/^\/api\/v1\/partner\/staff\/([A-Za-z0-9_-]+)$/);
   if (staffMatch && method === "PATCH") {
+    needOwner();
     const b = await readJson(request);
     const row = await db.prepare("SELECT id, role FROM partner_staff WHERE id = ? AND partner_id = ?").bind(staffMatch[1], pId).first<any>();
     if (!row) throw new HttpError(404, "STAFF_NOT_FOUND", "직원을 찾을 수 없습니다.");

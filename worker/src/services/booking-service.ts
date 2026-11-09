@@ -14,13 +14,13 @@ import { assertTransition, CUSTOMER_CANCELLABLE, STATUS_LABEL_KO, type BookingSt
 import * as L from "../domain/ledger.ts";
 import { convertMinor } from "../domain/money.ts";
 import { HttpError, str } from "../lib/http.ts";
-import { newBookingNumber, newId, encryptField, randomToken } from "../lib/crypto.ts";
+import { newBookingNumber, newId, encryptField, decryptField, randomToken } from "../lib/crypto.ts";
 import type { AuthUser } from "../lib/auth.ts";
 import { loadProduct, loadSupplier, bookabilityOf, assertTicketable, type SupplierRow } from "./catalog.ts";
 import { adapterFor, type Simulation, type SupplierContext } from "../suppliers/adapter.ts";
 import { getPaymentProvider, requirePaymentProvider } from "../payments/provider.ts";
-import { createOrderSettlement } from "./marketplace-service.ts";
-import { flushOutbox } from "./email-service.ts";
+import { planOrderSettlement } from "./marketplace-service.ts";
+import { flushOutbox, outboxInsert } from "./email-service.ts";
 import { flushPartnerWebhooks, hookEnqueueStmts, loadPartnerHook } from "./webhook-service.ts";
 
 /** Snapshot stored with a partner order-event delivery (read at dispatch time). */
@@ -153,6 +153,21 @@ export async function getBooking(env: Env, id: string): Promise<BookingRow | nul
   return env.DB.prepare("SELECT * FROM bookings WHERE id = ? OR booking_number = ?").bind(id, id).first<BookingRow>();
 }
 
+/**
+ * Product floor price (하한가, WO-OTA 09): when a policy row sets
+ * floor_price_minor, the cash-due total must stay at or above it, so coupons
+ * and coins can never push a protected product under its contracted minimum.
+ * No row (or NULL floor) means no floor.
+ */
+export async function assertAboveFloor(env: Env, domain: string, itemId: string, cashDueMinor: number): Promise<void> {
+  const row = await env.DB.prepare("SELECT floor_price_minor FROM product_policies WHERE domain_type = ? AND item_id = ?")
+    .bind(domain, itemId).first<{ floor_price_minor: number | null }>();
+  const floor = row ? Number(row.floor_price_minor) : NaN;
+  if (Number.isSafeInteger(floor) && floor > 0 && cashDueMinor < floor) {
+    throw new HttpError(409, "BELOW_FLOOR_PRICE", "쿠폰·코인 적용 후 금액이 상품 최저가(하한가)보다 낮아 예약할 수 없습니다.", { floorPriceMinor: floor });
+  }
+}
+
 async function mustGet(env: Env, id: string): Promise<BookingRow> {
   const b = await getBooking(env, id);
   if (!b) throw new HttpError(404, "BOOKING_NOT_FOUND", "예약 정보를 찾을 수 없습니다.");
@@ -211,7 +226,19 @@ const ACTIVE_HOLD_SUM = "SELECT COALESCE(SUM(quantity), 0) FROM inventory_holds 
 
 async function availableUnits(env: Env, itemId: string, unitKey: string, date: string, capacity: number): Promise<number> {
   const r = await env.DB.prepare(`SELECT (${ACTIVE_HOLD_SUM}) AS used`).bind(itemId, unitKey, date, nowIso()).first<{ used: number }>();
-  return capacity - Number(r?.used || 0);
+  const used = Number(r?.used || 0);
+  // Partner-managed allotment wins when present: the calendar PUT has real
+  // effect on quotes/bookings (is_closed days sell nothing). Exact unit first,
+  // then the "default" row (2026-11-09 audit [M]).
+  const ov = await env.DB.prepare(
+    `SELECT allocated_units, is_closed FROM partner_inventory WHERE item_id = ? AND service_date = ?
+     AND (unit_id = ? OR unit_id = 'default') ORDER BY CASE WHEN unit_id = ? THEN 0 ELSE 1 END LIMIT 1`,
+  ).bind(itemId, date, unitKey, unitKey).first<{ allocated_units: number; is_closed: number }>();
+  if (ov) {
+    if (Number(ov.is_closed) === 1) return 0;
+    return Number(ov.allocated_units) - used;
+  }
+  return capacity - used;
 }
 
 async function activeEntity(env: Env): Promise<{ id: string; status: string } | null> {
@@ -308,6 +335,7 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
     coinsMinor = coinRaw;
   }
   const cashDueMinor = q.totalMinor - coinsMinor;
+  await assertAboveFloor(env, domain, itemId, cashDueMinor);
   const discountMinor = q.discountMinor + coinsMinor;
   const title = inbound ? `왕복 · ${product.title} / ${inbound.title}` : product.title;
 
@@ -373,13 +401,40 @@ interface TravelerIn {
   passportExpiry: string | null;
 }
 
-function validateTravelers(raw: any[], q: { domain_type: string; params: QuoteParams; service_end: string }): TravelerIn[] {
+async function validateTravelers(
+  env: Env,
+  userId: string,
+  raw: any[],
+  q: { domain_type: string; params: QuoteParams; service_end: string },
+): Promise<TravelerIn[]> {
   if (!Array.isArray(raw)) throw new HttpError(400, "TRAVELERS_REQUIRED", "여행자 정보를 입력해주세요.");
   const t = q.params.travelers;
   const expected = { ADULT: t.adults, CHILD: t.children, INFANT: t.infants };
   const counts = { ADULT: 0, CHILD: 0, INFANT: 0 };
   const needsPassport = q.domain_type === "FLIGHT";
-  const out = raw.slice(0, 20).map((r, i): TravelerIn => {
+  // Saved-traveler import: { savedTravelerId } resolves from the wallet
+  // (owner-scoped, passport decrypted); explicit fields override the saved ones.
+  const resolved: any[] = [];
+  for (const r of raw.slice(0, 20)) {
+    if (r?.savedTravelerId) {
+      const s = await env.DB.prepare("SELECT * FROM saved_travelers WHERE id = ? AND user_id = ?")
+        .bind(str(r.savedTravelerId, 64), userId).first<any>();
+      if (!s) throw new HttpError(404, "SAVED_TRAVELER_NOT_FOUND", "저장된 여행자를 찾을 수 없습니다.");
+      let savedPassport = s.passport_number ? String(s.passport_number) : null;
+      if (savedPassport?.startsWith("v1:")) {
+        if (!env.PII_ENC_KEY) throw new HttpError(503, "PII_KEY_MISSING", "여권 정보를 복호화할 수 없습니다.");
+        savedPassport = await decryptField(savedPassport, env.PII_ENC_KEY);
+      }
+      resolved.push({
+        type: r.type || "ADULT", lastNameEn: r.lastNameEn || s.last_name_en, firstNameEn: r.firstNameEn || s.first_name_en,
+        birthDate: r.birthDate || s.birth_date, gender: r.gender || s.gender, nationality: r.nationality || s.nationality,
+        passportNumber: r.passportNumber || savedPassport, passportExpiry: r.passportExpiry || s.passport_expiry,
+      });
+    } else {
+      resolved.push(r);
+    }
+  }
+  const out = resolved.map((r, i): TravelerIn => {
     const type = (["ADULT", "CHILD", "INFANT"].includes(r?.type) ? r.type : "ADULT") as TravelerIn["type"];
     counts[type]++;
     const lastNameEn = str(r?.lastNameEn, 50).toUpperCase();
@@ -468,6 +523,7 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   const fresh = priceOrder(product, inbound, params, await loadPromotion(env, quote.promotion_code));
   const coinsMinor = Number(quote.coins_minor || 0);
   const freshCashDue = fresh.totalMinor - coinsMinor;
+  await assertAboveFloor(env, quote.domain_type, quote.item_id, freshCashDue);
   if (freshCashDue !== quote.total_minor) {
     await env.DB.prepare("UPDATE quotes SET status = 'EXPIRED' WHERE id = ?").bind(quote.id).run();
     throw new HttpError(409, "PRICE_CHANGED", "가격이 변경되었습니다. 변경된 금액을 확인해주세요.", { previousTotalMinor: quote.total_minor, newTotalMinor: freshCashDue });
@@ -481,7 +537,7 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   if (!contactName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail) || !/^[+0-9][0-9 -]{6,20}$/.test(contactPhone)) {
     throw new HttpError(400, "CONTACT_REQUIRED", "예약자 이름, 이메일, 연락처를 정확히 입력해주세요.");
   }
-  const travelers = validateTravelers(body.travelers, { domain_type: quote.domain_type, params, service_end: quote.service_end });
+  const travelers = await validateTravelers(env, user.id, body.travelers, { domain_type: quote.domain_type, params, service_end: quote.service_end });
   if (travelers.some((t) => t.passportNumber) && !env.PII_ENC_KEY) {
     throw new HttpError(503, "PII_KEY_MISSING", "여권 정보 암호화 키가 설정되지 않아 예약을 받을 수 없습니다.");
   }
@@ -733,17 +789,16 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
     const r = await adapter.ticket(supplierCtx(cur, await travelerCount(env, b.id)));
     await logSupplierCall(env, b.supplier_id, b.id, "TICKET", r.outcome, Date.now() - t0, JSON.stringify(r));
     if (r.outcome === "ISSUED") {
+      // Planned first (reads only), written in the same batch: a ticketed
+      // booking can never lack its settlement row (2026-11-09 audit [M]).
+      const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, b.paid_minor);
       await runBatch(db, [
         ...transition(db, cur, "TICKETED", { type: "SUPPLIER", id: b.supplier_id }, null, { supplier_status: "TICKETED" }),
         db.prepare("UPDATE booking_items SET ticket_numbers_json = ?, supplier_status = 'TICKETED', updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(JSON.stringify(r.ticketNumbers), b.id),
         ...journalStmts(db, L.fulfilmentRecognized(b.id, b.paid_minor, split), cur),
         notify("FLIGHT_TICKETED"),
+        settlement.stmt(db),
       ]);
-      try {
-        await createOrderSettlement(env, b.id, b.domain_type, b.item_id, b.paid_minor);
-      } catch (err) {
-        console.warn("Marketplace settlement creation failed:", err);
-      }
       return mustGet(env, b.id);
     }
     // Ticketing failed after PNR: void the PNR at the supplier, then refund.
@@ -761,17 +816,14 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
     return mustGet(env, b.id);
   }
 
+  const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, b.paid_minor);
   await runBatch(db, [
     ...transition(db, b, "VOUCHER_ISSUED", { type: "SYSTEM", id: null }, null, { voucher_code: voucherCode() }),
     db.prepare("UPDATE booking_items SET voucher_code = (SELECT voucher_code FROM bookings WHERE id = ?), updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(b.id, b.id),
     ...journalStmts(db, L.fulfilmentRecognized(b.id, b.paid_minor, split), b),
     notify("BOOKING_CONFIRMED"),
+    settlement.stmt(db),
   ]);
-  try {
-    await createOrderSettlement(env, b.id, b.domain_type, b.item_id, b.paid_minor);
-  } catch (err) {
-    console.warn("Marketplace settlement creation failed:", err);
-  }
   return mustGet(env, b.id);
 }
 
@@ -816,18 +868,22 @@ export async function processRefund(env: Env, refundId: string): Promise<void> {
   const r = await provider.refund({ paymentKey: pay.provider_payment_key, amountMinor: rf.amount_minor, reason: rf.reason, idempotencyKey: rf.id });
   if (r.outcome === "SUCCEEDED") {
     const newRefunded = pay.refunded_minor + rf.amount_minor;
+    const fullyRefunded = newRefunded >= pay.amount_minor;
     const hook = await loadPartnerHook(db, b.partner_id);
     await runBatch(db, [
       ...transition(db, b, "REFUNDED", { type: "PAYMENT_PROVIDER", id: provider.name }, null, {
         refunded_minor: b.refunded_minor + rf.amount_minor,
         refund_amount_krw: b.refunded_minor + rf.amount_minor,
-        payment_status: newRefunded >= pay.amount_minor ? "REFUNDED" : "PARTIALLY_REFUNDED",
+        payment_status: fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED",
       }),
       db.prepare("UPDATE refunds SET status = 'SUCCEEDED', provider_refund_id = ?, attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'PENDING'").bind(r.refundId, rf.id),
       db.prepare("UPDATE payments SET refunded_minor = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-        .bind(newRefunded, newRefunded >= pay.amount_minor ? "REFUNDED" : "PARTIALLY_REFUNDED", pay.id),
+        .bind(newRefunded, fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED", pay.id),
       ...journalStmts(db, L.refundPaid(rf.id, rf.amount_minor), b),
       ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "REFUNDED", { refunded_minor: newRefunded, refund_id: rf.id })),
+      // A fully refunded order must never stay payable (2026-11-09 audit [M]).
+      // Partial refunds keep the settlement PENDING until the remainder settles.
+      ...(fullyRefunded ? [db.prepare("UPDATE marketplace_order_settlements SET settlement_status = 'REFUNDED', fulfillment_status = 'FAILED' WHERE booking_id = ? AND settlement_status IN ('PENDING', 'HELD')").bind(b.id)] : []),
     ]);
     return;
   }
@@ -960,8 +1016,63 @@ export async function reconcilePaymentByLookup(env: Env, paymentId: string): Pro
   return "SKIPPED";
 }
 
+/**
+ * Fire one-shot price alerts whose tracked product hit the target price.
+ * Alerts pointing at missing/unsellable products are left for the next run.
+ * Generic ("general") alerts with no product carry no price signal and are skipped.
+ */
+export async function firePriceAlerts(env: Env): Promise<number> {
+  const alerts = await env.DB.prepare(
+    "SELECT id, email, domain_type, item_id, route_or_hotel, target_price FROM price_alerts WHERE is_active = 1 AND item_id IS NOT NULL AND item_id != 'general' LIMIT 100",
+  ).all<any>();
+  let fired = 0;
+  for (const a of alerts.results || []) {
+    let current: number | null = null;
+    try {
+      const dom = String(a.domain_type);
+      if (!isDomain(dom)) continue;
+      current = Number((await loadProduct(env, dom, String(a.item_id), null)).unitPriceMajor);
+    } catch {
+      continue;
+    }
+    if (!Number.isFinite(current) || current > Number(a.target_price)) continue;
+    const done = await env.DB.batch([
+      env.DB.prepare("UPDATE price_alerts SET is_active = 0 WHERE id = ? AND is_active = 1").bind(a.id),
+      outboxInsert(env.DB, "EMAIL", String(a.email), "PRICE_ALERT", {
+        routeOrHotel: String(a.route_or_hotel), targetPrice: Number(a.target_price), currentPrice: current,
+      }),
+    ]);
+    if (done[0].meta.changes) fired++;
+  }
+  return fired;
+}
+
+/**
+ * Complete fulfilled bookings whose service window has fully passed.
+ * COMPLETED is otherwise a dead terminal state (nothing ever writes it);
+ * the cron walks TICKETED/VOUCHER_ISSUED rows past service_end through the
+ * state machine with full history (2026-11-09 audit [m]).
+ */
+export async function completePastBookings(env: Env): Promise<number> {
+  const rows = await env.DB.prepare(
+    "SELECT id FROM bookings WHERE status IN ('TICKETED', 'VOUCHER_ISSUED') AND service_end < date('now') ORDER BY service_end LIMIT 50",
+  ).all<{ id: string }>();
+  let done = 0;
+  for (const r of rows.results || []) {
+    const b = await getBooking(env, r.id);
+    if (!b || (b.status !== "TICKETED" && b.status !== "VOUCHER_ISSUED")) continue;
+    try {
+      await runBatch(env.DB, [...transition(env.DB, b, "COMPLETED", { type: "SYSTEM", id: null }, "SERVICE_WINDOW_ELAPSED")]);
+      done++;
+    } catch {
+      // Raced with a customer cancel/refund: leave it for the next run.
+    }
+  }
+  return done;
+}
+
 export async function runMaintenance(env: Env): Promise<Record<string, number>> {
-  const stats = { expired: 0, paymentsReconciled: 0, refundsRetried: 0, quotesExpired: 0, emailsSent: 0, emailsPending: 0, webhooksSent: 0, webhooksPending: 0, rowsPruned: 0 };
+  const stats = { expired: 0, paymentsReconciled: 0, refundsRetried: 0, quotesExpired: 0, emailsSent: 0, emailsPending: 0, webhooksSent: 0, webhooksPending: 0, rowsPruned: 0, alertsFired: 0, completed: 0 };
   const now = nowIso();
   const stale = await env.DB.prepare("SELECT * FROM bookings WHERE status = 'AWAITING_PAYMENT' AND inventory_lock_expires_at <= ? LIMIT 100").bind(now).all<BookingRow>();
   for (const b of stale.results || []) {
@@ -987,6 +1098,8 @@ export async function runMaintenance(env: Env): Promise<Record<string, number>> 
   const hooks = await flushPartnerWebhooks(env);
   stats.webhooksSent = hooks.sent;
   stats.webhooksPending = hooks.pending;
+  stats.alertsFired = await firePriceAlerts(env);
+  stats.completed = await completePastBookings(env);
   // Ephemeral rows must not grow forever: rate-limit buckets older than any window,
   // spent txn-guard rows, and dead password-reset tokens.
   const epoch = Math.floor(Date.now() / 1000);
@@ -994,6 +1107,12 @@ export async function runMaintenance(env: Env): Promise<Record<string, number>> 
     env.DB.prepare("DELETE FROM login_attempts WHERE attempted_at < ?").bind(epoch - 86400),
     env.DB.prepare("DELETE FROM txn_guards WHERE id < (SELECT COALESCE(MAX(id), 0) - 5000 FROM txn_guards)"),
     env.DB.prepare("DELETE FROM password_reset_tokens WHERE used = 1 OR expires_at < ?").bind(epoch),
+    env.DB.prepare("DELETE FROM idempotency_keys WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')"),
+    env.DB.prepare("DELETE FROM revoked_tokens WHERE expires_at < ?").bind(epoch),
+    env.DB.prepare("DELETE FROM quotes WHERE status = 'EXPIRED' AND created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')"),
+    env.DB.prepare("DELETE FROM inventory_holds WHERE status = 'RELEASED' AND created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')"),
+    env.DB.prepare("DELETE FROM notification_outbox WHERE status = 'SENT' AND created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')"),
+    env.DB.prepare("DELETE FROM affiliate_clicks WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-90 days') AND status != 'CONVERTED'"),
   ]);
   stats.rowsPruned = pruned.reduce((n, r) => n + (r.meta.changes || 0), 0);
   return stats;

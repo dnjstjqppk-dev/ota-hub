@@ -14,14 +14,14 @@
 | 게이트 | 결과 | 근거 |
 |---|---|---|
 | 유닛 | 63/63 | `npm test` |
-| 로컬 E2E | 63/63 | `npm run test:e2e` (기존 60 + 감사 회귀 3종) |
-| 타입체크 | exit 0 | `npm run typecheck` (신설) |
-| 레드드릴 | RED→GREEN | LIVE 게이트 고장 주입 시 1P 테스트 409 실패, 복구 후 통과 |
-| Go 백엔드 | PASS | `go test ./...` |
-| 브랜딩 가드 | PASS | 389 파일 스캔 |
-| 3포털 빌드 | exit 0 | admin/partner Vite + Nuxt generate |
-| 운영 검증 | 41/41 | `scripts/verify-production.js` (배포 후) |
-| CI | success | run 42570604785 (1m47s) |
+| 로컬 E2E | 73/73 ×2회 | `npm run test:e2e` 연속 2회 (감사 2차 +10종, fday 재실행 입증) |
+| 타입체크 | exit 0 | `npm run typecheck` |
+| 레드드릴 | RED→GREEN ×3 | 1P 게이트, 세션파기 초단위(`reset_at+1`), 항공재고 오염(fday) |
+| Go 백엔드 | PASS | `go test ./backend/...` (루트 `./...`는 워크스페이스 경로 오류) |
+| 브랜딩 가드 | PASS | "getfortrip" 엄격 스캔 |
+| 3포털 빌드 | exit 0 | `node scripts/build-all.js` (admin/partner Vite + Nuxt) |
+| 운영 검증 | 41/41 | `scripts/verify-production.js` (배포 후, T41 dry-run 기본) |
+| CI | success | run 42586073260 (a690f7d, gate E2E 63/63) |
 | 3포털 루트 | 200 | hub/admin/partner |
 
 ## 3. WO-OTA 10종 매핑 (전부 통과 테스트에 귀속)
@@ -39,7 +39,16 @@
 | 09 | 재고 홀딩 + 하한가 | E2E inventory + quote |
 | 10 | 레이트리밋 + CORS | E2E 전역 + 운영 T22 |
 
-## 4. 본 세션 변경 (후속 2: 전수감사 6건 조치 — 커밋 예정)
+## 4. 본 세션 변경 (후속 3: 감사 잔여 전부 해소 — 미커밋, 사용자 승인 대기)
+
+상세: [전수 감사 리포트](FULL_AUDIT_20261109.md) `조치 현황 (2차)`.
+돈·장부 8건 + 보안 13건 + 죽은기능 6종 부활(2종 정책대기) + 프론트 3건 +
+E2E 63→73 + Go/문서/스키마 + 마이그레이션 0022~0026(로컬 적용済).
+게이트: 유닛 63/63 · E2E 73/73 연속 2회 · tsc 0 · 빌드 0 · Go · 브랜딩.
+신규 수정 2건(세션파기 `reset_at+1`, 항공날짜 `fday`)은 RED→GREEN 입증.
+미실시: 운영 D1 0022~0026 적용, 운영 verify, T41 실정산.
+
+## 4a. 이전 변경 (후속 2: 전수감사 6건 조치 — `a690f7d` 커밋·배포済)
 
 상세: [전수 감사 리포트](FULL_AUDIT_20261109.md) (blocker 1 + major 53 + minor 38 중
 상위 6건 조치). 게이트: 유닛 63/63 · E2E 63/63(신규 3종) · tsc 0 · Go · 브랜딩 · 3포털 빌드.

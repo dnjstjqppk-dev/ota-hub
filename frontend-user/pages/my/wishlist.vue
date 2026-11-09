@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * Wishlist and price alerts (design system "Horizon"), both read from and deleted through the API.
- * Alerts are created from product pages (PriceAlertButton). Email delivery of alerts is not wired yet,
- * and the page says so instead of promising notifications.
+ * Alerts are created from product pages (PriceAlertButton) and fire one-shot by email when the
+ * tracked product reaches the target price.
  */
 import { ref } from 'vue'
 import { apiFetch, formatKrw } from '~/composables/useApi'
@@ -57,7 +57,7 @@ async function remove(kind: 'wishlist' | 'price-alerts', id: string) {
 
     <template v-if="state === 'ready'">
       <h2 class="mb-1 mt-10 text-lg font-bold text-ink">가격 알림</h2>
-      <p class="mb-3 flex items-start gap-1.5 text-sm text-ink-muted"><AppIcon name="mail" :size="16" class="mt-0.5" />목표가를 저장해 둘 수 있어요. 알림 메일 발송은 아직 준비 중이라, 지금은 메일이 오지 않아요.</p>
+      <p class="mb-3 flex items-start gap-1.5 text-sm text-ink-muted"><AppIcon name="mail" :size="16" class="mt-0.5" />목표가에 도달하면 이메일로 알려드려요. 발송된 알림은 자동으로 꺼져요.</p>
       <p v-if="!alerts.length" class="card px-6 py-8 text-center text-sm text-ink-muted">설정한 가격 알림이 없어요.</p>
       <ul v-else class="space-y-2">
         <li v-for="a in alerts" :key="a.id" class="card flex items-center gap-3 p-4">

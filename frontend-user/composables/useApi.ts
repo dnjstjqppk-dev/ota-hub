@@ -38,3 +38,10 @@ export async function apiFetch<T = any>(path: string, opts: { method?: string; b
 
 export const formatKrw = (minor: number | null | undefined) =>
   typeof minor === 'number' ? `${minor.toLocaleString('ko-KR')}원` : '-'
+
+// Mirrors worker money.decimalsOf: KRW/JPY have no minor subunit, the rest use 2.
+export const formatMinor = (minor: number | null | undefined, currency: string) => {
+  if (typeof minor !== 'number') return '-'
+  const d = currency === 'KRW' || currency === 'JPY' ? 0 : 2
+  return `${(minor / 10 ** d).toLocaleString('ko-KR', { minimumFractionDigits: d, maximumFractionDigits: d })} ${currency}`
+}

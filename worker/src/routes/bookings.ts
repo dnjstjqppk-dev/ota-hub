@@ -1,6 +1,6 @@
 import type { Env } from "../env.ts";
 import { HttpError, json, readJson } from "../lib/http.ts";
-import { requireUser } from "../lib/auth.ts";
+import { rateLimit, requireUser } from "../lib/auth.ts";
 import { getPaymentProvider } from "../payments/provider.ts";
 import * as S from "../services/booking-service.ts";
 
@@ -15,11 +15,13 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
 
   if (path === "/api/v1/quotes" && method === "POST") {
     const user = await requireUser(request, env);
+    await rateLimit(request, env, "quotes", 300, 60);
     return json({ success: true, quote: await S.createQuote(env, user, await readJson(request)) }, 201);
   }
 
   if (path === "/api/v1/bookings" && method === "POST") {
     const user = await requireUser(request, env);
+    await rateLimit(request, env, "bookings", 120, 60);
     const r = await S.createBooking(env, user, await readJson(request), request.headers.get("Idempotency-Key"));
     return json({ success: true, replayed: r.replayed, booking: r.booking }, r.replayed ? 200 : 201);
   }
@@ -44,6 +46,7 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
 
   if (path === "/api/v1/payments/confirm" && method === "POST") {
     const user = await requireUser(request, env);
+    await rateLimit(request, env, "payments", 120, 60);
     const r = await S.confirmPayment(env, user, await readJson(request));
     return json({ success: true, ...r });
   }
@@ -62,6 +65,7 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
   m = path.match(/^\/api\/v1\/bookings\/([A-Za-z0-9_-]{4,64})\/cancel$/);
   if (m && method === "POST") {
     const user = await requireUser(request, env);
+    await rateLimit(request, env, "cancel", 120, 60);
     return json({ success: true, booking: await S.cancelByCustomer(env, user, m[1]) });
   }
 
