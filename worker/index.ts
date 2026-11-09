@@ -10,6 +10,7 @@
  */
 import type { Env } from "./src/env.ts";
 import { SECURITY_HEADERS, errorResponse, json, preflight, withCors } from "./src/lib/http.ts";
+import { captureException } from "./src/lib/sentry.ts";
 import { getPaymentProvider } from "./src/payments/provider.ts";
 import { handleAuth } from "./src/routes/auth.ts";
 import { handleBookings } from "./src/routes/bookings.ts";
@@ -46,6 +47,7 @@ async function health(env: Env): Promise<Response> {
       paymentProvider: pay ? `${pay.name}:${pay.mode}` : "DISABLED",
       sellerEntityActive: Boolean(entity),
       emailProvider: (env.RESEND_API_KEY || "").trim() ? "RESEND" : "NOT_CONFIGURED",
+      errorReporting: (env.SENTRY_DSN || "").trim() ? "SENTRY" : "NOT_CONFIGURED",
     },
     time: new Date().toISOString(),
   }, db && jwt ? 200 : 503);
@@ -151,7 +153,7 @@ async function serveAssets(request: Request, env: Env, url: URL): Promise<Respon
 }
 
 export default {
-  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const isApi = url.pathname.startsWith("/api/") || url.pathname.startsWith("/out/");
     if (!isApi) {
@@ -163,6 +165,7 @@ export default {
     try {
       res = await route(request, env, url);
     } catch (e) {
+      captureException(env, ctx, e, { url: request.url, method: request.method });
       res = errorResponse(e);
     }
     return withCors(res, request, env);
@@ -170,6 +173,10 @@ export default {
 
   /** Cron: expire abandoned bookings, reconcile unknown payments, retry refunds. */
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(runMaintenance(env).then((s) => console.log("maintenance", JSON.stringify(s))));
+    const run = runMaintenance(env).then(
+      (s) => console.log("maintenance", JSON.stringify(s)),
+      (e) => { captureException(env, ctx, e, { url: "cron:runMaintenance" }); throw e; },
+    );
+    ctx.waitUntil(run);
   },
 };

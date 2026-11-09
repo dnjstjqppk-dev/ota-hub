@@ -23,6 +23,8 @@ export interface Env {
   RESEND_API_KEY?: string;
   /** Verified sender identity, e.g. "getfortrip <noreply@getfortrip.com>". */
   EMAIL_FROM?: string;
+  /** Sentry DSN for unhandled-error reporting. Unset = reporting disabled (silent no-op). */
+  SENTRY_DSN?: string;
 }
 
 export function isNonProduction(env: Env): boolean {
