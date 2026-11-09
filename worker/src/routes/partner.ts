@@ -270,8 +270,9 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
   // 4. Partner Profile Management
   if (path === "/api/v1/partner/profile" && method === "GET") {
-    const p = await db.prepare("SELECT * FROM partners WHERE id = ?").bind(pId).first<any>();
-    const pr = await db.prepare("SELECT * FROM partner_profiles WHERE partner_id = ?").bind(pId).first<any>();
+    // Explicit allowlist: password_hash and legacy api_key must never reach the client (2026-11-09 audit [M]).
+    const p = await db.prepare("SELECT id, email, company_name, partner_type, business_number, contact_phone, settlement_rate, webhook_url, is_active, created_at FROM partners WHERE id = ?").bind(pId).first<any>();
+    const pr = await db.prepare("SELECT partner_id, status, representative_name, bank_name, bank_account_number, bank_account_holder, tax_invoice_email, business_cert_url, settlement_rate_bps, approved_by, approved_at, rejection_reason, created_at, updated_at FROM partner_profiles WHERE partner_id = ?").bind(pId).first<any>();
     return json({ success: true, partner: { ...p, profile: pr } });
   }
 

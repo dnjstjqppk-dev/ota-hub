@@ -1,4 +1,9 @@
-# getforTrip — 정식 출시 심사 게이트 및 릴리즈 체크리스트 (Go-Live Gate)
+# [SUPERSEDED 2026-11-09 — 보관용] getforTrip — 정식 출시 심사 게이트 및 릴리즈 체크리스트 (Go-Live Gate)
+
+> 이 문서는 2026-10-18 판정(15/15 GO)을 기록한 보관본이다. 현행 판정은
+> [개통 체크리스트](../../docs/GO_LIVE_CHECKLIST.md) (수동 0–8단계)와
+> [오픈 판정](../OPEN_READINESS_20261109.md) (조건부 GO)을 따른다.
+> 아래 GO 선언을 현행 상태로 인용하지 마라.
 
 **문서 코드:** GATE-2026-RELEASE01  
 **평가일자:** 2026-10-18  

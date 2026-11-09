@@ -260,6 +260,8 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       if (!contractId) throw new HttpError(409, "CONTRACT_REQUIRED", "LIVE 전환에는 계약(entity_contracts) 등록이 필요합니다.");
       const c = await db.prepare("SELECT status FROM entity_contracts WHERE id = ?").bind(contractId).first<{ status: string }>();
       if (c?.status !== "ACTIVE") throw new HttpError(409, "CONTRACT_NOT_ACTIVE", "LIVE 전환에는 유효(ACTIVE) 상태의 공급사 계약이 필요합니다.");
+      // LIVE+api is allowed as a contract state, but bookabilityOf() keeps it
+      // unsellable (SUPPLIER_API_NOT_IMPLEMENTED) until a real adapter exists.
       if (adapter !== "direct_contract" && adapter !== "api") throw new HttpError(409, "ADAPTER_NOT_LIVE", "LIVE 전환은 direct_contract 또는 api 어댑터에서만 가능합니다.");
     }
     await db.prepare("UPDATE suppliers SET adapter = ?, integration_status = ?, contract_id = COALESCE(?, contract_id), notes = COALESCE(?, notes), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")

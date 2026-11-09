@@ -16,7 +16,7 @@ import { convertMinor } from "../domain/money.ts";
 import { HttpError, str } from "../lib/http.ts";
 import { newBookingNumber, newId, encryptField, randomToken } from "../lib/crypto.ts";
 import type { AuthUser } from "../lib/auth.ts";
-import { loadProduct, loadSupplier, bookabilityOf, type SupplierRow } from "./catalog.ts";
+import { loadProduct, loadSupplier, bookabilityOf, assertTicketable, type SupplierRow } from "./catalog.ts";
 import { adapterFor, type Simulation, type SupplierContext } from "../suppliers/adapter.ts";
 import { getPaymentProvider, requirePaymentProvider } from "../payments/provider.ts";
 import { createOrderSettlement } from "./marketplace-service.ts";
@@ -289,6 +289,7 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
   if (!b.bookable) {
     throw new HttpError(409, "NOT_DIRECTLY_BOOKABLE", "이 상품은 현재 GetForTrip에서 직접 예약·결제할 수 없습니다. (공급사 연동 대기)", { reason: b.reason });
   }
+  assertTicketable(domain, supplier);
   const entity = await activeEntity(env);
   if (!entity) throw new HttpError(503, "SALES_NOT_ENABLED", "판매 주체(사업자) 정보가 활성화되지 않아 결제를 받을 수 없습니다.");
   if (!getPaymentProvider(env)) throw new HttpError(503, "PAYMENTS_DISABLED", "현재 온라인 결제가 활성화되어 있지 않습니다. (PG 계약/설정 대기)");
@@ -463,6 +464,7 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   const supplier = (await loadSupplier(env, product.supplierId)) as SupplierRow;
   const bk = bookabilityOf(env, supplier);
   if (!bk.bookable) throw new HttpError(409, "NOT_DIRECTLY_BOOKABLE", "이 상품은 현재 직접 예약할 수 없습니다.", { reason: bk.reason });
+  assertTicketable(quote.domain_type, supplier);
   const fresh = priceOrder(product, inbound, params, await loadPromotion(env, quote.promotion_code));
   const coinsMinor = Number(quote.coins_minor || 0);
   const freshCashDue = fresh.totalMinor - coinsMinor;
@@ -959,7 +961,7 @@ export async function reconcilePaymentByLookup(env: Env, paymentId: string): Pro
 }
 
 export async function runMaintenance(env: Env): Promise<Record<string, number>> {
-  const stats = { expired: 0, paymentsReconciled: 0, refundsRetried: 0, quotesExpired: 0, emailsSent: 0, emailsPending: 0, rowsPruned: 0 };
+  const stats = { expired: 0, paymentsReconciled: 0, refundsRetried: 0, quotesExpired: 0, emailsSent: 0, emailsPending: 0, webhooksSent: 0, webhooksPending: 0, rowsPruned: 0 };
   const now = nowIso();
   const stale = await env.DB.prepare("SELECT * FROM bookings WHERE status = 'AWAITING_PAYMENT' AND inventory_lock_expires_at <= ? LIMIT 100").bind(now).all<BookingRow>();
   for (const b of stale.results || []) {

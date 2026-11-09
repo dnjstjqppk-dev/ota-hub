@@ -212,7 +212,13 @@ test("PG response lost: manual review, then reconciliation discovers capture and
 test("toss webhook: hint triggers PG lookup; duplicates acknowledged; unknown orders ignored", async () => {
   assert.equal((await api("POST", "/api/v1/webhooks/toss", { body: { eventType: "PAYMENT_STATUS_CHANGED" } })).status, 400);
   const ghost = await api("POST", "/api/v1/webhooks/toss", { body: { eventType: "PAYMENT_STATUS_CHANGED", data: { orderId: "bkg_no_such_booking", paymentKey: "xxx", status: "DONE" } } });
-  assert.equal(ghost.data.action, "IGNORED_UNKNOWN_ORDER");
+  // Unknown orders get the generic settled shape — the endpoint must not reveal order existence.
+  assert.equal(ghost.data.action, "NO_UNKNOWN_PAYMENT");
+  assert.equal(ghost.data.reconciled, false);
+  assert.equal(ghost.data.bookingId, undefined);
+  const ghost2 = await api("POST", "/api/v1/webhooks/toss", { body: { eventType: "PAYMENT_STATUS_CHANGED", data: { orderId: "bkg_no_such_booking", paymentKey: "xxx", status: "DONE" } } });
+  assert.equal(ghost2.data.duplicate, true);
+  assert.equal(ghost2.data.action, "NO_UNKNOWN_PAYMENT");
   const { p } = await fullHotelBooking(A.token, {}, "timeout");
   const id = p.data.booking.id;
   assert.equal(p.data.booking.status, "MANUAL_REVIEW_REQUIRED");
@@ -1193,4 +1199,69 @@ test("1P direct sales: register on ptn_direct_01, go LIVE, sell, operator-confir
   assert.equal(c.data.booking.cancellationFeeMinor, 0);
   // 6. Leave the shared local fixture as found.
   assert.equal((await api("PATCH", "/api/v1/admin/suppliers/ptn_direct_01", { token: ADMIN, body: { integrationStatus: "NOT_INTEGRATED" } })).status, 200);
+});
+
+test("partner profile: response never carries password_hash or api_key", async () => {
+  const P = await approvedPartner("noleak");
+  const r = await api("GET", "/api/v1/partner/profile", { token: P.token });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.match(r.data.partner.email, /@local\.test$/, "profile carries the partner email");
+  assert.ok(!("password_hash" in r.data.partner), "password_hash leaked in profile");
+  assert.ok(!("api_key" in r.data.partner), "legacy api_key leaked in profile");
+  assert.ok(!JSON.stringify(r.data).includes("password_hash"), "password_hash leaked anywhere in body");
+  assert.ok(!JSON.stringify(r.data).includes("pbkdf2:"), "hash material leaked anywhere in body");
+  // PATCH still works and the profile round-trips the editable fields.
+  assert.equal((await api("PATCH", "/api/v1/partner/profile", { token: P.token, body: { contactPhone: "010-1234-5678", bankName: "E2E은행" } })).status, 200);
+  const r2 = (await api("GET", "/api/v1/partner/profile", { token: P.token })).data.partner;
+  assert.equal(r2.contact_phone, "010-1234-5678");
+  assert.equal(r2.profile.bank_name, "E2E은행");
+});
+
+test("LIVE+api suppliers sell nothing until a real adapter exists", async () => {
+  const tag = Date.now().toString(36);
+  const supId = `e2e_sup_api_${tag}`;
+  const hotelId = `e2e_api_htl_${tag}`;
+  const roomId = `e2e_api_rm_${tag}`;
+  const ectId = `e2e_ect_api_${tag}`;
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${supId}', 'E2E API 공급사', 'ALL', 'api', 'NOT_INTEGRATED', 'MERCHANT_OF_RECORD', 9000)`);
+  assert.equal((await api("POST", "/api/v1/admin/catalog/HOTEL", { token: ADMIN, body: {
+    id: hotelId, partner_id: supId, name_ko: "E2E API 호텔", name_en: "E2E API Hotel",
+    city: "서울", country: "대한민국", address: "서울시 중구", base_price_krw: 100000, star_rating: 3,
+    rooms_json: [{ id: roomId, name_ko: "스탠다드", base_price_krw: 100000, available_inventory: 5, max_occupancy: 2 }],
+  } })).status, 201);
+  // Commercially LIVE (contract ACTIVE) but technically unfulfillable: still dark.
+  assert.equal((await api("POST", "/api/v1/admin/contracts", { token: ADMIN, body: { id: ectId, entityId: "ent_primary", contractType: "SUPPLIER", counterparty: "E2E API 계약" } })).status, 201);
+  assert.equal((await api("PATCH", `/api/v1/admin/contracts/${ectId}`, { token: ADMIN, body: { status: "ACTIVE" } })).status, 200);
+  assert.equal((await api("PATCH", `/api/v1/admin/suppliers/${supId}`, { token: ADMIN, body: { integrationStatus: "LIVE", contractId: ectId } })).status, 200);
+  const dark = (await api("GET", `/api/v1/hotels/${hotelId}`)).data.data;
+  assert.equal(dark.bookable, false);
+  assert.equal(dark.bookable_reason, "SUPPLIER_API_NOT_IMPLEMENTED");
+  const q = await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "HOTEL", itemId: hotelId, unitId: roomId, startDate: day(70), endDate: day(71), travelers: { adults: 2 } } });
+  assert.equal(q.data.code, "NOT_DIRECTLY_BOOKABLE");
+  assert.equal(q.data.details.reason, "SUPPLIER_API_NOT_IMPLEMENTED");
+  // Cleanup: own rows only, nothing shared.
+  sql(`DELETE FROM hotels WHERE id = '${hotelId}'; DELETE FROM suppliers WHERE id = '${supId}'; DELETE FROM entity_contracts WHERE id = '${ectId}'`);
+});
+
+test("direct-contract flights cannot quote: no ticketing exists", async () => {
+  const tag = Date.now().toString(36);
+  const flightId = `e2e_dc_flt_${tag}`;
+  const ectId = `e2e_ect_flt_${tag}`;
+  assert.equal((await api("POST", "/api/v1/admin/contracts", { token: ADMIN, body: { id: ectId, entityId: "ent_primary", contractType: "SUPPLIER", counterparty: "E2E 직계약 항공" } })).status, 201);
+  assert.equal((await api("PATCH", `/api/v1/admin/contracts/${ectId}`, { token: ADMIN, body: { status: "ACTIVE" } })).status, 200);
+  assert.equal((await api("PATCH", "/api/v1/admin/suppliers/ptn_direct_01", { token: ADMIN, body: { adapter: "direct_contract", integrationStatus: "LIVE", contractId: ectId } })).status, 200);
+  assert.equal((await api("POST", "/api/v1/admin/catalog/FLIGHT", { token: ADMIN, body: {
+    id: flightId, partner_id: "ptn_direct_01", flight_number: "GFT101", airline_name: "E2E 직항",
+    airline_code: "GFT", departure_airport: "ICN", arrival_airport: "NRT",
+    departure_city: "서울", arrival_city: "도쿄", departure_time: "2027-01-10T09:00:00Z", arrival_time: "2027-01-10T12:00:00Z",
+    duration_minutes: 180, base_price_krw: 300000, available_seats: 10,
+  } })).status, 201);
+  const dark = (await api("GET", `/api/v1/flights/${flightId}`)).data.data;
+  assert.equal(dark.bookable, false);
+  assert.equal(dark.bookable_reason, "FLIGHT_TICKETING_UNSUPPORTED");
+  const q = await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: flightId, startDate: day(80), travelers: { adults: 1 } } });
+  assert.equal(q.data.code, "FLIGHT_TICKETING_UNSUPPORTED");
+  // Leave the shared fixture as found (status + seeded self-contract).
+  assert.equal((await api("PATCH", "/api/v1/admin/suppliers/ptn_direct_01", { token: ADMIN, body: { integrationStatus: "NOT_INTEGRATED" } })).status, 200);
+  sql(`UPDATE suppliers SET contract_id = 'ect_direct_01' WHERE id = 'ptn_direct_01'; DELETE FROM entity_contracts WHERE id = '${ectId}'`);
 });

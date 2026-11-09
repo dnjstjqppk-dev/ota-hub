@@ -1,6 +1,8 @@
 # Go-Live Checklist — PG 계약 후 바로 장사하기
 
 > 전제: `main` 최신이 CI로 배포되어 있고, `node scripts/verify-production.js` 41/41이다.
+> (기본 dry-run: T41 실정산은 `VERIFY_LIVE_SETTLE=1`을 붙여야 수행. 어드민 비번은
+> `TEST_ADMIN_PASSWORD` 환경변수로 전달. CI는 유닛·E2E·타입체크·마이그레이션 검증을 통과해야 배포한다.)
 > 아래 순서는 의존성 순서다. 각 단계의 확인 명령을 통과해야 다음으로 간다.
 
 ## 0. 직영 공급사 준비 (코드 배포 후 1회)
@@ -91,7 +93,7 @@ npx wrangler secret put SENTRY_DSN   # 워커 런타임용
 테스트 결제는 DB에 `mode=SANDBOX`로 찍혀 실매출과 구분된다.
 
 ```powershell
-$env:PAYMENT_PROVIDER = "toss"   # wrangler.jsonc vars 또는 대시보드 vars에 설정 후 재배포
+# PAYMENT_PROVIDER=toss 는 wrangler.jsonc vars에 선언済 (키 없이는 DISABLED 유지)
 npx wrangler secret put TOSS_SECRET_KEY   # test_sk_... 입력
 ```
 

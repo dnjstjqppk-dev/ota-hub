@@ -559,9 +559,11 @@ func (h *APIHandler) AdminLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	email := strings.TrimSpace(strings.ToLower(req.Email))
+	// No fallback: an admin password must never live in the repo (2026-11-09 audit [M]).
 	adminPass := os.Getenv("ADMIN_PASSWORD")
 	if adminPass == "" {
-		adminPass = "AdminProdPass#2026_SecureKey"
+		writeError(w, http.StatusServiceUnavailable, "admin login is not configured")
+		return
 	}
 
 	if (email == "admin@getfortrip.com" || email == "admin") && req.Password == adminPass {

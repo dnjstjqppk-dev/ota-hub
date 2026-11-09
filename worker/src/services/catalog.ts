@@ -161,26 +161,48 @@ export interface Bookability {
   bookable: boolean;
   reason: string | null;
   mode: "LIVE" | "SIMULATED" | null;
+  adapter: string | null;
 }
 
 /**
  * A product is directly bookable only if its supplier can actually fulfil it.
  * Suppliers with no contract / no adapter are never sold, so the platform can
  * never take a customer's money for something it cannot deliver.
+ *
+ * Two deliberate non-bookable states (2026-11-09 audit [M]):
+ * - adapter "api" with no implementation: admin may still mark the contract
+ *   LIVE, but nothing sells until a real adapter exists in adapterFor().
+ * - FLIGHT on direct_contract is handled by assertTicketable(), not here,
+ *   because bookability is per supplier while ticketing is per domain.
  */
 export function bookabilityOf(env: Env, supplier: SupplierRow | null): Bookability {
-  if (!supplier) return { bookable: false, reason: "SUPPLIER_NOT_REGISTERED", mode: null };
-  if (supplier.transaction_model === "AFFILIATE") return { bookable: false, reason: "EXTERNAL_LINK_ONLY", mode: null };
-  if (supplier.integration_status === "BLOCKED") return { bookable: false, reason: "SUPPLIER_BLOCKED", mode: null };
+  if (!supplier) return { bookable: false, reason: "SUPPLIER_NOT_REGISTERED", mode: null, adapter: null };
+  if (supplier.transaction_model === "AFFILIATE") return { bookable: false, reason: "EXTERNAL_LINK_ONLY", mode: null, adapter: supplier.adapter };
+  if (supplier.integration_status === "BLOCKED") return { bookable: false, reason: "SUPPLIER_BLOCKED", mode: null, adapter: supplier.adapter };
   if (supplier.adapter === "simulator") {
     return flag(env, "ALLOW_SIMULATED_SUPPLIERS")
-      ? { bookable: true, reason: null, mode: "SIMULATED" }
-      : { bookable: false, reason: "SUPPLIER_NOT_INTEGRATED", mode: null };
+      ? { bookable: true, reason: null, mode: "SIMULATED", adapter: supplier.adapter }
+      : { bookable: false, reason: "SUPPLIER_NOT_INTEGRATED", mode: null, adapter: supplier.adapter };
   }
-  if ((supplier.adapter === "direct_contract" || supplier.adapter === "api") && supplier.integration_status === "LIVE") {
-    return { bookable: true, reason: null, mode: "LIVE" };
+  if (supplier.adapter === "api" && supplier.integration_status === "LIVE") {
+    return { bookable: false, reason: "SUPPLIER_API_NOT_IMPLEMENTED", mode: null, adapter: supplier.adapter };
   }
-  return { bookable: false, reason: "SUPPLIER_NOT_INTEGRATED", mode: null };
+  if (supplier.adapter === "direct_contract" && supplier.integration_status === "LIVE") {
+    return { bookable: true, reason: null, mode: "LIVE", adapter: supplier.adapter };
+  }
+  return { bookable: false, reason: "SUPPLIER_NOT_INTEGRATED", mode: null, adapter: supplier.adapter };
+}
+
+/**
+ * Direct-contract fulfilment is operator confirmation + voucher issuance; no
+ * ticketing exists (directContractAdapter.ticket() always fails), so selling
+ * a FLIGHT on such a supplier would capture money and auto-refund after the
+ * operator's confirmation. Refuse at the money gates instead.
+ */
+export function assertTicketable(domain: string, supplier: SupplierRow | null): void {
+  if (domain === "FLIGHT" && supplier?.adapter === "direct_contract") {
+    throw new HttpError(409, "FLIGHT_TICKETING_UNSUPPORTED", "직계약 공급사 상품은 항공 발권이 지원되지 않습니다. 발권 가능 공급사의 상품을 선택해주세요.");
+  }
 }
 
 // Search results only *display* bookability; quoting/booking always re-reads the

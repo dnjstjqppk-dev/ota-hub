@@ -5,6 +5,12 @@
  * trusted for money movement on its own: it only triggers the same PG lookup
  * the maintenance cron uses, and the booking moves only when the PG confirms
  * the outcome. Duplicate deliveries are acknowledged without re-processing.
+ *
+ * Authentication note (2026-11-09 audit [M]): Toss signs no webhook payload,
+ * so there is no HMAC to check — the PG lookup IS the verification. Forged
+ * events can at most enqueue a lookup that the PG then rejects. Responses are
+ * deliberately generic: unknown order IDs get the same shape as known-but-
+ * settled ones, so the endpoint is not an order-existence oracle.
  */
 import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
@@ -32,7 +38,11 @@ export async function handleWebhooks(request: Request, env: Env, url: URL): Prom
   // Dedupe redeliveries: same order + key + status is the same fact.
   const eventId = `${orderId}:${paymentKey || "-"}:${status || eventType}`.slice(0, 200);
   const dup = await env.DB.prepare("SELECT outcome FROM payment_events WHERE provider = 'toss' AND event_id = ?").bind(eventId).first<{ outcome: string | null }>();
-  if (dup) return json({ success: true, duplicate: true, reconciled: dup.outcome === "RECONCILED", action: dup.outcome, outcome: dup.outcome });
+  if (dup) {
+    // Same oracle rule as fresh events: an unknown order stays indistinguishable.
+    const action = dup.outcome === "IGNORED_UNKNOWN_ORDER" ? "NO_UNKNOWN_PAYMENT" : dup.outcome;
+    return json({ success: true, duplicate: true, reconciled: dup.outcome === "RECONCILED", action, outcome: action });
+  }
 
   const provider = getPaymentProvider(env);
   if (!provider) {
@@ -41,8 +51,10 @@ export async function handleWebhooks(request: Request, env: Env, url: URL): Prom
   }
   const b = await getBooking(env, orderId);
   if (!b) {
+    // Recorded distinctly server-side, answered generically: same shape as a
+    // known order with nothing to reconcile, so callers cannot probe order IDs.
     await record(env, eventId, eventType, body, "IGNORED_UNKNOWN_ORDER");
-    return json({ success: true, reconciled: false, action: "IGNORED_UNKNOWN_ORDER" });
+    return json({ success: true, duplicate: false, reconciled: false, action: "NO_UNKNOWN_PAYMENT" });
   }
   const unknowns = await env.DB.prepare("SELECT id FROM payments WHERE booking_id = ? AND status = 'UNKNOWN' ORDER BY created_at").bind(b.id).all<{ id: string }>();
   let reconciled = 0;

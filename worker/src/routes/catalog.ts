@@ -14,10 +14,14 @@ const contains = (s: string): string => `%${likeEscape(s)}%`;
 
 const PRICE_NOTICE = "참고 가격 (공급사 실시간 검증 전)";
 
-function annotate(rows: any[], map: Map<string, Bookability>, fallbackSupplier: string) {
+function annotate(rows: any[], map: Map<string, Bookability>, fallbackSupplier: string, domain: string | null = null) {
   return rows.map((r) => {
-    const b = map.get(r.partner_id || fallbackSupplier) || { bookable: false, reason: "SUPPLIER_NOT_REGISTERED", mode: null };
-    return { ...r, bookable: b.bookable, bookable_reason: b.reason, fulfilment_mode: b.mode, price_notice: PRICE_NOTICE };
+    const b = map.get(r.partner_id || fallbackSupplier) || { bookable: false, reason: "SUPPLIER_NOT_REGISTERED", mode: null, adapter: null };
+    // Mirror the quote-time ticketing rule so lists/details never advertise an unquotable flight.
+    const bb = domain === "FLIGHT" && b.adapter === "direct_contract"
+      ? { ...b, bookable: false, reason: "FLIGHT_TICKETING_UNSUPPORTED", mode: null }
+      : b;
+    return { ...r, bookable: bb.bookable, bookable_reason: bb.reason, fulfilment_mode: bb.mode, price_notice: PRICE_NOTICE };
   });
 }
 
@@ -219,13 +223,13 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       q += ` LIMIT ${Math.min(limit, 100)}`;
 
       const res = await env.DB.prepare(q).bind(...p).all();
-      { const rows = annotate(res.results || [], bmap, "ptn_flt_01"); return json({ success: true, count: rows.length, data: rows }); }
+      { const rows = annotate(res.results || [], bmap, "ptn_flt_01", "FLIGHT"); return json({ success: true, count: rows.length, data: rows }); }
     }
     if (path.startsWith("/api/v1/flights/")) {
       const id = path.replace("/api/v1/flights/", "");
       const row = await env.DB.prepare("SELECT * FROM flights WHERE id = ?").bind(id).first();
       if (!row) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
-      return json({ success: true, data: annotate([row], bmap, "ptn_flt_01")[0] });
+      return json({ success: true, data: annotate([row], bmap, "ptn_flt_01", "FLIGHT")[0] });
     }
 
     if (path === "/api/v1/trains") {

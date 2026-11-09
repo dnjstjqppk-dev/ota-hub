@@ -27,6 +27,7 @@ async function runVerificationSuite() {
 
   let passed = 0;
   let total = 0;
+  let skipped = 0;
 
   async function test(name, fn) {
     total++;
@@ -189,7 +190,9 @@ async function runVerificationSuite() {
   // 9. P0-01 & P0-07: AUTHENTIC ADMIN LOGIN & DASHBOARD ACCESS
   // ---------------------------------------------------------------------------
   await test('P0-01 & P0-07: Authentic Admin PBKDF2 Login & Dashboard Authorized Access', async () => {
-    const adminPass = process.env.TEST_ADMIN_PASSWORD || 'AdminProdPass#2026_SecureKey';
+    // No fallback: a production admin password must never live in the repo (2026-11-09 audit [M]).
+    const adminPass = process.env.TEST_ADMIN_PASSWORD;
+    if (!adminPass) throw new Error('TEST_ADMIN_PASSWORD is not set; refusing to probe production admin login');
     const loginRes = await fetch(`${BASE_URL}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -967,16 +970,23 @@ async function runVerificationSuite() {
       throw new Error(`Invalid settlements response: ${JSON.stringify(admJson)}`);
     }
 
-    // 2. Admin approves payout for an existing settlement if present
+    // 2. Admin approves payout for an existing settlement if present.
+    // Dry-run by default: settling moves real money, so the live PATCH runs only
+    // with VERIFY_LIVE_SETTLE=1 (2026-11-09 audit [M]).
     const pending = admJson.settlements.find((s) => s.settlement_status === 'PENDING') || admJson.settlements[0];
     if (pending) {
-      const settleRes = await fetch(`${BASE_URL}/api/v1/admin/marketplace/settlements/${pending.id}/settle`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${adminToken}` }
-      });
-      if (!settleRes.ok) throw new Error(`Settlement approval failed: HTTP ${settleRes.status}`);
-      const settleJson = await settleRes.json();
-      if (!settleJson.success) throw new Error(`Settlement approval rejected: ${JSON.stringify(settleJson)}`);
+      if (!process.env.VERIFY_LIVE_SETTLE) {
+        skipped++;
+        console.log(`(dry-run: live settle of ${pending.id} skipped; set VERIFY_LIVE_SETTLE=1 to exercise it)`);
+      } else {
+        const settleRes = await fetch(`${BASE_URL}/api/v1/admin/marketplace/settlements/${pending.id}/settle`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${adminToken}` }
+        });
+        if (!settleRes.ok) throw new Error(`Settlement approval failed: HTTP ${settleRes.status}`);
+        const settleJson = await settleRes.json();
+        if (!settleJson.success) throw new Error(`Settlement approval rejected: ${JSON.stringify(settleJson)}`);
+      }
     }
 
     // 3. Partner views their own 3P settlement records
@@ -994,7 +1004,7 @@ async function runVerificationSuite() {
   // SUMMARY
   // ---------------------------------------------------------------------------
   console.log('\n==============================================================================');
-  console.log(`Live Security & E2E Verification Results: ${passed}/${total} PASS (${Math.round((passed / total) * 100)}%)`);
+  console.log(`Live Security & E2E Verification Results: ${passed}/${total} PASS (${Math.round((passed / total) * 100)}%), ${skipped} SKIPPED (dry-run)`);
   console.log('==============================================================================\n');
 
   if (passed !== total) {

@@ -404,17 +404,19 @@ INSERT OR REPLACE INTO affiliate_partners_config (partner_id, name, deep_link_te
 ('myrealtrip', 'MyRealTrip', 'https://www.myrealtrip.com/offers/{item_id}?aff_id=getfortrip&click_id={click_id}', 'AID-MRT-7721', 'SET_VIA_WRANGLER_D1_SECRET_MRT', 1),
 ('skyscanner', 'Skyscanner', 'https://www.skyscanner.co.kr/transport/flights/?associateid=GFT_OTA&sub={click_id}&item={item_id}', 'AID-SKY-5510', 'SET_VIA_WRANGLER_D1_SECRET_SKY', 1);
 
--- Seed B2B Partners (PBKDF2 hashed passwords)
+-- Seed B2B Partners. NOTE (2026-11-09 audit [B]): the shared PBKDF2 hash this
+-- snapshot used to plant was scrubbed. Seed rows ship DISABLED; rotate before login:
+--   node scripts/rotate-partner-password.mjs <email> <new-password> --execute --remote
 INSERT INTO partners (id, email, password_hash, company_name, partner_type, business_number, contact_phone, settlement_rate, api_key, webhook_url, is_active) VALUES
-('ptn_htl_01', 'hotel_partner@getfortrip.com', 'pbkdf2:sha256:100000:4a78ff00cace8af97d13f3ecfcc6b9fd:08e886547510d833517452c8ff882b2584009810c41c83c05d67a66869b915a5', '(주)하얏트 코리아 호스피탈리티', 'HOTEL', '101-81-99201', '02-797-1234', 0.90, 'ptn_live_key_htl_01', 'https://api.hyatt-korea.internal/v1/getfortrip/webhook', 1),
-('ptn_tour_01', 'tour_partner@getfortrip.com', 'pbkdf2:sha256:100000:4a78ff00cace8af97d13f3ecfcc6b9fd:08e886547510d833517452c8ff882b2584009810c41c83c05d67a66869b915a5', '(주)도쿄 익스플로러 투어스', 'TOUR', '202-86-33918', '02-333-8822', 0.88, 'ptn_live_key_tour_01', 'https://api.tokyo-explorer.internal/v1/getfortrip/webhook', 1),
-('ptn_car_01', 'car_partner@getfortrip.com', 'pbkdf2:sha256:100000:4a78ff00cace8af97d13f3ecfcc6b9fd:08e886547510d833517452c8ff882b2584009810c41c83c05d67a66869b915a5', '글로벌 모빌리티 & 렌터카 파트너스', 'CAR', '303-88-55410', '064-744-8899', 0.92, 'ptn_live_key_car_01', 'https://api.global-mobility.internal/v1/getfortrip/webhook', 1)
-ON CONFLICT(id) DO UPDATE SET password_hash = excluded.password_hash;
+('ptn_htl_01', 'hotel_partner@getfortrip.com', 'DISABLED_BY_0021_ROTATE_BEFORE_LOGIN', '(주)하얏트 코리아 호스피탈리티', 'HOTEL', '101-81-99201', '02-797-1234', 0.90, 'ptn_live_key_htl_01', 'https://api.hyatt-korea.internal/v1/getfortrip/webhook', 1),
+('ptn_tour_01', 'tour_partner@getfortrip.com', 'DISABLED_BY_0021_ROTATE_BEFORE_LOGIN', '(주)도쿄 익스플로러 투어스', 'TOUR', '202-86-33918', '02-333-8822', 0.88, 'ptn_live_key_tour_01', 'https://api.tokyo-explorer.internal/v1/getfortrip/webhook', 1),
+('ptn_car_01', 'car_partner@getfortrip.com', 'DISABLED_BY_0021_ROTATE_BEFORE_LOGIN', '글로벌 모빌리티 & 렌터카 파트너스', 'CAR', '303-88-55410', '064-744-8899', 0.92, 'ptn_live_key_car_01', 'https://api.global-mobility.internal/v1/getfortrip/webhook', 1)
+ON CONFLICT(id) DO NOTHING;
 
--- Seed Admin User (Rotate password hash immediately in production)
+-- Seed Admin User. Same scrub: no usable hash ships in this snapshot.
 INSERT INTO users (id, email, password_hash, full_name, phone_number, role, tier, trip_coins) VALUES
-('usr-admin-001', 'admin@getfortrip.com', 'pbkdf2:sha256:100000:4a78ff00cace8af97d13f3ecfcc6b9fd:08e886547510d833517452c8ff882b2584009810c41c83c05d67a66869b915a5', '총괄 관리자', '010-1234-5678', 'ADMIN', 'DIAMOND_PLUS', 100000)
-ON CONFLICT(id) DO UPDATE SET password_hash = excluded.password_hash, role = 'ADMIN';
+('usr-admin-001', 'admin@getfortrip.com', 'DISABLED_SNAPSHOT_ROTATE_BEFORE_LOGIN', '총괄 관리자', '010-1234-5678', 'ADMIN', 'DIAMOND_PLUS', 100000)
+ON CONFLICT(id) DO NOTHING;
 
 -- Seed Notices
 INSERT OR IGNORE INTO notices (id, title, content, is_emergency, banner_active) VALUES

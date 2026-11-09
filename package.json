@@ -15,10 +15,12 @@
     "build:all": "node scripts/build-all.js",
     "deploy": "node scripts/build-and-deploy.js",
     "test": "node --test \"worker/test/unit/*.test.ts\" \"frontend-user/tests/*.test.mjs\"",
-    "test:e2e": "node --test worker/test/e2e/api.e2e.mjs"
+    "test:e2e": "node --test worker/test/e2e/api.e2e.mjs",
+    "typecheck": "tsc -p worker/tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "typescript": "^6.0.3",
     "wrangler": "^4.152.0"
   }
 }
