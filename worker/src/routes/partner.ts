@@ -10,7 +10,7 @@ import { pageMeta, pageParams } from "../lib/pagination.ts";
 import { likeEscape } from "../services/suggest-service.ts";
 
 /** Validate partner-supplied hotel rooms. Absent input means "no rooms yet" ([]). */
-function parseRooms(input: unknown): Array<{ id: string; name_ko: string; base_price_krw: number; available_inventory: number; max_occupancy: number }> {
+export function parseRooms(input: unknown): Array<{ id: string; name_ko: string; base_price_krw: number; available_inventory: number; max_occupancy: number }> {
   if (input === undefined || input === null) return [];
   if (!Array.isArray(input) || input.length > 50) throw new HttpError(400, "INVALID_ROOMS", "객실은 최대 50개까지 배열로 전달해주세요.");
   return input.map((r: any, i: number) => {
@@ -368,6 +368,26 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   // 5b. Update own product (title/price/city/sale status). No hard delete:
   // bookings reference item_id, so withdrawal is is_active = 0.
   const prodMatch = path.match(/^\/api\/v1\/partner\/products\/([A-Za-z0-9_-]+)$/);
+  // #26: own product detail (rooms included for hotels) for the edit UI.
+  if (prodMatch && method === "GET") {
+    const pid = prodMatch[1];
+    const tables = [
+      { t: "hotels", titleCol: "name_ko", priceCol: "base_price_krw", cityCol: "city" },
+      { t: "cars", titleCol: "vehicle_model", priceCol: "daily_price_krw", cityCol: "pickup_location" },
+      { t: "activities", titleCol: "title", priceCol: "price_krw", cityCol: "city" },
+    ] as const;
+    for (const cfg of tables) {
+      const row = await db.prepare(`SELECT id, ${cfg.titleCol} AS title, ${cfg.cityCol} AS city, ${cfg.priceCol} AS base_price_krw, is_active FROM ${cfg.t} WHERE id = ? AND partner_id = ?`).bind(pid, pId).first<any>();
+      if (!row) continue;
+      let rooms: any[] = [];
+      if (cfg.t === "hotels") {
+        const h = await db.prepare("SELECT rooms_json FROM hotels WHERE id = ?").bind(pid).first<any>();
+        try { const parsed = JSON.parse(h?.rooms_json || "[]"); if (Array.isArray(parsed)) rooms = parsed; } catch { rooms = []; }
+      }
+      return json({ success: true, product: { ...row, domain_type: cfg.t === "hotels" ? "HOTEL" : cfg.t === "cars" ? "CAR" : "ACTIVITY", rooms } });
+    }
+    throw new HttpError(404, "PRODUCT_NOT_FOUND", "본인의 상품에 대해서만 조회할 수 있습니다.");
+  }
   if (prodMatch && method === "PATCH") {
     const b = await readJson(request);
     const title = b.title !== undefined ? str(b.title, 200) : null;

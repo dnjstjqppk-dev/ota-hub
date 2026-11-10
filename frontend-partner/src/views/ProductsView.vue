@@ -22,7 +22,7 @@ const editError = ref('')
 const imgBusy = ref(false)
 const imgMsg = ref('')
 
-function openEdit(p: ProductRow) {
+async function openEdit(p: ProductRow) {
   editing.value = p
   editTitle.value = p.title
   editCity.value = p.city
@@ -30,6 +30,20 @@ function openEdit(p: ProductRow) {
   editActive.value = p.is_active === 1
   editError.value = ''
   imgMsg.value = ''
+  editRooms.value = []
+  editRoomsLoaded.value = false
+  if (p.domain_type === 'HOTEL') {
+    try {
+      const res = await fetch(apiUrl(`/partner/products/${p.id}`), { headers: { Authorization: `Bearer ${partnerToken()}` } })
+      const j = await res.json().catch(() => ({}))
+      if (res.ok && Array.isArray(j.product?.rooms)) {
+        editRooms.value = j.product.rooms.map((r: any) => ({ id: r.id, name: r.name_ko || r.name || '', price: Number(r.base_price_krw) || 0, inventory: Number(r.available_inventory) || 0, occupancy: Number(r.max_occupancy) || 2 }))
+      }
+      editRoomsLoaded.value = true
+    } catch {
+      editError.value = '객실 정보를 불러오지 못했습니다.'
+    }
+  }
 }
 
 async function uploadImages(ev: Event) {
@@ -73,13 +87,19 @@ async function uploadImages(ev: Event) {
 
 async function saveEdit() {
   if (!editing.value) return
+  if (editing.value.domain_type === 'HOTEL' && editRoomsLoaded.value) {
+    const err = validRooms(editRooms.value)
+    if (err) { editError.value = err; return }
+  }
   editBusy.value = true
   editError.value = ''
   try {
+    const body: Record<string, unknown> = { title: editTitle.value.trim(), city: editCity.value.trim(), price: editPrice.value, isActive: editActive.value }
+    if (editing.value.domain_type === 'HOTEL' && editRoomsLoaded.value) body.rooms = roomPayload(editRooms.value)
     const res = await fetch(apiUrl(`/partner/products/${editing.value.id}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken()}` },
-      body: JSON.stringify({ title: editTitle.value.trim(), city: editCity.value.trim(), price: editPrice.value, isActive: editActive.value })
+      body: JSON.stringify(body)
     })
     const j = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(j.error || '수정에 실패했습니다.')
@@ -117,6 +137,24 @@ const newCity = ref('서울')
 const newPrice = ref(120000)
 const submitLoading = ref(false)
 const submitError = ref('')
+
+// #26: hotel rooms (required for bookability — a roomless hotel can never be quoted).
+interface RoomDraft { id?: string; name: string; price: number; inventory: number; occupancy: number }
+const blankRoom = (): RoomDraft => ({ name: '', price: 0, inventory: 0, occupancy: 2 })
+const newRooms = ref<RoomDraft[]>([blankRoom()])
+const editRooms = ref<RoomDraft[]>([])
+const editRoomsLoaded = ref(false)
+function validRooms(rows: RoomDraft[]): string | null {
+  if (!rows.length) return '호텔은 객실을 1개 이상 등록해야 견적이 가능합니다.'
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]
+    if (!r.name.trim()) return `${i + 1}번째 객실명을 입력해 주세요.`
+    if (!Number.isInteger(r.price) || r.price < 0) return `${i + 1}번째 객실 요금이 올바르지 않습니다.`
+    if (!Number.isInteger(r.inventory) || r.inventory < 0) return `${i + 1}번째 객실 재고가 올바르지 않습니다.`
+  }
+  return null
+}
+const roomPayload = (rows: RoomDraft[]) => rows.map((r) => ({ id: r.id, name_ko: r.name.trim(), base_price_krw: r.price, available_inventory: r.inventory, max_occupancy: r.occupancy }))
 
 // URL Ingestion for Partners
 const importUrl = ref('')
@@ -177,27 +215,34 @@ const handleImportUrl = async () => {
 
 const handleCreateProduct = async () => {
   if (!newTitle.value) return
+  if (newDomain.value === 'HOTEL') {
+    const err = validRooms(newRooms.value)
+    if (err) { submitError.value = err; return }
+  }
   submitLoading.value = true
   submitError.value = ''
   try {
     const token = partnerToken()
+    const body: Record<string, unknown> = {
+      domain: newDomain.value,
+      title: newTitle.value,
+      city: newCity.value,
+      price: newPrice.value
+    }
+    if (newDomain.value === 'HOTEL') body.rooms = roomPayload(newRooms.value)
     const res = await fetch(apiUrl('/partner/products'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({
-        domain: newDomain.value,
-        title: newTitle.value,
-        city: newCity.value,
-        price: newPrice.value
-      })
+      body: JSON.stringify(body)
     })
 
     if (res.ok) {
       isModalOpen.value = false
       newTitle.value = ''
+      newRooms.value = [blankRoom()]
       importUrl.value = ''
       importMessage.value = ''
       await fetchProducts()
@@ -399,6 +444,35 @@ onMounted(() => {
             </div>
           </div>
 
+          <div v-if="newDomain === 'HOTEL'" class="space-y-2 rounded-xl border border-line bg-surface-sunken p-3">
+            <div class="flex items-center justify-between">
+              <span class="label">객실 (1개 이상 필수 · 없으면 견적 불가)</span>
+              <button type="button" class="rounded-lg bg-surface px-2 py-1 text-[11px] font-bold text-ink-muted hover:text-ink" @click="newRooms.push(blankRoom())">+ 객실 추가</button>
+            </div>
+            <div v-for="(r, i) in newRooms" :key="i" class="grid grid-cols-12 items-end gap-2 rounded-lg bg-surface p-2">
+              <div class="col-span-12 space-y-1 sm:col-span-4">
+                <label class="label">객실명 *</label>
+                <input v-model="r.name" type="text" placeholder="예: 디럭스 더블" class="input !min-h-[36px] !text-xs" />
+              </div>
+              <div class="col-span-4 space-y-1 sm:col-span-3">
+                <label class="label">1박 요금</label>
+                <input v-model.number="r.price" type="number" min="0" step="1000" class="input !min-h-[36px] !text-xs tabular" />
+              </div>
+              <div class="col-span-3 space-y-1 sm:col-span-2">
+                <label class="label">재고</label>
+                <input v-model.number="r.inventory" type="number" min="0" step="1" class="input !min-h-[36px] !text-xs tabular" />
+              </div>
+              <div class="col-span-3 space-y-1 sm:col-span-2">
+                <label class="label">정원</label>
+                <input v-model.number="r.occupancy" type="number" min="1" max="10" step="1" class="input !min-h-[36px] !text-xs tabular" />
+              </div>
+              <div class="col-span-2 sm:col-span-1">
+                <button type="button" :disabled="newRooms.length <= 1" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken disabled:opacity-30" @click="newRooms.splice(i, 1)" aria-label="객실 삭제"><AppIcon name="close" :size="16" /></button>
+              </div>
+            </div>
+            <p class="text-[11px] text-ink-subtle">재고 0인 객실은 매진으로 표시돼요. 날짜별 재고·마감은 ‘재고/가격’ 메뉴에서 관리하세요.</p>
+          </div>
+
           <div class="flex items-center justify-end gap-2 border-t border-line pt-2">
             <button
               type="button"
@@ -447,6 +521,34 @@ onMounted(() => {
             <div class="space-y-1">
               <label class="label">기본 요금 (KRW)</label>
               <input v-model.number="editPrice" type="number" step="1000" min="0" class="input font-bold tabular" />
+            </div>
+          </div>
+          <div v-if="editing && editing.domain_type === 'HOTEL'" class="space-y-2 rounded-xl border border-line bg-surface-sunken p-3">
+            <div class="flex items-center justify-between">
+              <span class="label">객실 (1개 이상 필수 · 없으면 견적 불가)</span>
+              <button type="button" class="rounded-lg bg-surface px-2 py-1 text-[11px] font-bold text-ink-muted hover:text-ink" @click="editRooms.push(blankRoom())">+ 객실 추가</button>
+            </div>
+            <p v-if="!editRoomsLoaded" class="text-[11px] text-ink-subtle">객실 정보를 불러오는 중…</p>
+            <div v-for="(r, i) in editRooms" :key="r.id || i" class="grid grid-cols-12 items-end gap-2 rounded-lg bg-surface p-2">
+              <div class="col-span-12 space-y-1 sm:col-span-4">
+                <label class="label">객실명 *</label>
+                <input v-model="r.name" type="text" class="input !min-h-[36px] !text-xs" />
+              </div>
+              <div class="col-span-4 space-y-1 sm:col-span-3">
+                <label class="label">1박 요금</label>
+                <input v-model.number="r.price" type="number" min="0" step="1000" class="input !min-h-[36px] !text-xs tabular" />
+              </div>
+              <div class="col-span-3 space-y-1 sm:col-span-2">
+                <label class="label">재고</label>
+                <input v-model.number="r.inventory" type="number" min="0" step="1" class="input !min-h-[36px] !text-xs tabular" />
+              </div>
+              <div class="col-span-3 space-y-1 sm:col-span-2">
+                <label class="label">정원</label>
+                <input v-model.number="r.occupancy" type="number" min="1" max="10" step="1" class="input !min-h-[36px] !text-xs tabular" />
+              </div>
+              <div class="col-span-2 sm:col-span-1">
+                <button type="button" :disabled="editRooms.length <= 1" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken disabled:opacity-30" @click="editRooms.splice(i, 1)" aria-label="객실 삭제"><AppIcon name="close" :size="16" /></button>
+              </div>
             </div>
           </div>
           <label class="flex cursor-pointer items-center gap-2 font-bold text-ink-muted">

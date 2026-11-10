@@ -83,7 +83,11 @@ async function save() {
     if (form.role !== selected.value.role) body.role = form.role
     if (coinValue.value !== null) { body.coinAdjustment = coinValue.value; body.note = form.note.trim() || undefined }
     if (suspensionChanged.value) { body.isActive = !form.suspended; if (form.suspended) body.reason = form.reason.trim() }
-    const r = await api(`/admin/users/${encodeURIComponent(selected.value.id)}`, { method: 'PATCH', json: body })
+    // #23: coin adjustments are money-moving — the server requires an
+    // Idempotency-Key so a retried submit replays instead of double-applying.
+    const headers: Record<string, string> = {}
+    if (body.coinAdjustment !== undefined) headers['Idempotency-Key'] = `adm_coin_${crypto.randomUUID().replace(/-/g, '')}`
+    const r = await api(`/admin/users/${encodeURIComponent(selected.value.id)}`, { method: 'PATCH', json: body, headers })
     selected.value = { ...selected.value, role: form.role, coin_balance: r.coinBalance ?? selected.value.coin_balance, status: suspensionChanged.value ? (form.suspended ? 'SUSPENDED' : 'ACTIVE') : selected.value.status }
     form.coin = ''
     form.note = ''

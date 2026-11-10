@@ -51,15 +51,15 @@
 
 ### 프론트 기능 결함
 
-23. `admin/UsersView.vue:77` — 코인조정이 Idempotency-Key 없이 전송, 서버 400. UI 조정 전부 실패 → 키 생성·전송 [S]
-24. `admin/AffiliateView.vue:32-47` — 등록 UI 없음(조회만). 제휴사 등록 불가 → 레지스트리 탭 추가 [M]
-25. `admin/router` — entities/contracts 화면 없음. LIVE 온보딩 불가 → UI 추가 [M]
-26. `partner/ProductsView.vue:135-153` — 호텔 등록/수정이 rooms 미전송 → ROOM_REQUIRED로 영구 견적불가 → 객실관리 추가 [M]
-27. `user/DetailBookingCard.vue:108` — EXTERNAL_LINK_ONLY에 링크 없음(/out/ 참조 0). 제휴수익 경로 단절 → outlink 방출+렌더 [M]
+[x] 23. 코인조정 Idempotency-Key 미전송 → 완료 (6c / `UsersView.vue` 코인 조정 시 `adm_coin_*` 키 생성·전송; 서버 멱등 리플레이로 중복적용 방지)
+[x] 24. 제휴사 등록 UI 없음 → 완료 (6c / `AffiliateView.vue` 레지스트리 탭 추가: 등록·시크릿 로테이션·활성 토글, 시크릿 write-only). E2E #24 검증
+[x] 25. entities/contracts 화면 없음 → 완료 (6c / `EntitiesView.vue` 신규 + `/entities` 라우트·내비: 완성게이트·계약승격·변경이력). E2E #25 검증
+[x] 26. 호텔 rooms 미전송 영구 견적불가 → 완료 (6c / `ProductsView.vue` 객실관리 UI + `partner.ts` 상품 GET 상세/PATCH rooms + 마켓 HOTEL rooms 게이트). E2E #26 통과
+[x] 27. EXTERNAL_LINK_ONLY 링크 없음 → 완료 (6c / 0036 `suppliers.outlink_partner_id` + `affiliateOutlinkMap` ACTIVE·https 게이트 방출 + `DetailBookingCard` 외부예약 버튼 + 공급사 매핑 UI; 미매핑·비활성은 링크 없이 정직 문구). E2E #27 통과
 [x] (`806b37c`) 28. `user/OnboardingModal.vue:33-36` — 결제즉시 바우처 약속 vs PENDING → 확정후발券 문구로 수정 [S]
 [x] (`806b37c`) 29. `user/OnboardingModal.vue:39` — 가입쿠폰팩 약속 vs 지급로직 없음 → 삭제 또는 지급구현 [S]
-30. `user/nuxt.config.ts:124-139` — 최저가비교 SEO vs 미검증 참고가 → 실비교 전까지 삭제 [S]
-31. `user/pages/sustainability.vue:22-33` — 에코뱃지+신칸센/유로스타 허위(QR은 GFV- 텍스트) → 미검증 삭제 [S]
+[x] 30. 최저가비교 SEO 허위 → 완료 (6c / `app.vue` JSON-LD 최저가·비교 문구 삭제, 실비교 전까지 미표방)
+[x] 31. sustainability 허위 뱃지·노선 → 완료 (6c / `sustainability.vue` 미검증 에코뱃지·신칸센/유로스타 문구 삭제, 사실 기반으로 재작성)
 
 ### 보안·권한
 

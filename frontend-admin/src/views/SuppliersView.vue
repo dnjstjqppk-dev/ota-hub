@@ -33,11 +33,13 @@ const supplierContracts = computed(() => (entities.data.value.contracts || []).f
 const contractById = computed(() => new Map((entities.data.value.contracts || []).map((c: any) => [c.id, c])))
 
 const editing = ref<any | null>(null)
-const form = reactive({ adapter: '', integrationStatus: '', contractId: '', notes: '' })
+const form = reactive({ adapter: '', integrationStatus: '', contractId: '', notes: '', outlinkPartnerId: '' })
+const partners = useResource(async () => api('/admin/affiliate/partners'), { partners: [] } as any)
+const activePartners = computed(() => (partners.data.value.partners || []).filter((p: any) => p.is_active === 1))
 const busy = ref(false)
 function open(s: any) {
   editing.value = s
-  Object.assign(form, { adapter: s.adapter, integrationStatus: s.integration_status, contractId: s.contract_id || '', notes: s.notes || '' })
+  Object.assign(form, { adapter: s.adapter, integrationStatus: s.integration_status, contractId: s.contract_id || '', notes: s.notes || '', outlinkPartnerId: s.outlink_partner_id || '' })
 }
 const liveBlocked = computed(() => {
   if (form.integrationStatus !== 'LIVE') return ''
@@ -53,7 +55,7 @@ async function save() {
   try {
     await api(`/admin/suppliers/${encodeURIComponent(editing.value.id)}`, {
       method: 'PATCH',
-      json: { adapter: form.adapter, integrationStatus: form.integrationStatus, contractId: form.contractId || undefined, notes: form.notes.trim() || undefined }
+      json: { adapter: form.adapter, integrationStatus: form.integrationStatus, contractId: form.contractId || undefined, notes: form.notes.trim() || undefined, outlinkPartnerId: form.outlinkPartnerId || null }
     })
     toast('공급사 연동 정보를 저장했어요.')
     editing.value = null
@@ -107,6 +109,14 @@ async function save() {
             <option v-for="c in supplierContracts" :key="c.id" :value="c.id">{{ c.counterparty }} · {{ c.status }} ({{ c.id }})</option>
           </select>
           <p v-if="!supplierContracts.length" class="mt-1 text-2xs text-ink-subtle">등록된 공급사 계약이 없어요.</p>
+        </div>
+        <div v-if="editing?.transaction_model === 'AFFILIATE'">
+          <label class="label" for="sp-outlink">제휴 아웃링크</label>
+          <select id="sp-outlink" v-model="form.outlinkPartnerId" class="input">
+            <option value="">연결 없음 (링크 미노출)</option>
+            <option v-for="p in activePartners" :key="p.partner_id" :value="p.partner_id">{{ p.name }} ({{ p.partner_id }})</option>
+          </select>
+          <p class="mt-1 text-2xs text-ink-subtle">AFFILIATE 공급사는 직접 판매하지 않고, 선택한 제휴사의 외부 링크 버튼만 노출해요.</p>
         </div>
         <div>
           <label class="label" for="sp-notes">메모</label>

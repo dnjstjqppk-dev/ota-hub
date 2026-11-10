@@ -21,13 +21,13 @@ const FACTS = [
   }
 ]
 useHead({
-  title: '기차표 예약',
-  meta: [{ name: 'description', content: 'KTX, 신칸센, 유로스타 열차 시간표와 요금을 비교하고 예약하세요.' }]
+  title: '기차 시간표·요금 조회',
+  meta: [{ name: 'description', content: 'KTX, 신칸센, 유로스타 열차 시간표와 요금을 조회하세요. 기차표 직접 예약은 공급사 계약 후 지원됩니다.' }]
 })
 </script>
 
 <template>
-  <ProductLanding tab="trains" crumb="기차" title="기차표를 예약하세요" subtitle="출발역과 도착역을 고르면 운행 중인 열차와 좌석 등급을 비교할 수 있어요." :facts="FACTS">
-    <ProductRail kind="trains" title="판매 중인 구간" hint="구간별 현재 최저 참고가 · 1인 편도 기준" />
+  <ProductLanding tab="trains" crumb="기차" title="기차 시간표를 조회하세요" subtitle="출발역과 도착역을 고르면 운행 중인 열차와 좌석 등급을 비교할 수 있어요. 직접 예약은 공급사 계약 후 지원됩니다." :facts="FACTS">
+    <ProductRail kind="trains" title="운행 중인 구간" hint="구간별 현재 최저 참고가 · 1인 편도 기준" />
   </ProductLanding>
 </template>

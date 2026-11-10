@@ -16,6 +16,7 @@ import SuppliersView from '../views/SuppliersView.vue'
 import TicketsView from '../views/TicketsView.vue'
 import AffiliateView from '../views/AffiliateView.vue'
 import LegalView from '../views/LegalView.vue'
+import EntitiesView from '../views/EntitiesView.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -122,6 +123,12 @@ const routes: RouteRecordRaw[] = [
     path: '/legal',
     name: 'Legal',
     component: LegalView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/entities',
+    name: 'Entities',
+    component: EntitiesView,
     meta: { requiresAuth: true }
   },
   {

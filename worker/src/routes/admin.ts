@@ -311,10 +311,20 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       // unsellable (SUPPLIER_API_NOT_IMPLEMENTED) until a real adapter exists.
       if (adapter !== "direct_contract" && adapter !== "api") throw new HttpError(409, "ADAPTER_NOT_LIVE", "LIVE 전환은 direct_contract 또는 api 어댑터에서만 가능합니다.");
     }
-    await db.prepare("UPDATE suppliers SET adapter = ?, integration_status = ?, contract_id = COALESCE(?, contract_id), notes = COALESCE(?, notes), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")
-      .bind(adapter, status, b.contractId ? str(b.contractId, 64) : null, b.notes ? str(b.notes, 500) : null, m[1]).run();
+    // #27: affiliate outlink mapping. Must reference a registered partner (the
+    // catalog only emits the link while the partner stays active + https).
+    let outlink = before.outlink_partner_id ?? null;
+    if (b.outlinkPartnerId !== undefined) {
+      const v = b.outlinkPartnerId === null || b.outlinkPartnerId === "" ? null : str(b.outlinkPartnerId, 64).toLowerCase();
+      if (v && !await db.prepare("SELECT partner_id FROM affiliate_partners_config WHERE partner_id = ?").bind(v).first()) {
+        throw new HttpError(404, "UNKNOWN_PARTNER", "등록되지 않은 제휴사 ID입니다.");
+      }
+      outlink = v;
+    }
+    await db.prepare("UPDATE suppliers SET adapter = ?, integration_status = ?, contract_id = COALESCE(?, contract_id), notes = COALESCE(?, notes), outlink_partner_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")
+      .bind(adapter, status, b.contractId ? str(b.contractId, 64) : null, b.notes ? str(b.notes, 500) : null, outlink, m[1]).run();
     invalidateSupplierCache();
-    await audit(env, admin.id, "UPDATE_SUPPLIER", "SUPPLIER", m[1], { before: { adapter: before.adapter, status: before.integration_status }, after: { adapter, status } });
+    await audit(env, admin.id, "UPDATE_SUPPLIER", "SUPPLIER", m[1], { before: { adapter: before.adapter, status: before.integration_status }, after: { adapter, status, outlink } });
     return json({ success: true });
   }
 
@@ -701,6 +711,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     if (secret.length < 24 || secret.length > 200) throw new HttpError(400, "WEAK_PARTNER_SECRET", "secretKey는 24자 이상이어야 합니다.");
     await db.prepare("UPDATE affiliate_partners_config SET name = ?, deep_link_template = ?, affiliate_id = ?, secret_key = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE partner_id = ?")
       .bind(name, template, affiliateId, secret, active, m[1]).run();
+    invalidateSupplierCache(); // #27: activation toggle must reflect in catalog outlinks immediately.
     await audit(env, admin.id, "UPDATE_AFFILIATE_PARTNER", "AFFILIATE_PARTNER", m[1], { before: before.is_active, after: active });
     return json({ success: true });
   }

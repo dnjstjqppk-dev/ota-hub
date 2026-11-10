@@ -179,6 +179,13 @@ export interface Bookability {
   reason: string | null;
   mode: "LIVE" | "SIMULATED" | null;
   adapter: string | null;
+  /**
+   * #27: affiliate partner id for the /out/ click-tracking link. Set only by
+   * supplierBookabilityMap() for AFFILIATE suppliers mapped to an ACTIVE
+   * partner with an https template; bookabilityOf() (pure, no DB) always
+   * leaves it null. Money gates ignore it -- it only renders a link.
+   */
+  outlinkPartner: string | null;
 }
 
 /**
@@ -193,21 +200,21 @@ export interface Bookability {
  *   because bookability is per supplier while ticketing is per domain.
  */
 export function bookabilityOf(env: Env, supplier: SupplierRow | null): Bookability {
-  if (!supplier) return { bookable: false, reason: "SUPPLIER_NOT_REGISTERED", mode: null, adapter: null };
-  if (supplier.transaction_model === "AFFILIATE") return { bookable: false, reason: "EXTERNAL_LINK_ONLY", mode: null, adapter: supplier.adapter };
-  if (supplier.integration_status === "BLOCKED") return { bookable: false, reason: "SUPPLIER_BLOCKED", mode: null, adapter: supplier.adapter };
+  if (!supplier) return { bookable: false, reason: "SUPPLIER_NOT_REGISTERED", mode: null, adapter: null, outlinkPartner: null };
+  if (supplier.transaction_model === "AFFILIATE") return { bookable: false, reason: "EXTERNAL_LINK_ONLY", mode: null, adapter: supplier.adapter, outlinkPartner: null };
+  if (supplier.integration_status === "BLOCKED") return { bookable: false, reason: "SUPPLIER_BLOCKED", mode: null, adapter: supplier.adapter, outlinkPartner: null };
   if (supplier.adapter === "simulator") {
     return flag(env, "ALLOW_SIMULATED_SUPPLIERS")
-      ? { bookable: true, reason: null, mode: "SIMULATED", adapter: supplier.adapter }
-      : { bookable: false, reason: "SUPPLIER_NOT_INTEGRATED", mode: null, adapter: supplier.adapter };
+      ? { bookable: true, reason: null, mode: "SIMULATED", adapter: supplier.adapter, outlinkPartner: null }
+      : { bookable: false, reason: "SUPPLIER_NOT_INTEGRATED", mode: null, adapter: supplier.adapter, outlinkPartner: null };
   }
   if (supplier.adapter === "api" && supplier.integration_status === "LIVE") {
-    return { bookable: false, reason: "SUPPLIER_API_NOT_IMPLEMENTED", mode: null, adapter: supplier.adapter };
+    return { bookable: false, reason: "SUPPLIER_API_NOT_IMPLEMENTED", mode: null, adapter: supplier.adapter, outlinkPartner: null };
   }
   if (supplier.adapter === "direct_contract" && supplier.integration_status === "LIVE") {
-    return { bookable: true, reason: null, mode: "LIVE", adapter: supplier.adapter };
+    return { bookable: true, reason: null, mode: "LIVE", adapter: supplier.adapter, outlinkPartner: null };
   }
-  return { bookable: false, reason: "SUPPLIER_NOT_INTEGRATED", mode: null, adapter: supplier.adapter };
+  return { bookable: false, reason: "SUPPLIER_NOT_INTEGRATED", mode: null, adapter: supplier.adapter, outlinkPartner: null };
 }
 
 /**
@@ -268,5 +275,30 @@ export async function supplierBookabilityMap(env: Env): Promise<Map<string, Book
   }
   const m = new Map<string, Bookability>();
   for (const r of supplierCache.rows) m.set(r.id, bookabilityOf(env, r));
+  for (const [sid, pid] of await affiliateOutlinkMap(env)) {
+    const b = m.get(sid);
+    if (b && b.reason === "EXTERNAL_LINK_ONLY") b.outlinkPartner = pid;
+  }
+  return m;
+}
+
+/**
+ * #27: supplier -> affiliate partner for /out/ links. Emitted only when the
+ * supplier is AFFILIATE-mapped AND the partner is active with an https
+ * template -- the same gates /out/ enforces at click time. A stale entry
+ * (partner deactivated within the supplier-cache TTL) degrades to an honest
+ * 404 at click time, never a wrong redirect.
+ */
+const OUTLINK_PID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+async function affiliateOutlinkMap(env: Env): Promise<Map<string, string>> {
+  const m = new Map<string, string>();
+  try {
+    const res = await env.DB.prepare(
+      'SELECT s.id AS sid, c.partner_id AS pid FROM suppliers s ' +
+      'JOIN affiliate_partners_config c ON c.partner_id = s.outlink_partner_id ' +
+      "WHERE s.transaction_model = 'AFFILIATE' AND c.is_active = 1 AND c.deep_link_template LIKE 'https://%'"
+    ).all<{ sid: string; pid: string }>();
+    for (const r of res.results || []) if (OUTLINK_PID.test(r.pid || '')) m.set(r.sid, r.pid);
+  } catch { /* pre-0036 databases have no outlink column: no links, no crash */ }
   return m;
 }

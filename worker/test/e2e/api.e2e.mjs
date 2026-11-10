@@ -440,6 +440,77 @@ test("#21: duplicate affiliate postbacks (sequential + concurrent) book once", a
   assert.equal(sql(`SELECT COUNT(*) AS n FROM affiliate_conversions WHERE order_id IN ('${o1}','${o2}')`)[0].n, 2);
 });
 
+test("#24/#25: admin registry APIs — affiliate partners, entities, contracts", async () => {
+  // Affiliate partners: validation, secret write-only, rotation.
+  const pid = `e2ep${rnd().slice(0, 8)}`;
+  assert.equal((await api("POST", "/api/v1/admin/affiliate/partners", { token: ADMIN, body: { partnerId: "BAD ID!", name: "x", affiliateId: "x", secretKey: "s".repeat(32) } })).data.code, "INVALID_PARTNER_ID");
+  assert.equal((await api("POST", "/api/v1/admin/affiliate/partners", { token: ADMIN, body: { partnerId: pid, name: "E2E Reg", deepLinkTemplate: "https://x.test/{item_id}?c={click_id}", affiliateId: "E2E", secretKey: "short" } })).data.code, "WEAK_PARTNER_SECRET");
+  const secret = `e2e-reg-${rnd()}${rnd()}`;
+  const created = await api("POST", "/api/v1/admin/affiliate/partners", { token: ADMIN, body: { partnerId: pid, name: "E2E Reg", deepLinkTemplate: "https://x.test/{item_id}?c={click_id}", affiliateId: "E2E", secretKey: secret } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  assert.equal((await api("POST", "/api/v1/admin/affiliate/partners", { token: ADMIN, body: { partnerId: pid, name: "dup", deepLinkTemplate: "https://x.test/{item_id}?c={click_id}", affiliateId: "E2E", secretKey: secret } })).data.code, "ID_EXISTS");
+  const listed = (await api("GET", "/api/v1/admin/affiliate/partners", { token: ADMIN })).data.partners;
+  const row = listed.find((p) => p.partner_id === pid);
+  assert.ok(row && !("secret_key" in row), "secret is write-only");
+  const rot = `e2e-rot-${rnd()}${rnd()}${rnd()}`;
+  assert.equal((await api("PATCH", `/api/v1/admin/affiliate/partners/${pid}`, { token: ADMIN, body: { secretKey: rot, isActive: false } })).status, 200);
+  const row2 = (await api("GET", "/api/v1/admin/affiliate/partners", { token: ADMIN })).data.partners.find((p) => p.partner_id === pid);
+  assert.equal(row2.is_active, 0);
+  // Entities: completion gate, then ACTIVE; contracts: draft then activate.
+  const ents = (await api("GET", "/api/v1/admin/entities", { token: ADMIN })).data.entities;
+  assert.ok(ents.length >= 1);
+  const ent = ents.find((e) => e.status !== "ACTIVE") || ents[0];
+  assert.equal((await api("PATCH", `/api/v1/admin/entities/${ent.id}`, { token: ADMIN, body: { status: "ACTIVE", business_registration_no: "", travel_agency_license_no: "", ecommerce_registration_no: "", representative_name: "", cs_phone: "" } })).data.code, "ENTITY_INCOMPLETE");
+  const full = await api("PATCH", `/api/v1/admin/entities/${ent.id}`, { token: ADMIN, body: { status: "ACTIVE", legal_name: "E2E 법인", business_registration_no: "000-00-00000", travel_agency_license_no: "제2026-000호", ecommerce_registration_no: "제2026-서울-0000호", representative_name: "김대표", cs_phone: "02-0000-0000" } });
+  assert.equal(full.status, 200, JSON.stringify(full.data));
+  const cc = await api("POST", "/api/v1/admin/contracts", { token: ADMIN, body: { entityId: ent.id, contractType: "SUPPLIER", counterparty: "E2E 상대방" } });
+  assert.equal(cc.status, 201, JSON.stringify(cc.data));
+  assert.equal((await api("PATCH", `/api/v1/admin/contracts/${cc.data.id}`, { token: ADMIN, body: { status: "ACTIVE" } })).status, 200);
+  const chg = await api("GET", `/api/v1/admin/entities/${ent.id}/changes`, { token: ADMIN });
+  assert.ok(chg.data.changes.length >= 1, "entity changes are logged");
+});
+
+test("#27: affiliate outlink emitted only for mapped + active partners; click tracked", async () => {
+  const pid = `e2eol${rnd().slice(0, 8)}`;
+  const secret = `e2e-ol-${rnd()}${rnd()}`;
+  const tpl = "https://clk.example.net/go?c={click_id}&i={item_id}";
+  const pc = await api("POST", "/api/v1/admin/affiliate/partners", { token: ADMIN, body: { partnerId: pid, name: "E2E Outlink", deepLinkTemplate: tpl, affiliateId: "E2E", secretKey: secret } });
+  assert.equal(pc.status, 201, JSON.stringify(pc.data));
+  // Unknown partner mapping is rejected, not stored.
+  assert.equal((await api("PATCH", "/api/v1/admin/suppliers/ptn_htl_01", { token: ADMIN, body: { outlinkPartnerId: "no_such_partner" } })).data.code, "UNKNOWN_PARTNER");
+  const hotel = sql("SELECT id, partner_id FROM hotels WHERE is_active = 1 AND (partner_id IS NULL OR partner_id = 'ptn_htl_01') LIMIT 1")[0];
+  assert.ok(hotel, "seeded hotel for outlink test");
+  const before = sql("SELECT transaction_model, outlink_partner_id FROM suppliers WHERE id = 'ptn_htl_01'")[0];
+  try {
+    sql("UPDATE suppliers SET transaction_model = 'AFFILIATE' WHERE id = 'ptn_htl_01'");
+    const mp = await api("PATCH", "/api/v1/admin/suppliers/ptn_htl_01", { token: ADMIN, body: { outlinkPartnerId: pid } });
+    assert.equal(mp.status, 200, JSON.stringify(mp.data));
+    const det = (await api("GET", `/api/v1/hotels/${hotel.id}`)).data.data;
+    assert.equal(det.bookable, false);
+    assert.equal(det.bookable_reason, "EXTERNAL_LINK_ONLY");
+    assert.equal(det.outlink_path, `/out/${pid}/${hotel.id}`);
+    // The link click-tracks (302 + REDIRECTED row) and lands on the template.
+    const click = await fetch(BASE + "/api/v1" + det.outlink_path, { redirect: "manual" });
+    assert.equal(click.status, 302);
+    const loc = click.headers.get("location") || "";
+    assert.ok(loc.startsWith("https://clk.example.net/go?c=clk_") && loc.includes(`i=${hotel.id}`), loc);
+    const rows = sql(`SELECT click_id, partner_name, item_id, status FROM affiliate_clicks WHERE partner_name = '${pid}' ORDER BY created_at DESC LIMIT 1`);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].item_id, hotel.id);
+    assert.equal(rows[0].status, "REDIRECTED");
+    // Deactivating the partner removes the link and parks the click path.
+    assert.equal((await api("PATCH", `/api/v1/admin/affiliate/partners/${pid}`, { token: ADMIN, body: { isActive: false } })).status, 200);
+    const det2 = (await api("GET", `/api/v1/hotels/${hotel.id}`)).data.data;
+    assert.ok(!("outlink_path" in det2), "no outlink while partner inactive");
+    assert.equal((await fetch(BASE + "/api/v1" + det.outlink_path, { redirect: "manual" })).status, 404);
+  } finally {
+    sql(`UPDATE suppliers SET transaction_model = '${before.transaction_model}', outlink_partner_id = ${before.outlink_partner_id ? `'${before.outlink_partner_id}'` : "NULL"} WHERE id = 'ptn_htl_01'`);
+    await api("PATCH", "/api/v1/admin/suppliers/ptn_htl_01", { token: ADMIN, body: { notes: "e2e #27 restore" } }); // invalidate cache
+  }
+  const det3 = (await api("GET", `/api/v1/hotels/${hotel.id}`)).data.data;
+  assert.ok(!("outlink_path" in det3), "outlink gone after restore");
+});
+
 test("affiliate postback: unconfigured partner rejected, cannot touch bookings", async () => {
   const q = (await quote(A.token)).data.quote;
   const b = (await book(A.token, q)).data.booking;
@@ -621,6 +692,34 @@ test("#15: partner product registration wires a supplier row and reports honest 
   sql(`UPDATE suppliers SET integration_status = 'LIVE' WHERE id = '${P.id}'`);
   const q1 = await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "ACTIVITY", itemId, startDate: day(96), travelers: { adults: 1 } } });
   assert.equal(q1.status, 201, JSON.stringify(q1.data));
+});
+
+test("#26: partner hotel registration carries rooms; roomless hotels stay unquotable", async () => {
+  const P = await approvedPartner("rooms26");
+  const bad = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 룸리스 호텔", domain: "HOTEL", city: "서울", price: 200000 } });
+  assert.equal(bad.status, 400, JSON.stringify(bad.data));
+  assert.equal(bad.data.code, "ROOMS_REQUIRED");
+  const rooms = [{ name_ko: "디럭스 더블", base_price_krw: 200000, available_inventory: 5, max_occupancy: 2 }];
+  const reg = await api("POST", "/api/v1/partner/products", { token: P.token, body: { title: "E2E 룸 호텔", domain: "HOTEL", city: "서울", price: 200000, rooms } });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
+  const id = reg.data.id;
+  const det = await api("GET", `/api/v1/partner/products/${id}`, { token: P.token });
+  assert.equal(det.status, 200, JSON.stringify(det.data));
+  assert.equal(det.data.product.rooms.length, 1);
+  assert.equal(det.data.product.rooms[0].name_ko, "디럭스 더블");
+  const pat = await api("PATCH", `/api/v1/partner/products/${id}`, { token: P.token, body: { rooms: [...rooms, { name_ko: "스위트", base_price_krw: 400000, available_inventory: 2, max_occupancy: 3 }] } });
+  assert.equal(pat.status, 200, JSON.stringify(pat.data));
+  const det2 = await api("GET", `/api/v1/partner/products/${id}`, { token: P.token });
+  assert.equal(det2.data.product.rooms.length, 2);
+  // Another partner cannot see or touch it.
+  const Q = await approvedPartner("rooms26b");
+  assert.equal((await api("GET", `/api/v1/partner/products/${id}`, { token: Q.token })).status, 404);
+  // After operator LIVE, the roomed hotel quotes with a unit.
+  sql(`INSERT OR IGNORE INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'x', 'ALL', 'simulator', 'LIVE', 'AGENCY', 9000)`);
+  sql(`UPDATE suppliers SET integration_status = 'LIVE', adapter = 'simulator' WHERE id = '${P.id}'`);
+  const roomId = det2.data.product.rooms[0].id;
+  const q = await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "HOTEL", itemId: id, unitId: roomId, startDate: day(60), endDate: day(61), rooms: 1, travelers: { adults: 1 } } });
+  assert.equal(q.status, 201, JSON.stringify(q.data));
 });
 
 test("partner extranet: orders are scoped to the partner; other partners cannot see or act on them", async () => {

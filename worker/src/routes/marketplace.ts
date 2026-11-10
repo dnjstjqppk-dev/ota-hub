@@ -4,6 +4,7 @@ import { audit, requireAdmin, requirePartner } from '../lib/auth.ts';
 import { getMarketplaceFinancialSummary } from '../services/marketplace-service.ts';
 import { isFeatureEnabled } from '../services/feature-flag-service.ts';
 import { settlementPayoutStmts } from '../services/booking-service.ts';
+import { parseRooms } from './partner.ts';
 import { newId } from '../lib/crypto.ts';
 
 export async function handleMarketplace(request: Request, env: Env, url: URL): Promise<Response | null> {
@@ -257,11 +258,15 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     // 1. Insert into domain specific table
     let newDomainItemId = '';
     if (domain === 'HOTEL') {
+      // #26: same rule as /partner/products — a roomless hotel can never be
+      // quoted, so rooms are part of the registration payload.
+      const rooms = parseRooms(b.rooms);
+      if (!rooms.length) throw new HttpError(400, 'ROOMS_REQUIRED', '호텔 등록에는 객실 정보(rooms)가 1개 이상 필요합니다.');
       newDomainItemId = newId('htl');
       await env.DB.prepare(`
-        INSERT INTO hotels (id, partner_id, name_ko, name_en, city, country, address, base_price_krw, created_at)
-        VALUES (?, ?, ?, ?, ?, '대한민국', '파트너 지정 주소', ?, ?)
-      `).bind(newDomainItemId, pId, title, title, city, retailPrice, now).run();
+        INSERT INTO hotels (id, partner_id, name_ko, name_en, city, country, address, base_price_krw, rooms_json, created_at)
+        VALUES (?, ?, ?, ?, ?, '대한민국', '파트너 지정 주소', ?, ?, ?)
+      `).bind(newDomainItemId, pId, title, title, city, retailPrice, JSON.stringify(rooms), now).run();
     } else {
       newDomainItemId = newId('act');
       await env.DB.prepare(`

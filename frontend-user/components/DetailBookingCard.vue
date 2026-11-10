@@ -6,7 +6,7 @@
  * price for `unitLabel`; nothing here estimates taxes or totals the server has not confirmed.
  */
 import { computed, ref, watch } from 'vue'
-import { formatKrw } from '~/composables/useApi'
+import { formatKrw, useApiUrl } from '~/composables/useApi'
 import { BOOKABLE_REASON_KO } from '~/composables/useCatalogDetail'
 import { daysBetween, fmtDay, qDate, qInt, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 
@@ -50,6 +50,9 @@ const query = computed(() => ({
   ...(props.people ? { adults: String(adults.value), ...(children.value ? { children: String(children.value) } : {}) } : {})
 }))
 const reason = computed(() => (props.item.bookable_reason && BOOKABLE_REASON_KO[props.item.bookable_reason]) || '지금은 직접 예약할 수 없는 상품이에요.')
+/** #27: affiliate outlink supplied by the catalog API (path under the API base). Rendered only when the server emits a real link. */
+const outlinkPath = computed(() => (typeof props.item.outlink_path === 'string' && props.item.outlink_path.startsWith('/out/') ? props.item.outlink_path : ''))
+const outlinkUrl = computed(() => (outlinkPath.value ? useApiUrl(outlinkPath.value) : ''))
 
 const highlight = ref(false)
 const card = ref<HTMLElement | null>(null)
@@ -105,7 +108,11 @@ defineExpose({ askDates })
         <span v-else class="block rounded-xl bg-surface-sunken py-3 text-center text-sm font-semibold text-ink-subtle">인원 초과</span>
         <p v-if="highlight && !datesReady" class="text-sm font-medium text-primary" role="status">{{ dateMode === 'range' ? `${startLabel}과 ${endLabel}을 선택해 주세요.` : `${startLabel}을 선택해 주세요.` }}</p>
       </template>
-      <p v-else class="rounded-xl bg-surface-sunken px-4 py-3 text-sm text-ink-muted" data-testid="not-bookable">{{ reason }}</p>
+      <template v-else>
+        <p class="rounded-xl bg-surface-sunken px-4 py-3 text-sm text-ink-muted" data-testid="not-bookable">{{ reason }}</p>
+        <a v-if="outlinkUrl" :href="outlinkUrl" target="_blank" rel="noopener sponsored" class="btn-primary block w-full py-3 text-center" data-testid="outlink-book">제휴사 사이트에서 예약하기</a>
+        <p v-if="outlinkUrl" class="text-xs text-ink-subtle">예약·결제는 외부 제휴사 사이트에서 진행돼요. 이 상품은 GetForTrip에서 직접 판매하지 않아요.</p>
+      </template>
 
       <PriceAlertButton :domain="domain" :item-id="item.id" :label="alertLabel" :current-price="priceKrw" />
     </div>

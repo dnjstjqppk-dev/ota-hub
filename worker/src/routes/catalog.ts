@@ -17,12 +17,18 @@ const PRICE_NOTICE = "참고 가격 (공급사 실시간 검증 전)";
 
 function annotate(rows: any[], map: Map<string, Bookability>, fallbackSupplier: string, domain: string | null = null) {
   return rows.map((r) => {
-    const b = map.get(r.partner_id || fallbackSupplier) || { bookable: false, reason: "SUPPLIER_NOT_REGISTERED", mode: null, adapter: null };
+    const b = map.get(r.partner_id || fallbackSupplier) || { bookable: false, reason: "SUPPLIER_NOT_REGISTERED", mode: null, adapter: null, outlinkPartner: null };
     // Mirror the quote-time ticketing rule so lists/details never advertise an unquotable flight.
     const bb = domain === "FLIGHT" && b.adapter === "direct_contract"
       ? { ...b, bookable: false, reason: "FLIGHT_TICKETING_UNSUPPORTED", mode: null }
       : b;
-    return { ...r, bookable: bb.bookable, bookable_reason: bb.reason, fulfilment_mode: bb.mode, price_notice: PRICE_NOTICE };
+    // #27: affiliate outlink (path under the API base). Gated on the PRE-override
+    // reason: an AFFILIATE flight still links out (the partner tickets it; we
+    // take no money), even though FLIGHT_TICKETING_UNSUPPORTED blocks direct sale.
+    const outlink = b.reason === "EXTERNAL_LINK_ONLY" && b.outlinkPartner && r.id
+      ? `/out/${b.outlinkPartner}/${encodeURIComponent(String(r.id))}${domain ? `?domain=${domain}` : ""}`
+      : null;
+    return { ...r, bookable: bb.bookable, bookable_reason: bb.reason, fulfilment_mode: bb.mode, price_notice: PRICE_NOTICE, ...(outlink ? { outlink_path: outlink } : {}) };
   });
 }
 

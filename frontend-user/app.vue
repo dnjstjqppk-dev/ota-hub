@@ -22,10 +22,10 @@ useHead({
         'name': 'getfortrip',
         'url': 'https://getfortrip.com',
         'logo': 'https://getfortrip.com/logo.svg',
-        'description': '스마트한 전 세계 여행의 시작, getfortrip. 항공권, 호텔, 기차표, 렌터카, 공항픽업, 투어·티켓 최저가 예약.',
+        'description': '스마트한 전 세계 여행의 시작, getfortrip. 항공권, 호텔, 기차표, 렌터카, 공항픽업, 투어·티켓 예약.',
         'priceRange': '₩₩',
-        'currenciesAccepted': 'KRW, USD, JPY, EUR',
-        'paymentAccepted': 'Credit Card, S2S Webhook',
+        'currenciesAccepted': 'KRW',
+        'paymentAccepted': 'Credit Card',
         'address': {
           '@type': 'PostalAddress',
           'addressCountry': 'KR',
