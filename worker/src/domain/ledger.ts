@@ -10,7 +10,9 @@ export type Account =
   | "SUPPLIER_PAYABLE"
   | "COMMISSION_REVENUE"
   | "CANCELLATION_FEE_REVENUE"
-  | "PROMOTION_EXPENSE";
+  | "PROMOTION_EXPENSE"
+  | "OPERATING_CASH"
+  | "SELLER_CLAIM_RECEIVABLE";
 
 export interface JournalLine {
   account: Account;
@@ -90,17 +92,52 @@ export function fulfilmentReversed(bookingId: string, paidMinor: number, split: 
  * slice of payable/commission/promo is unwound so CUSTOMER_DEPOSITS never
  * goes negative while the live remainder stays recognized.
  */
-export function fulfilmentReversedPartial(bookingId: string, takeMinor: number, split: RecognitionSplit, paidMinor: number): Journal | null {
+export function fulfilmentReversedPartial(bookingId: string, takeMinor: number, split: RecognitionSplit, paidMinor: number, referenceId?: string): Journal | null {
   if (!Number.isSafeInteger(takeMinor) || takeMinor <= 0 || !Number.isSafeInteger(paidMinor) || paidMinor <= 0) return null;
-  if (takeMinor >= paidMinor) return fulfilmentReversed(bookingId, paidMinor, split);
+  if (takeMinor >= paidMinor) {
+    if (!referenceId || referenceId === bookingId) return fulfilmentReversed(bookingId, paidMinor, split);
+    const full = fulfilmentReversed(bookingId, paidMinor, split);
+    return { ...full, referenceId };
+  }
   const promo = Math.max(0, Math.round(split.promotionMinor * takeMinor / paidMinor));
   const supplier = Math.min(Math.max(0, Math.round(split.supplierPayableMinor * takeMinor / paidMinor)), takeMinor + promo);
   const commission = takeMinor + promo - supplier;
-  return journal("FULFILMENT_REVERSED", bookingId, [
+  return journal("FULFILMENT_REVERSED", referenceId || bookingId, [
     { account: "SUPPLIER_PAYABLE", direction: "DEBIT", amountMinor: supplier },
     { account: "COMMISSION_REVENUE", direction: "DEBIT", amountMinor: commission },
     { account: "CUSTOMER_DEPOSITS", direction: "CREDIT", amountMinor: takeMinor },
     { account: "PROMOTION_EXPENSE", direction: "CREDIT", amountMinor: promo },
+  ]);
+}
+
+/**
+ * Settlement payout (#17): the bank transfer relieves the full recognized
+ * payable. `cashMinor` is the money that actually moved; any recovery-offset
+ * slice extinguishes the SELLER_CLAIM_RECEIVABLE raised at claim time.
+ */
+export function settlementPaidOut(settlementId: string, grossMinor: number, cashMinor: number): Journal | null {
+  if (!Number.isSafeInteger(grossMinor) || grossMinor <= 0) return null;
+  if (!Number.isSafeInteger(cashMinor) || cashMinor < 0 || cashMinor > grossMinor) return null;
+  return journal("SETTLEMENT_PAID_OUT", settlementId, [
+    { account: "SUPPLIER_PAYABLE", direction: "DEBIT", amountMinor: grossMinor },
+    { account: "OPERATING_CASH", direction: "CREDIT", amountMinor: cashMinor },
+    { account: "SELLER_CLAIM_RECEIVABLE", direction: "CREDIT", amountMinor: grossMinor - cashMinor },
+  ]);
+}
+
+/**
+ * Post-payout refund, seller owes us back (#17/B3): book the claim as a
+ * receivable that funds the customer refund. The credit lands in
+ * CUSTOMER_DEPOSITS (not PG_CLEARING): on a settled order the deposits were
+ * already relieved at recognition and the payout relieved the payable, so the
+ * outgoing refund must be funded by the seller's reimbursement — otherwise
+ * deposits strand negative. Extinguished by a later payout offset.
+ */
+export function recoveryClaimRaised(claimId: string, amountMinor: number): Journal | null {
+  if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) return null;
+  return journal("SETTLEMENT_RECOVERY_RAISED", claimId, [
+    { account: "SELLER_CLAIM_RECEIVABLE", direction: "DEBIT", amountMinor },
+    { account: "CUSTOMER_DEPOSITS", direction: "CREDIT", amountMinor },
   ]);
 }
 

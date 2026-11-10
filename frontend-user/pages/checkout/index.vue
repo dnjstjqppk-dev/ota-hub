@@ -106,8 +106,13 @@ async function getQuote(retry = true) {
   if (r.status === 401) return goLogin()
   if (!r.ok) {
     // The server knows the payable total: clamp an over-large coin request once and retry.
+    // #13: at least 1 KRW must stay on the card (full-coin checkout is unsupported).
     if (r.data.code === 'COINS_EXCEED_TOTAL' && retry && typeof r.data.details?.maxUsable === 'number') {
-      useCoins.value = r.data.details.maxUsable
+      useCoins.value = Math.max(0, r.data.details.maxUsable - 1)
+      return getQuote(false)
+    }
+    if (r.data.code === 'ZERO_TOTAL_UNSUPPORTED' && retry && useCoins.value > 0) {
+      useCoins.value = Math.max(0, Math.floor(useCoins.value) - 1)
       return getQuote(false)
     }
     if (['NOT_DIRECTLY_BOOKABLE', 'SALES_NOT_ENABLED', 'PAYMENTS_DISABLED', 'BELOW_FLOOR_PRICE', 'FLIGHT_TICKETING_UNSUPPORTED', 'ESIM_INSURANCE_QUOTE_UNSUPPORTED'].includes(r.data.code || '')) blocked.value = { code: r.data.code!, message: r.data.error || '' }
@@ -282,7 +287,7 @@ onBeforeUnmount(() => clearInterval(timer))
                 <button v-if="coinBalance > 0 && !quote" type="button" class="text-xs font-bold text-primary" @click="useCoins = coinBalance">전액 사용</button>
               </div>
               <input v-model.number="useCoins" type="number" min="0" :max="coinBalance" step="100" :disabled="!!quote || coinBalance <= 0" :class="[FIELD, 'mt-2']" placeholder="0" data-testid="coin-amount" />
-              <p class="mt-1.5 text-xs text-ink-subtle">1코인 = 1원, 결제 금액에서 차감돼요. 취소하면 사용한 코인을 전액 돌려받아요.</p>
+              <p class="mt-1.5 text-xs text-ink-subtle">1코인 = 1원, 결제 금액에서 차감돼요. 최소 1원은 카드로 결제해야 해요. 취소하면 사용한 코인을 전액 돌려받아요.</p>
             </div>
           </div>
 

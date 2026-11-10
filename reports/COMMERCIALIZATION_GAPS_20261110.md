@@ -35,11 +35,11 @@
 
 ### 돈·정산
 
-13. `booking-service.ts:338` — 코인=전액 시 cashDue=0으로 CHECK 위반 500. 0원결제 경로 없음 → 0원 이행경로 추가 또는 깔끔한 차단 [M]
-14. `booking-service.ts:256,590` — 쿠폰 클레임 검사 없이 정가표 직접조회·소비 blind UPDATE·취소시 미복원·사용상한 없음 → 클레임행 요구+조건부 소비/복원+상한 [M]
-15. `marketplace.ts:135` — 파트너 상품등록이 suppliers 행 미생성 → SUPPLIER_NOT_REGISTERED로 영구 견적불가(성공표시 거짓) → 등록 시 공급사+계약 배선 또는 게이트 [M]
-16. `pricing.ts:158` — 취소정책이 boolean만 사용, 어드민 tiers_json/시간/수수료 무시 → computeCancellation에 tiers 평가+예약시 스냅샷 [M]
-17. `marketplace.ts:71` — settle이 원장 분개 없이 SETTLED 찍고 배치 롤업. SUPPLIER_PAYABLE 영원히 증가 → 지급 분개(외상매입 차변/현금 대변) 포함 [S]
+[x] 13. 코인=전액 CHECK 500 → 완료 (6a / `booking-service.ts` ZERO_TOTAL_UNSUPPORTED 400 + `checkout/index.vue` 최소1원 자동보정·안내). 0원 PG 경로가 없어 정직 차단. E2E #13 통과
+[x] 14. 쿠폰 검사·복원·상한 없음 → 완료 (6a / `loadPromotion` 클레임 필수 + 예약 원자 소비/보상 + 9개 취소경로 복원 + `usage_limit/used_count`(0034) + 어드민 상한 API + 멱등 선확인). E2E #14 통과
+[x] 15. 상품등록 공급사행 미생성 → 완료 (6a / `marketplace.ts` 등록 시 공급사행 자동생성(direct_contract/NOT_INTEGRATED, 정산율 변환) + `sellable:false` 정직 응답; 운영자 LIVE 후 견적). E2E #15 통과
+[x] 16. tiers 미반영 → 완료 (469200e Phase 5 C6 / `pricing.ts` TIERED + 스냅샷 + `computeCancellation`, 유닛 C6). 6a에서 대조 검증
+[x] 17. settle 분개 누락 → 완료 (6a / 0034 OPERATING_CASH·SELLER_CLAIM_RECEIVABLE + `settlementPaidOut`/`recoveryClaimRaised` + 정산주문 reversal 스킵 + 고객취소 park 선행 + `payableStranded` recon). E2E B3/B4 확장 + ledger 통과
 
 ### 데이터·시드
 

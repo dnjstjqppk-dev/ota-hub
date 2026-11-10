@@ -142,6 +142,25 @@ async function coinRestoreStmtsOnce(db: D1Database, b: Pick<BookingRow, "id" | "
   return done ? [] : coinRestoreStmts(db, b);
 }
 
+/**
+ * #14: give the booking's coupon back on cancel/fail/expire. The promo-cap
+ * decrement runs FIRST so it still observes the consumed claim (is_used = 1);
+ * the claim restore runs after. Second runs are no-ops (claim already 0, and
+ * the decrement requires a consumed claim), so every cancel path lands
+ * exactly-once without a separate idempotency ledger.
+ */
+function couponRestoreStmts(db: D1Database, userId: string, quoteId: string | null): Stmt[] {
+  if (!userId || !quoteId) return [];
+  return [
+    db.prepare(`UPDATE promotions SET used_count = used_count - 1
+       WHERE code = (SELECT promotion_code FROM quotes WHERE id = ?) AND used_count > 0
+         AND EXISTS (SELECT 1 FROM user_coupons WHERE user_id = ? AND coupon_code = (SELECT promotion_code FROM quotes WHERE id = ?) AND is_used = 1)`)
+      .bind(quoteId, userId, quoteId),
+    db.prepare("UPDATE user_coupons SET is_used = 0 WHERE user_id = ? AND coupon_code = (SELECT promotion_code FROM quotes WHERE id = ?) AND is_used = 1")
+      .bind(userId, quoteId),
+  ];
+}
+
 function journalStmts(db: D1Database, j: L.Journal | null, b: Pick<BookingRow, "id" | "entity_id" | "supplier_id" | "currency">): Stmt[] {
   if (!j) return [];
   const journalId = newId("jnl");
@@ -157,7 +176,7 @@ function journalStmts(db: D1Database, j: L.Journal | null, b: Pick<BookingRow, "
  * admin, offline, external — lands exactly-once idempotent journals: the
  * customer path pre-posts at request time and no-ops here, the others post.
  */
-async function recognitionReversalStmts(env: Env, db: D1Database, b: Pick<BookingRow, "id" | "entity_id" | "supplier_id" | "currency" | "paid_minor" | "discount_amount_krw">, takeMinor: number): Promise<Stmt[]> {
+async function recognitionReversalStmts(env: Env, db: D1Database, b: Pick<BookingRow, "id" | "entity_id" | "supplier_id" | "currency" | "paid_minor" | "discount_amount_krw">, takeMinor: number, referenceId?: string): Promise<Stmt[]> {
   const paid = Number(b.paid_minor || 0);
   if (!Number.isSafeInteger(takeMinor) || takeMinor <= 0 || !Number.isSafeInteger(paid) || paid <= 0) return [];
   const row = await db.prepare(
@@ -169,7 +188,9 @@ async function recognitionReversalStmts(env: Env, db: D1Database, b: Pick<Bookin
   if (take <= 0) return [];
   const supplier = await loadSupplier(env, b.supplier_id).catch(() => null);
   const split = L.recognitionSplit(paid, Math.round(Number(b.discount_amount_krw || 0)), (supplier as any)?.settlement_rate_bps ?? 9000);
-  return journalStmts(db, L.fulfilmentReversedPartial(b.id, take, split, paid), b);
+  // The reference is per-refund (not per-booking): repeated partial reversals
+  // on a live order must not collide on idx_ledger_event_once.
+  return journalStmts(db, L.fulfilmentReversedPartial(b.id, take, split, paid, referenceId || b.id), b);
 }
 
 /** Retained remainder not yet journaled as cancellation-fee revenue (B7 partials). */
@@ -325,10 +346,19 @@ async function activeEntity(env: Env): Promise<{ id: string; status: string } | 
   return null;
 }
 
-async function loadPromotion(env: Env, code: string | null): Promise<Promotion | null> {
+async function loadPromotion(env: Env, code: string | null, userId?: string | null): Promise<Promotion | null> {
   if (!code) return null;
   const p = await env.DB.prepare("SELECT * FROM promotions WHERE code = ?").bind(code.toUpperCase()).first<any>();
   if (!p) throw new HttpError(400, "PROMO_NOT_FOUND", "존재하지 않는 쿠폰 코드입니다.");
+  // #14: a code alone is not a discount — the caller must hold an unused claim.
+  if (userId) {
+    const claim = await env.DB.prepare("SELECT is_used FROM user_coupons WHERE user_id = ? AND coupon_code = ?").bind(userId, p.code).first<any>();
+    if (!claim) throw new HttpError(409, "COUPON_NOT_CLAIMED", "먼저 쿠폰을 받아주세요. (마이페이지 쿠폰함에서 받기)");
+    if (Number(claim.is_used) !== 0) throw new HttpError(409, "COUPON_ALREADY_USED", "이미 사용한 쿠폰입니다.");
+  }
+  if (p.usage_limit !== null && p.usage_limit !== undefined && Number(p.used_count || 0) >= Number(p.usage_limit)) {
+    throw new HttpError(409, "PROMO_EXHAUSTED", "쿠폰이 모두 소진되었습니다.");
+  }
   return {
     code: p.code, discountType: p.discount_type === "PERCENTAGE" ? "PERCENTAGE" : "FIXED_AMOUNT", discountValue: Number(p.discount_value),
     minOrderMajor: Number(p.min_order_amount_krw || 0), maxDiscountMajor: Number(p.max_discount_krw || 0),
@@ -399,7 +429,7 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
   // C6: snapshot the structured policy (if any) so refunds use the displayed tiers.
   product.structuredPolicy = await loadStructuredPolicy(env, domain, itemId);
   if (inbound) inbound.structuredPolicy = await loadStructuredPolicy(env, domain, inbound.itemId);
-  const promo = await loadPromotion(env, body.promotionCode ? str(body.promotionCode, 40) : null);
+  const promo = await loadPromotion(env, body.promotionCode ? str(body.promotionCode, 40) : null, user.id);
   const ovDates = [params.startDate, params.endDate, params.returnDate].filter((d): d is string => !!d).sort();
   const nightly = nightlyResolver(ovDates.length
     ? await loadNightlyOverrides(env, inbound ? [product.itemId, inbound.itemId] : [product.itemId], product.unitId || "default", ovDates[0], ovDates[ovDates.length - 1])
@@ -416,6 +446,11 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
     coinsMinor = coinRaw;
   }
   const cashDueMinor = q.totalMinor - coinsMinor;
+  // #13: a zero cash total has no PG path and would die on the quotes CHECK
+  // with a 500 — refuse honestly instead (full-coin checkout is unsupported).
+  if (!Number.isSafeInteger(cashDueMinor) || cashDueMinor <= 0) {
+    throw new HttpError(400, "ZERO_TOTAL_UNSUPPORTED", "쿠폰·코인 적용 후 결제 금액이 0원이면 예약할 수 없습니다. 코인 전액 결제는 준비 중이며, 최소 1원은 카드로 결제해주세요.");
+  }
   await assertAboveFloor(env, domain, itemId, cashDueMinor);
   const discountMinor = q.discountMinor + coinsMinor;
   const title = inbound ? `왕복 · ${product.title} / ${inbound.title}` : product.title;
@@ -566,6 +601,11 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   if (!idemKey || !/^[A-Za-z0-9_-]{16,80}$/.test(idemKey)) {
     throw new HttpError(400, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key 헤더가 필요합니다.");
   }
+  // #14: replay before consuming anything — a retried booking must return the
+  // winner, not burn a second coupon deduction (the catch below stays as the
+  // race backstop for truly concurrent duplicates).
+  const prior = await env.DB.prepare("SELECT id FROM bookings WHERE user_id = ? AND idempotency_key = ?").bind(user.id, idemKey).first<{ id: string }>();
+  if (prior) return { replayed: true, booking: await serializeBooking(env, (await getBooking(env, prior.id))!, user) };
   const existing = await env.DB.prepare("SELECT id FROM bookings WHERE user_id = ? AND idempotency_key = ?").bind(user.id, idemKey).first<{ id: string }>();
   if (existing) return { replayed: true, booking: await serializeBooking(env, (await getBooking(env, existing.id))!, user) };
 
@@ -610,7 +650,7 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   const freshNightly = nightlyResolver(freshDates.length
     ? await loadNightlyOverrides(env, inbound ? [product.itemId, inbound.itemId] : [product.itemId], product.unitId || "default", freshDates[0], freshDates[freshDates.length - 1])
     : new Map());
-  const fresh = priceOrder(product, inbound, params, await loadPromotion(env, quote.promotion_code), freshNightly);
+  const fresh = priceOrder(product, inbound, params, await loadPromotion(env, quote.promotion_code, user.id), freshNightly);
   const coinsMinor = Number(quote.coins_minor || 0);
   const freshCashDue = fresh.totalMinor - coinsMinor;
   await assertAboveFloor(env, quote.domain_type, quote.item_id, freshCashDue);
@@ -646,6 +686,33 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
     const spent = await db.prepare("UPDATE users SET trip_coins = trip_coins - ? WHERE id = ? AND trip_coins >= ?").bind(coinsMinor, user.id, coinsMinor).run();
     if (!spent.meta.changes) throw new HttpError(409, "INSUFFICIENT_COINS", "보유 코인이 부족합니다. 금액을 다시 확인해주세요.");
   }
+  // #14: consume the coupon claim + promo cap atomically (conditional UPDATEs:
+  // concurrent bookings cannot double-spend one claim or overshoot the cap).
+  // Compensated below if the batch itself fails, like coins.
+  let couponConsumed: string | null = null;
+  let promoCounted: string | null = null;
+  if (quote.promotion_code) {
+    const c = await db.prepare("UPDATE user_coupons SET is_used = 1 WHERE user_id = ? AND coupon_code = ? AND is_used = 0").bind(user.id, quote.promotion_code).run();
+    if (!c.meta.changes) {
+      const w = await db.prepare("SELECT id FROM bookings WHERE user_id = ? AND idempotency_key = ?").bind(user.id, idemKey).first<{ id: string }>();
+      if (w) return { replayed: true, booking: await serializeBooking(env, (await getBooking(env, w.id))!, user) };
+      throw new HttpError(409, "COUPON_UNAVAILABLE", "쿠폰이 이미 사용되었거나 회수되었습니다. 쿠폰함에서 확인해주세요.");
+    }
+    couponConsumed = quote.promotion_code;
+    const pc = await db.prepare("UPDATE promotions SET used_count = used_count + 1 WHERE code = ? AND (usage_limit IS NULL OR used_count < usage_limit)").bind(quote.promotion_code).run();
+    if (!pc.meta.changes) {
+      await db.prepare("UPDATE user_coupons SET is_used = 0 WHERE user_id = ? AND coupon_code = ?").bind(user.id, quote.promotion_code).run();
+      couponConsumed = null;
+      throw new HttpError(409, "PROMO_EXHAUSTED", "쿠폰이 모두 소진되었습니다.");
+    }
+    promoCounted = quote.promotion_code;
+  }
+  const compensatePromo = async () => {
+    if (couponConsumed) await db.prepare("UPDATE user_coupons SET is_used = 0 WHERE user_id = ? AND coupon_code = ?").bind(user.id, couponConsumed).run();
+    if (promoCounted) await db.prepare("UPDATE promotions SET used_count = used_count - 1 WHERE code = ? AND used_count > 0").bind(promoCounted).run();
+    couponConsumed = null;
+    promoCounted = null;
+  };
   const lockExpires = new Date(Date.now() + PAYMENT_WINDOW_MS).toISOString();
   const stmts: Stmt[] = [
     db.prepare(
@@ -674,10 +741,8 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
       ? [db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, 'COIN_SPENT', ?)")
           .bind(newId("coin"), user.id, -coinsMinor, id)]
       : []),
-    // A claimed coupon is single-use: booking with its code consumes the claim.
-    ...(quote.promotion_code
-      ? [db.prepare("UPDATE user_coupons SET is_used = 1 WHERE user_id = ? AND coupon_code = ? AND is_used = 0").bind(user.id, quote.promotion_code)]
-      : []),
+    // #14: the coupon claim + promo cap were consumed atomically before the
+    // batch (with compensation on failure) — nothing blind is written here.
     ...consentStmts(db, user.id, [
       { type: "REFUND_POLICY", version: txConsents.refundPolicy, agreed: true },
       { type: "PRIVACY", version: txConsents.privacy, agreed: true },
@@ -714,6 +779,7 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
         await db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, 'COIN_SPENT_COMPENSATED', ?)")
           .bind(newId("coin"), user.id, coinsMinor, winner.id).run();
       }
+      await compensatePromo();
       return { replayed: true, booking: await serializeBooking(env, (await getBooking(env, winner.id))!, user) };
     }
     if (coinsMinor > 0) {
@@ -722,6 +788,7 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
       await db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, 'COIN_SPENT_COMPENSATED', ?)")
         .bind(newId("coin"), user.id, coinsMinor, id).run();
     }
+    await compensatePromo();
     throw e;
   }
   return { replayed: false, booking: await serializeBooking(env, (await getBooking(env, id))!, user) };
@@ -775,6 +842,7 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
       db.prepare("UPDATE payments SET status = 'FAILED', failure_code = 'AMOUNT_MISMATCH', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(paymentId),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ? AND status = 'HELD'").bind(b.id),
       ...coinRestoreStmts(db, cur),
+      ...couponRestoreStmts(db, cur.user_id, cur.quote_id),
     ]);
     throw new HttpError(502, "PG_AMOUNT_MISMATCH", "결제 금액 검증에 실패하여 결제를 취소했습니다.");
   }
@@ -1000,7 +1068,11 @@ export async function applyRefundSucceeded(env: Env, b: BookingRow, pay: any, rf
   // The order always ends REFUNDED here: unwind the full remaining recognition
   // and journal any retained remainder as fee revenue, so deposits net to zero.
   // Ledger-state guards make customer pre-posted journals no-op (exactly-once).
-  const reversal = await recognitionReversalStmts(env, db, b, Number(b.paid_minor || 0));
+  // #17: on a SETTLED order the payout already relieved the payable — a
+  // reversal would push it negative. The seller claim funds the refund instead
+  // (including any retained remainder: nothing phantom stays on relieved books).
+  const settledRow = await db.prepare("SELECT id FROM marketplace_order_settlements WHERE booking_id = ? AND settlement_status = 'SETTLED' LIMIT 1").bind(b.id).first();
+  const reversal = settledRow ? [] : await recognitionReversalStmts(env, db, b, Number(b.paid_minor || 0), rf.id);
   const feeDue = await unrecordedFeeMinor(db, b.id, Number(b.paid_minor || 0), Number(b.refunded_minor || 0) + Number(rf.amount_minor || 0));
   await runBatch(db, [
     ...transition(db, b, "REFUNDED", actor, rf.source && rf.source !== "INTERNAL" ? `REFUND_${rf.source}` : null, {
@@ -1020,9 +1092,10 @@ export async function applyRefundSucceeded(env: Env, b: BookingRow, pay: any, rf
     // A fully refunded order must never stay payable (2026-11-09 audit [M]).
     ...((fullyRefunded || supplierGone) ? [db.prepare("UPDATE marketplace_order_settlements SET settlement_status = 'REFUNDED', fulfillment_status = 'FAILED' WHERE booking_id = ? AND settlement_status IN ('PENDING', 'HELD')").bind(b.id)] : []),
     ...(await coinRestoreStmtsOnce(db, b)),
+    ...couponRestoreStmts(db, b.user_id, b.quote_id),
   ]);
   // B3: a payout already made becomes a recovery claim against the seller.
-  await recordRecoveryIfSettled(db, b, rf.amount_minor, `지급 후 환불 환수 (refund ${rf.id})`);
+  await recordRecoveryIfSettled(db, b, Number(rf.amount_minor || 0) + (settledRow ? feeDue : 0), `지급 후 환불 환수 (refund ${rf.id})`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1047,6 +1120,7 @@ export async function cancelByCustomer(env: Env, user: AuthUser, bookingId: stri
       ...transition(db, b, "CANCELLED", actor, "CANCELLED_BEFORE_PAYMENT"),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
       ...coinRestoreStmts(db, b),
+      ...couponRestoreStmts(db, b.user_id, b.quote_id),
       ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "CANCELLED")),
       outboxInsert(db, "EMAIL", b.customer_email, "BOOKING_CANCELLED", { bookingId: b.id, bookingNumber: b.booking_number }),
     ]);
@@ -1071,16 +1145,24 @@ export async function cancelByCustomer(env: Env, user: AuthUser, bookingId: stri
     return serializeBooking(env, await mustGet(env, b.id), user);
   }
 
+  // B3/#17: money already moved (SETTLED) — park for approval BEFORE posting
+  // anything. Phantom reversals/fees on relieved accounts would strand; the
+  // operator replays via the admin refund path, which claims from the seller.
+  const cxSettled = await db.prepare("SELECT id FROM marketplace_order_settlements WHERE booking_id = ? AND settlement_status = 'SETTLED' LIMIT 1").bind(b.id).first();
+  if (cxSettled) {
+    await runBatch(db, transition(db, cur, "MANUAL_REVIEW_REQUIRED", { type: "SYSTEM", id: null }, "SETTLED_REFUND_NEEDS_APPROVAL"));
+    return serializeBooking(env, await mustGet(env, b.id), user);
+  }
   // Supplier cancelled: reverse revenue recognition, retain fee, refund the rest.
-  const wasRecognized = ["VOUCHER_ISSUED", "TICKETED"].includes(b.status);
-  const split = L.recognitionSplit(b.paid_minor, Math.round(Number(b.discount_amount_krw || 0)), supplier?.settlement_rate_bps ?? 9000);
+  const reversal = await recognitionReversalStmts(env, db, b, Number(b.paid_minor || 0));
   const ledger = [
-    ...(wasRecognized ? journalStmts(db, L.fulfilmentReversed(b.id, b.paid_minor, split), cur) : []),
+    ...reversal,
     ...journalStmts(db, L.cancellationFeeRetained(b.id, feeMinor), cur),
     db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
     db.prepare("UPDATE booking_items SET supplier_status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(b.id),
     // The coin portion is always restored in full on cancel; any fee comes from cash.
     ...coinRestoreStmts(db, b),
+    ...couponRestoreStmts(db, b.user_id, b.quote_id),
   ];
   if (refundMinor <= 0) {
     const hook = await loadPartnerHook(db, b.partner_id);
@@ -1105,6 +1187,7 @@ export async function expireBooking(env: Env, b: BookingRow, reason: string): Pr
       ...transition(env.DB, b, "EXPIRED", { type: "SYSTEM", id: null }, reason),
       env.DB.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ? AND status = 'HELD'").bind(b.id),
       ...coinRestoreStmts(env.DB, b),
+      ...couponRestoreStmts(env.DB, b.user_id, b.quote_id),
     ]);
   } catch (e) {
     if (!(e instanceof HttpError && e.code === "CONCURRENT_MODIFICATION")) throw e;
@@ -1144,6 +1227,7 @@ export async function reconcilePaymentByLookup(env: Env, paymentId: string): Pro
       env.DB.prepare("UPDATE payments SET status = 'FAILED', failure_code = 'NOT_CAPTURED', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(p.id),
       env.DB.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
       ...coinRestoreStmts(env.DB, b),
+      ...couponRestoreStmts(env.DB, b.user_id, b.quote_id),
     ]);
     return "RECONCILED";
   }
@@ -1151,14 +1235,35 @@ export async function reconcilePaymentByLookup(env: Env, paymentId: string): Pro
 }
 
 /** B3: a refund against an already-SETTLED order becomes an OPEN seller claim. */
-export async function recordRecoveryIfSettled(db: D1Database, b: Pick<BookingRow, "id" | "currency">, deltaMinor: number, reason: string): Promise<string | null> {
+export async function recordRecoveryIfSettled(db: D1Database, b: Pick<BookingRow, "id" | "currency" | "entity_id" | "supplier_id">, deltaMinor: number, reason: string): Promise<string | null> {
   if (!Number.isSafeInteger(deltaMinor) || deltaMinor <= 0) return null;
   const s = await db.prepare("SELECT id, seller_id FROM marketplace_order_settlements WHERE booking_id = ? AND settlement_status = 'SETTLED'").bind(b.id).first<{ id: string; seller_id: string }>();
   if (!s) return null;
   const id = newId("rcv");
-  await db.prepare("INSERT INTO settlement_recoveries (id, seller_id, booking_id, settlement_id, amount_minor, currency, reason, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN')")
-    .bind(id, s.seller_id, b.id, s.id, deltaMinor, (b as BookingRow).currency || "KRW", reason.slice(0, 300)).run();
+  // #17: the claim is a booked receivable (against the PG pool that funded the
+  // customer refund), extinguished when a later payout offsets it. The claim
+  // row and its journal land in one batch — never one without the other.
+  await db.batch([
+    db.prepare("INSERT INTO settlement_recoveries (id, seller_id, booking_id, settlement_id, amount_minor, currency, reason, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN')")
+      .bind(id, s.seller_id, b.id, s.id, deltaMinor, (b as BookingRow).currency || "KRW", reason.slice(0, 300)),
+    ...journalStmts(db, L.recoveryClaimRaised(id, deltaMinor), b as Pick<BookingRow, "id" | "entity_id" | "supplier_id" | "currency">),
+  ]);
   return id;
+}
+
+/**
+ * #17: settlement payout journal lines for marketplace.ts. The conditional
+ * SETTLED update is the single writer; these lines post right after its
+ * changes-check so a payout is journaled exactly once.
+ */
+export function settlementPayoutStmts(
+  db: D1Database,
+  b: Pick<BookingRow, "id" | "entity_id" | "supplier_id" | "currency">,
+  settlementId: string,
+  grossMinor: number,
+  cashMinor: number,
+): Stmt[] {
+  return journalStmts(db, L.settlementPaidOut(settlementId, grossMinor, cashMinor), b);
 }
 
 /** Legal walk from any live status to REFUNDED. Dead terminals → null (money-only). */
@@ -1229,6 +1334,9 @@ export async function applyExternalCancel(env: Env, bookingId: string, ext: Exte
     payment_status: fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED",
     ...(supplierCancelled ? { supplier_status: "CANCELLED" } : {}),
   };
+  // #17: same settled rule as applyRefundSucceeded — the claim (raised below)
+  // funds the refund; a reversal would double-relieve the paid-out payable.
+  const extSettled = await db.prepare("SELECT id FROM marketplace_order_settlements WHERE booking_id = ? AND settlement_status = 'SETTLED' LIMIT 1").bind(b.id).first();
   const money: Stmt[] = [
     db.prepare("INSERT INTO refunds (id, booking_id, payment_id, amount_minor, currency, reason, status, source, provider_refund_id, attempts) VALUES (?, ?, ?, ?, ?, ?, 'SUCCEEDED', 'EXTERNAL', ?, 1)")
       .bind(rfId, b.id, pay.id, delta, b.currency, reason.slice(0, 300), ext.transactionKey),
@@ -1238,7 +1346,7 @@ export async function applyExternalCancel(env: Env, bookingId: string, ext: Exte
     db.prepare("UPDATE refunds SET status = 'FAILED', last_error = 'EXTERNAL_CANCEL_SUPERSEDED', updated_at = CURRENT_TIMESTAMP WHERE payment_id = ? AND status = 'PENDING'").bind(pay.id),
     // Full external cancel unwinds the whole recognition; a partial one unwinds
     // only its slice so the live remainder stays recognized (never negative).
-    ...(await recognitionReversalStmts(env, db, b, fullyRefunded ? Number(b.paid_minor || 0) : delta)),
+    ...(extSettled ? [] : await recognitionReversalStmts(env, db, b, fullyRefunded ? Number(b.paid_minor || 0) : delta, rfId)),
     ...journalStmts(db, L.refundPaid(rfId, delta), b),
     outboxInsert(db, "EMAIL", b.customer_email, "REFUND_COMPLETED", { bookingId: b.id, bookingNumber: b.booking_number, amountMinor: delta }),
   ];
@@ -1248,6 +1356,7 @@ export async function applyExternalCancel(env: Env, bookingId: string, ext: Exte
       db.prepare("UPDATE marketplace_order_settlements SET settlement_status = 'REFUNDED', fulfillment_status = 'FAILED' WHERE booking_id = ? AND settlement_status IN ('PENDING', 'HELD')").bind(b.id),
       ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "REFUNDED", { refunded_minor: newRefunded, refund_id: rfId, external: true })),
       ...(await coinRestoreStmtsOnce(db, b)),
+      ...couponRestoreStmts(db, b.user_id, b.quote_id),
       outboxInsert(db, "EMAIL", b.customer_email, "BOOKING_CANCELLED", { bookingId: b.id, bookingNumber: b.booking_number }),
     );
     if (supplierCancelled) money.push(db.prepare("UPDATE booking_items SET supplier_status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(b.id));
@@ -1408,6 +1517,7 @@ export async function adminSupplierDecision(env: Env, decider: AuthUser, booking
         ...transition(db, b, "FAILED", actor, note || "OPERATOR_REJECTED_UNPAID"),
         db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
         ...coinRestoreStmts(db, b),
+        ...couponRestoreStmts(db, b.user_id, b.quote_id),
         outboxInsert(db, "EMAIL", b.customer_email, "SUPPLIER_REJECTED", { bookingId: b.id, bookingNumber: b.booking_number }),
       ]);
       return mustGet(env, b.id);
@@ -1486,6 +1596,7 @@ export async function adminForceCancel(env: Env, admin: AuthUser, bookingId: str
       ...transition(db, b, "CANCELLED", actor, "ADMIN_FORCE_CANCEL_UNPAID"),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
       ...coinRestoreStmts(db, b),
+      ...couponRestoreStmts(db, b.user_id, b.quote_id),
       ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "CANCELLED")),
       outboxInsert(db, "EMAIL", b.customer_email, "BOOKING_CANCELLED", { bookingId: b.id, bookingNumber: b.booking_number }),
     ]);

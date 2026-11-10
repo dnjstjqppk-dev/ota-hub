@@ -87,6 +87,43 @@ test("partial reversal unwinds only the refunded slice and stays balanced", () =
   assert.equal(L.fulfilmentReversedPartial("b", -5, split, paid), null);
 });
 
+test("#17: payout relieves the payable; recovery slices extinguish the claim", () => {
+  // Plain payout: payable out, cash out.
+  const p = L.settlementPaidOut("stl_1", 544500, 544500)!;
+  assert.ok(L.balanced(p.lines));
+  assert.equal(p.eventType, "SETTLEMENT_PAID_OUT");
+  // Payout with a recovery offset: the offset slice kills the receivable.
+  const q = L.settlementPaidOut("stl_2", 544500, 244500)!;
+  assert.ok(L.balanced(q.lines));
+  const recv = q.lines.find((l) => l.account === "SELLER_CLAIM_RECEIVABLE")!;
+  assert.equal(recv.direction, "CREDIT");
+  assert.equal(recv.amountMinor, 300000);
+  // Fully offset payout (no bank movement): payable vs receivable only.
+  const z = L.settlementPaidOut("stl_3", 100000, 0)!;
+  assert.ok(L.balanced(z.lines));
+  assert.ok(!z.lines.some((l) => l.account === "OPERATING_CASH"));
+  // The claim funds the customer refund via deposits (settled books are relieved).
+  const c = L.recoveryClaimRaised("rcv_1", 605000)!;
+  assert.ok(L.balanced(c.lines));
+  assert.equal(c.lines.find((l) => l.account === "CUSTOMER_DEPOSITS")!.direction, "CREDIT");
+  // Guards.
+  assert.equal(L.settlementPaidOut("s", 0, 0), null);
+  assert.equal(L.settlementPaidOut("s", 100, 101), null);
+  assert.equal(L.settlementPaidOut("s", 100, -1), null);
+  assert.equal(L.recoveryClaimRaised("c", 0), null);
+});
+
+test("#17: repeated reversals carry per-refund references (no unique clash)", () => {
+  const split = L.recognitionSplit(605000, 0, 9000);
+  const a = L.fulfilmentReversedPartial("b", 302500, split, 605000, "rfd_1")!;
+  const c = L.fulfilmentReversedPartial("b", 302500, split, 605000, "rfd_2")!;
+  assert.equal(a.referenceId, "rfd_1");
+  assert.equal(c.referenceId, "rfd_2");
+  assert.ok(L.balanced(a.lines) && L.balanced(c.lines));
+  const full = L.fulfilmentReversedPartial("b", 605000, split, 605000, "rfd_3")!;
+  assert.equal(full.referenceId, "rfd_3");
+});
+
 test("public reviewer names are masked", async () => {
   const { maskName } = await import("../../src/lib/crypto.ts");
   assert.equal(maskName("김민지"), "김*지");

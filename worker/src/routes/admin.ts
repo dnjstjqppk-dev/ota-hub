@@ -265,6 +265,11 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const strandedDeposits = await db.prepare(
       "SELECT l.booking_id, b.status, SUM(CASE WHEN l.direction='CREDIT' THEN l.amount_minor ELSE -l.amount_minor END) AS deposit FROM ledger_entries l JOIN bookings b ON b.id = l.booking_id WHERE l.account = 'CUSTOMER_DEPOSITS' AND b.status IN ('REFUNDED','CANCELLED','FAILED','VOUCHER_ISSUED','TICKETED','COMPLETED') GROUP BY l.booking_id HAVING deposit != 0",
     ).all();
+    // #17: a SETTLED order's supplier payable must be fully relieved by its
+    // payout journal — anything left is a missing/partial payout posting.
+    const payableStranded = await db.prepare(
+      "SELECT l.booking_id, SUM(CASE WHEN l.direction='CREDIT' THEN l.amount_minor ELSE -l.amount_minor END) AS payable FROM ledger_entries l JOIN marketplace_order_settlements s ON s.booking_id = l.booking_id AND s.settlement_status = 'SETTLED' WHERE l.account = 'SUPPLIER_PAYABLE' GROUP BY l.booking_id HAVING payable != 0",
+    ).all();
     // Legacy static-salt SHA-256 password hashes still on record (users + partners + staff).
     // Sunset is blocked on email delivery (Resend): forcing rotation now would lock out
     // users with no recovery path. Tracked here until then (2026-11-09 audit [M]).
@@ -273,8 +278,8 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
         + (SELECT COUNT(*) FROM partners WHERE LENGTH(password_hash) = 64 AND password_hash GLOB '[0-9a-f]*')
         + (SELECT COUNT(*) FROM partner_staff WHERE LENGTH(password_hash) = 64 AND password_hash GLOB '[0-9a-f]*') AS c`,
     ).first<{ c: number }>();
-    const ok = !unbalanced.results.length && !paidMismatch.results.length && !refundMismatch.results.length && !strandedDeposits.results.length;
-    return json({ success: true, ok, unbalancedJournals: unbalanced.results, paidMismatch: paidMismatch.results, refundMismatch: refundMismatch.results, strandedDeposits: strandedDeposits.results, legacyPasswordHashes: Number(legacy?.c || 0) });
+    const ok = !unbalanced.results.length && !paidMismatch.results.length && !refundMismatch.results.length && !strandedDeposits.results.length && !payableStranded.results.length;
+    return json({ success: true, ok, unbalancedJournals: unbalanced.results, paidMismatch: paidMismatch.results, refundMismatch: refundMismatch.results, strandedDeposits: strandedDeposits.results, payableStranded: payableStranded.results, legacyPasswordHashes: Number(legacy?.c || 0) });
   }
 
   if (path === "/api/v1/admin/suppliers" && method === "GET") {
@@ -990,6 +995,11 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const maxDiscount = b.maxDiscountKrw === undefined ? 0 : Number(b.maxDiscountKrw);
     const validFrom = b.validFrom ? str(b.validFrom, 30) : null;
     const validUntil = b.validUntil ? str(b.validUntil, 30) : null;
+    // #14: optional total-redemption cap (null = unlimited).
+    const usageLimit = b.usageLimit === undefined || b.usageLimit === null ? null : Number(b.usageLimit);
+    if (usageLimit !== null && (!Number.isSafeInteger(usageLimit) || usageLimit < 1)) {
+      throw new HttpError(400, "INVALID_USAGE_LIMIT", "사용 상한은 1 이상의 정수여야 합니다.");
+    }
     if (!/^[A-Z0-9-]{4,32}$/.test(code)) throw new HttpError(400, "INVALID_CODE", "코드는 4~32자의 영문 대문자·숫자·하이픈이어야 합니다.");
     if (!title) throw new HttpError(400, "TITLE_REQUIRED", "프로모션 제목을 입력해주세요.");
     if (!["PERCENTAGE", "FIXED_AMOUNT"].includes(discountType)) throw new HttpError(400, "INVALID_DISCOUNT_TYPE", "할인 방식은 PERCENTAGE 또는 FIXED_AMOUNT이어야 합니다.");
@@ -1007,18 +1017,28 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     if (dup) throw new HttpError(409, "CODE_EXISTS", "이미 등록된 코드입니다.");
     const id = newId("promo");
     await db.prepare(
-      "INSERT INTO promotions (id, code, title, discount_type, discount_value, min_order_amount_krw, max_discount_krw, valid_from, valid_until, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)"
-    ).bind(id, code, title, discountType, discountValue, minOrder, maxDiscount, validFrom, validUntil).run();
-    await audit(env, admin.id, "CREATE_PROMOTION", "PROMOTION", id, { code });
+      "INSERT INTO promotions (id, code, title, discount_type, discount_value, min_order_amount_krw, max_discount_krw, valid_from, valid_until, usage_limit, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)"
+    ).bind(id, code, title, discountType, discountValue, minOrder, maxDiscount, validFrom, validUntil, usageLimit).run();
+    await audit(env, admin.id, "CREATE_PROMOTION", "PROMOTION", id, { code, usageLimit });
     return json({ success: true, id, code }, 201);
   }
   m = path.match(/^\/api\/v1\/admin\/promotions\/([A-Za-z0-9_-]+)$/);
   if (m && method === "PATCH") {
     const b = await readJson(request);
-    if (typeof b.isActive !== "boolean") throw new HttpError(400, "INVALID_BODY", "isActive(boolean)가 필요합니다.");
-    const r = await db.prepare("UPDATE promotions SET is_active = ? WHERE id = ?").bind(b.isActive ? 1 : 0, m[1]).run();
-    if (!r.meta.changes) throw new HttpError(404, "PROMOTION_NOT_FOUND", "프로모션을 찾을 수 없습니다.");
-    await audit(env, admin.id, b.isActive ? "ENABLE_PROMOTION" : "DISABLE_PROMOTION", "PROMOTION", m[1], null);
+    if (typeof b.isActive !== "boolean" && b.usageLimit === undefined) throw new HttpError(400, "INVALID_BODY", "isActive(boolean) 또는 usageLimit(정수·null)이 필요합니다.");
+    const cur = await db.prepare("SELECT id, used_count FROM promotions WHERE id = ?").bind(m[1]).first<any>();
+    if (!cur) throw new HttpError(404, "PROMOTION_NOT_FOUND", "프로모션을 찾을 수 없습니다.");
+    if (b.usageLimit !== undefined) {
+      const lim = b.usageLimit === null ? null : Number(b.usageLimit);
+      if (lim !== null && (!Number.isSafeInteger(lim) || lim < 1)) throw new HttpError(400, "INVALID_USAGE_LIMIT", "사용 상한은 1 이상의 정수여야 합니다.");
+      if (lim !== null && lim < Number(cur.used_count || 0)) throw new HttpError(409, "LIMIT_BELOW_USAGE", "이미 사용된 수량보다 낮게 상한을 내릴 수 없습니다.");
+      await db.prepare("UPDATE promotions SET usage_limit = ? WHERE id = ?").bind(lim, m[1]).run();
+      await audit(env, admin.id, "UPDATE_PROMOTION_LIMIT", "PROMOTION", m[1], { usageLimit: lim });
+    }
+    if (typeof b.isActive === "boolean") {
+      await db.prepare("UPDATE promotions SET is_active = ? WHERE id = ?").bind(b.isActive ? 1 : 0, m[1]).run();
+      await audit(env, admin.id, b.isActive ? "ENABLE_PROMOTION" : "DISABLE_PROMOTION", "PROMOTION", m[1], null);
+    }
     return json({ success: true });
   }
 

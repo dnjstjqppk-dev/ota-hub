@@ -147,6 +147,10 @@ test("quote: server computes price; client price fields ignored; invalid inputs 
   assert.equal(r.data.quote.totalMinor, 605000); // 1 night × 550,000 + 10% tax
   assert.equal((await quote(A.token, { startDate: day(-1), endDate: day(1) })).status, 400);
   assert.equal((await quote(A.token, { travelers: { adults: 3 } })).data.code, "OCCUPANCY_EXCEEDED");
+  // #14: discount codes need a claim; window violations still surface as PROMO_*.
+  assert.equal((await quote(A.token, { promotionCode: "TEST10" })).data.code, "COUPON_NOT_CLAIMED");
+  assert.equal((await api("POST", "/api/v1/user/coupons/claim", { token: A.token, body: { code: "TEST10" } })).status, 200);
+  sql(`INSERT OR IGNORE INTO user_coupons (id, user_id, coupon_code, title, discount_type, discount_value, valid_until, is_used) VALUES ('ucp_e2e_exp_${rnd()}', '${A.id}', 'EXPIRED', 'x', 'FIXED_AMOUNT', 1, '', 0)`);
   assert.equal((await quote(A.token, { promotionCode: "EXPIRED" })).data.code, "PROMO_EXPIRED");
   const promo = await quote(A.token, { promotionCode: "TEST10" });
   assert.equal(promo.data.quote.discountMinor, 30000);
@@ -390,8 +394,8 @@ test("user data: price alerts / coupons / reviews are owner-scoped and verified"
   const al = await api("POST", "/api/v1/price-alerts", { token: A.token, body: { routeOrHotel: "ICN-NRT", targetPrice: 200000 } });
   await api("DELETE", `/api/v1/price-alerts/${al.data.id}`, { token: B.token });
   assert.equal((await api("GET", "/api/v1/price-alerts", { token: A.token })).data.alerts.length, 1);
-  assert.equal((await api("POST", "/api/v1/user/coupons/claim", { token: A.token, body: { code: "TEST10" } })).status, 200);
-  assert.equal((await api("POST", "/api/v1/user/coupons/claim", { token: A.token, body: { code: "TEST10" } })).data.code, "ALREADY_CLAIMED");
+  assert.equal((await api("POST", "/api/v1/user/coupons/claim", { token: B.token, body: { code: "TEST10" } })).status, 200);
+  assert.equal((await api("POST", "/api/v1/user/coupons/claim", { token: B.token, body: { code: "TEST10" } })).data.code, "ALREADY_CLAIMED");
   const rv = await api("POST", "/api/v1/reviews", { token: B.token, body: { targetId: "htl_seoul_01", rating: 5, comment: "unverified" } });
   assert.equal(rv.status, 400);
   assert.equal(rv.data.code, "REVIEW_BOOKING_REQUIRED");
@@ -559,6 +563,25 @@ test("C1/C2 onboarding loop: real doc upload, business check, then approval unlo
   assert.equal(ok.status, 200, JSON.stringify(ok.data));
   const dash = await api("GET", "/api/v1/partner/dashboard", { token: T });
   assert.equal(dash.status, 200, JSON.stringify(dash.data));
+});
+
+test("#15: partner product registration wires a supplier row and reports honest sellability", async () => {
+  const P = await approvedPartner("sup15");
+  const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 공급사행 투어", domain: "ACTIVITY", city: "서울", price: 50000, capacity: 10 } });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
+  assert.equal(reg.data.product.sellable, false);
+  assert.equal(reg.data.product.sellable_reason, "SUPPLIER_NOT_INTEGRATED");
+  const sup = sql(`SELECT adapter, integration_status, settlement_rate_bps FROM suppliers WHERE id = '${P.id}'`)[0];
+  assert.equal(sup.adapter, "direct_contract");
+  assert.equal(sup.integration_status, "NOT_INTEGRATED");
+  assert.ok(Number(sup.settlement_rate_bps) > 0 && Number(sup.settlement_rate_bps) <= 10000);
+  const itemId = reg.data.product.item_id;
+  const q0 = await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "ACTIVITY", itemId, startDate: day(96), travelers: { adults: 1 } } });
+  assert.equal(q0.data.code, "NOT_DIRECTLY_BOOKABLE", JSON.stringify(q0.data));
+  // Operator contracts the supplier → the same product becomes quotable.
+  sql(`UPDATE suppliers SET integration_status = 'LIVE' WHERE id = '${P.id}'`);
+  const q1 = await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "ACTIVITY", itemId, startDate: day(96), travelers: { adults: 1 } } });
+  assert.equal(q1.status, 201, JSON.stringify(q1.data));
 });
 
 test("partner extranet: orders are scoped to the partner; other partners cannot see or act on them", async () => {
@@ -931,6 +954,7 @@ test("promotions: operators issue codes that quotes honor", async () => {
   assert.equal((await api("POST", "/api/v1/admin/promotions", { token: ADMIN, body: { code, title: "dup", discountType: "FIXED_AMOUNT", discountValue: 1 } })).status, 409);
   const pub = await api("GET", "/api/v1/promotions");
   assert.ok(pub.data.promotions.some((p) => p.code === code), "active code publicly listed");
+  assert.equal((await api("POST", "/api/v1/user/coupons/claim", { token: A.token, body: { code } })).status, 200);
   const q = await quote(A.token, { promotionCode: code });
   assert.ok(q.data.quote.discountMinor > 0, "quote honors the new code");
   assert.ok(q.data.quote.totalMinor < 605000);
@@ -1037,6 +1061,54 @@ test("coins: spend at checkout, restore on cancel; claimed coupons consumed", as
   assert.equal(sql(`SELECT COALESCE(SUM(delta), 0) AS s FROM coin_ledger WHERE user_id = '${C.id}'`)[0].s, 20000, "ledger nets to the grant");
 });
 
+test("#13: full-coin quote is refused honestly (400, never a 500)", async () => {
+  const C = await register("zerotot");
+  const gross = (await quote(C.token)).data.quote.grossMinor;
+  assert.ok(gross > 1000);
+  assert.equal((await api("PATCH", `/api/v1/admin/users/${C.id}`, { token: ADMIN, headers: { "Idempotency-Key": idem() }, body: { coinAdjustment: gross, note: "e2e #13" } })).status, 200);
+  const z = await quote(C.token, { coinAmount: gross });
+  assert.equal(z.status, 400, JSON.stringify(z.data));
+  assert.equal(z.data.code, "ZERO_TOTAL_UNSUPPORTED");
+  const ok = await quote(C.token, { coinAmount: gross - 1 });
+  assert.equal(ok.status, 201, JSON.stringify(ok.data));
+  assert.equal(ok.data.quote.totalMinor, 1);
+});
+
+test("#14: coupons need a claim, consume once, restore on cancel, honor caps", async () => {
+  const U = await register("cpn14");
+  const code = `E2E-P14${Date.now().toString(36).toUpperCase()}${rnd().slice(0, 4).toUpperCase()}`;
+  const promo = await api("POST", "/api/v1/admin/promotions", { token: ADMIN, body: { code, title: "E2E #14", discountType: "FIXED_AMOUNT", discountValue: 1000, minOrderAmountKrw: 0, validFrom: day(0), validUntil: day(30) } });
+  assert.equal(promo.status, 201, JSON.stringify(promo.data));
+  const promoId = promo.data.id;
+  assert.equal((await quote(U.token, { promotionCode: code })).data.code, "COUPON_NOT_CLAIMED");
+  assert.equal((await api("POST", "/api/v1/user/coupons/claim", { token: U.token, body: { code } })).status, 200);
+  const q = (await quote(U.token, { promotionCode: code })).data.quote;
+  const b = (await book(U.token, q)).data.booking;
+  const used = () => sql(`SELECT is_used AS u FROM user_coupons WHERE user_id = '${U.id}' AND coupon_code = '${code}'`)[0].u;
+  const counted = () => sql(`SELECT used_count AS c FROM promotions WHERE code = '${code}'`)[0].c;
+  assert.equal(used(), 1, "booking consumes the claim");
+  assert.equal(counted(), 1, "booking counts the redemption");
+  assert.equal((await quote(U.token, { promotionCode: code })).data.code, "COUPON_ALREADY_USED");
+  assert.equal((await api("POST", `/api/v1/bookings/${b.id}/cancel`, { token: U.token })).data.booking.status, "CANCELLED");
+  assert.equal(used(), 0, "unpaid cancel restores the claim");
+  assert.equal(counted(), 0, "unpaid cancel releases the cap");
+  // Paid cancel restores too.
+  const q2 = (await quote(U.token, { promotionCode: code })).data.quote;
+  const b2 = (await book(U.token, q2)).data.booking;
+  assert.equal((await pay(U.token, b2)).data.booking.status, "VOUCHER_ISSUED");
+  assert.equal((await api("POST", `/api/v1/bookings/${b2.id}/cancel`, { token: U.token })).data.booking.status, "REFUNDED");
+  assert.equal(used(), 0, "paid cancel restores the claim");
+  assert.equal(counted(), 0, "paid cancel releases the cap");
+  // Cap of 1: a second user's quote is refused once the first books.
+  assert.equal((await api("PATCH", `/api/v1/admin/promotions/${promoId}`, { token: ADMIN, body: { usageLimit: 0 } })).data.code, "INVALID_USAGE_LIMIT");
+  assert.equal((await api("PATCH", `/api/v1/admin/promotions/${promoId}`, { token: ADMIN, body: { usageLimit: 1 } })).status, 200);
+  const V = await register("cpn14b");
+  assert.equal((await api("POST", "/api/v1/user/coupons/claim", { token: V.token, body: { code } })).status, 200);
+  const q3 = (await quote(U.token, { promotionCode: code })).data.quote;
+  assert.equal((await book(U.token, q3)).status, 201);
+  assert.equal((await quote(V.token, { promotionCode: code })).data.code, "PROMO_EXHAUSTED");
+});
+
 test("ledger: every journal balanced; no payment/refund/deposit mismatch (run last)", async () => {
   const r = await api("GET", "/api/v1/admin/reconciliation", { token: ADMIN });
   assert.equal(r.status, 200);
@@ -1044,6 +1116,7 @@ test("ledger: every journal balanced; no payment/refund/deposit mismatch (run la
   assert.deepEqual(r.data.paidMismatch, []);
   assert.deepEqual(r.data.refundMismatch, []);
   assert.deepEqual(r.data.strandedDeposits, []);
+  assert.deepEqual(r.data.payableStranded, []);
   assert.equal(r.data.ok, true);
 });
 
@@ -1923,6 +1996,13 @@ test("B3: post-payout refund becomes a recovery claim auto-deducted from the nex
   assert.equal(claims.length, 1);
   assert.equal(claims[0].status, "OPEN");
   assert.equal(claims[0].amount_minor, b1.totalMinor);
+  // #17: the claim is a booked receivable funding the refund (never phantom).
+  const cj = sql(`SELECT account, direction, amount_minor FROM ledger_entries WHERE booking_id = '${b1.id}' AND event_type = 'SETTLEMENT_RECOVERY_RAISED'`);
+  assert.equal(cj.length, 2);
+  assert.ok(cj.some((l) => l.account === "SELLER_CLAIM_RECEIVABLE" && l.direction === "DEBIT" && l.amount_minor === b1.totalMinor));
+  assert.ok(cj.some((l) => l.account === "CUSTOMER_DEPOSITS" && l.direction === "CREDIT" && l.amount_minor === b1.totalMinor));
+  const dep1 = sql(`SELECT COALESCE(SUM(CASE WHEN direction='CREDIT' THEN amount_minor ELSE -amount_minor END),0) AS d FROM ledger_entries WHERE booking_id = '${b1.id}' AND account = 'CUSTOMER_DEPOSITS'`)[0].d;
+  assert.equal(dep1, 0, "post-payout refund leaves no stranded deposits");
   assert.equal((await api("GET", "/api/v1/admin/marketplace/recoveries?status=OPEN", { token: ADMIN })).data.recoveries.length >= 1, true);
   // Next payout to the same seller auto-deducts the claim.
   const s2 = sql(`SELECT * FROM marketplace_order_settlements WHERE booking_id = '${b2.id}'`)[0];

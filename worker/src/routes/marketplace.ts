@@ -3,6 +3,7 @@ import { HttpError, json, readJson, str } from '../lib/http.ts';
 import { audit, requireAdmin, requirePartner } from '../lib/auth.ts';
 import { getMarketplaceFinancialSummary } from '../services/marketplace-service.ts';
 import { isFeatureEnabled } from '../services/feature-flag-service.ts';
+import { settlementPayoutStmts } from '../services/booking-service.ts';
 import { newId } from '../lib/crypto.ts';
 
 export async function handleMarketplace(request: Request, env: Env, url: URL): Promise<Response | null> {
@@ -122,6 +123,13 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     `).bind(now, payoutMethod, payoutReference, deducted, id).run();
     if (!r.meta.changes) {
       throw new HttpError(409, 'SETTLEMENT_NOT_PAYABLE', `지급할 수 없는 정산 상태입니다. (${before.settlement_status})`);
+    }
+    // #17: journal the payout (Dr SUPPLIER_PAYABLE / Cr OPERATING_CASH +
+    // recovery offset) exactly once, right after the single-writer update.
+    const gross = Number(before.seller_payout_minor) || 0;
+    if (gross > 0) {
+      const bctx = await env.DB.prepare('SELECT id, entity_id, supplier_id, currency FROM bookings WHERE id = ?').bind(before.booking_id).first<any>();
+      if (bctx) await env.DB.batch(settlementPayoutStmts(env.DB, bctx, id, gross, remaining));
     }
     if (recoveryStmts.length) await env.DB.batch(recoveryStmts);
     // Roll partner-seller payouts into their open monthly batch so the partner
@@ -275,7 +283,7 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
       mktId,
       domain,
       newDomainItemId,
-      `sup_${pId}`,
+      pId,
       `PARTNER:${pId}`,
       pId,
       companyName,
@@ -286,9 +294,21 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
       now
     ).run();
 
+    // #15: a registered product must resolve a supplier at quote time — create
+    // the partner's supplier row (idempotent across repeat registrations).
+    // It starts NOT_INTEGRATED: the product is registered but honestly NOT
+    // sellable until an operator contracts the supplier and marks it LIVE.
+    const prof = await env.DB.prepare('SELECT settlement_rate_bps FROM partner_profiles WHERE partner_id = ?').bind(pId).first<any>();
+    const commission = Number(prof?.settlement_rate_bps);
+    const sellerShareBps = Number.isSafeInteger(commission) ? Math.min(10000, Math.max(0, 10000 - commission)) : 9000;
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps)
+       VALUES (?, ?, 'ALL', 'direct_contract', 'NOT_INTEGRATED', 'AGENCY', ?)`
+    ).bind(pId, companyName, sellerShareBps).run();
+
     return json({
       success: true,
-      message: '3P 마켓플레이스 공급 상품이 성공적으로 등록되었습니다.',
+      message: '3P 마켓플레이스 공급 상품 등록이 접수되었습니다. 운영자의 계약 심사 후 판매가 개시됩니다.',
       product: {
         marketplace_id: mktId,
         item_id: newDomainItemId,
@@ -298,7 +318,10 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
         seller_name: companyName,
         retail_price_krw: retailPrice,
         commission_rate_bps: commissionBps,
-        seller_payout_krw: sellerPayout
+        seller_payout_krw: sellerPayout,
+        sellable: false,
+        sellable_reason: 'SUPPLIER_NOT_INTEGRATED',
+        next_step: '운영자가 공급사 계약을 심사하고 LIVE로 전환하면 견적·예약이 가능합니다.'
       }
     }, 201);
   }
