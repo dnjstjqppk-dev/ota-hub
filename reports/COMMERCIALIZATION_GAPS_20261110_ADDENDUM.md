@@ -40,15 +40,16 @@
 
 ## 신규 C — 운영·상품·인프라
 
-- C1. **파일 업로드 인프라 0.** R2 바인딩·업로드 엔드포인트 없음 → 사업자등록증·통장사본(`business_cert_url` 쓰기 경로 0), 상품 이미지, 리뷰/모먼트 사진 불가. 파트너가 서류 없이 승인됨 [L]
-- C2. 사업자 진위확인(국세청 상태조회) 없음 [S]
-- C3. **알림 4종뿐**(PASSWORD_RESET·PRICE_ALERT·BOOKING_CONFIRMED·FLIGHT_TICKETED). 결제완료·접수, 취소접수, 환불완료, 공급사 거절, 결제만료, 문의답변, 파트너 신규주문·승인/반려 없음. SMS/KAKAO는 enum만 있고 발송기 없음(`email-service.ts:117`). 기존 #120 확장 [M]
-- C4. 메일 처리량 상한: 크론 5분당 20건(`flushOutbox` limit 20) = 시간당 240건 [S]
-- C5. **일정 변경 기능 없음**인데 정책 화면에 "일정 변경 가능" 표시(`hotels/detail/[id].vue` PolicyNotice) [M]
-- C6. 고객에게 보이는 다단계 취소수수료(tiers)가 환불 계산엔 미적용 — 기존 #16을 표시·광고 문제로 격상 [M]
-- C7. **신규 상품 SEO 미렌더.** static preset이 하드코딩 ID만 prerender(`nuxt.config.ts:24-60`). 어드민/파트너 등록 상품은 SPA 셸만 나가는데 사이트맵엔 노출 [M]
-- C8. **상품 콘텐츠 전반 출처 문제.** 실존 호텔(시그니엘 등)에 Unsplash 스톡 이미지 148건 + 임의 편의시설(`hotelCatalog.ts:52-75`). 홈 "평점 높은 호텔"·trip-best 랭킹도 날조 평점 기반. 기존 #60보다 범위 넓음 [L]
-- C9. (미확인) Cloudflare 플랜·한도: PBKDF2 100k(`crypto.ts:68`), D1 단일 DB 용량, Time Travel 보존기간. 플랜에 따라 CPU 한도 초과 가능 [S]
+- [x] C1. **파일 업로드 인프라 0.** → 완료 (469200e / `0032_uploads.sql`, `routes/uploads.ts` R2 multipart, `lib/auth.ts` requirePartnerOnboarding, `routes/partner.ts` PENDING 로그인+프로필, `routes/admin.ts` DOCS_REQUIRED 승인게이트, 파트너 프론트 온보딩 유도+배너). 서류 자동 프로필 연결, 승인 전 업무 API ACTIVE 전용 유지. E2E C1 온보딩+C1/C2 루프(실제 업로드) 통과
+- [x] C2. 사업자 진위확인 → 완료 (469200e / `services/business-verify.ts` NTS API, POST /admin/partners/:id/verify-business NTS_API 01-only/MANUAL+note, BUSINESS_NOT_VERIFIED 승인게이트, `PartnersView.vue`). 유닛 nts + E2E 게이트 통과
+- [x] C3. **알림 4종뿐** → 완료 (469200e / `services/email-service.ts` 결제완료·취소완료·환불완료·공급사거절 4종 템플릿+트리거, SMS/KAKAO fail-closed). 유닛 email + E2E 유지 통과
+- [x] C4. 메일 처리량 상한 → 완료 (469200e / OUTBOX_BATCH_LIMIT 기본 50·상한 200). 크론 처리량 2.5배, E2E 유지 통과
+- [x] C5. **일정 변경 허위 표시** → 완료 (469200e / 상세·결제 화면 "일정 변경 가능" 문구·배지 제거, 취소 후 재예약 안내로 교체)
+- [x] C6. 다단계 취소수수료 미적용 → 완료 (469200e / `domain/pricing.ts` TIERED 정책, 견적 스냅샷+computeCancellation 동시 적용). 유닛 domain TIERED 통과
+- [x] C7. **신규 상품 SEO 미렌더** → 완료 (469200e / GET /api/v1/seo/snapshot + `scripts/gen-seo-snapshot.mjs` + `prerender-routes.json`/`generatedCatalog.json` + `nuxt.config.ts` SEO_DETAIL_ROUTES + `useGeneratedCatalog.ts` fallback). 클린 시드 기준 62 routes, build-all 718 routes prerender 성공
+- [x] C8. **상품 콘텐츠 출처 문제** → 완료 (469200e / `0033_content_cleanup.sql` DB 정리 + 정적 카탈로그 평점 null화 + `database/migrations/` 레거시 날조 시드 17건 삭제 + 리뷰 0건 "신규" UI). 잔존 Unsplash는 도시 에디토리얼 6건(이미지 출처 명시)만
+- [x] C9. Cloudflare CPU 한도 → 완료 (469200e / `PBKDF2_ITERATIONS` env 범위조절 + drift 시 자동 rehash + `GO_LIVE_CHECKLIST.md` 유료 플랜 전제 명시). 기본 100k 유지. 유닛 crypto 통과
+- [x] (원장 외 추가수정) B1/B7 환불 인식취소 분개 누락 → 완료 (469200e / `domain/ledger.ts` fulfilmentReversedPartial + `booking-service.ts` recognitionReversalStmts/unrecordedFeeMinor, applyRefundSucceeded·applyExternalCancel 장착). run당 stranded 6건 → 0건, E2E ledger 통과
 - [x] (`806b37c`) C10. `brand.ts:34` "GDS·NDC 실시간 직연동 발권" 상수 — 사용처 0이지만 허위, 삭제 [S]
 
 ## 코드 밖 필수 (기존 OPEN_READINESS §5 + 보강)
