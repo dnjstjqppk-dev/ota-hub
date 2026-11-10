@@ -257,3 +257,23 @@
 로컬 픽스처 `ptn_direct_01` NOT_INTEGRATED + `ect_direct_01` PENDING 유지 확인.
 미실시: 운영 D1 0022~0026 적용, 운영 verify(사용자 `TEST_ADMIN_PASSWORD` 필요),
 T41 실정산(미테스트·dry-run 기본).
+
+## 조치 현황 (2026-11-10 3차 — 정책대기 2종 해소, 미커밋)
+
+- **어필리에이트 부활** (`admin.ts` affiliate partners): `GET/POST
+  /api/v1/admin/affiliate/partners` + `PATCH .../:id` 신설 (어드민 전용, 감사로그).
+  검증은 런타임 게이트와 일치: 소문자 ID(조회가 소문자화), https 템플릿(`/out/`
+  404 조건), 24자+ 시크릿(postback 거부 조건). 시크릿은 쓰기 전용(목록·응답·
+  감사 상세에 절대 미포함). 마이그레이션 불필요(테이블 기존).
+- **ESIM/보험 명시적 미지원** (`services/catalog.ts` `assertQuotableDomain`):
+  견적·예약 머니게이트 양쪽에서 409 `ESIM_INSURANCE_QUOTE_UNSUPPORTED`
+  (기존 400 INVALID_DOMAIN 대신). plans 목록·레지스트리(SANDBOX_MOCK)는 유지.
+  checkout 차단 코드 목록에 추가 (`frontend-user/pages/checkout/index.vue`).
+- **테스트**: 유닛 63→64 (가드 단위), E2E 73→75 (제휴 등록→302→서명전환→
+  비활성차단 전주기 1종, 409+목록생존 1종). 신규 2종 RED→GREEN 입증
+  (404/400 → 구현 후 통과). smoke 테스트명 "dead"→"unregistered" 정정.
+
+검증(본 세션 관측): 유닛 64/64 · E2E **75/75** · tsc exit 0 · 브랜딩 PASS ·
+3포털 빌드 exit 0. 전체 E2E 1회차에서 기존 테스트 1건(payment double-click)
+일시 실패 → 단독·전체 재실행 모두 통과(본 변경 무관, HOTEL 견적 경로 미변경).
+미실시: 커밋·배포(승인 대기), 운영 verify, T41 실정산.
