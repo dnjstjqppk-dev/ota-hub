@@ -41,8 +41,8 @@ async function load() {
   error.value = ''
   try {
     const [k, w] = await Promise.all([
-      fetch(apiUrl('/partner/api-keys'), { headers: authHeaders() }),
-      fetch(apiUrl('/partner/webhook'), { headers: authHeaders() })
+      fetch(apiUrl('/partner/api-keys'), { credentials: 'include', headers: authHeaders() }),
+      fetch(apiUrl('/partner/webhook'), { credentials: 'include', headers: authHeaders() })
     ])
     if (!k.ok) throw new Error('API 키 목록을 불러오지 못했습니다.')
     keys.value = ((await k.json()).keys || []) as ApiKeyRow[]
@@ -65,6 +65,7 @@ async function issue() {
   freshKey.value = null
   try {
     const res = await fetch(apiUrl('/partner/api-keys'), {
+      credentials: 'include',
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ name: newName.value.trim() || 'Default' })
@@ -85,7 +86,7 @@ async function revoke(id: string) {
   if (!confirm('이 API 키를 폐기할까요? 이 키로 연동된 시스템의 호출이 즉시 중단됩니다.')) return
   revoking.value = id
   try {
-    const res = await fetch(apiUrl(`/partner/api-keys/${encodeURIComponent(id)}`), { method: 'DELETE', headers: authHeaders() })
+    const res = await fetch(apiUrl(`/partner/api-keys/${encodeURIComponent(id)}`), { credentials: 'include', method: 'DELETE', headers: authHeaders() })
     if (!res.ok) throw new Error('키 폐기에 실패했습니다.')
     await load()
   } catch (e) {
@@ -107,6 +108,7 @@ async function saveWebhook() {
   webhookMsg.value = ''
   try {
     const res = await fetch(apiUrl('/partner/webhook'), {
+      credentials: 'include',
       method: 'PUT',
       headers: authHeaders(),
       body: JSON.stringify({ webhookUrl: webhookUrl.value.trim() })
@@ -124,7 +126,7 @@ async function saveWebhook() {
 async function loadDeliveries() {
   deliveriesLoading.value = true
   try {
-    const res = await fetch(apiUrl('/partner/webhook/deliveries'), { headers: authHeaders() })
+    const res = await fetch(apiUrl('/partner/webhook/deliveries'), { credentials: 'include', headers: authHeaders() })
     if (res.ok) deliveries.value = ((await res.json()).deliveries || []) as any[]
   } catch {
     // deliveries are auxiliary; the main error surface stays on load()
@@ -137,7 +139,7 @@ async function sendTest() {
   testBusy.value = true
   webhookMsg.value = ''
   try {
-    const res = await fetch(apiUrl('/partner/webhook/test'), { method: 'POST', headers: authHeaders() })
+    const res = await fetch(apiUrl('/partner/webhook/test'), { credentials: 'include', method: 'POST', headers: authHeaders() })
     const j = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(j.error || '테스트 전송에 실패했습니다.')
     webhookMsg.value = '테스트 이벤트를 큐에 넣었어요. 아래 발송 이력에서 결과를 확인하세요.'
@@ -153,7 +155,7 @@ async function rotateSecret() {
   if (!confirm('서명 시크릿을 교체할까요? 기존 시크릿으로 검증하던 수신기는 즉시 실패합니다.')) return
   secretBusy.value = true
   try {
-    const res = await fetch(apiUrl('/partner/webhook/rotate'), { method: 'POST', headers: authHeaders() })
+    const res = await fetch(apiUrl('/partner/webhook/rotate'), { credentials: 'include', method: 'POST', headers: authHeaders() })
     const j = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(j.error || '시크릿 교체에 실패했습니다.')
     webhookSecret.value = j.secret || ''

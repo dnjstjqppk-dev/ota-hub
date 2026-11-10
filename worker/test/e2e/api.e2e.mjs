@@ -511,6 +511,102 @@ test("#27: affiliate outlink emitted only for mapped + active partners; click tr
   assert.ok(!("outlink_path" in det3), "outlink gone after restore");
 });
 
+test("#32/#33/#34: staff blocked from keys/webhook/bank; owner allowed", async () => {
+  resetLimiter("partner_login");
+  const P = await approvedPartner("sec32");
+  const O = P.token;
+  const staffEmail = `qa_stf_${rnd()}@local.test`;
+  const staffPw = "Passw0rd-QA-1";
+  const sc = await api("POST", "/api/v1/partner/staff", { token: O, body: { email: staffEmail, fullName: "QA Staff", role: "STAFF", password: staffPw } });
+  assert.equal(sc.status, 201, JSON.stringify(sc.data));
+  const S = (await api("POST", "/api/v1/partner/login", { body: { email: staffEmail, password: staffPw } })).data.token;
+  assert.ok(S, "staff login");
+  // #32: issuance + revocation are OWNER_ONLY.
+  assert.equal((await api("POST", "/api/v1/partner/api-keys", { token: S, body: { name: "staff-key" } })).data.code, "OWNER_ONLY");
+  const key = await api("POST", "/api/v1/partner/api-keys", { token: O, body: { name: "owner-key" } });
+  assert.equal(key.status, 201, JSON.stringify(key.data));
+  assert.equal((await api("DELETE", `/api/v1/partner/api-keys/${key.data.id}`, { token: S })).data.code, "OWNER_ONLY");
+  assert.equal((await api("DELETE", `/api/v1/partner/api-keys/${key.data.id}`, { token: O })).status, 200);
+  // #34: webhook read/write/rotate are OWNER_ONLY.
+  assert.equal((await api("GET", "/api/v1/partner/webhook", { token: S })).data.code, "OWNER_ONLY");
+  assert.equal((await api("PUT", "/api/v1/partner/webhook", { token: S, body: { webhookUrl: "https://evil.example.test/hook" } })).data.code, "OWNER_ONLY");
+  assert.equal((await api("POST", "/api/v1/partner/webhook/rotate", { token: S })).data.code, "OWNER_ONLY");
+  assert.equal((await api("GET", "/api/v1/partner/webhook", { token: O })).status, 200);
+  const rot = await api("POST", "/api/v1/partner/webhook/rotate", { token: O });
+  assert.equal(rot.status, 200, JSON.stringify(rot.data));
+  assert.ok(String(rot.data.secret || "").startsWith("whsec_"));
+  // #33: staff see ****+last4, owner sees the full account number.
+  const acct = "987-65-4321";
+  assert.equal((await api("PATCH", "/api/v1/partner/profile", { token: O, body: { bankName: "QA은행", bankAccountNumber: acct, bankAccountHolder: "QA" } })).status, 200);
+  const staffView = (await api("GET", "/api/v1/partner/profile", { token: S })).data.partner.profile.bank_account_number;
+  assert.ok(!staffView.includes("987-65"), `staff view masked: ${staffView}`);
+  assert.ok(staffView.endsWith("4321"), `mask keeps last 4: ${staffView}`);
+  assert.equal((await api("GET", "/api/v1/partner/profile", { token: O })).data.partner.profile.bank_account_number, acct);
+});
+
+test("#36: public marketplace catalog hides cost/margin/sourcing fields", async () => {
+  // Fixture uses a scratch item id (never htl_seoul_01): settlement
+  // attribution reads this table, so a real-item fixture would flip later
+  // tests from SUPPLIER_FALLBACK to CATALOG. Removed in finally regardless.
+  sql(`INSERT OR IGNORE INTO marketplace_catalog_items (id, domain_type, item_id, merchant_model, supplier_id, registered_by, seller_id, seller_name, fulfillment_provider, supply_cost_minor, retail_price_minor, commission_rate_bps, seller_payout_minor, platform_margin_minor, external_sku, source_url, status) VALUES ('mkt_e2e_36', 'HOTEL', 'htl_scratch_36', '3P', 'ptn_htl_01', 'PARTNER:ptn_htl_01', 'ptn_htl_01', 'E2E Seller', 'PARTNER', 50000, 99000, 1000, 89100, 9900, 'SKU-SECRET', 'https://internal.example.test/ingest', 'ACTIVE')`);
+  try {
+    const r = await api("GET", "/api/v1/marketplace/catalog?model=3P");
+    assert.equal(r.status, 200);
+    assert.ok(r.data.items.length >= 1, "fixture visible");
+    assert.ok(r.data.items.some((it) => it.id === "mkt_e2e_36"), "fixture row returned");
+    for (const it of r.data.items) {
+      for (const f of ["supply_cost_minor", "commission_rate_bps", "seller_payout_minor", "platform_margin_minor", "external_sku", "source_url", "registered_by", "supplier_id"]) {
+        assert.ok(!(f in it), `public field leaked: ${f}`);
+      }
+      assert.ok("retail_price_minor" in it && "seller_name" in it, "public pricing intact");
+    }
+  } finally {
+    sql("DELETE FROM marketplace_catalog_items WHERE id = 'mkt_e2e_36'");
+  }
+});
+
+test("#37: password change verifies current, kills sessions, forces re-login", async () => {
+  resetLimiter("register", "login");
+  const u = await register("pw37");
+  const old = "Passw0rd-QA-1";
+  const next = "NewPassw0rd-QA-2";
+  assert.equal((await api("POST", "/api/v1/auth/me/password", { body: { currentPassword: old, newPassword: next } })).status, 401);
+  assert.equal((await api("POST", "/api/v1/auth/me/password", { token: u.token, body: { currentPassword: "WrongPassw0rd-9", newPassword: next } })).data.code, "INVALID_CREDENTIALS");
+  assert.equal((await api("POST", "/api/v1/auth/me/password", { token: u.token, body: { currentPassword: old, newPassword: "short" } })).data.code, "WEAK_PASSWORD");
+  const ch = await api("POST", "/api/v1/auth/me/password", { token: u.token, body: { currentPassword: old, newPassword: next } });
+  assert.equal(ch.status, 200, JSON.stringify(ch.data));
+  assert.equal(ch.data.requireRelogin, true);
+  assert.equal((await api("GET", "/api/v1/auth/me", { token: u.token })).status, 401, "old session dead");
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: u.email, password: old } })).status, 401, "old password dead");
+  const nl = await api("POST", "/api/v1/auth/login", { body: { email: u.email, password: next } });
+  assert.equal(nl.status, 200, JSON.stringify(nl.data));
+  assert.equal((await api("GET", "/api/v1/auth/me", { token: nl.data.token })).status, 200, "new session works");
+});
+
+test("#35: logins issue HttpOnly jars; cookie alone authenticates", async () => {
+  resetLimiter("login", "partner_login");
+  const u = await register("jar35");
+  const fmt = (c) => (c || "").split(";")[0];
+  const ul = await fetch(BASE + "/api/v1/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: u.email, password: "Passw0rd-QA-1" }) });
+  const uSet = ul.headers.get("set-cookie") || "";
+  assert.ok(uSet.includes("getfortrip_jwt=") && /httponly/i.test(uSet) && /samesite=lax/i.test(uSet), uSet);
+  const me = await fetch(BASE + "/api/v1/auth/me", { headers: { Cookie: fmt(uSet) } });
+  assert.equal(me.status, 200, "user jar authenticates without Bearer");
+  const al = await fetch(BASE + "/api/v1/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }) });
+  const aSet = al.headers.get("set-cookie") || "";
+  assert.ok(aSet.includes("getfortrip_admin_jwt=") && /httponly/i.test(aSet), aSet);
+  const pe = `qa_ptn_jarc_${rnd()}@local.test`;
+  await api("POST", "/api/v1/partner/register", { body: { email: pe, password: "Passw0rd-QA-1", companyName: "QA jar", businessNumber: "000-00-00000" } });
+  const plog = await fetch(BASE + "/api/v1/partner/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: pe, password: "Passw0rd-QA-1" }) });
+  const pSet = plog.headers.get("set-cookie") || "";
+  assert.ok(pSet.includes("getfortrip_partner_jwt=") && /httponly/i.test(pSet), pSet);
+  const pme = await fetch(BASE + "/api/v1/partner/profile", { headers: { Cookie: fmt(pSet) } });
+  assert.equal(pme.status, 200, "partner jar authenticates without Bearer");
+  const lo = await fetch(BASE + "/api/v1/partner/logout", { method: "POST", headers: { Cookie: fmt(pSet) } });
+  assert.equal(lo.status, 200);
+  assert.ok((lo.headers.get("set-cookie") || "").includes("Max-Age=0"), "logout clears the jar");
+});
+
 test("affiliate postback: unconfigured partner rejected, cannot touch bookings", async () => {
   const q = (await quote(A.token)).data.quote;
   const b = (await book(A.token, q)).data.booking;

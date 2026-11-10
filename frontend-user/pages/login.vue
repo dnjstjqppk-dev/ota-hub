@@ -43,6 +43,7 @@ const handleLogin = async () => {
       }
     }>(loginUrl, {
       method: 'POST',
+      credentials: 'include', // accept the HttpOnly session jar (#35)
       body: {
         email: email.value,
         password: password.value
@@ -70,6 +71,7 @@ const handleLogin = async () => {
     <form class="space-y-4" novalidate @submit.prevent="handleLogin">
       <label class="block"><span class="field-label">이메일</span><input v-model="email" type="email" autocomplete="email" required class="w-full rounded-xl border border-line bg-surface px-3.5 py-3 text-sm text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus" placeholder="name@example.com" /></label>
       <label class="block"><span class="field-label">비밀번호</span><input v-model="password" type="password" autocomplete="current-password" required class="w-full rounded-xl border border-line bg-surface px-3.5 py-3 text-sm text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus" /></label>
+      <p v-if="route.query.changed === '1'" class="rounded-xl bg-success-soft px-3.5 py-2.5 text-sm font-medium text-success" role="status">비밀번호를 변경했어요. 새 비밀번호로 로그인해 주세요.</p>
       <div class="flex justify-end text-sm"><NuxtLink to="/forgot-password" class="font-semibold text-primary hover:underline">비밀번호를 잊으셨나요?</NuxtLink></div>
       <p v-if="errorMessage" class="flex items-start gap-2 rounded-xl bg-danger-soft px-3.5 py-2.5 text-sm font-medium text-danger" role="alert"><AppIcon name="close" :size="16" class="mt-0.5" />{{ errorMessage }}</p>
       <button type="submit" :disabled="isSubmitting" class="btn-primary w-full py-3 text-base">{{ isSubmitting ? '로그인 중…' : '로그인' }}</button>

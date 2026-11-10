@@ -80,6 +80,7 @@ const fetchOrders = async () => {
     if (debouncedQuery.value) p.set('q', debouncedQuery.value)
     p.set('page', String(page.value))
     const res = await fetch(apiUrl(`/partner/orders?${p}`), {
+      credentials: 'include',
       headers: { Authorization: `Bearer ${token}` }
     })
     if (!res.ok) throw new Error('주문 목록을 불러오지 못했습니다.')
@@ -113,6 +114,7 @@ const handleOrderAction = async (order: OrderRow, action: 'confirm' | 'reject') 
   try {
     const token = partnerToken()
     const res = await fetch(apiUrl(`/partner/orders/${order.id}/${action}`), {
+      credentials: 'include',
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ supplierReference })

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { apiUrl } from '../config/api'
+import { apiUrl, savePartnerInfo, setPartnerMemoryToken } from '../config/api'
 
 const router = useRouter()
 // Demo credentials only in local development — never prefilled in production builds.
@@ -18,10 +18,12 @@ const handleLogin = async () => {
   try {
     const res = await fetch(apiUrl('/partner/login'), {
       method: 'POST',
+      credentials: 'include', // accept the server's HttpOnly partner jar (#35)
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: email.value.trim().toLowerCase(),
-        password: password.value
+        password: password.value,
+        remember: rememberMe.value
       })
     })
 
@@ -30,12 +32,10 @@ const handleLogin = async () => {
       throw new Error(data.error || '로그인에 실패했습니다.')
     }
 
-    const store = rememberMe.value ? localStorage : sessionStorage
-    store.setItem('getfortrip_partner_token', data.token)
-    store.setItem('getfortrip_partner_info', JSON.stringify(data.partner))
-
-    // Set partner cookie for edge authorization
-    document.cookie = `getfortrip_partner_jwt=${data.token}; path=/; max-age=86400; SameSite=Lax`
+    // #35: token to memory only; the jar (7-day when remembered, session
+    // otherwise) is set HttpOnly by the server — never document.cookie.
+    setPartnerMemoryToken(data.token)
+    savePartnerInfo(data.partner, rememberMe.value)
 
     // C1: PENDING owners finish onboarding (profile + docs) before they can
     // use the extranet; ACTIVE accounts go to the dashboard.

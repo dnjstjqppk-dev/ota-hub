@@ -34,6 +34,24 @@ async function save() {
   msg.value = { ok: true, text: '회원 정보를 저장했어요.' }
 }
 function logout() { auth.logout(); navigateTo('/') }
+// #37: password change kills every session (server resets + revokes), so the
+// user always lands back on login with the new password.
+const curPw = ref('')
+const newPw = ref('')
+const newPw2 = ref('')
+const pwBusy = ref(false)
+const pwMsg = ref<{ ok: boolean; text: string } | null>(null)
+async function changePassword() {
+  pwMsg.value = null
+  if (!curPw.value) { pwMsg.value = { ok: false, text: '현재 비밀번호를 입력해 주세요.' }; return }
+  if (newPw.value !== newPw2.value) { pwMsg.value = { ok: false, text: '새 비밀번호가 일치하지 않아요.' }; return }
+  pwBusy.value = true
+  const r = await apiFetch('/auth/me/password', { method: 'POST', body: { currentPassword: curPw.value, newPassword: newPw.value } })
+  pwBusy.value = false
+  if (!r.ok) { pwMsg.value = { ok: false, text: r.data.error || '변경하지 못했어요.' }; return }
+  auth.logout()
+  navigateTo({ path: '/login', query: { changed: '1' } })
+}
 // A1: confirmed, password-verified withdrawal. Session is cleared on success.
 const withdrawing = ref(false)
 const withdrawPw = ref('')
@@ -64,6 +82,15 @@ const FIELD = 'w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 tex
       <div class="flex flex-wrap gap-2 pt-1">
         <button type="submit" class="btn-primary" :disabled="saving">{{ saving ? '저장 중…' : '저장' }}</button>
       </div>
+    </form>
+    <form class="card mt-6 max-w-xl space-y-4 p-5 sm:p-6" novalidate @submit.prevent="changePassword">
+      <h2 class="text-sm font-bold text-ink">비밀번호 변경</h2>
+      <p class="text-xs text-ink-subtle">변경하면 모든 기기에서 로그아웃되고 새 비밀번호로 다시 로그인해야 해요.</p>
+      <label class="block"><span class="field-label">현재 비밀번호</span><input v-model="curPw" type="password" autocomplete="current-password" :class="FIELD" data-testid="pw-current" /></label>
+      <label class="block"><span class="field-label">새 비밀번호 (10자 이상, 영문+숫자)</span><input v-model="newPw" type="password" autocomplete="new-password" :class="FIELD" data-testid="pw-new" /></label>
+      <label class="block"><span class="field-label">새 비밀번호 확인</span><input v-model="newPw2" type="password" autocomplete="new-password" :class="FIELD" data-testid="pw-new2" /></label>
+      <p v-if="pwMsg" :class="['rounded-xl px-4 py-2.5 text-sm font-medium', pwMsg.ok ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger']" :role="pwMsg.ok ? 'status' : 'alert'">{{ pwMsg.text }}</p>
+      <button type="submit" class="btn-primary" :disabled="pwBusy" data-testid="pw-submit">{{ pwBusy ? '변경 중…' : '비밀번호 변경' }}</button>
     </form>
     <button type="button" class="mt-6 flex items-center gap-2 text-sm font-semibold text-ink-muted hover:text-danger" @click="logout"><AppIcon name="logout" :size="18" />로그아웃</button>
     <details class="card mt-6 max-w-xl border-danger/30 p-5 sm:p-6">

@@ -199,9 +199,25 @@ export async function rateLimit(request: Request, env: Env, bucket: string, limi
   }
 }
 
-export function authCookie(token: string, env: Env): string {
+export type AuthJar = "getfortrip_jwt" | "getfortrip_admin_jwt" | "getfortrip_partner_jwt";
+
+/**
+ * #35: HttpOnly session cookie. One jar per portal so a user, an admin, and a
+ * partner session coexist in one browser. Host-only (no Domain): the browser
+ * returns it to the API host on same-site requests, which covers the launch
+ * topology (getfortrip.com + subdomains); cross-site staging falls back to
+ * the in-memory Bearer token (re-login after reload).
+ */
+export function authCookie(token: string, env: Env, name: AuthJar = "getfortrip_jwt", maxAgeSec = 604800): string {
   const secure = env.APP_ENV === "development" || env.APP_ENV === "test" ? "" : " Secure;";
-  return `getfortrip_jwt=${token}; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=604800`;
+  const age = maxAgeSec > 0 ? ` Max-Age=${maxAgeSec};` : "";
+  return `${name}=${token}; Path=/; HttpOnly;${secure} SameSite=Lax;${age}`;
+}
+
+/** Clearing must mirror the set attributes or the browser keeps the cookie. */
+export function clearAuthCookie(env: Env, name: AuthJar): string {
+  const secure = env.APP_ENV === "development" || env.APP_ENV === "test" ? "" : " Secure;";
+  return `${name}=; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=0`;
 }
 
 export async function audit(env: Env, adminId: string, action: string, targetType: string, targetId: string, details: unknown): Promise<void> {

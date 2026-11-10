@@ -2,7 +2,7 @@ import type { Env } from "../env.ts";
 import { isNonProduction } from "../env.ts";
 import { HttpError, clientIp, json, readJson, str } from "../lib/http.ts";
 import { hashPassword, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
-import { audit, authCookie, getAuthUser, jwtSecret, rateLimit, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
+import { audit, authCookie, clearAuthCookie, getAuthUser, jwtSecret, rateLimit, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
 import { consentStmts, currentVersions } from "../lib/consents.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 
@@ -75,13 +75,44 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     if (v.needsRehash) await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(await hashPassword(password, resolvePbkdf2Iterations(env)), u.id).run();
     if (u.status && u.status !== "ACTIVE") throw new HttpError(403, "ACCOUNT_SUSPENDED", u.status === "DELETED" ? "탈퇴한 계정입니다." : "이용이 정지된 계정입니다. 고객센터에 문의해주세요.");
     if (u.role === "ADMIN") await audit(env, u.id, "ADMIN_LOGIN_SUCCESS", "AUTH", email, { ip: request.headers.get("CF-Connecting-IP") });
-    const s = await issueSession(env, u);
-    return json({ success: true, token: s.token, user: publicUser(u) }, 200, { "Set-Cookie": s.cookie });
+    // #35: the admin portal gets its own jar so it never clobbers a user session in the same browser.
+    const jar = path === "/api/v1/admin/login" ? "getfortrip_admin_jwt" : "getfortrip_jwt";
+    const adminToken = await signJwt({ id: u.id, email: u.email, fullName: u.full_name, role: u.role || "USER", tier: u.tier }, jwtSecret(env));
+    return json({ success: true, token: adminToken, user: publicUser(u) }, 200, { "Set-Cookie": authCookie(adminToken, env, jar as "getfortrip_jwt" | "getfortrip_admin_jwt") });
   }
 
   if (path === "/api/v1/auth/logout" && method === "POST") {
     await revokeCurrentToken(request, env);
-    return json({ success: true }, 200, { "Set-Cookie": "getfortrip_jwt=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" });
+    return json({ success: true }, 200, { "Set-Cookie": clearAuthCookie(env, "getfortrip_jwt") });
+  }
+
+  if (path === "/api/v1/admin/logout" && method === "POST") {
+    await revokeCurrentToken(request, env);
+    return json({ success: true }, 200, { "Set-Cookie": clearAuthCookie(env, "getfortrip_admin_jwt") });
+  }
+
+  // #37: authenticated password change. Verifies the current password (a live
+  // session alone is not enough), then kills every session including this one:
+  // the client must re-login with the new password (requireRelogin).
+  if (path === "/api/v1/auth/me/password" && method === "POST") {
+    const a = await getAuthUser(request, env);
+    if (!a) throw new HttpError(401, "UNAUTHORIZED", "로그인이 필요합니다.");
+    await rateLimit(request, env, "pwchange", 10, 3600);
+    const body = await readJson(request);
+    const current = String(body.currentPassword || "");
+    const next = String(body.newPassword || "");
+    if (!current) throw new HttpError(400, "PASSWORD_REQUIRED", "현재 비밀번호를 입력해주세요.");
+    validatePassword(next);
+    const full = await env.DB.prepare("SELECT password_hash FROM users WHERE id = ?").bind(a.id).first<{ password_hash: string }>();
+    if (!full || !(await verifyPasswordDetailed(current, full.password_hash)).ok) {
+      throw new HttpError(401, "INVALID_CREDENTIALS", "현재 비밀번호가 일치하지 않습니다.");
+    }
+    await env.DB.prepare("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .bind(await hashPassword(next, resolvePbkdf2Iterations(env)), a.id).run();
+    await revokeCurrentToken(request, env);
+    await resetSubjectSessions(env, a.id);
+    await audit(env, a.id, "PASSWORD_CHANGED", "AUTH", a.email, { ip: request.headers.get("CF-Connecting-IP") });
+    return json({ success: true, requireRelogin: true }, 200, { "Set-Cookie": clearAuthCookie(env, "getfortrip_jwt") });
   }
 
   if (path === "/api/v1/auth/me" && method === "GET") {

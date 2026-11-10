@@ -28,6 +28,7 @@ const fetchStaff = async () => {
   try {
     const token = partnerToken()
     const res = await fetch(apiUrl('/partner/staff'), {
+      credentials: 'include',
       headers: { Authorization: `Bearer ${token}` }
     })
     if (!res.ok) throw new Error('직원 목록을 불러오지 못했습니다.')
@@ -47,6 +48,7 @@ const handleAddStaff = async () => {
   try {
     const token = partnerToken()
     const res = await fetch(apiUrl('/partner/staff'), {
+      credentials: 'include',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -90,6 +92,7 @@ async function patchStaff(s: StaffRow, patch: { role?: string; isActive?: boolea
   error.value = ''
   try {
     const res = await fetch(apiUrl(`/partner/staff/${s.id}`), {
+      credentials: 'include',
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken()}` },
       body: JSON.stringify(patch)

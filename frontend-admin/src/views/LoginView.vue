@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Admin sign-in. Uses the shared /auth/login and admits only accounts whose role is ADMIN. */
+/** Admin sign-in (#35: dedicated /admin/login jar + memory token, never localStorage). Admits only ADMIN accounts. */
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiUrl } from '../config/api'
@@ -18,8 +18,9 @@ async function submit() {
   if (!email.value.trim() || !password.value) { error.value = '이메일과 비밀번호를 입력해 주세요.'; return }
   busy.value = true
   try {
-    const res = await fetch(apiUrl('/auth/login'), {
+    const res = await fetch(apiUrl('/admin/login'), {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.value.trim(), password: password.value })
     })

@@ -63,12 +63,12 @@
 
 ### 보안·권한
 
-32. `partner.ts:626,232` — STAFF가 API키 발급 가능, 키세션은 OWNER 기본. 권한상승 → 발급+폐기를 needOwner로 [S]
-33. `partner.ts:296,551` — 프로필 은행계좌를 전 STAFF에 노출(정산은 마스킹) → OWNER 외 마스크 [S]
-34. `partner.ts:649-671,640` — 웹훅 시크릿/URL/로테이션+키삭제가 전 STAFF 가능 → OWNER 전용 [S]
-35. 3포털 auth 저장소 + `crypto.ts:124` — JWT localStorage 7일. XSS 1건에 탈취 → 서버가 이미 굽는 HttpOnly 쿠키로 전환 [M]
-36. `marketplace.ts:17` — 공개 SELECT * 로 원가/마진/수수료 노출 → 공개 컬럼 allowlist [S]
-37. `auth.ts:100-124` — 비밀번호 변경 API 없음(리셋은 메일없으면 no-op) → 로그인후 변경 API + 출시 시 메일 필수 [M]
+[x] 32. STAFF API키 발급 권한상승 → 완료 (6d / `partner.ts` API키 POST/DELETE에 needOwner, STAFF는 OWNER_ONLY). E2E staff-vs-owner 통과
+[x] 33. 프로필 은행계좌 전 STAFF 노출 → 완료 (6d / OWNER 외 ****+뒤4자리 마스크). E2E 통과
+[x] 34. 웹훅 전 STAFF 가능 → 완료 (6d / 웹훅 GET/PUT/rotate OWNER 전용). E2E 통과
+[x] 35. JWT localStorage 7일 → 완료 (6d / HttpOnly jar 3종 발급+메모리 토큰, localStorage 영속 제거; 쿠키 단독 인증. 잔여: 활성세션 XSS 시 메모리 토큰 노출 가능 — 7일 영속 탈취는 제거, CSRF 토큰은 후속 범위)
+[x] 36. 공개 카탈로그 원가/마진 노출 → 완료 (6d / `marketplace.ts` 공개 SELECT allowlist: supply_cost/commission/payout/margin/external_sku/source_url/registered_by/supplier_id 숨김, retail_price/seller_name 유지). E2E 통과
+[x] 37. 비밀번호 변경 API 없음 → 완료 (6d / POST `/api/v1/auth/me/password` 현비번 검증+정책+세션파기+requireRelogin+jar 삭제 + 유저 프로필 UI. 파트너 프로필 비번 UI 없음 → 범위 외)
 
 ### 이행·공급
 

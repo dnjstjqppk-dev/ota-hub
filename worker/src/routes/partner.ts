@@ -1,6 +1,6 @@
 import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
-import { jwtSecret, rateLimit, requirePartner, requirePartnerOnboarding, resetSubjectSessions } from "../lib/auth.ts";
+import { authCookie, clearAuthCookie, jwtSecret, rateLimit, requirePartner, requirePartnerOnboarding, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
 import { hashPassword, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 import { EMAIL_RE, validatePasswordPolicy } from "./auth.ts";
@@ -123,6 +123,8 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
         jwtSecret(env),
         24 * 3600
       );
+      // #35: HttpOnly jar; "remember me" persists 7 days, otherwise a session cookie.
+      const staffJarAge = b.remember === true ? 604800 : 0;
       return json({
         success: true,
         token: staffToken,
@@ -136,7 +138,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
           staffRole: s.role,
           staffName: s.full_name,
         },
-      });
+      }, 200, { "Set-Cookie": authCookie(staffToken, env, "getfortrip_partner_jwt", staffJarAge) });
     }
 
     const v = await verifyPasswordDetailed(pass, p.password_hash, resolvePbkdf2Iterations(env));
@@ -157,6 +159,8 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       24 * 3600
     );
 
+    // #35: HttpOnly jar; "remember me" persists 7 days, otherwise a session cookie.
+    const jarAge = b.remember === true ? 604800 : 0;
     return json({
       success: true,
       token,
@@ -168,7 +172,12 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
         settlementRateBps: p.rate_bps,
         profileStatus: p.profile_status,
       },
-    });
+    }, 200, { "Set-Cookie": authCookie(token, env, "getfortrip_partner_jwt", jarAge) });
+  }
+
+  if (path === "/api/v1/partner/logout" && method === "POST") {
+    await revokeCurrentToken(request, env);
+    return json({ success: true }, 200, { "Set-Cookie": clearAuthCookie(env, "getfortrip_partner_jwt") });
   }
 
   if (path === "/api/v1/partner/forgot-password" && method === "POST") {
@@ -300,6 +309,11 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     // Explicit allowlist: password_hash and legacy api_key must never reach the client (2026-11-09 audit [M]).
     const p = await db.prepare("SELECT id, email, company_name, partner_type, business_number, contact_phone, settlement_rate, webhook_url, is_active, created_at FROM partners WHERE id = ?").bind(pId).first<any>();
     const pr = await db.prepare("SELECT partner_id, status, representative_name, bank_name, bank_account_number, bank_account_holder, tax_invoice_email, business_cert_url, bank_cert_url, business_verified_at, business_verify_method, settlement_rate_bps, approved_by, approved_at, rejection_reason, created_at, updated_at FROM partner_profiles WHERE partner_id = ?").bind(pId).first<any>();
+    // #33: staff see the settlement-style mask (**** + last 4); only the owner reads the full number.
+    if (pr && !isOwner && pr.bank_account_number) {
+      const acct = String(pr.bank_account_number);
+      pr.bank_account_number = acct.length > 4 ? `${"*".repeat(Math.max(0, acct.length - 4))}${acct.slice(-4)}` : "****";
+    }
     return json({ success: true, partner: { ...p, profile: pr } });
   }
 
@@ -667,6 +681,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   }
 
   if (path === "/api/v1/partner/api-keys" && method === "POST") {
+    needOwner(); // #32: key issuance mints a bearer credential — OWNER only.
     const b = await readJson(request);
     const name = str(b.name, 80) || "Default";
     const count = await db.prepare("SELECT COUNT(*) AS c FROM partner_api_keys WHERE partner_id = ? AND is_active = 1").bind(pId).first<{ c: number }>();
@@ -682,6 +697,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
   m = path.match(/^\/api\/v1\/partner\/api-keys\/([A-Za-z0-9_-]{4,64})$/);
   if (m && method === "DELETE") {
+    needOwner(); // #32/#34: revocation kills integrations — OWNER only.
     const r = await db.prepare("UPDATE partner_api_keys SET is_active = 0, revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND partner_id = ? AND is_active = 1")
       .bind(m[1], pId).run();
     if (!r.meta.changes) throw new HttpError(404, "KEY_NOT_FOUND", "API 키를 찾을 수 없습니다.");
@@ -690,11 +706,13 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
   // 11. Partner order-event webhook URL (booking.created / booking.cancelled POST here as JSON)
   if (path === "/api/v1/partner/webhook" && method === "GET") {
+    needOwner(); // #34: the response carries the signing secret — OWNER only.
     const pr = await db.prepare("SELECT webhook_url, webhook_secret FROM partner_profiles WHERE partner_id = ?").bind(pId).first<{ webhook_url: string | null; webhook_secret: string | null }>();
     return json({ success: true, webhookUrl: pr?.webhook_url || null, secret: pr?.webhook_secret || null });
   }
 
   if (path === "/api/v1/partner/webhook" && (method === "PUT" || method === "PATCH")) {
+    needOwner(); // #34: redirecting order events — OWNER only.
     const b = await readJson(request);
     const webhookUrl = str(b.webhookUrl, 500);
     if (webhookUrl) {
@@ -712,6 +730,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   }
 
   if (path === "/api/v1/partner/webhook/rotate" && method === "POST") {
+    needOwner(); // #34: rotation invalidates the shared secret — OWNER only.
     await rateLimit(request, env, "webhook_rotate", 10, 3600);
     const secret = `whsec_${randomToken(24)}`;
     await db.prepare("UPDATE partner_profiles SET webhook_secret = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE partner_id = ?").bind(secret, pId).run();

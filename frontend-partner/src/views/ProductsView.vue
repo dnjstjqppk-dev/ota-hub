@@ -34,7 +34,7 @@ async function openEdit(p: ProductRow) {
   editRoomsLoaded.value = false
   if (p.domain_type === 'HOTEL') {
     try {
-      const res = await fetch(apiUrl(`/partner/products/${p.id}`), { headers: { Authorization: `Bearer ${partnerToken()}` } })
+      const res = await fetch(apiUrl(`/partner/products/${p.id}`), { credentials: 'include', headers: { Authorization: `Bearer ${partnerToken()}` } })
       const j = await res.json().catch(() => ({}))
       if (res.ok && Array.isArray(j.product?.rooms)) {
         editRooms.value = j.product.rooms.map((r: any) => ({ id: r.id, name: r.name_ko || r.name || '', price: Number(r.base_price_krw) || 0, inventory: Number(r.available_inventory) || 0, occupancy: Number(r.max_occupancy) || 2 }))
@@ -60,6 +60,7 @@ async function uploadImages(ev: Event) {
       form.append('file', file)
       form.append('purpose', 'PRODUCT_IMAGE')
       const up = await fetch(apiUrl('/uploads'), {
+        credentials: 'include',
         method: 'POST',
         headers: { Authorization: `Bearer ${partnerToken()}` },
         body: form
@@ -69,6 +70,7 @@ async function uploadImages(ev: Event) {
       ids.push(uj.id)
     }
     const res = await fetch(apiUrl(`/partner/products/${editing.value.id}`), {
+      credentials: 'include',
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken()}` },
       body: JSON.stringify({ imageIds: ids })
@@ -97,6 +99,7 @@ async function saveEdit() {
     const body: Record<string, unknown> = { title: editTitle.value.trim(), city: editCity.value.trim(), price: editPrice.value, isActive: editActive.value }
     if (editing.value.domain_type === 'HOTEL' && editRoomsLoaded.value) body.rooms = roomPayload(editRooms.value)
     const res = await fetch(apiUrl(`/partner/products/${editing.value.id}`), {
+      credentials: 'include',
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken()}` },
       body: JSON.stringify(body)
@@ -115,6 +118,7 @@ async function saveEdit() {
 async function toggleActive(p: ProductRow) {
   try {
     const res = await fetch(apiUrl(`/partner/products/${p.id}`), {
+      credentials: 'include',
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken()}` },
       body: JSON.stringify({ isActive: p.is_active !== 1 })
@@ -168,6 +172,7 @@ const fetchProducts = async () => {
   try {
     const token = partnerToken()
     const res = await fetch(apiUrl('/partner/products'), {
+      credentials: 'include',
       headers: { Authorization: `Bearer ${token}` }
     })
     if (!res.ok) throw new Error('상품 목록을 불러오지 못했습니다.')
@@ -188,6 +193,7 @@ const handleImportUrl = async () => {
   try {
     const token = partnerToken()
     const res = await fetch(apiUrl('/partner/ingest/url'), {
+      credentials: 'include',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -231,6 +237,7 @@ const handleCreateProduct = async () => {
     }
     if (newDomain.value === 'HOTEL') body.rooms = roomPayload(newRooms.value)
     const res = await fetch(apiUrl('/partner/products'), {
+      credentials: 'include',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

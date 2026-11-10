@@ -16,7 +16,11 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     const model = url.searchParams.get('model'); // '1P', '3P', 'CONSIGNMENT'
     const domain = url.searchParams.get('domain');
 
-    let sql = 'SELECT * FROM marketplace_catalog_items WHERE status = "ACTIVE"';
+    // #36: public allowlist — supply cost, commission, payout, margin, and
+    // sourcing internals (external_sku, source_url, registered_by) never leave
+    // the server on the unauthenticated surface. Operator financials stay on
+    // the authenticated admin summary/settlement endpoints.
+    let sql = 'SELECT id, domain_type, item_id, merchant_model, seller_id, seller_name, fulfillment_provider, retail_price_minor, refund_responsible_party, status, created_at, updated_at FROM marketplace_catalog_items WHERE status = "ACTIVE"';
     const params: unknown[] = [];
     if (model) {
       sql += ' AND merchant_model = ?';

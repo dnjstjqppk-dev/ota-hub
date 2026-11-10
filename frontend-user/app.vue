@@ -37,7 +37,7 @@ useHead({
 })
 
 onMounted(() => {
-  // initAuth restores the session and verifies the token with /auth/me (logs out on 401).
+  // initAuth restores the session from the HttpOnly cookie jar via /auth/me (clears local state on 401).
   authStore.initAuth()
   try {
     if (!localStorage.getItem('getfortrip_onboarded_v1')) showOnboarding.value = true

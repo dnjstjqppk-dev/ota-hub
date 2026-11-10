@@ -13,6 +13,7 @@ async function handleForgot() {
   errorMessage.value = ''
   try {
     const res = await fetch(apiUrl('/partner/forgot-password'), {
+      credentials: 'include',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.value.trim() })

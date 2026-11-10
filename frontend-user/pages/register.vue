@@ -66,6 +66,7 @@ const handleRegister = async () => {
       message?: string
     }>(registerUrl, {
       method: 'POST',
+      credentials: 'include', // accept the HttpOnly session jar (#35)
       body: {
         email: email.value,
         password: password.value,

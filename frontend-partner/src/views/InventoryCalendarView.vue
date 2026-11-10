@@ -36,6 +36,7 @@ const fetchProducts = async () => {
   try {
     const token = partnerToken()
     const res = await fetch(apiUrl('/partner/products'), {
+      credentials: 'include',
       headers: { Authorization: `Bearer ${token}` }
     })
     if (!res.ok) throw new Error('상품 목록을 불러오지 못했습니다.')
@@ -59,6 +60,7 @@ const fetchInventory = async () => {
   try {
     const token = partnerToken()
     const res = await fetch(apiUrl(`/partner/inventory?month=${currentMonth.value}&itemId=${encodeURIComponent(selectedProduct.value)}`), {
+      credentials: 'include',
       headers: { Authorization: `Bearer ${token}` }
     })
     if (!res.ok) throw new Error('재고 정보를 불러오지 못했습니다.')
@@ -86,6 +88,7 @@ const handleSaveDate = async () => {
   try {
     const token = partnerToken()
     const res = await fetch(apiUrl('/partner/inventory'), {
+      credentials: 'include',
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',

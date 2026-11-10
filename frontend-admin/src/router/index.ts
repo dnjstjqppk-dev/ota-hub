@@ -17,6 +17,7 @@ import TicketsView from '../views/TicketsView.vue'
 import AffiliateView from '../views/AffiliateView.vue'
 import LegalView from '../views/LegalView.vue'
 import EntitiesView from '../views/EntitiesView.vue'
+import { restoreSession, session } from '../composables/session'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -145,14 +146,15 @@ const router = createRouter({
   routes
 })
 
-// Authentication Route Guard
-router.beforeEach((to, _from, next) => {
-  const token = localStorage.getItem('getfortrip_admin_token')
+// Authentication Route Guard (#35: verified against the cookie jar, not a stored token).
+router.beforeEach(async (to, _from, next) => {
   const isPublic = to.meta.public === true
+  if (!isPublic || to.path === '/login') await restoreSession()
+  const logged = !!session.user
 
-  if (!isPublic && !token) {
+  if (!isPublic && !logged) {
     next({ path: '/login', query: { redirect: to.fullPath } })
-  } else if (to.path === '/login' && token) {
+  } else if (to.path === '/login' && logged) {
     next({ path: '/dashboard' })
   } else {
     next()

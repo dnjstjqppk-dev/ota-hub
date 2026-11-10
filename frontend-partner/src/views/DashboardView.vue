@@ -34,6 +34,7 @@ const fetchDashboard = async () => {
   try {
     const token = partnerToken()
     const res = await fetch(apiUrl('/partner/dashboard'), {
+      credentials: 'include',
       headers: { Authorization: `Bearer ${token}` }
     })
     if (!res.ok) throw new Error('대시보드를 불러오지 못했습니다.')

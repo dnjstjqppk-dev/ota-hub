@@ -21,6 +21,7 @@ async function fetchDetail() {
   error.value = ''
   try {
     const res = await fetch(apiUrl(`/partner/orders/${encodeURIComponent(id)}`), {
+      credentials: 'include',
       headers: { Authorization: `Bearer ${partnerToken()}` }
     })
     const j = await res.json().catch(() => ({}))

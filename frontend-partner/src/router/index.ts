@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
-import { partnerOnboardingPending, partnerToken } from '../config/api'
+import { partnerInfo, partnerOnboardingPending, restorePartnerSession } from '../config/api'
 import DashboardView from '../views/DashboardView.vue'
 import ProductsView from '../views/ProductsView.vue'
 import InventoryCalendarView from '../views/InventoryCalendarView.vue'
@@ -111,16 +111,20 @@ const router = createRouter({
   routes
 })
 
-// Authentication Route Guard
-router.beforeEach((to, _from, next) => {
-  const token = partnerToken()
+// Authentication Route Guard (#35: verified against the cookie jar, not a stored token).
+router.beforeEach(async (to, _from, next) => {
   const isPublic = to.meta.public === true
+  // restorePartnerSession verifies the jar once per page load (memory Bearer
+  // covers cross-site staging); later navigations answer from the info cache.
+  const authed = (!isPublic || to.path === '/login' || to.path === '/register')
+    ? await restorePartnerSession()
+    : !!partnerInfo()
 
-  if (!isPublic && !token) {
+  if (!isPublic && !authed) {
     next({ path: '/login', query: { redirect: to.fullPath } })
-  } else if ((to.path === '/login' || to.path === '/register') && token) {
+  } else if ((to.path === '/login' || to.path === '/register') && authed) {
     next({ path: partnerOnboardingPending() ? '/profile' : '/dashboard' })
-  } else if (!isPublic && token && partnerOnboardingPending() && to.path !== '/profile') {
+  } else if (!isPublic && authed && partnerOnboardingPending() && to.path !== '/profile') {
     // C1: onboarding accounts can only complete their profile + docs.
     next({ path: '/profile', query: { onboarding: '1' } })
   } else {

@@ -52,14 +52,14 @@ const fetchSettlements = async () => {
     const headers = { Authorization: `Bearer ${token}` }
 
     // 1. Fetch live marketplace order settlements
-    const mktRes = await fetch(apiUrl('/partner/marketplace/settlements'), { headers })
+    const mktRes = await fetch(apiUrl('/partner/marketplace/settlements'), { credentials: 'include', headers })
     if (mktRes.ok) {
       const data = await mktRes.json()
       orderSettlements.value = data.settlements || []
     }
 
     // 2. Fetch periodic settlement batches
-    const batchRes = await fetch(apiUrl('/partner/settlements'), { headers })
+    const batchRes = await fetch(apiUrl('/partner/settlements'), { credentials: 'include', headers })
     if (!batchRes.ok) throw new Error('정산 내역을 불러오지 못했습니다.')
     const json = await batchRes.json()
     batches.value = json.batches || []

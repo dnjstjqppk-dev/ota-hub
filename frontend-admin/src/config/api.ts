@@ -11,21 +11,30 @@ export const apiUrl = (path: string = ''): string => {
   return `${API_BASE_URL}${cleanPath}`
 }
 
+// #35: the JWT lives in memory only (gone on reload) and in the server's
+// HttpOnly admin jar. It is NEVER written to localStorage: reload-restore
+// flows through the cookie (credentials: 'include' below).
+let memoryToken: string | null = null
+export const setAdminMemoryToken = (t: string | null) => { memoryToken = t || null }
+export const adminMemoryToken = (): string | null => memoryToken
+export const clearAdminMemoryToken = () => { memoryToken = null }
+
 export async function adminFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('getfortrip_admin_token') : null
   const headers = new Headers(options.headers || {})
   if (!headers.has('Content-Type') && options.body) {
     headers.set('Content-Type', 'application/json')
   }
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
+  if (memoryToken) {
+    headers.set('Authorization', `Bearer ${memoryToken}`)
   }
   const res = await fetch(apiUrl(path), {
+    credentials: 'include',
     ...options,
     headers
   })
   if (res.status === 401 || res.status === 403) {
     if (typeof window !== 'undefined' && !window.location.pathname.endsWith('/login')) {
+      clearAdminMemoryToken()
       localStorage.removeItem('getfortrip_admin_token')
       localStorage.removeItem('getfortrip_admin_user')
       const loginPath = window.location.pathname.startsWith('/admin') ? '/admin/login' : '/login'

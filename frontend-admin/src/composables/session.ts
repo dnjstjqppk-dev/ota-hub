@@ -1,31 +1,54 @@
 import { reactive, ref } from 'vue'
-import { adminFetch } from '../config/api'
+import { adminFetch, adminMemoryToken, apiUrl, clearAdminMemoryToken, setAdminMemoryToken } from '../config/api'
 import { errorMessage } from './format'
 
-const TOKEN_KEY = 'getfortrip_admin_token'
 const USER_KEY = 'getfortrip_admin_user'
 
 export interface AdminUser { id: string; name: string; email: string; role: string }
 
-function readUser(): AdminUser | null {
-  try {
-    const u = JSON.parse(localStorage.getItem(USER_KEY) || 'null')
-    return u && u.id && u.email ? u : null
-  } catch { return null }
-}
-
 /** Signed-in admin as returned by the login API — never a placeholder identity. */
-export const session = reactive<{ user: AdminUser | null }>({ user: readUser() })
+export const session = reactive<{ user: AdminUser | null }>({ user: null })
 
 export function saveSession(token: string, user: AdminUser) {
-  localStorage.setItem(TOKEN_KEY, token)
+  setAdminMemoryToken(token) // #35: memory only — never localStorage.
   localStorage.setItem(USER_KEY, JSON.stringify(user))
+  try { localStorage.removeItem('getfortrip_admin_token') } catch {}
   session.user = user
+  settled = true
 }
 export function clearSession() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(USER_KEY)
+  clearAdminMemoryToken()
+  try {
+    localStorage.removeItem('getfortrip_admin_token')
+    localStorage.removeItem(USER_KEY)
+  } catch {}
   session.user = null
+  // Best-effort server logout: revokes the JWT and clears the admin jar.
+  try {
+    fetch(apiUrl('/admin/logout'), { method: 'POST', credentials: 'include' }).catch(() => {})
+  } catch {}
+}
+
+// #35: one cookie-restore attempt per page load for the route guard. The
+// server enforces ADMIN per endpoint; this only decides where to route.
+let settled = false
+export async function restoreSession(): Promise<boolean> {
+  if (session.user) return true
+  if (settled) return false
+  settled = true
+  try {
+    // Memory Bearer covers cross-site staging (no cookie); the jar covers reloads.
+    const headers: Record<string, string> = adminMemoryToken() ? { Authorization: `Bearer ${adminMemoryToken()}` } : {}
+    const res = await fetch(apiUrl('/auth/me'), { credentials: 'include', headers })
+    const data = await res.json().catch(() => null)
+    if (res.ok && data && data.role === 'ADMIN' && data.id && data.email) {
+      session.user = { id: data.id, name: data.fullName || '', email: data.email, role: 'ADMIN' }
+      try { localStorage.setItem(USER_KEY, JSON.stringify(session.user)) } catch {}
+      return true
+    }
+  } catch {}
+  clearSession()
+  return false
 }
 
 /** JSON request helper: throws an Error carrying the server's message on any non-2xx. */
