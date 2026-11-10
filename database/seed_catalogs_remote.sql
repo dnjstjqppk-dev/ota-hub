@@ -15,16 +15,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     5,
     'HOTEL',
-    4.9,
-    3450,
+    NULL,
+    0,
     '잠실 롯데월드몰 / 석촌호수',
     '지하철 2·8호선 잠실역 지하 직결',
     1,
     1,
     550000,
-    'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-    '["https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800","https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800","https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800"]',
-    '["초고층 스카이라운지","미쉐린 스타 스테이 다이닝","실내 온수 인피니티풀","에비앙 럭셔리 스파","무료 발레파킹","24시간 롤스로이스 리무진 의전"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_seoul_01_dlx","name":"그랜드 디럭스 더블룸 (시티뷰)","name_ko":"그랜드 디럭스 더블룸 (시티뷰)","bed_type":"슈퍼킹베드 1개","max_occupancy":2,"room_size_sqm":48,"base_price_krw":550000,"breakfast_included":true,"free_cancellation":true,"available_inventory":5},{"id":"rm_seoul_01_ste","name":"프리미어 리버뷰 스위트","name_ko":"프리미어 리버뷰 스위트","bed_type":"로열 킹베드 1개","max_occupancy":3,"room_size_sqm":85,"base_price_krw":890000,"breakfast_included":true,"free_cancellation":true,"available_inventory":2}]'
   );
 
@@ -45,16 +45,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     5,
     'HOTEL',
-    4.9,
-    4120,
+    NULL,
+    0,
     '남산 장충단공원',
     '지하철 3호선 동대입구역 도보 5분',
     1,
     1,
     460000,
-    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    '["https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800","https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800"]',
-    '["어번 아일랜드 야외 온수 수영장","라연 미쉐린 3스타 한식당","겔랑 스파","패스트리 부티크","비즈니스 이그제큐티브 라운지"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_seoul_02_dlx","name":"디럭스 킹 룸 (남산뷰)","name_ko":"디럭스 킹 룸 (남산뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":43,"base_price_krw":460000,"breakfast_included":true,"free_cancellation":true,"available_inventory":4}]'
   );
 
@@ -75,16 +75,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     5,
     'HOTEL',
-    4.8,
-    2280,
+    NULL,
+    0,
     '강남 삼성동 코엑스 맞은편',
     '지하철 2호선 삼성역 1번 출구 도보 1분',
     1,
     0,
     490000,
-    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
-    '["https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800"]',
-    '["24층 최고층 로비 파노라마 통창","오셀라스 럭셔리 스파","실내 온수 인피니티풀","팀버 하우스 바이닐 바"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_seoul_03_std","name":"파크 킹 룸 (코엑스 시티뷰)","name_ko":"파크 킹 룸 (코엑스 시티뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":42,"base_price_krw":490000,"breakfast_included":false,"free_cancellation":true,"available_inventory":6}]'
   );
 
@@ -105,16 +105,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     5,
     'HOTEL',
-    4.9,
-    2180,
+    NULL,
+    0,
     '롯폰기 힐스 쇼핑가 / 모리 타워',
     '지하철 히비야선 롯폰기역 도보 3분',
     1,
     1,
     385000,
-    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    '["https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800","https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800","https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800"]',
-    '["나가미네 스파 & 피트니스","실내 온수풀","도쿄 타워 전망","10개 인터내셔널 레스토랑 & 바","무료 Wi-Fi","24시간 룸서비스"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_tokyo_01_dlx","name":"디럭스 킹 룸 (시티뷰)","name_ko":"디럭스 킹 룸 (시티뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":42,"base_price_krw":385000,"breakfast_included":true,"free_cancellation":true,"available_inventory":7},{"id":"rm_tokyo_01_ste","name":"그랜드 이그제큐티브 스위트","name_ko":"그랜드 이그제큐티브 스위트","bed_type":"킹베드 1개 + 거실","max_occupancy":3,"room_size_sqm":78,"base_price_krw":680000,"breakfast_included":true,"free_cancellation":true,"available_inventory":3}]'
   );
 
@@ -135,16 +135,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     5,
     'HOTEL',
-    4.9,
-    1840,
+    NULL,
+    0,
     '신주쿠 스카이스크래퍼 지구',
     'JR 신주쿠역 도보 10분 (무료 셔틀 운행)',
     1,
     1,
     450000,
-    'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800',
-    '["https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800"]',
-    '["클럽 온 더 파크 럭셔리 스파","뉴욕 그릴 & 바","52층 파노라마 후지산 전망","피트니스 센터"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_tokyo_02_std","name":"파크 디럭스 룸 (후지산 전망)","name_ko":"파크 디럭스 룸 (후지산 전망)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":55,"base_price_krw":450000,"breakfast_included":true,"free_cancellation":true,"available_inventory":4}]'
   );
 
@@ -165,16 +165,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     4,
     'HOTEL',
-    4.7,
-    5210,
+    NULL,
+    0,
     '신주쿠 도청 앞',
     '지하철 도초마에역 바로 앞 / JR 신주쿠역 도보 5분',
     1,
     0,
     230000,
-    'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-    '["https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"]',
-    '["공항 리무진 버스 직결","야외 수영장 (여름철)","편의점 24시간","디즈니랜드 무료 셔틀"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_tokyo_03_std","name":"스탠다드 더블룸 (본관)","name_ko":"스탠다드 더블룸 (본관)","bed_type":"더블베드 1개","max_occupancy":2,"room_size_sqm":28,"base_price_krw":230000,"breakfast_included":false,"free_cancellation":true,"available_inventory":12}]'
   );
 
@@ -195,16 +195,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     5,
     'HOTEL',
-    4.8,
-    1890,
+    NULL,
+    0,
     '도톤보리 / 난바역 직결',
     '난카이 난바역 직결 (간사이 공항 라피트 바로 탑승)',
     1,
     0,
     275000,
-    'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800',
-    '["https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800","https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800"]',
-    '["난카이 난바역 바로 위 위치","36층 테이블36 파노라마 레스토랑","실내 온수풀 & 스파","피트니스 센터"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_osaka_01_sel","name":"스위스 셀렉트 킹룸","name_ko":"스위스 셀렉트 킹룸","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":32,"base_price_krw":275000,"breakfast_included":false,"free_cancellation":true,"available_inventory":8},{"id":"rm_osaka_01_adv","name":"어드밴티지 이그제큐티브 룸 (라운지 포함)","name_ko":"어드밴티지 이그제큐티브 룸 (라운지 포함)","bed_type":"슈퍼킹베드 1개","max_occupancy":2,"room_size_sqm":38,"base_price_krw":390000,"breakfast_included":true,"free_cancellation":true,"available_inventory":4}]'
   );
 
@@ -225,16 +225,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     5,
     'HOTEL',
-    4.9,
-    2450,
+    NULL,
+    0,
     '우메다 그랜드 프론트 쇼핑몰',
     'JR 오사카역 직결 도보 5분',
     1,
     1,
     380000,
-    'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-    '["https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"]',
-    '["일본 전통 대욕장 & 자쿠지","미쉐린 피에르 다이닝","실내 온수풀","24시간 클럽 인터컨티넨탈"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_osaka_02_std","name":"클래식 킹룸 (우메다 시티뷰)","name_ko":"클래식 킹룸 (우메다 시티뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":49,"base_price_krw":380000,"breakfast_included":true,"free_cancellation":true,"available_inventory":5}]'
   );
 
@@ -255,16 +255,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     5,
     'RESORT',
-    4.8,
-    3890,
+    NULL,
+    0,
     '차오프라야 강변 / 사톤',
     'BTS 사판탁신역 도보 1분 (아이콘시암 셔틀 보트 직결)',
     1,
     1,
     210000,
-    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
-    '["https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800","https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800"]',
-    '["차오프라야 리버사이드 수영장 2개","CHI 더 스파","아이콘시암 전용 무료 셔틀보트","호라이즌 디너 크루즈 선착장"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_bkk_01_dlx","name":"디럭스 리버뷰 킹룸","name_ko":"디럭스 리버뷰 킹룸","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":40,"base_price_krw":210000,"breakfast_included":true,"free_cancellation":true,"available_inventory":9},{"id":"rm_bkk_01_ste","name":"크룽텝 윙 프라이빗 발코니 스위트","name_ko":"크룽텝 윙 프라이빗 발코니 스위트","bed_type":"슈퍼킹베드 1개","max_occupancy":3,"room_size_sqm":76,"base_price_krw":395000,"breakfast_included":true,"free_cancellation":true,"available_inventory":3}]'
   );
 
@@ -285,16 +285,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     5,
     'HOTEL',
-    4.9,
-    2150,
+    NULL,
+    0,
     '사톤 룸피니 공원',
     'MRT 룸피니역 도보 8분',
     1,
     1,
     195000,
-    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    '["https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800"]',
-    '["도심 속 태국 정통 연못 가든","야외 25m 온수 수영장","초콜릿 뷔페 살롱","보타니카 스파"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_bkk_02_std","name":"슈페리어 더블룸 (연못 가든 뷰)","name_ko":"슈페리어 더블룸 (연못 가든 뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":38,"base_price_krw":195000,"breakfast_included":true,"free_cancellation":true,"available_inventory":6}]'
   );
 
@@ -315,16 +315,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     5,
     'HOTEL',
-    4.8,
-    2840,
+    NULL,
+    0,
     '캐널시티 하카타 직결',
     '지하철 나나쿠마선 쿠시다진자마에역 도보 2분 / 하카타역 도보 10분',
     1,
     1,
     245000,
-    'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800',
-    '["https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800","https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800"]',
-    '["캐널시티 복합 쇼핑몰 직결","클럽 올림푸스 실내 온수풀 & 스파","분수쇼 뷰 바 피즈","나카스 포장마차 거리 도보 3분"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_fuk_01_std","name":"스탠다드 킹 룸 (분수쇼 뷰)","name_ko":"스탠다드 킹 룸 (분수쇼 뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":34,"base_price_krw":245000,"breakfast_included":true,"free_cancellation":true,"available_inventory":8},{"id":"rm_fuk_01_dlx","name":"클럽 킹 룸 (라운지 해피아워 포함)","name_ko":"클럽 킹 룸 (라운지 해피아워 포함)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":40,"base_price_krw":340000,"breakfast_included":true,"free_cancellation":true,"available_inventory":4}]'
   );
 
@@ -345,16 +345,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     4,
     'HOTEL',
-    4.7,
-    3620,
+    NULL,
+    0,
     '텐진 솔라리아 플라자',
     '니시테츠 후쿠오카(텐진)역 직결 / 지하철 텐진역 바로 연결',
     1,
     0,
     145000,
-    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    '["https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800"]',
-    '["텐진역 직결 최고의 위치","17층 전망 레스토랑 레드 플랑","백화점 쇼핑가 바로 연결","공항철도 직결"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_fuk_02_std","name":"모던 더블룸 (텐진 파크뷰)","name_ko":"모던 더블룸 (텐진 파크뷰)","bed_type":"더블베드 1개","max_occupancy":2,"room_size_sqm":24,"base_price_krw":145000,"breakfast_included":false,"free_cancellation":true,"available_inventory":11}]'
   );
 
@@ -375,16 +375,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     4,
     'HOTEL',
-    4.8,
-    4890,
+    NULL,
+    0,
     '샹드마르스 공원 / 에펠탑',
     'RER C선 샹드마르스-투르에펠역 도보 2분 / 비르하케임역 도보 5분',
     1,
     1,
     480000,
-    'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800',
-    '["https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800","https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800"]',
-    '["에펠탑 도보 1분 정면 뷰","프레임(FR|AME) 오가닉 레스토랑 & 바","24시간 피트니스 센터","전 객실 발코니 에펠탑 조망"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_paris_01_efl","name":"디럭스 킹 룸 (에펠탑 전망 발코니)","name_ko":"디럭스 킹 룸 (에펠탑 전망 발코니)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":32,"base_price_krw":480000,"breakfast_included":true,"free_cancellation":true,"available_inventory":6},{"id":"rm_paris_01_ste","name":"주니어 스위트 (화이트 에펠 파노라마)","name_ko":"주니어 스위트 (화이트 에펠 파노라마)","bed_type":"슈퍼킹베드 1개 + 소파베드","max_occupancy":3,"room_size_sqm":52,"base_price_krw":780000,"breakfast_included":true,"free_cancellation":true,"available_inventory":2}]'
   );
 
@@ -405,16 +405,16 @@ INSERT OR REPLACE INTO hotels (
     139.7292,
     5,
     'HOTEL',
-    4.9,
-    2710,
+    NULL,
+    0,
     '오페라 가르니에 / 방돔 광장',
     '지하철 오페라역 도보 1분',
     1,
     1,
     620000,
-    'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-    '["https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"]',
-    '["1862년 나폴레옹 3세 시대 유서 깊은 궁전 양식","카페 드 라 페(Café de la Paix)","딥티크 어메니티","클럽 라운지"]',
+    NULL,
+    '[]',
+    '[]',
     '[{"id":"rm_paris_02_std","name":"클래식 룸 (오페라 하우스 뷰)","name_ko":"클래식 룸 (오페라 하우스 뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":35,"base_price_krw":620000,"breakfast_included":true,"free_cancellation":true,"available_inventory":4}]'
   );
 
@@ -1019,7 +1019,7 @@ INSERT OR REPLACE INTO cars (
     48000,
     '제주국제공항 렌터카하우스 셔틀 1구역 (도보 3분)',
     1,
-    'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800',
+    NULL,
     10
   );
 
@@ -1038,7 +1038,7 @@ INSERT OR REPLACE INTO cars (
     62000,
     '도쿄 나리타 국제공항 제1터미널 렌터카 카운터',
     1,
-    'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800',
+    NULL,
     10
   );
 
@@ -1057,7 +1057,7 @@ INSERT OR REPLACE INTO cars (
     65000,
     '제주국제공항 셔틀 탑승장 2구역 SK렌터카 지점',
     1,
-    'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=800',
+    NULL,
     10
   );
 
@@ -1076,7 +1076,7 @@ INSERT OR REPLACE INTO cars (
     95000,
     '제주국제공항 렌터카하우스 셔틀 1구역',
     1,
-    'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800',
+    NULL,
     10
   );
 
@@ -1092,14 +1092,14 @@ INSERT OR REPLACE INTO activities (
     '도쿄',
     '일본',
     89000,
-    4.9,
-    8740,
+    NULL,
+    0,
     1,
     1,
     'FULL_DAY',
     '자유 일정 (한국어 안내 리플릿)',
     'QR_CODE',
-    'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800',
+    NULL,
     '도쿄 디즈니랜드 매표소 대기 없이 모바일 QR 바로 입장; 디즈니 프리미어 액세스(DPA) 연동 가능; 성인/아동/청소년 모바일 QR 입장; 지정일 24시간 전까지 100% 무료 취소',
     '["도쿄 디즈니랜드 1일 자유이용권","모바일 전자 바우처"]',
     30
@@ -1117,14 +1117,14 @@ INSERT OR REPLACE INTO activities (
     '오사카',
     '일본',
     82000,
-    4.9,
-    11420,
+    NULL,
+    0,
     1,
     1,
     'FULL_DAY',
     '자유 일정',
     'QR_CODE',
-    'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=800',
+    NULL,
     '슈퍼 닌텐도 월드 & 해리포터 마법의 세계 입장; 공식 파트너 인증 다이렉트 QR코드 발권; 현장 매표소 교환 없이 개찰구 직행',
     '["USJ 1일 입장권","모바일 입장 QR"]',
     30
@@ -1142,14 +1142,14 @@ INSERT OR REPLACE INTO activities (
     '도쿄',
     '일본',
     78000,
-    4.8,
-    2430,
+    NULL,
+    0,
     1,
     1,
     'FULL_DAY',
     '한국어 전문 가이드',
     'QR_CODE',
-    'https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=800',
+    NULL,
     '신주쿠 출발 전용 리무진 버스로 후지산 5합목 방문; 하코네 로프웨이 케이블카 탑승 & 아시노코 해적유람선 조망; 한국인 베테랑 인솔 가이드 전 일정 동행',
     '["왕복 전용 버스","한국어 가이드","케이블카 티켓","여행자 보험"]',
     30
@@ -1167,14 +1167,14 @@ INSERT OR REPLACE INTO activities (
     '서울',
     '대한민국',
     42000,
-    4.8,
-    5120,
+    NULL,
+    0,
     1,
     1,
     'FULL_DAY',
     '자유 일정',
     'QR_CODE',
-    'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=800',
+    NULL,
     '국내 최대 실내외 테마파크 어드벤처 & 매직아일랜드 종일 이용; 모바일 바코드 즉시 입장 (당일 구매 후 바로 사용 가능); 민속박물관 무료 관람 포함',
     '["롯데월드 종합이용권","민속박물관 입장"]',
     30
@@ -1192,14 +1192,14 @@ INSERT OR REPLACE INTO activities (
     '파리',
     '프랑스',
     68000,
-    4.9,
-    1890,
+    NULL,
+    0,
     1,
     1,
     'HOURS',
     '한국어 공인 가이드',
     'QR_CODE',
-    'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800',
+    NULL,
     '모나리자, 밀로의 비너스, 사모트라케의 니케 등 핵심 걸작 집중 해설; 프랑스 공인 국가 가이드의 깊이 있는 역사/예술 스토리텔링; 개인 무선 수신기 제공으로 편안한 관람',
     '["한국어 공인 도슨트 해설","개인 무선 수신기"]',
     30
@@ -1217,14 +1217,14 @@ INSERT OR REPLACE INTO activities (
     '도쿄',
     '일본',
     6900,
-    4.9,
-    14200,
+    NULL,
+    0,
     1,
     1,
     'MULTI_DAY',
     '한국어 상세 개통 매뉴얼',
     'QR_CODE',
-    'https://images.unsplash.com/photo-1512499617640-c74ae3a79d37?w=800',
+    NULL,
     '유심 교체 없이 이메일/카카오톡 QR코드 스캔 즉시 개통; 일본 1위 통신사 NTT Docomo / SoftBank 5G 망 자동 로밍; 데이터 무제한 (매일 2GB 사용 후 128kbps 무제한 유지)',
     '["일본 데이터 eSIM QR 프로파일","도움 센터 고객상담"]',
     30
@@ -1242,8 +1242,8 @@ INSERT OR REPLACE INTO packages (
     18,
     1400000,
     1150000,
-    'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800',
-    '{"features":["대한항공 직항 왕복 (위탁수하물 23kg 포함)","그랜드 하얏트 도쿄 3박 전 일정 조식 뷔페 포함","롯폰기 힐스 쇼핑몰 & 전망대 직결","24시간 한국인 안심 여행 케어 컨시어지"],"gallery":["https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800","https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800","https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800"]}',
+    NULL,
+    '{"features":["대한항공 직항 왕복 (위탁수하물 23kg 포함)","그랜드 하얏트 도쿄 3박 전 일정 조식 뷔페 포함","롯폰기 힐스 쇼핑몰 & 전망대 직결","24시간 한국인 안심 여행 케어 컨시어지"],"gallery":[]}',
     16
   );
 
@@ -1259,8 +1259,8 @@ INSERT OR REPLACE INTO packages (
     19,
     920000,
     750000,
-    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    '{"features":["아시아나항공 직항 왕복 (수하물 23kg)","난카이 난바역 직결 5성급 호텔 2박","간사이공항 특급 라피트 왕복 승차권 증정","도톤보리 도보 3분 초역세권"],"gallery":["https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800","https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"]}',
+    NULL,
+    '{"features":["아시아나항공 직항 왕복 (수하물 23kg)","난카이 난바역 직결 5성급 호텔 2박","간사이공항 특급 라피트 왕복 승차권 증정","도톤보리 도보 3분 초역세권"],"gallery":[]}',
     16
   );
 
@@ -1276,8 +1276,8 @@ INSERT OR REPLACE INTO packages (
     21,
     1250000,
     990000,
-    'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=800',
-    '{"features":["대한항공 주간 직항 (수하물 23kg)","차오프라야 강변 5성급 샹그릴라 4박 전 일정 조식","샹그릴라 전용 디너 크루즈 1회 할인권","아이콘시암 무료 셔틀보트 이용"],"gallery":["https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=800"]}',
+    NULL,
+    '{"features":["대한항공 주간 직항 (수하물 23kg)","차오프라야 강변 5성급 샹그릴라 4박 전 일정 조식","샹그릴라 전용 디너 크루즈 1회 할인권","아이콘시암 무료 셔틀보트 이용"],"gallery":[]}',
     16
   );
 
@@ -1293,7 +1293,7 @@ INSERT OR REPLACE INTO packages (
     17,
     3200000,
     2650000,
-    'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800',
-    '{"features":["에어프랑스 직항 왕복 (위탁수하물 23kg)","에펠탑 초근접 4성급 호텔 5박","루브르 박물관 모바일 패스트트랙 e-티켓 포함","세느강 바토무슈 유람선 탑승권 증정"],"gallery":["https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800"]}',
+    NULL,
+    '{"features":["에어프랑스 직항 왕복 (위탁수하물 23kg)","에펠탑 초근접 4성급 호텔 5박","루브르 박물관 모바일 패스트트랙 e-티켓 포함","세느강 바토무슈 유람선 탑승권 증정"],"gallery":[]}',
     16
   );

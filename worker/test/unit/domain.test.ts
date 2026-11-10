@@ -112,3 +112,36 @@ test("cancellation: free window, then fee; non-refundable keeps 100%", () => {
   assert.equal(r.feeMinor + r.refundMinor, 1001);
   assert.deepEqual(computeCancellation({ type: "NON_REFUNDABLE", freeUntil: null, feeBpsAfter: 10000, source: "CATALOG_RULE" }, 5000, NOW), { feeMinor: 5000, refundMinor: 0 });
 });
+
+test("cancellation: structured tiers pick by hours-before-service (C6)", () => {
+  const start = "2026-12-10T00:00:00.000Z";
+  const policy = {
+    type: "TIERED" as const, freeUntil: null, feeBpsAfter: 10000, serviceStart: start, source: "PRODUCT_POLICY" as const,
+    tiers: [{ hoursBefore: 168, refundBps: 10000 }, { hoursBefore: 72, refundBps: 5000 }, { hoursBefore: 24, refundBps: 0 }],
+  };
+  // 9 days before -> top tier, full refund.
+  assert.deepEqual(computeCancellation(policy, 100000, new Date("2026-12-01T00:00:00Z")), { feeMinor: 0, refundMinor: 100000 });
+  // Exactly on a cutoff -> that tier.
+  assert.deepEqual(computeCancellation(policy, 100000, new Date("2026-12-07T00:00:00Z")), { feeMinor: 50000, refundMinor: 50000 });
+  // Between cutoffs (120h) -> the largest cutoff at or under (72h tier).
+  assert.deepEqual(computeCancellation(policy, 100000, new Date("2026-12-05T00:00:00Z")), { feeMinor: 50000, refundMinor: 50000 });
+  // Past every cutoff -> nothing back.
+  assert.deepEqual(computeCancellation(policy, 100000, new Date("2026-12-09T12:00:00Z")), { feeMinor: 100000, refundMinor: 0 });
+  // After the service started -> nothing back.
+  assert.deepEqual(computeCancellation(policy, 100000, new Date("2026-12-11T00:00:00Z")), { feeMinor: 100000, refundMinor: 0 });
+  // A zero-hour tier makes even last-minute cancels refundable at its rate.
+  const zero = { ...policy, tiers: [{ hoursBefore: 0, refundBps: 5000 }] };
+  assert.deepEqual(computeCancellation(zero, 100000, new Date("2026-12-09T23:00:00Z")), { feeMinor: 50000, refundMinor: 50000 });
+});
+
+test("quote: structured policy snapshots tiers and free-cancel hours (C6)", () => {
+  const tiered: CatalogProduct = { ...hotel, structuredPolicy: { freeCancelHours: 48, tiers: [{ hoursBefore: 48, refundBps: 10000 }] } };
+  const q = computeQuote(tiered, { startDate: "2026-12-01", endDate: "2026-12-02", travelers: { adults: 1, children: 0, infants: 0 } }, null, NOW);
+  assert.equal(q.cancellationPolicy.type, "TIERED");
+  assert.equal(q.cancellationPolicy.source, "PRODUCT_POLICY");
+  assert.equal(q.cancellationPolicy.serviceStart, "2026-12-01T00:00:00.000Z");
+  const hours: CatalogProduct = { ...hotel, structuredPolicy: { freeCancelHours: 72, tiers: [] } };
+  const q2 = computeQuote(hours, { startDate: "2026-12-01", endDate: "2026-12-02", travelers: { adults: 1, children: 0, infants: 0 } }, null, NOW);
+  assert.equal(q2.cancellationPolicy.type, "FREE_UNTIL");
+  assert.equal(q2.cancellationPolicy.freeUntil, "2026-11-28T00:00:00.000Z");
+});

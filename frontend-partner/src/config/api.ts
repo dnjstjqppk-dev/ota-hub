@@ -17,6 +17,22 @@ export function partnerToken(): string | null {
   }
 }
 
+/** Stored login payload (`data.partner`). */
+export function partnerInfo(): Record<string, any> | null {
+  try {
+    const raw = localStorage.getItem('getfortrip_partner_info') || sessionStorage.getItem('getfortrip_partner_info')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+/** True while the account is still in onboarding (approval pending). */
+export function partnerOnboardingPending(): boolean {
+  const st = String(partnerInfo()?.profileStatus || '').toUpperCase()
+  return st === 'PENDING_APPROVAL' || st === 'PENDING'
+}
+
 export function clearPartnerSession(): void {
   try {
     localStorage.removeItem('getfortrip_partner_token')

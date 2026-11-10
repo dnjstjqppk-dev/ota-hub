@@ -90,7 +90,7 @@ defineExpose({ askDates })
             </li>
           </ul>
           <p v-if="policy.no_show_fee_bps" class="text-ink-muted">노쇼 시 요금의 {{ pct(policy.no_show_fee_bps) }} 위약금</p>
-          <p class="text-ink-muted">일정 변경 {{ policy.change_allowed ? '가능' : '불가' }}</p>
+          <p class="text-ink-muted">일정 변경은 지원하지 않아요. 날짜를 바꾸려면 취소 후 다시 예약해 주세요.</p>
           <p v-if="policy.note" class="text-xs text-ink-subtle">{{ policy.note }}</p>
         </div>
         <p v-else-if="loaded" class="flex items-center gap-1.5 text-sm font-semibold" :class="cancellation === 'FREE' ? 'text-success' : 'text-danger'">

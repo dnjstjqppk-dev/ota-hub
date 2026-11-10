@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
-import { partnerToken } from '../config/api'
+import { partnerOnboardingPending, partnerToken } from '../config/api'
 import DashboardView from '../views/DashboardView.vue'
 import ProductsView from '../views/ProductsView.vue'
 import InventoryCalendarView from '../views/InventoryCalendarView.vue'
@@ -119,7 +119,10 @@ router.beforeEach((to, _from, next) => {
   if (!isPublic && !token) {
     next({ path: '/login', query: { redirect: to.fullPath } })
   } else if ((to.path === '/login' || to.path === '/register') && token) {
-    next({ path: '/dashboard' })
+    next({ path: partnerOnboardingPending() ? '/profile' : '/dashboard' })
+  } else if (!isPublic && token && partnerOnboardingPending() && to.path !== '/profile') {
+    // C1: onboarding accounts can only complete their profile + docs.
+    next({ path: '/profile', query: { onboarding: '1' } })
   } else {
     next()
   }

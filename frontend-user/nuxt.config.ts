@@ -3,6 +3,11 @@ declare const process: {
   env: Record<string, string | undefined>
 }
 
+// C7: product detail routes come from the build-time D1 snapshot
+// (scripts/gen-seo-snapshot.mjs) — never a hardcoded ID list.
+import generatedRoutes from './prerender-routes.json'
+const SEO_DETAIL_ROUTES: string[] = Array.isArray(generatedRoutes) ? generatedRoutes : []
+
 export default defineNuxtConfig({
   ssr: true,
   // Private, query-driven pages render client-side only. A prerendered copy would hydrate with the
@@ -26,37 +31,24 @@ export default defineNuxtConfig({
         '/hotels',
         '/hotels/list',
         '/hotels/detail',
-        '/hotels/detail/htl_seoul_01',
-        '/hotels/detail/htl_tokyo_01',
-        '/hotels/detail/htl_osaka_01',
         '/flights',
         '/flights/search',
         '/flights/detail',
-        '/flights/detail/flt_ke703',
-        '/flights/detail/flt_oz102',
         '/trains',
         '/trains/search',
         '/trains/detail',
-        '/trains/detail/trn_ktx_021',
-        '/trains/detail/trn_shinkansen_nozomi23',
         '/cars',
         '/cars/list',
         '/cars/detail',
-        '/cars/detail/car_avante_01',
-        '/cars/detail/car_yaris_01',
         '/transfers',
         '/transfers/list',
         '/transfers/detail',
         '/things-to-do',
         '/things-to-do/list',
         '/things-to-do/detail',
-        '/things-to-do/detail/act_disney_tokyo',
-        '/things-to-do/detail/act_fuji_tour',
         '/packages',
         '/packages/list',
         '/packages/detail',
-        '/packages/detail/pkg_tokyo_4d3n',
-        '/packages/detail/pkg_osaka_3d2n',
         '/deals',
         '/rewards',
         '/login',
@@ -73,7 +65,7 @@ export default defineNuxtConfig({
         '/things-to-do/booking',
         '/packages/booking',
         '/my/bookings',
-        '/transfers/detail/tf_icn_van_01'
+        ...SEO_DETAIL_ROUTES,
       ]
     }
   },

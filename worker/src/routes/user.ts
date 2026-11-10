@@ -165,6 +165,12 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     const id = newId("rev");
     await db.prepare("INSERT INTO reviews (id, user_id, user_name, domain_type, target_id, booking_id, rating, comment, verified_stay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)")
       .bind(id, u.id, u.fullName || "여행자", domain, targetId, bookingId, rating, comment).run();
+    // C8: product scores are always recomputed from verified reviews — never stored claims.
+    const scoreTable = domain === "HOTEL" ? "hotels" : domain === "ACTIVITY" ? "activities" : null;
+    if (scoreTable) {
+      await db.prepare(`UPDATE ${scoreTable} SET review_count = (SELECT COUNT(*) FROM reviews WHERE domain_type = ? AND target_id = ?), review_score = (SELECT ROUND(AVG(rating), 1) FROM reviews WHERE domain_type = ? AND target_id = ?) WHERE id = ?`)
+        .bind(domain, targetId, domain, targetId, targetId).run();
+    }
     return json({ success: true, reviewId: id, verifiedStay: true }, 201);
   }
 

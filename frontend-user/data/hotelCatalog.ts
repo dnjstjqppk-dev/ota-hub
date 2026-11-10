@@ -25,14 +25,14 @@ export interface HotelProperty {
   country: string
   address: string
   star_rating: number
-  review_score: number
+  review_score: number | null
   review_count: number
   neighborhood: string
   subway_nearby: string
   property_type: 'HOTEL' | 'RESORT' | 'RYOKAN' | 'VILLA'
   free_cancellation: boolean
   free_breakfast: boolean
-  thumbnail_url: string
+  thumbnail_url: string | null
   images: string[]
   amenities: string[]
   rooms: RoomOption[]
@@ -58,20 +58,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '대한민국',
     address: '서울특별시 송파구 올림픽로 300 롯데월드타워 76-101층',
     star_rating: 5,
-    review_score: 4.9,
-    review_count: 3450,
+    review_score: null,
+    review_count: 0,
     neighborhood: '잠실 롯데월드몰 / 석촌호수',
     subway_nearby: '지하철 2·8호선 잠실역 지하 직결',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: true,
-    thumbnail_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-    images: [
-      'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-      'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
-      'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800'
-    ],
-    amenities: ['초고층 스카이라운지', '미쉐린 스타 스테이 다이닝', '실내 온수 인피니티풀', '에비앙 럭셔리 스파', '무료 발레파킹', '24시간 롤스로이스 리무진 의전'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_seoul_01_dlx',
@@ -112,19 +108,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '대한민국',
     address: '서울특별시 중구 동호로 249',
     star_rating: 5,
-    review_score: 4.9,
-    review_count: 4120,
+    review_score: null,
+    review_count: 0,
     neighborhood: '남산 장충단공원',
     subway_nearby: '지하철 3호선 동대입구역 도보 5분',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: true,
-    thumbnail_url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    images: [
-      'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-      'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800'
-    ],
-    amenities: ['어번 아일랜드 야외 온수 수영장', '라연 미쉐린 3스타 한식당', '겔랑 스파', '패스트리 부티크', '비즈니스 이그제큐티브 라운지'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_seoul_02_dlx',
@@ -152,18 +145,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '대한민국',
     address: '서울특별시 강남구 테헤란로 606',
     star_rating: 5,
-    review_score: 4.8,
-    review_count: 2280,
+    review_score: null,
+    review_count: 0,
     neighborhood: '강남 삼성동 코엑스 맞은편',
     subway_nearby: '지하철 2호선 삼성역 1번 출구 도보 1분',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: false,
-    thumbnail_url: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
-    images: [
-      'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800'
-    ],
-    amenities: ['24층 최고층 로비 파노라마 통창', '오셀라스 럭셔리 스파', '실내 온수 인피니티풀', '팀버 하우스 바이닐 바'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_seoul_03_std',
@@ -195,20 +186,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '일본',
     address: '도쿄도 미나토구 롯폰기 6-10-3',
     star_rating: 5,
-    review_score: 4.9,
-    review_count: 2180,
+    review_score: null,
+    review_count: 0,
     neighborhood: '롯폰기 힐스 쇼핑가 / 모리 타워',
     subway_nearby: '지하철 히비야선 롯폰기역 도보 3분',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: true,
-    thumbnail_url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    images: [
-      'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-      'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800',
-      'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800'
-    ],
-    amenities: ['나가미네 스파 & 피트니스', '실내 온수풀', '도쿄 타워 전망', '10개 인터내셔널 레스토랑 & 바', '무료 Wi-Fi', '24시간 룸서비스'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_tokyo_01_dlx',
@@ -249,18 +236,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '일본',
     address: '도쿄도 신주쿠구 니시신주쿠 3-7-1-2',
     star_rating: 5,
-    review_score: 4.9,
-    review_count: 1840,
+    review_score: null,
+    review_count: 0,
     neighborhood: '신주쿠 스카이스크래퍼 지구',
     subway_nearby: 'JR 신주쿠역 도보 10분 (무료 셔틀 운행)',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: true,
-    thumbnail_url: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800',
-    images: [
-      'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800'
-    ],
-    amenities: ['클럽 온 더 파크 럭셔리 스파', '뉴욕 그릴 & 바', '52층 파노라마 후지산 전망', '피트니스 센터'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_tokyo_02_std',
@@ -288,16 +273,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '일본',
     address: '도쿄도 신주쿠구 니시신주쿠 2-2-1',
     star_rating: 4,
-    review_score: 4.7,
-    review_count: 5210,
+    review_score: null,
+    review_count: 0,
     neighborhood: '신주쿠 도청 앞',
     subway_nearby: '지하철 도초마에역 바로 앞 / JR 신주쿠역 도보 5분',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: false,
-    thumbnail_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-    images: ['https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'],
-    amenities: ['공항 리무진 버스 직결', '야외 수영장 (여름철)', '편의점 24시간', '디즈니랜드 무료 셔틀'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_tokyo_03_std',
@@ -329,19 +314,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '일본',
     address: '오사카부 오사카시 주오구 난바 5-1-60',
     star_rating: 5,
-    review_score: 4.8,
-    review_count: 1890,
+    review_score: null,
+    review_count: 0,
     neighborhood: '도톤보리 / 난바역 직결',
     subway_nearby: '난카이 난바역 직결 (간사이 공항 라피트 바로 탑승)',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: false,
-    thumbnail_url: 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800',
-    images: [
-      'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800',
-      'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800'
-    ],
-    amenities: ['난카이 난바역 바로 위 위치', '36층 테이블36 파노라마 레스토랑', '실내 온수풀 & 스파', '피트니스 센터'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_osaka_01_sel',
@@ -381,16 +363,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '일본',
     address: '오사카부 오사카시 기타구 오후카초 3-60 그랜드 프론트 오사카',
     star_rating: 5,
-    review_score: 4.9,
-    review_count: 2450,
+    review_score: null,
+    review_count: 0,
     neighborhood: '우메다 그랜드 프론트 쇼핑몰',
     subway_nearby: 'JR 오사카역 직결 도보 5분',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: true,
-    thumbnail_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-    images: ['https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'],
-    amenities: ['일본 전통 대욕장 & 자쿠지', '미쉐린 피에르 다이닝', '실내 온수풀', '24시간 클럽 인터컨티넨탈'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_osaka_02_std',
@@ -422,19 +404,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '태국',
     address: '89 Soi Wat Suan Plu, Bangrak, Bangkok 10500',
     star_rating: 5,
-    review_score: 4.8,
-    review_count: 3890,
+    review_score: null,
+    review_count: 0,
     neighborhood: '차오프라야 강변 / 사톤',
     subway_nearby: 'BTS 사판탁신역 도보 1분 (아이콘시암 셔틀 보트 직결)',
     property_type: 'RESORT',
     free_cancellation: true,
     free_breakfast: true,
-    thumbnail_url: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
-    images: [
-      'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
-      'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800'
-    ],
-    amenities: ['차오프라야 리버사이드 수영장 2개', 'CHI 더 스파', '아이콘시암 전용 무료 셔틀보트', '호라이즌 디너 크루즈 선착장'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_bkk_01_dlx',
@@ -474,16 +453,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '태국',
     address: '13/3 South Sathorn Road, Bangkok 10120',
     star_rating: 5,
-    review_score: 4.9,
-    review_count: 2150,
+    review_score: null,
+    review_count: 0,
     neighborhood: '사톤 룸피니 공원',
     subway_nearby: 'MRT 룸피니역 도보 8분',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: true,
-    thumbnail_url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    images: ['https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800'],
-    amenities: ['도심 속 태국 정통 연못 가든', '야외 25m 온수 수영장', '초콜릿 뷔페 살롱', '보타니카 스파'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_bkk_02_std',
@@ -515,19 +494,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '일본',
     address: '후쿠오카현 후쿠오카시 하카타구 스미요시 1-2-82',
     star_rating: 5,
-    review_score: 4.8,
-    review_count: 2840,
+    review_score: null,
+    review_count: 0,
     neighborhood: '캐널시티 하카타 직결',
     subway_nearby: '지하철 나나쿠마선 쿠시다진자마에역 도보 2분 / 하카타역 도보 10분',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: true,
-    thumbnail_url: 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800',
-    images: [
-      'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800',
-      'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800'
-    ],
-    amenities: ['캐널시티 복합 쇼핑몰 직결', '클럽 올림푸스 실내 온수풀 & 스파', '분수쇼 뷰 바 피즈', '나카스 포장마차 거리 도보 3분'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_fuk_01_std',
@@ -567,16 +543,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '일본',
     address: '후쿠오카시 주오구 텐진 2-2-43',
     star_rating: 4,
-    review_score: 4.7,
-    review_count: 3620,
+    review_score: null,
+    review_count: 0,
     neighborhood: '텐진 솔라리아 플라자',
     subway_nearby: '니시테츠 후쿠오카(텐진)역 직결 / 지하철 텐진역 바로 연결',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: false,
-    thumbnail_url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    images: ['https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800'],
-    amenities: ['텐진역 직결 최고의 위치', '17층 전망 레스토랑 레드 플랑', '백화점 쇼핑가 바로 연결', '공항철도 직결'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_fuk_02_std',
@@ -608,19 +584,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '프랑스',
     address: '18 Avenue De Suffren, 75015 Paris',
     star_rating: 4,
-    review_score: 4.8,
-    review_count: 4890,
+    review_score: null,
+    review_count: 0,
     neighborhood: '샹드마르스 공원 / 에펠탑',
     subway_nearby: 'RER C선 샹드마르스-투르에펠역 도보 2분 / 비르하케임역 도보 5분',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: true,
-    thumbnail_url: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800',
-    images: [
-      'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800',
-      'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800'
-    ],
-    amenities: ['에펠탑 도보 1분 정면 뷰', '프레임(FR|AME) 오가닉 레스토랑 & 바', '24시간 피트니스 센터', '전 객실 발코니 에펠탑 조망'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_paris_01_efl',
@@ -661,16 +634,16 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
     country: '프랑스',
     address: '2 Rue Scribe, 75009 Paris',
     star_rating: 5,
-    review_score: 4.9,
-    review_count: 2710,
+    review_score: null,
+    review_count: 0,
     neighborhood: '오페라 가르니에 / 방돔 광장',
     subway_nearby: '지하철 오페라역 도보 1분',
     property_type: 'HOTEL',
     free_cancellation: true,
     free_breakfast: true,
-    thumbnail_url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-    images: ['https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'],
-    amenities: ['1862년 나폴레옹 3세 시대 유서 깊은 궁전 양식', '카페 드 라 페(Café de la Paix)', '딥티크 어메니티', '클럽 라운지'],
+    thumbnail_url: null,
+    images: [],
+    amenities: [],
     rooms: [
       {
         id: 'rm_paris_02_std',
@@ -748,7 +721,8 @@ export function searchHotelCatalog(params: {
   if (params.sortBy === 'price_asc') {
     list.sort((a, b) => (a.rooms[0]?.base_price_krw || 0) - (b.rooms[0]?.base_price_krw || 0))
   } else if (params.sortBy === 'score_desc') {
-    list.sort((a, b) => b.review_score - a.review_score)
+    // Unrated properties (null) sort last — never as zero-score equals.
+    list.sort((a, b) => (b.review_score ?? -1) - (a.review_score ?? -1))
   }
 
   return list

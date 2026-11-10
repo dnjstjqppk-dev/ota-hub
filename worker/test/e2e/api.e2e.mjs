@@ -511,6 +511,56 @@ async function approvedPartner(tag) {
   return { id: reg.data.partnerId, token: login.data.token };
 }
 
+test("C1 onboarding: PENDING owners log in and complete profile; business endpoints stay ACTIVE-only", async () => {
+  const email = `qa_ptn_onb_${rnd()}@local.test`;
+  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: "QA onboarding", businessNumber: "000-00-00000" } });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
+  const login = await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } });
+  assert.equal(login.status, 200, JSON.stringify(login.data));
+  assert.equal(login.data.partner.profileStatus, "PENDING_APPROVAL");
+  const T = login.data.token;
+  const me = await api("GET", "/api/v1/partner/profile", { token: T });
+  assert.equal(me.status, 200, JSON.stringify(me.data));
+  const patched = await api("PATCH", "/api/v1/partner/profile", { token: T, body: { contactPhone: "02-1111-2222", bankName: "QA은행", bankAccountNumber: "123-45-6789", bankAccountHolder: "QA온보딩", taxInvoiceEmail: "tax-qa@local.test" } });
+  assert.equal(patched.status, 200, JSON.stringify(patched.data));
+  const me2 = await api("GET", "/api/v1/partner/profile", { token: T });
+  assert.equal(me2.data.partner.contact_phone, "02-1111-2222");
+  assert.equal(me2.data.partner.profile.bank_name, "QA은행");
+  for (const [m, p] of [["GET", "/api/v1/partner/dashboard"], ["GET", "/api/v1/partner/orders"], ["POST", "/api/v1/partner/api-keys"]]) {
+    const r = await api(m, p, m === "GET" ? { token: T } : { token: T, body: {} });
+    assert.equal(r.status, 403, `${m} ${p}: ${JSON.stringify(r.data)}`);
+  }
+});
+
+test("C1/C2 onboarding loop: real doc upload, business check, then approval unlocks the extranet", async () => {
+  const email = `qa_ptn_loop_${rnd()}@local.test`;
+  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: "QA loop", businessNumber: "000-00-00000" } });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
+  const id = reg.data.partnerId;
+  const T = (await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } })).data.token;
+  // Approval is blocked until docs exist (C1) and the business check is recorded (C2).
+  const noDocs = await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { status: "ACTIVE" } });
+  assert.equal(noDocs.status, 409);
+  assert.equal(noDocs.data.code, "DOCS_REQUIRED");
+  // Real upload path (multipart) for both onboarding documents.
+  for (const purpose of ["BUSINESS_CERT", "BANK_CERT"]) {
+    const form = new FormData();
+    form.append("file", new Blob(["%PDF-1.4 fake-cert"], { type: "application/pdf" }), `${purpose.toLowerCase()}.pdf`);
+    form.append("purpose", purpose);
+    const up = await fetch(BASE + "/api/v1/uploads", { method: "POST", headers: { Authorization: `Bearer ${T}` }, body: form });
+    assert.equal(up.status, 201, `${purpose}: ${await up.text()}`);
+  }
+  const noCheck = await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { status: "ACTIVE" } });
+  assert.equal(noCheck.status, 409);
+  assert.equal(noCheck.data.code, "BUSINESS_NOT_VERIFIED");
+  const vb = await api("POST", `/api/v1/admin/partners/${id}/verify-business`, { token: ADMIN, body: { method: "MANUAL", note: "E2E: 서류 대조 확인" } });
+  assert.equal(vb.status, 200, JSON.stringify(vb.data));
+  const ok = await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { status: "ACTIVE" } });
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  const dash = await api("GET", "/api/v1/partner/dashboard", { token: T });
+  assert.equal(dash.status, 200, JSON.stringify(dash.data));
+});
+
 test("partner extranet: orders are scoped to the partner; other partners cannot see or act on them", async () => {
   const q = (await quote(A.token)).data.quote;
   const b = (await book(A.token, q)).data.booking;
@@ -666,6 +716,14 @@ test("admin: partner status/commission and supplier LIVE switch are validated", 
   assert.equal((await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { status: "BOGUS" } })).status, 400);
   assert.equal((await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { settlementRateBps: -1 } })).status, 400);
   assert.equal((await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { settlementRateBps: 1250.5 } })).status, 400);
+  const gate = await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { status: "ACTIVE", settlementRateBps: 1250 } });
+  assert.equal(gate.status, 409, "C1: approval without onboarding docs is refused");
+  assert.equal(gate.data.code, "DOCS_REQUIRED");
+  sql(`UPDATE partner_profiles SET business_cert_url = 'https://r2.local.test/cert.pdf', bank_cert_url = 'https://r2.local.test/bank.pdf' WHERE partner_id = '${id}'`);
+  const gate2 = await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { status: "ACTIVE", settlementRateBps: 1250 } });
+  assert.equal(gate2.status, 409, "C2: approval without a business check is refused");
+  assert.equal(gate2.data.code, "BUSINESS_NOT_VERIFIED");
+  assert.equal((await api("POST", `/api/v1/admin/partners/${id}/verify-business`, { token: ADMIN, body: { method: "MANUAL", note: "E2E gate" } })).status, 200);
   assert.equal((await api("PATCH", `/api/v1/admin/partners/${id}`, { token: ADMIN, body: { status: "ACTIVE", settlementRateBps: 1250 } })).status, 200);
   assert.equal(sql(`SELECT settlement_rate_bps FROM partner_profiles WHERE partner_id = '${id}'`)[0].settlement_rate_bps, 1250);
 

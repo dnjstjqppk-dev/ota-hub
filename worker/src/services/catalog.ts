@@ -1,6 +1,6 @@
 import type { Env } from "../env.ts";
 import { flag } from "../env.ts";
-import type { CatalogProduct, Domain } from "../domain/pricing.ts";
+import type { CatalogProduct, Domain, StructuredPolicy } from "../domain/pricing.ts";
 import { HttpError } from "../lib/http.ts";
 
 export interface SupplierRow {
@@ -65,6 +65,23 @@ export function hotelRatePlans(hotel: { free_breakfast?: unknown; free_cancellat
 }
 
 /** Load a product from the server's own catalog. Throws 404 if absent. */
+/**
+ * Structured policy row for a product, validated the same way the admin API
+ * validates writes. Attached at quote time so the cancellation snapshot and
+ * the refund math use the same tiers the UI displays (C6).
+ */
+export async function loadStructuredPolicy(env: Env, domain: string, itemId: string): Promise<StructuredPolicy | null> {
+  const row = await env.DB.prepare("SELECT free_cancel_hours, tiers_json FROM product_policies WHERE domain_type = ? AND item_id = ?")
+    .bind(domain, itemId).first<{ free_cancel_hours: number | null; tiers_json: string | null }>();
+  if (!row) return null;
+  const tiers = parseJson<any[]>(row.tiers_json, [])
+    .filter((t) => Number.isInteger(t?.hours_before) && t.hours_before >= 0 && Number.isInteger(t?.refund_bps) && t.refund_bps >= 0 && t.refund_bps <= 10000)
+    .map((t) => ({ hoursBefore: t.hours_before, refundBps: t.refund_bps }));
+  const freeCancelHours = Number.isInteger(row.free_cancel_hours) && (row.free_cancel_hours as number) >= 0 ? (row.free_cancel_hours as number) : null;
+  if (!tiers.length && freeCancelHours === null) return null;
+  return { freeCancelHours, tiers };
+}
+
 export async function loadProduct(env: Env, domain: Domain, itemId: string, unitId: string | null, ratePlanId: string | null = null): Promise<CatalogProduct> {
   const db = env.DB;
   const notFound = () => new HttpError(404, "PRODUCT_NOT_FOUND", "상품을 찾을 수 없습니다.");

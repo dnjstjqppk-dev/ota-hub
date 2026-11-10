@@ -27,12 +27,12 @@ export interface ActivityProperty {
   guide_language: string
   price_krw: number
   original_price_krw: number
-  review_score: number
+  review_score: number | null
   review_count: number
   free_cancellation: boolean
   instant_confirmation: boolean
   badge: string
-  image_url: string
+  image_url: string | null
   gallery: string[]
   highlights: string[]
   included: string[]
@@ -53,16 +53,13 @@ export const MASTER_ACTIVITY_CATALOG: ActivityProperty[] = [
     guide_language: '자유 일정 (한국어 안내 리플릿)',
     price_krw: 89000,
     original_price_krw: 98000,
-    review_score: 4.9,
-    review_count: 8740,
+    review_score: null,
+    review_count: 0,
     free_cancellation: true,
     instant_confirmation: true,
     badge: '글로벌 베스트셀러',
-    image_url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800',
-      'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=800'
-    ],
+    image_url: null,
+    gallery: [],
     highlights: [
       '도쿄 디즈니랜드 매표소 대기 없이 모바일 QR 바로 입장',
       '디즈니 프리미어 액세스(DPA) 연동 가능',
@@ -106,15 +103,13 @@ export const MASTER_ACTIVITY_CATALOG: ActivityProperty[] = [
     guide_language: '자유 일정',
     price_krw: 82000,
     original_price_krw: 91000,
-    review_score: 4.9,
-    review_count: 11420,
+    review_score: null,
+    review_count: 0,
     free_cancellation: true,
     instant_confirmation: true,
     badge: '인기 테마파크 1위',
-    image_url: 'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=800'
-    ],
+    image_url: null,
+    gallery: [],
     highlights: [
       '슈퍼 닌텐도 월드 & 해리포터 마법의 세계 입장',
       '공식 파트너 인증 다이렉트 QR코드 발권',
@@ -148,15 +143,13 @@ export const MASTER_ACTIVITY_CATALOG: ActivityProperty[] = [
     guide_language: '한국어 전문 가이드',
     price_krw: 78000,
     original_price_krw: 89000,
-    review_score: 4.8,
-    review_count: 2430,
+    review_score: null,
+    review_count: 0,
     free_cancellation: true,
     instant_confirmation: true,
     badge: '인기 1일 버스투어',
-    image_url: 'https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=800'
-    ],
+    image_url: null,
+    gallery: [],
     highlights: [
       '신주쿠 출발 전용 리무진 버스로 후지산 5합목 방문',
       '하코네 로프웨이 케이블카 탑승 & 아시노코 해적유람선 조망',
@@ -189,15 +182,13 @@ export const MASTER_ACTIVITY_CATALOG: ActivityProperty[] = [
     guide_language: '자유 일정',
     price_krw: 42000,
     original_price_krw: 62000,
-    review_score: 4.8,
-    review_count: 5120,
+    review_score: null,
+    review_count: 0,
     free_cancellation: true,
     instant_confirmation: true,
     badge: '잠실 랜드마크',
-    image_url: 'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=800'
-    ],
+    image_url: null,
+    gallery: [],
     highlights: [
       '국내 최대 실내외 테마파크 어드벤처 & 매직아일랜드 종일 이용',
       '모바일 바코드 즉시 입장 (당일 구매 후 바로 사용 가능)',
@@ -231,15 +222,13 @@ export const MASTER_ACTIVITY_CATALOG: ActivityProperty[] = [
     guide_language: '한국어 공인 가이드',
     price_krw: 68000,
     original_price_krw: 82000,
-    review_score: 4.9,
-    review_count: 1890,
+    review_score: null,
+    review_count: 0,
     free_cancellation: true,
     instant_confirmation: true,
     badge: '파리 필수 도슨트',
-    image_url: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800'
-    ],
+    image_url: null,
+    gallery: [],
     highlights: [
       '모나리자, 밀로의 비너스, 사모트라케의 니케 등 핵심 걸작 집중 해설',
       '프랑스 공인 국가 가이드의 깊이 있는 역사/예술 스토리텔링',
@@ -272,15 +261,13 @@ export const MASTER_ACTIVITY_CATALOG: ActivityProperty[] = [
     guide_language: '한국어 상세 개통 매뉴얼',
     price_krw: 6900,
     original_price_krw: 9900,
-    review_score: 4.9,
-    review_count: 14200,
+    review_score: null,
+    review_count: 0,
     free_cancellation: true,
     instant_confirmation: true,
     badge: '필수 여행템 1위',
-    image_url: 'https://images.unsplash.com/photo-1512499617640-c74ae3a79d37?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1512499617640-c74ae3a79d37?w=800'
-    ],
+    image_url: null,
+    gallery: [],
     highlights: [
       '유심 교체 없이 이메일/카카오톡 QR코드 스캔 즉시 개통',
       '일본 1위 통신사 NTT Docomo / SoftBank 5G 망 자동 로밍',
@@ -341,7 +328,7 @@ export function searchActivityCatalog(params: {
   if (params.sortBy === 'price_asc') {
     list.sort((a, b) => a.price_krw - b.price_krw)
   } else if (params.sortBy === 'rating_desc') {
-    list.sort((a, b) => b.review_score - a.review_score)
+    list.sort((a, b) => (b.review_score ?? -1) - (a.review_score ?? -1))
   }
 
   return list

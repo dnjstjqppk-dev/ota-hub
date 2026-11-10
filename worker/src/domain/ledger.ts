@@ -85,6 +85,25 @@ export function fulfilmentReversed(bookingId: string, paidMinor: number, split: 
   ]);
 }
 
+/**
+ * Pro-rata reversal for a partial refund on a recognized order: the refunded
+ * slice of payable/commission/promo is unwound so CUSTOMER_DEPOSITS never
+ * goes negative while the live remainder stays recognized.
+ */
+export function fulfilmentReversedPartial(bookingId: string, takeMinor: number, split: RecognitionSplit, paidMinor: number): Journal | null {
+  if (!Number.isSafeInteger(takeMinor) || takeMinor <= 0 || !Number.isSafeInteger(paidMinor) || paidMinor <= 0) return null;
+  if (takeMinor >= paidMinor) return fulfilmentReversed(bookingId, paidMinor, split);
+  const promo = Math.max(0, Math.round(split.promotionMinor * takeMinor / paidMinor));
+  const supplier = Math.min(Math.max(0, Math.round(split.supplierPayableMinor * takeMinor / paidMinor)), takeMinor + promo);
+  const commission = takeMinor + promo - supplier;
+  return journal("FULFILMENT_REVERSED", bookingId, [
+    { account: "SUPPLIER_PAYABLE", direction: "DEBIT", amountMinor: supplier },
+    { account: "COMMISSION_REVENUE", direction: "DEBIT", amountMinor: commission },
+    { account: "CUSTOMER_DEPOSITS", direction: "CREDIT", amountMinor: takeMinor },
+    { account: "PROMOTION_EXPENSE", direction: "CREDIT", amountMinor: promo },
+  ]);
+}
+
 export function cancellationFeeRetained(bookingId: string, feeMinor: number): Journal | null {
   if (feeMinor <= 0) return null;
   return journal("CANCELLATION_FEE", bookingId, [

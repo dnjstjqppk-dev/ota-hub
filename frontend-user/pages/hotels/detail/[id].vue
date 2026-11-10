@@ -10,6 +10,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { getHotelById } from '~/data/hotelCatalog'
+import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,7 +18,7 @@ const currency = useCurrencyStore()
 
 const hotelId = String(route.params.id || route.query.hotelId || route.query.id || '')
 // Static catalogue is only a first paint (and SEO); never substitute a different hotel for an unknown id.
-const hotel = ref<any>(hotelId ? getHotelById(hotelId) || null : null)
+const hotel = ref<any>(hotelId ? getHotelById(hotelId) || generatedFallback('HOTEL', hotelId) : null)
 const loading = ref(!hotel.value)
 const notFound = ref(false)
 // Rate plans (price, meal, cancellation) only come from the live API.
@@ -183,7 +184,11 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
       <div class="flex shrink-0 items-center gap-3">
         <div v-if="score" class="flex items-center gap-2">
           <span class="rounded-xl bg-primary px-2.5 py-1.5 text-lg font-bold text-primary-ink tabular">{{ score.toFixed(1) }}</span>
-          <span class="text-xs leading-tight text-ink-muted">5점 만점<br /><template v-if="hotel.review_count">평가 {{ Number(hotel.review_count).toLocaleString('ko-KR') }}건</template></span>
+          <span class="text-xs leading-tight text-ink-muted">5점 만점<br /><template v-if="hotel.review_count">인증 후기 {{ Number(hotel.review_count).toLocaleString('ko-KR') }}건</template></span>
+        </div>
+        <div v-else class="flex items-center gap-2">
+          <span class="rounded-xl bg-surface-sunken px-2.5 py-1.5 text-sm font-bold text-ink-muted">신규</span>
+          <span class="text-xs leading-tight text-ink-muted">아직 인증 후기가 없어요</span>
         </div>
         <WishlistButton domain="HOTEL" :item-id="hotel.id" :title="hotel.name_ko || hotel.name" :price-krw="minRoomPrice" :thumbnail-url="gallery[0] || null" :target-url="$route.fullPath" />
         <PriceAlertButton domain="HOTEL" :item-id="hotel.id" :label="hotel.name_ko || hotel.name" :current-price="minRoomPrice" />
@@ -297,7 +302,7 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
               <li v-if="policy.free_cancel_hours !== null && policy.free_cancel_hours !== undefined" class="flex gap-2"><AppIcon name="check" :size="16" class="mt-0.5 text-success" />체크인 {{ hoursLabel(policy.free_cancel_hours) }} 전까지 무료 취소</li>
               <li v-for="(t, i) in (policy.tiers || [])" :key="i" class="flex gap-2"><AppIcon name="refund" :size="16" class="mt-0.5 text-ink-subtle" />체크인 {{ hoursLabel(t.hours_before) }} 전 취소 시 {{ pct(t.refund_bps) }} 환불{{ t.note ? ` · ${t.note}` : '' }}</li>
               <li v-if="policy.no_show_fee_bps" class="flex gap-2"><AppIcon name="refund" :size="16" class="mt-0.5 text-ink-subtle" />노쇼 시 요금의 {{ pct(policy.no_show_fee_bps) }} 위약금</li>
-              <li class="flex gap-2"><AppIcon name="check" :size="16" class="mt-0.5 text-ink-subtle" />일정 변경 {{ policy.change_allowed ? '가능' : '불가' }}</li>
+              <li class="flex gap-2"><AppIcon name="check" :size="16" class="mt-0.5 text-ink-subtle" />일정 변경은 지원하지 않아요. 날짜를 바꾸려면 취소 후 다시 예약해 주세요.</li>
               <li v-if="policy.note" class="flex gap-2 text-xs text-ink-subtle">{{ policy.note }}</li>
             </ul>
             <p v-else-if="loaded" class="mt-3 border-t border-line pt-3 text-xs text-ink-subtle">이 숙소는 <NuxtLink to="/refund-policy" class="underline">표준 취소·환불 규정</NuxtLink>을 따릅니다.</p>

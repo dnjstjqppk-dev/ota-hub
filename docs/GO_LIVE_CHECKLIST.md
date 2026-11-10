@@ -7,6 +7,11 @@
 
 ## 0. 직영 공급사 준비 (코드 배포 후 1회)
 
+Cloudflare Workers 유료 플랜이 필요하다. 비밀번호 해시(PBKDF2
+100k)는 무료 플랜 10ms CPU 예산을 초과할 수 있어 로그인·가입이
+실패할 수 있다. 기본값을 낮추는 대신 유료 플랜을 전제로 한다
+(측정치·근거: `worker/src/lib/crypto.ts` C9 주석).
+
 마이그레이션 `0020_direct_sales_supplier.sql`은 배포 시 자동 적용되지 않는다.
 수동 적용 후 행 존재를 확인한다.
 
@@ -126,12 +131,18 @@ npx wrangler secret put TOSS_SECRET_KEY   # test_sk_... 입력
 
 상점관리자 웹훅 URL에 등록:
 
+```powershell
+$secret = -join ((48..57) + (97..122) | Get-Random -Count 32 | ForEach-Object { [char]$_ })
+npx wrangler secret put TOSS_WEBHOOK_SECRET  # 위 $secret 입력
+```
+
 ```text
-https://ota-hub.dnjstjqppk.workers.dev/api/v1/webhooks/toss
+https://ota-hub.dnjstjqppk.workers.dev/api/v1/webhooks/toss?key=$secret
 ```
 
 웹훅은 힌트일 뿐 돈은 항상 PG 조회로 확정하므로(Dual-write 방지),
-등록 전에도 결제는 정상 동작한다. 등록 후에는 PG 응답 유실 건이 자동 화해된다.
+등록 전에도 결제는 정상 동작한다. 등록 후에는 PG 응답 유실 건이 자동 화해되고,
+토스 대시보드 직접 취소·차지백도 내부 예약·재고·코인·정산에 동기화된다.
 
 ## 9. 개통 후 상시 확인
 

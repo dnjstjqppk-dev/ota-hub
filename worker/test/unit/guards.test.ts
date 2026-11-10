@@ -66,6 +66,27 @@ test("ledger journals always balance; cancel-after-confirm nets customer deposit
   assert.equal(L.cancellationFeeRetained("b", 0), null);
 });
 
+test("partial reversal unwinds only the refunded slice and stays balanced", () => {
+  const paid = 605000, disc = 0;
+  const split = L.recognitionSplit(paid, disc, 9000);
+  const half = Math.floor(paid / 2);
+  const j = L.fulfilmentReversedPartial("b", half, split, paid)!;
+  assert.ok(L.balanced(j.lines), "partial journal balances");
+  assert.equal(j.eventType, "FULFILMENT_REVERSED");
+  const dep = (jj: L.Journal) => jj.lines.filter((l) => l.account === "CUSTOMER_DEPOSITS").reduce((s, l) => s + (l.direction === "CREDIT" ? l.amountMinor : -l.amountMinor), 0);
+  // Capture + recognition + partial reversal + partial payout nets deposits to zero.
+  const flow = [L.paymentCaptured("p", paid), L.fulfilmentRecognized("b", paid, split), j, L.refundPaid("r", half)];
+  assert.equal(flow.reduce((s, x) => s + dep(x), 0), 0);
+  // A second partial for the remainder also nets out (cumulative tracking).
+  const rest = L.fulfilmentReversedPartial("b", paid - half, split, paid)!;
+  assert.ok(L.balanced(rest.lines));
+  assert.equal(dep(rest) - (paid - half), 0);
+  // Full-or-more delegates to the whole reversal; garbage returns null.
+  assert.equal(L.fulfilmentReversedPartial("b", paid, split, paid)!.lines.length, L.fulfilmentReversed("b", paid, split).lines.length);
+  assert.equal(L.fulfilmentReversedPartial("b", 0, split, paid), null);
+  assert.equal(L.fulfilmentReversedPartial("b", -5, split, paid), null);
+});
+
 test("public reviewer names are masked", async () => {
   const { maskName } = await import("../../src/lib/crypto.ts");
   assert.equal(maskName("김민지"), "김*지");

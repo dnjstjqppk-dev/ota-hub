@@ -59,6 +59,44 @@ export function renderOutboxEmail(template: string, payloadJson: string, site: s
       html: `<p>${esc(what)}. 예약번호: <b>${esc(num)}</b></p><p><a href="${esc(url)}">내 예약에서 바우처 확인하기</a></p>`,
     };
   }
+  if (template === "PAYMENT_COMPLETED") {
+    const num = String(p.bookingNumber || p.bookingId || "");
+    const amt = Number(p.amountMinor);
+    if (!num || !Number.isSafeInteger(amt)) return null;
+    const url = `${site.replace(/\/+$/, "")}/my/bookings`;
+    return {
+      subject: `[${brand}] 결제가 완료됐어요 — ${num}`,
+      html: `<p>${amt.toLocaleString("ko-KR")}원 결제가 완료됐어요. 예약번호: <b>${esc(num)}</b></p><p>공급사 확정이 끝나면 바우처를 보내드려요. <a href="${esc(url)}">내 예약 보기</a></p>`,
+    };
+  }
+  if (template === "BOOKING_CANCELLED") {
+    const num = String(p.bookingNumber || p.bookingId || "");
+    if (!num) return null;
+    const url = `${site.replace(/\/+$/, "")}/my/bookings`;
+    return {
+      subject: `[${brand}] 예약이 취소됐어요 — ${num}`,
+      html: `<p>예약번호 <b>${esc(num)}</b> 예약이 취소됐어요.</p><p>환불 대상 금액이 있으면 취소·환불 규정에 따라 원래 결제 수단으로 돌려드려요. <a href="${esc(url)}">내 예약 보기</a></p>`,
+    };
+  }
+  if (template === "REFUND_COMPLETED") {
+    const num = String(p.bookingNumber || p.bookingId || "");
+    const amt = Number(p.amountMinor);
+    if (!num || !Number.isSafeInteger(amt)) return null;
+    const url = `${site.replace(/\/+$/, "")}/my/bookings`;
+    return {
+      subject: `[${brand}] ${amt.toLocaleString("ko-KR")}원 환불이 완료됐어요 — ${num}`,
+      html: `<p>예약번호 <b>${esc(num)}</b>에 대해 <b>${amt.toLocaleString("ko-KR")}원</b>을 환불했어요. 카드사·은행 사정에 따라 입금까지 며칠 걸릴 수 있어요.</p><p><a href="${esc(url)}">내 예약 보기</a></p>`,
+    };
+  }
+  if (template === "SUPPLIER_REJECTED") {
+    const num = String(p.bookingNumber || p.bookingId || "");
+    if (!num) return null;
+    const url = `${site.replace(/\/+$/, "")}/my/bookings`;
+    return {
+      subject: `[${brand}] 공급사가 예약을 받지 못했어요 — ${num}`,
+      html: `<p>예약번호 <b>${esc(num)}</b>에 대해 공급사가 예약을 확정하지 못했어요. 결제한 금액은 전액 환불해 드려요.</p><p><a href="${esc(url)}">내 예약 보기</a></p>`,
+    };
+  }
   return null;
 }
 
@@ -85,7 +123,11 @@ const MAX_ATTEMPTS = 5;
  * Deliver queued EMAIL rows. Without a provider key every row is left queued
  * and reported as pending — callers (cron, admin) can see the backlog.
  */
-export async function flushOutbox(env: Env, limit = 20): Promise<{ sent: number; failed: number; pending: number }> {
+export async function flushOutbox(env: Env, limit?: number): Promise<{ sent: number; failed: number; pending: number }> {
+  // C4: 50 rows per 5-minute cron = ~600/hr. Override with OUTBOX_BATCH_LIMIT
+  // (capped at 200: each send is a live Resend call inside one cron run).
+  const batch = limit ?? Math.min(200, Math.max(1, Number(env.OUTBOX_BATCH_LIMIT) || 50));
+  limit = batch;
   const rows = await env.DB.prepare(
     "SELECT id, recipient, template, payload_json, attempts FROM notification_outbox WHERE channel = 'EMAIL' AND status IN ('PENDING', 'BLOCKED_NO_PROVIDER') AND attempts < ? ORDER BY created_at LIMIT ?",
   ).bind(MAX_ATTEMPTS, limit).all<any>();
@@ -114,8 +156,13 @@ export async function flushOutbox(env: Env, limit = 20): Promise<{ sent: number;
   return { sent, failed, pending: 0 };
 }
 
-/** Enqueue helper for future writers; keeps the insert shape in one place. */
+/**
+ * Enqueue helper for writers; keeps the insert shape in one place. Only EMAIL
+ * delivers today — SMS/KAKAO have no sender, so they fail closed here instead
+ * of queueing rows nobody will ever send (C3).
+ */
 export function outboxInsert(db: D1Database, channel: "EMAIL" | "SMS" | "KAKAO", recipient: string, template: string, payload: unknown): D1PreparedStatement {
+  if (channel !== "EMAIL") throw new Error(`${channel} delivery is not implemented; no sender is configured.`);
   return db.prepare("INSERT INTO notification_outbox (id, channel, recipient, template, payload_json, status) VALUES (?, ?, ?, ?, ?, 'PENDING')")
     .bind(newId("ntf"), channel, recipient, template, JSON.stringify(payload));
 }

@@ -31,6 +31,8 @@ export interface CatalogProduct {
   maxOccupancy: number | null;
   freeCancellation: boolean;
   instantConfirmation: boolean;
+  /** Structured policy row when the admin set one; drives the cancellation snapshot. */
+  structuredPolicy?: StructuredPolicy | null;
   /** Clock time "HH:MM" for scheduled products (flights / trains). */
   departureClock: string | null;
   /** FLIGHT: origin / destination airport codes, used to validate round trips. */
@@ -68,12 +70,25 @@ export interface Promotion {
   active: boolean;
 }
 
+export interface PolicyTier {
+  hoursBefore: number;
+  refundBps: number;
+}
+
+/** Structured per-product policy (product_policies). Tiers are what the UI displays; the refund math must use the same rows (C6). */
+export interface StructuredPolicy {
+  freeCancelHours: number | null;
+  tiers: PolicyTier[];
+}
+
 export interface CancellationPolicy {
-  /** FREE_UNTIL: full refund until `freeUntil`, then `feeBpsAfter` charged. NON_REFUNDABLE: 100% fee. */
-  type: "FREE_UNTIL" | "NON_REFUNDABLE";
+  /** FREE_UNTIL: full refund until `freeUntil`, then `feeBpsAfter` charged. NON_REFUNDABLE: 100% fee. TIERED: refund_bps by hours before `serviceStart`. */
+  type: "FREE_UNTIL" | "NON_REFUNDABLE" | "TIERED";
+  tiers?: PolicyTier[];
+  serviceStart?: string;
   freeUntil: string | null;
   feeBpsAfter: number;
-  source: "CATALOG_RULE";
+  source: "CATALOG_RULE" | "PRODUCT_POLICY";
 }
 
 export interface QuoteLine {
@@ -156,12 +171,19 @@ export function normalizeTravelers(t: Partial<Travelers> | undefined): Travelers
 }
 
 export function cancellationPolicyFor(product: CatalogProduct, serviceStartMs: number): CancellationPolicy {
+  const sp = product.structuredPolicy;
+  const tiers = (sp?.tiers || []).filter((t) => Number.isInteger(t.hoursBefore) && t.hoursBefore >= 0 && Number.isInteger(t.refundBps) && t.refundBps >= 0 && t.refundBps <= 10000);
+  if (tiers.length) {
+    tiers.sort((a, b) => b.hoursBefore - a.hoursBefore);
+    return { type: "TIERED", freeUntil: null, feeBpsAfter: 10000, tiers, serviceStart: new Date(serviceStartMs).toISOString(), source: "PRODUCT_POLICY" };
+  }
   if (!product.freeCancellation) {
     return { type: "NON_REFUNDABLE", freeUntil: null, feeBpsAfter: 10000, source: "CATALOG_RULE" };
   }
-  // Free cancellation until 24h before the service starts (00:00 UTC of service date).
-  const freeUntil = new Date(serviceStartMs - MS_DAY).toISOString();
-  return { type: "FREE_UNTIL", freeUntil, feeBpsAfter: 10000, source: "CATALOG_RULE" };
+  // Free cancellation until free_cancel_hours before the service (default 24h).
+  const freeHours = sp && Number.isInteger(sp.freeCancelHours) && (sp.freeCancelHours as number) >= 0 ? (sp.freeCancelHours as number) : 24;
+  const freeUntil = new Date(serviceStartMs - freeHours * 3600_000).toISOString();
+  return { type: "FREE_UNTIL", freeUntil, feeBpsAfter: 10000, source: sp ? "PRODUCT_POLICY" : "CATALOG_RULE" };
 }
 
 export function promotionDiscount(promo: Promotion | null, subtotalMinor: number, nowIso: string): number {
@@ -397,6 +419,21 @@ export function computeCancellation(
   let feeBps = 0;
   if (policy.type === "NON_REFUNDABLE") {
     feeBps = policy.feeBpsAfter;
+  } else if (policy.type === "TIERED") {
+    // The applicable tier is the one with the largest hours_before at or under
+    // the actual hours before service; past every cutoff the refund is 0.
+    const startMs = policy.serviceStart ? Date.parse(policy.serviceStart) : NaN;
+    if (!Number.isFinite(startMs)) {
+      feeBps = 10000;
+    } else {
+      const hoursBefore = (startMs - now.getTime()) / 3600_000;
+      let refundBps = 0;
+      let bestCutoff = -1;
+      for (const t of policy.tiers || []) {
+        if (t.hoursBefore <= hoursBefore && t.hoursBefore > bestCutoff && t.refundBps >= 0) { bestCutoff = t.hoursBefore; refundBps = t.refundBps; }
+      }
+      feeBps = 10000 - Math.min(10000, Math.max(0, refundBps));
+    }
   } else if (policy.freeUntil && now.toISOString() > policy.freeUntil) {
     feeBps = policy.feeBpsAfter;
   }

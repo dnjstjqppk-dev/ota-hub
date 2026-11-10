@@ -2,19 +2,20 @@ import { ref, onMounted } from 'vue'
 import { apiFetch } from '~/composables/useApi'
 
 /**
- * Loads one catalog product from the API. There is deliberately no fallback product:
- * an unknown id renders "not found", never a different (default) product that could be booked by mistake.
+ * Loads one catalog product from the API. `fallback` is the build-time snapshot entry for the SAME id:
+ * it paints synchronously for prerendered SEO and is replaced by the live row on mount. A live 404 (delisted since the snapshot) clears it; an unknown id still renders "not found".
  */
-export function useCatalogDetail(apiPath: string, id: string) {
-  const item = ref<any>(null)
-  const state = ref<'loading' | 'ok' | 'notfound' | 'error'>('loading')
+export function useCatalogDetail(apiPath: string, id: string, fallback: Record<string, any> | null = null) {
+  const item = ref<any>(fallback)
+  const state = ref<'loading' | 'ok' | 'notfound' | 'error'>(fallback ? 'ok' : 'loading')
 
   async function load() {
-    if (!id) { state.value = 'notfound'; return }
-    state.value = 'loading'
+    if (!id) { item.value = null; state.value = 'notfound'; return }
+    if (!fallback) state.value = 'loading'
     const r = await apiFetch(`${apiPath}/${encodeURIComponent(id)}`)
     if (r.ok && r.data?.data) { item.value = r.data.data; state.value = 'ok'; return }
-    state.value = r.status === 404 ? 'notfound' : 'error'
+    if (r.status === 404) { item.value = null; state.value = 'notfound'; return }
+    state.value = fallback ? 'ok' : 'error'
   }
 
   onMounted(load)

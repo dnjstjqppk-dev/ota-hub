@@ -3,10 +3,11 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail, jsonLdScript } from '~/composables/useCatalogDetail'
+import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
-const { item: p, state, reload } = useCatalogDetail('/packages', id)
+const { item: p, state, reload } = useCatalogDetail('/packages', id, generatedFallback('PACKAGE', id))
 
 const details = computed<any>(() => {
   try { return JSON.parse(p.value?.details_json || '{}') || {} } catch { return {} }

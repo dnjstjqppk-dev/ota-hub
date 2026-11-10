@@ -311,7 +311,10 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
                     </div>
                     <div v-if="Number(h.review_score) > 0" class="flex shrink-0 flex-col items-end">
                       <span class="rounded-lg bg-primary px-2 py-1 text-sm font-bold text-primary-ink tabular">{{ Number(h.review_score).toFixed(1) }}</span>
-                      <span v-if="h.review_count" class="mt-1 text-2xs text-ink-subtle tabular">평가 {{ Number(h.review_count).toLocaleString('ko-KR') }}</span>
+                      <span v-if="h.review_count" class="mt-1 text-2xs text-ink-subtle tabular">인증 후기 {{ Number(h.review_count).toLocaleString('ko-KR') }}</span>
+                    </div>
+                    <div v-else class="flex shrink-0 flex-col items-end">
+                      <span class="rounded-lg bg-surface-sunken px-2 py-1 text-xs font-bold text-ink-muted">신규</span>
                     </div>
                   </div>
 

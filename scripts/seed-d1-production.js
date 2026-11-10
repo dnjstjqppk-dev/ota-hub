@@ -73,14 +73,14 @@ hotels.forEach(h => {
     ${h.longitude || 139.7292},
     ${h.star_rating || 5},
     ${escapeSql(h.property_type || 'HOTEL')},
-    ${h.review_score || 4.8},
-    ${h.review_count || 500},
+    ${h.review_score ?? 'NULL'},
+    ${h.review_count ?? 0},
     ${escapeSql(h.neighborhood || '')},
     ${escapeSql(h.subway_nearby || '')},
     ${h.free_cancellation ? 1 : 0},
     ${h.free_breakfast ? 1 : 0},
     ${minPrice},
-    ${escapeSql(h.thumbnail_url || (h.images?.[0] ?? ''))},
+    ${escapeSql(h.thumbnail_url ?? h.images?.[0] ?? null)},
     ${escapeSql(JSON.stringify(h.images || []))},
     ${escapeSql(JSON.stringify(h.amenities || []))},
     ${escapeSql(JSON.stringify(h.rooms || []))}
@@ -180,8 +180,8 @@ activities.forEach(a => {
     ${escapeSql(a.city)},
     ${escapeSql(a.country)},
     ${a.price_krw || 50000},
-    ${a.review_score || 4.9},
-    ${a.review_count || 500},
+    ${a.review_score ?? 'NULL'},
+    ${a.review_count ?? 0},
     ${a.instant_confirmation ? 1 : 0},
     ${a.free_cancellation ? 1 : 0},
     ${escapeSql(a.duration_type || 'FULL_DAY')},
@@ -218,6 +218,10 @@ packages.forEach(p => {
 
 fs.writeFileSync(outSqlPath, sqlStatements.join('\n\n'), 'utf8');
 console.log(`\n💾 Generated SQL file with ${sqlStatements.length} statements at: ${outSqlPath}`);
+if (!process.argv.includes('--execute')) {
+  console.log('ℹ️ SQL generated only. Pass --execute to run the remote D1 seed.');
+  process.exit(0);
+}
 console.log('🚀 Executing D1 remote seed...');
 
 try {

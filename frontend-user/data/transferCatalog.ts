@@ -21,7 +21,7 @@ export interface TransferProperty {
   flight_tracking: boolean
   meet_and_greet: boolean
   free_cancellation_hours: number
-  image_url: string
+  image_url: string | null
   features: string[]
   service_highlights: string[]
   meeting_guide: string
@@ -47,7 +47,7 @@ export const MASTER_TRANSFER_CATALOG: TransferProperty[] = [
     flight_tracking: true,
     meet_and_greet: true,
     free_cancellation_hours: 24,
-    image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800',
+    image_url: null,
     features: ['항공편 지연 자동 추적', '입국장 60분 무료 대기', '기사 네임보드 피켓 영접', '고속도로 통행료/유류비 포함'],
     service_highlights: [
       '항공편 실시간 자동 추적: 항공기 조기 착륙 또는 지연 착륙 시 기사님이 착륙 시간에 맞춰 자동 대기',
@@ -74,7 +74,7 @@ export const MASTER_TRANSFER_CATALOG: TransferProperty[] = [
     flight_tracking: true,
     meet_and_greet: true,
     free_cancellation_hours: 24,
-    image_url: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800',
+    image_url: null,
     features: ['안락한 4도어 고급 세단', '생수 무료 제공', '무료 60분 대기', '통행료 전액 포함'],
     service_highlights: [
       '경제적이고 안락한 1~3인 전용 공항 이동 솔루션',
@@ -100,7 +100,7 @@ export const MASTER_TRANSFER_CATALOG: TransferProperty[] = [
     flight_tracking: true,
     meet_and_greet: true,
     free_cancellation_hours: 24,
-    image_url: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800',
+    image_url: null,
     features: ['정숙한 고급 대형 세단', '항공편 지연 무료 추적', '생수 및 물티슈 제공', '프리미엄 기사 배정'],
     service_highlights: [
       '비즈니스 출장 및 소규모 가족 이동에 최적화된 고급 세단',
@@ -125,7 +125,7 @@ export const MASTER_TRANSFER_CATALOG: TransferProperty[] = [
     flight_tracking: true,
     meet_and_greet: true,
     free_cancellation_hours: 24,
-    image_url: 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800',
+    image_url: null,
     features: ['정장 의전 전문 기사', 'VIP 입국 영접 서비스', '90분 무료 대기', '에비앙 생수 및 어메니티'],
     service_highlights: [
       '국빈 및 VIP 의전을 위한 최고급 플래그십 세단',
@@ -155,7 +155,7 @@ export const MASTER_TRANSFER_CATALOG: TransferProperty[] = [
     flight_tracking: true,
     meet_and_greet: true,
     free_cancellation_hours: 24,
-    image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800',
+    image_url: null,
     features: ['김포공항 전용 픽업', '입국장 60분 무료 대기', '도심 30분대 쾌속 주파', '짐 무료 적재'],
     service_highlights: [
       '서울 도심과 가장 가까운 김포공항 최적화 픽업',
@@ -183,7 +183,7 @@ export const MASTER_TRANSFER_CATALOG: TransferProperty[] = [
     flight_tracking: true,
     meet_and_greet: true,
     free_cancellation_hours: 24,
-    image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800',
+    image_url: null,
     features: ['한국어 가능 기사 옵션', '수도고속도로 톨게이트비 포함', '60분 무료 대기', '공식 녹색 번호판 허가 차량'],
     service_highlights: [
       '일본 국토교통성 인증 정식 녹색 영업 번호판(미도리 넘버) 보증 차량',
@@ -208,7 +208,7 @@ export const MASTER_TRANSFER_CATALOG: TransferProperty[] = [
     flight_tracking: true,
     meet_and_greet: true,
     free_cancellation_hours: 24,
-    image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800',
+    image_url: null,
     features: ['장거리 픽업 90분 무료 대기', '히가시칸토 고속도로 톨비 포함', '대형 캐리어 8개 적재 가능'],
     service_highlights: [
       '나리타에서 도쿄 도심까지 70km 장거리 무환승 직행',
@@ -237,7 +237,7 @@ export const MASTER_TRANSFER_CATALOG: TransferProperty[] = [
     flight_tracking: true,
     meet_and_greet: true,
     free_cancellation_hours: 24,
-    image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800',
+    image_url: null,
     features: ['한신고속도로 톨게이트 포함', '오사카/교토 호텔 직행', '정식 영업용 번호판'],
     service_highlights: [
       '오사카 도심 숙소 앞까지 바로 이동하는 프리미엄 픽업',

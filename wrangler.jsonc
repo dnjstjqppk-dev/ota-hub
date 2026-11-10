@@ -19,6 +19,9 @@
       "migrations_dir": "worker/migrations"
     }
   ],
+  "r2_buckets": [
+    { "binding": "UPLOADS", "bucket_name": "getfortrip-uploads" }
+  ],
   "assets": {
     "directory": "frontend-user/.output/public",
     "binding": "ASSETS",

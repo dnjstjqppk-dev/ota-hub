@@ -2,10 +2,11 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCatalogDetail, jsonLdScript } from '~/composables/useCatalogDetail'
+import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
-const { item: t, state, reload } = useCatalogDetail('/trains', id)
+const { item: t, state, reload } = useCatalogDetail('/trains', id, generatedFallback('TRAIN', id))
 const hm = (m: number) => `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ''}`
 
 const facts = computed(() => {

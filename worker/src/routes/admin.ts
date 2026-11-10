@@ -6,6 +6,7 @@ import { BOOKING_STATUSES } from "../domain/state-machine.ts";
 import { newId } from "../lib/crypto.ts";
 import { invalidateSupplierCache } from "../services/catalog.ts";
 import { likeEscape } from "../services/suggest-service.ts";
+import { verifyBusinessNumber } from "../services/business-verify.ts";
 import { pageMeta, pageParams } from "../lib/pagination.ts";
 import { idempotencyPrecheck, idempotencyStore } from "../lib/idempotency.ts";
 
@@ -782,7 +783,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const status = str(url.searchParams.get("status"), 20).toUpperCase();
     const cols = `p.id, p.email, p.company_name, p.partner_type, p.business_number, p.contact_phone, p.is_active,
               COALESCE(pr.status, 'ACTIVE') AS profile_status, COALESCE(pr.settlement_rate_bps, 1000) AS settlement_rate_bps,
-              pr.representative_name, pr.bank_name, pr.bank_account_number, pr.bank_account_holder, pr.tax_invoice_email,
+              pr.representative_name, pr.bank_name, pr.bank_account_number, pr.bank_account_holder, pr.tax_invoice_email, pr.business_cert_url, pr.bank_cert_url, pr.business_verified_at, pr.business_verify_method,
               pr.rejection_reason, pr.created_at, pr.approved_at, pr.approved_by`;
     const from = "partners p LEFT JOIN partner_profiles pr ON pr.partner_id = p.id";
     let where = "1=1";
@@ -800,6 +801,34 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const total = ((await db.prepare(`SELECT COUNT(*) AS total FROM ${from} WHERE ${where}`).bind(...p).first<{ total: number }>())?.total || 0) as number;
     const rows = await db.prepare(`SELECT ${cols} FROM ${from} WHERE ${where} ORDER BY pr.created_at DESC LIMIT ? OFFSET ?`).bind(...p, pg.pageSize, pg.offset).all();
     return json({ success: true, partners: rows.results || [], ...pageMeta(total, pg.page, pg.pageSize) });
+  }
+
+  // C2: record a business-number check (NTS API or documented manual review).
+  m = path.match(/^\/api\/v1\/admin\/partners\/([A-Za-z0-9_-]+)\/verify-business$/);
+  if (m && method === "POST") {
+    const body = await readJson(request);
+    const methodKind = str(body.method, 10).toUpperCase();
+    if (methodKind !== "NTS_API" && methodKind !== "MANUAL") {
+      throw new HttpError(400, "INVALID_METHOD", "method는 NTS_API | MANUAL 중 하나여야 합니다.");
+    }
+    const p = await db.prepare("SELECT id, business_number FROM partners WHERE id = ?").bind(m[1]).first<any>();
+    if (!p) throw new HttpError(404, "PARTNER_NOT_FOUND", "파트너를 찾을 수 없습니다.");
+    let check: { valid: boolean; status: string; statusCode: string } | null = null;
+    if (methodKind === "NTS_API") {
+      check = await verifyBusinessNumber(env, p.business_number);
+      if (!check.valid) {
+        await audit(env, admin.id, "PARTNER_BUSINESS_CHECK_FAILED", "PARTNER", p.id, { method: methodKind, status: check.status, code: check.statusCode });
+        throw new HttpError(409, "BUSINESS_INVALID", `사업자등록번호 상태가 정상이 아닙니다. (${check.status || check.statusCode})`);
+      }
+    } else {
+      const note = str(body.note, 300);
+      if (!note) throw new HttpError(400, "NOTE_REQUIRED", "수동 확인은 확인 근거를 기록해야 합니다.");
+    }
+    const now = new Date().toISOString();
+    await db.prepare("UPDATE partner_profiles SET business_verified_at = ?, business_verified_by = ?, business_verify_method = ? WHERE partner_id = ?")
+      .bind(now, admin.id, methodKind, p.id).run();
+    await audit(env, admin.id, "PARTNER_BUSINESS_VERIFIED", "PARTNER", p.id, { method: methodKind, status: check?.status || null, note: str(body.note, 300) || null });
+    return json({ success: true, verified: true, method: methodKind, status: check?.status || null });
   }
 
   m = path.match(/^\/api\/v1\/admin\/partners\/([A-Za-z0-9_-]+)$/);
@@ -820,6 +849,17 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     }
     const exists = await db.prepare("SELECT id FROM partners WHERE id = ?").bind(partnerId).first();
     if (!exists) throw new HttpError(404, "PARTNER_NOT_FOUND", "파트너를 찾을 수 없습니다.");
+
+    // C1/C2: approval requires onboarding docs AND a recorded business check.
+    if (targetStatus === "ACTIVE") {
+      const prof = await db.prepare("SELECT business_cert_url, bank_cert_url, business_verified_at FROM partner_profiles WHERE partner_id = ?").bind(partnerId).first<any>();
+      if (!prof?.business_cert_url || !prof?.bank_cert_url) {
+        throw new HttpError(409, "DOCS_REQUIRED", "사업자등록증과 통장사본이 등록되지 않은 파트너는 승인할 수 없습니다.");
+      }
+      if (!prof?.business_verified_at) {
+        throw new HttpError(409, "BUSINESS_NOT_VERIFIED", "사업자등록번호 진위확인이 끝나지 않은 파트너는 승인할 수 없습니다.");
+      }
+    }
 
     if (targetStatus) {
       const isActive = targetStatus === "ACTIVE" ? 1 : 0;

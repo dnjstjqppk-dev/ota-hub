@@ -8,6 +8,7 @@ import type { Env } from "../env.ts";
 import { json, str } from "../lib/http.ts";
 import { hotelRatePlans, supplierBookabilityMap, type Bookability } from "../services/catalog.ts";
 import { airportsForCityCode, airportsForPlaceName, likeEscape, parseDomain, suggest } from "../services/suggest-service.ts";
+import { catalogSnapshot } from "./seo.ts";
 
 /** User text for a LIKE '%...%' pattern: `%`/`_`/`\` become literals, never wildcards. */
 const contains = (s: string): string => `%${likeEscape(s)}%`;
@@ -49,6 +50,12 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
     if (!domain || !itemId) return json({ success: true, policy: null });
     const row = await env.DB.prepare("SELECT domain_type, item_id, free_cancel_hours, change_allowed, no_show_fee_bps, tiers_json, floor_price_minor, note, updated_at FROM product_policies WHERE domain_type = ? AND item_id = ?").bind(domain, itemId).first<any>();
     return json({ success: true, policy: row ? { ...row, tiers: JSON.parse(row.tiers_json || "[]") } : null });
+  }
+
+  // C7: build-time SEO snapshot (public; powers prerender routes + first paint).
+  if (path === "/api/v1/seo/snapshot") {
+    const snap = await catalogSnapshot(env);
+    return json({ success: true, generatedAt: new Date().toISOString(), ...snap }, 200, { "Cache-Control": "public, max-age=3600" });
   }
 
   // Legal document version registry (bodies live in the versioned frontend pages).
@@ -136,11 +143,11 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       } else if (sortBy === "price_desc") {
         q += " ORDER BY base_price_krw DESC";
       } else if (sortBy === "score_desc") {
-        q += " ORDER BY review_score DESC, review_count DESC";
+        q += " ORDER BY review_score DESC NULLS LAST, review_count DESC";
       } else if (sortBy === "star_desc") {
-        q += " ORDER BY star_rating DESC, review_score DESC";
+        q += " ORDER BY star_rating DESC, review_score DESC NULLS LAST";
       } else {
-        q += " ORDER BY review_score DESC, star_rating DESC";
+        q += " ORDER BY review_score DESC NULLS LAST, star_rating DESC";
       }
       q += ` LIMIT ${Math.min(limit, 100)}`;
 
@@ -383,9 +390,9 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       if (sortBy === "price_asc") {
         q += " ORDER BY price_krw ASC";
       } else if (sortBy === "rating_desc") {
-        q += " ORDER BY review_score DESC, review_count DESC";
+        q += " ORDER BY review_score DESC NULLS LAST, review_count DESC";
       } else {
-        q += " ORDER BY review_score DESC, review_count DESC";
+        q += " ORDER BY review_score DESC NULLS LAST, review_count DESC";
       }
       q += " LIMIT 50";
       const res = await env.DB.prepare(q).bind(...p).all();

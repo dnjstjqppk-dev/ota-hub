@@ -19,6 +19,9 @@ const editActive = ref(true)
 const editBusy = ref(false)
 const editError = ref('')
 
+const imgBusy = ref(false)
+const imgMsg = ref('')
+
 function openEdit(p: ProductRow) {
   editing.value = p
   editTitle.value = p.title
@@ -26,6 +29,46 @@ function openEdit(p: ProductRow) {
   editPrice.value = Number(p.base_price_krw) || 0
   editActive.value = p.is_active === 1
   editError.value = ''
+  imgMsg.value = ''
+}
+
+async function uploadImages(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const files = Array.from(input.files || [])
+  if (!files.length || !editing.value) return
+  imgBusy.value = true
+  imgMsg.value = ''
+  editError.value = ''
+  try {
+    const ids: string[] = []
+    for (const file of files.slice(0, 10)) {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('purpose', 'PRODUCT_IMAGE')
+      const up = await fetch(apiUrl('/uploads'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${partnerToken()}` },
+        body: form
+      })
+      const uj = await up.json().catch(() => ({}))
+      if (!up.ok) throw new Error(uj.error || `"${file.name}" 업로드에 실패했습니다.`)
+      ids.push(uj.id)
+    }
+    const res = await fetch(apiUrl(`/partner/products/${editing.value.id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken()}` },
+      body: JSON.stringify({ imageIds: ids })
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(j.error || '이미지 연결에 실패했습니다.')
+    imgMsg.value = `${ids.length}장을 등록했어요.`
+    await fetchProducts()
+  } catch (e) {
+    editError.value = (e as Error).message
+  } finally {
+    imgBusy.value = false
+    input.value = ''
+  }
 }
 
 async function saveEdit() {
@@ -410,6 +453,12 @@ onMounted(() => {
             <input v-model="editActive" type="checkbox" class="h-4 w-4 rounded accent-success" />
             <span>판매 중 (끄면 사용자 사이트에서 숨겨져요)</span>
           </label>
+          <div class="space-y-1">
+            <label class="label">상품 이미지 (최대 10장 · JPEG/PNG/WebP, 장당 8MB 이하)</label>
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="input text-xs" :disabled="imgBusy" @change="uploadImages" />
+            <p v-if="imgMsg" class="text-[11px] font-bold text-success">{{ imgMsg }}</p>
+            <p v-if="imgBusy" class="text-[11px] text-ink-subtle">업로드 중…</p>
+          </div>
           <div class="flex items-center justify-end gap-2 border-t border-line pt-2">
             <button type="button" class="btn-secondary btn-sm" @click="editing = null">취소</button>
             <button type="submit" :disabled="editBusy" class="btn-primary btn-sm">{{ editBusy ? '저장 중...' : '수정 완료' }}</button>

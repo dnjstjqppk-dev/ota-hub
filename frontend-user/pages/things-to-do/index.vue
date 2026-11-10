@@ -109,8 +109,9 @@ useHead(() => ({
                 <h3 class="mt-1 line-clamp-2 text-sm font-bold leading-snug text-ink"><NuxtLink :to="`/things-to-do/detail/${a.id}`" class="after:absolute after:inset-0 group-hover:text-primary">{{ a.title }}</NuxtLink></h3>
                 <p v-if="Number(a.review_score) > 0" class="mt-1.5 flex items-center gap-1 text-xs text-ink-muted">
                   <AppIcon name="star" :size="12" stroke="0" class="fill-current text-warning" /><b class="text-ink tabular">{{ Number(a.review_score).toFixed(1) }}</b>
-                  <span v-if="a.review_count" class="tabular">({{ Number(a.review_count).toLocaleString('ko-KR') }})</span>
+                  <span v-if="a.review_count" class="tabular">(인증 후기 {{ Number(a.review_count).toLocaleString('ko-KR') }})</span>
                 </p>
+                <p v-else class="mt-1.5 text-2xs font-semibold text-ink-subtle">신규</p>
                 <ul class="mt-2 flex flex-wrap gap-x-2.5 gap-y-1 text-2xs font-semibold">
                   <li v-if="Number(a.instant_confirmation)" class="flex items-center gap-0.5 text-success"><AppIcon name="bolt" :size="12" />즉시 확정</li>
                   <li v-if="Number(a.free_cancellation)" class="flex items-center gap-0.5 text-success"><AppIcon name="check" :size="12" />무료 취소</li>

@@ -25,7 +25,7 @@ export interface PackageBundle {
   savings_amount_krw: number
   savings_percentage: number
   badge: string
-  hero_image_url: string
+  hero_image_url: string | null
   gallery: string[]
   features: string[]
   flight_summary: {
@@ -63,12 +63,8 @@ export const MASTER_PACKAGE_CATALOG: PackageBundle[] = [
     savings_amount_krw: 250000,
     savings_percentage: 18,
     badge: '베스트셀러 에어텔',
-    hero_image_url: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800',
-      'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-      'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800'
-    ],
+    hero_image_url: null,
+    gallery: [],
     features: [
       '대한항공 직항 왕복 (위탁수하물 23kg 포함)',
       '그랜드 하얏트 도쿄 3박 전 일정 조식 뷔페 포함',
@@ -108,11 +104,8 @@ export const MASTER_PACKAGE_CATALOG: PackageBundle[] = [
     savings_amount_krw: 170000,
     savings_percentage: 19,
     badge: '난바역 직결 호텔',
-    hero_image_url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-      'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'
-    ],
+    hero_image_url: null,
+    gallery: [],
     features: [
       '아시아나항공 직항 왕복 (수하물 23kg)',
       '난카이 난바역 직결 5성급 호텔 2박',
@@ -152,10 +145,8 @@ export const MASTER_PACKAGE_CATALOG: PackageBundle[] = [
     savings_amount_krw: 260000,
     savings_percentage: 21,
     badge: '차오프라야 리버뷰',
-    hero_image_url: 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=800'
-    ],
+    hero_image_url: null,
+    gallery: [],
     features: [
       '대한항공 주간 직항 (수하물 23kg)',
       '차오프라야 강변 5성급 샹그릴라 4박 전 일정 조식',
@@ -195,10 +186,8 @@ export const MASTER_PACKAGE_CATALOG: PackageBundle[] = [
     savings_amount_krw: 550000,
     savings_percentage: 17,
     badge: '에펠탑 도보 1분',
-    hero_image_url: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800'
-    ],
+    hero_image_url: null,
+    gallery: [],
     features: [
       '에어프랑스 직항 왕복 (위탁수하물 23kg)',
       '에펠탑 초근접 4성급 호텔 5박',

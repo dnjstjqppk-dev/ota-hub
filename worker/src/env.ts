@@ -1,6 +1,8 @@
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  /** R2 bucket for partner docs and product images (C1). */
+  UPLOADS?: R2Bucket;
   /** "production" | "staging" | "development" | "test". Anything other than development/test is treated as production. */
   APP_ENV?: string;
   JWT_SECRET?: string;
@@ -14,6 +16,7 @@ export interface Env {
   TOSS_SECRET_KEY?: string;
   TOSS_CLIENT_KEY?: string;
   TOSS_WEBHOOK_SECRET?: string;
+  OUTBOX_BATCH_LIMIT?: string;
   /** Contract-test stub base URL for the Toss provider. Honored in development/test only; production always uses api.tosspayments.com. */
   TOSS_API_BASE?: string;
   /** "true" allows suppliers with adapter=simulator to fulfil bookings. Refused outside development/test. */
@@ -26,6 +29,12 @@ export interface Env {
   EMAIL_FROM?: string;
   /** Sentry DSN for unhandled-error reporting. Unset = reporting disabled (silent no-op). */
   SENTRY_DSN?: string;
+  /** PBKDF2 iteration override (default 100000, clamped 10000–1000000). */
+  PBKDF2_ITERATIONS?: string;
+  /** NTS business-status API key (data.go.kr). Unset = API verification unavailable, manual review only. */
+  NTS_API_KEY?: string;
+  /** Contract-test stub base URL for the NTS client. Honored in development/test only. */
+  NTS_API_BASE?: string;
 }
 
 export function isNonProduction(env: Env): boolean {

@@ -47,7 +47,7 @@ const cards = computed<Card[]>(() => {
       return routes(list, 'departure_station', 'arrival_station', (x) => x.departure_station, (x) => x.arrival_station, 'price_krw')
         .map(({ g, min, a, b }) => ({ key: `${a}-${b}`, to: `/trains/search?dep=${enc(a)}&arr=${enc(b)}`, icon: 'train', eyebrow: [...new Set(g.map((x) => x.train_type))].join(' · '), title: `${a} → ${b}`, meta: `${g.length}편 · 약 ${hm(Math.min(...g.map((x) => x.duration_minutes)))}`, price: Number.isFinite(min) ? min : null, unit: '1인 편도부터' }))
     case 'hotels':
-      return list.map((h) => ({ key: h.id, to: `/hotels/detail/${h.id}`, img: h.thumbnail_url, icon: 'hotel', eyebrow: [h.city, h.star_rating ? `${h.star_rating}성급` : ''].filter(Boolean).join(' · '), title: h.name_ko, meta: h.review_score ? `평점 ${Number(h.review_score).toFixed(1)}` : '', price: Number(h.base_price_krw) || null, unit: '1박 참고가부터' }))
+      return list.map((h) => ({ key: h.id, to: `/hotels/detail/${h.id}`, img: h.thumbnail_url, icon: 'hotel', eyebrow: [h.city, h.star_rating ? `${h.star_rating}성급` : ''].filter(Boolean).join(' · '), title: h.name_ko, meta: h.review_score ? `인증 후기 평점 ${Number(h.review_score).toFixed(1)}` : '신규', price: Number(h.base_price_krw) || null, unit: '1박 참고가부터' }))
     case 'cars':
       return list.map((c) => ({ key: c.id, to: `/cars/detail/${c.id}`, img: c.image_url, icon: 'car', eyebrow: c.company_name, title: c.vehicle_model, meta: c.pickup_location, price: Number(c.daily_price_krw) || null, unit: '1일' }))
     case 'transfers':

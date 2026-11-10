@@ -1,7 +1,7 @@
 import type { Env } from "../env.ts";
 import { isNonProduction } from "../env.ts";
 import { HttpError, clientIp, json, readJson, str } from "../lib/http.ts";
-import { hashPassword, newId, randomToken, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
+import { hashPassword, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
 import { audit, authCookie, getAuthUser, jwtSecret, rateLimit, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
 import { consentStmts, currentVersions } from "../lib/consents.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
@@ -48,7 +48,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     await env.DB.batch([
       env.DB.prepare(
         "INSERT INTO users (id, email, password_hash, full_name, phone_number, role, tier, trip_coins, marketing_consent) VALUES (?, ?, ?, ?, ?, 'USER', 'SILVER', 0, ?)",
-      ).bind(id, email, await hashPassword(password), fullName, phone || null, marketing ? 1 : 0),
+      ).bind(id, email, await hashPassword(password, resolvePbkdf2Iterations(env)), fullName, phone || null, marketing ? 1 : 0),
       ...consentStmts(env.DB, id, [
         { type: "TERMS", version: versions["terms"] || "2.0", agreed: true },
         { type: "PRIVACY", version: versions["privacy"] || "2.0", agreed: true },
@@ -67,12 +67,12 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     const password = String(body.password || "");
     if (!email || !password) throw new HttpError(400, "CREDENTIALS_REQUIRED", "이메일과 비밀번호를 입력해주세요.");
     const u = await env.DB.prepare("SELECT * FROM users WHERE email = ?").bind(email).first<any>();
-    const v = await verifyPasswordDetailed(password, u?.password_hash);
+    const v = await verifyPasswordDetailed(password, u?.password_hash, resolvePbkdf2Iterations(env));
     if (!u || !v.ok) {
       if (u?.role === "ADMIN") await audit(env, u.id, "LOGIN_FAILED", "AUTH", email, { ip: request.headers.get("CF-Connecting-IP") });
       throw new HttpError(401, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 일치하지 않습니다.");
     }
-    if (v.needsRehash) await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(await hashPassword(password), u.id).run();
+    if (v.needsRehash) await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(await hashPassword(password, resolvePbkdf2Iterations(env)), u.id).run();
     if (u.status && u.status !== "ACTIVE") throw new HttpError(403, "ACCOUNT_SUSPENDED", u.status === "DELETED" ? "탈퇴한 계정입니다." : "이용이 정지된 계정입니다. 고객센터에 문의해주세요.");
     if (u.role === "ADMIN") await audit(env, u.id, "ADMIN_LOGIN_SUCCESS", "AUTH", email, { ip: request.headers.get("CF-Connecting-IP") });
     const s = await issueSession(env, u);
@@ -158,7 +158,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     if (!rec) throw new HttpError(400, "INVALID_RESET_TOKEN", "만료되었거나 이미 사용된 링크입니다.");
     const r = await env.DB.batch([
       env.DB.prepare("UPDATE password_reset_tokens SET used = 1 WHERE token = ? AND used = 0").bind(rec.token),
-      env.DB.prepare("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(await hashPassword(pw), rec.user_id),
+      env.DB.prepare("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(await hashPassword(pw, resolvePbkdf2Iterations(env)), rec.user_id),
     ]);
     if (!r[0].meta.changes) throw new HttpError(400, "INVALID_RESET_TOKEN", "이미 사용된 링크입니다.");
     await resetSubjectSessions(env, rec.user_id);
@@ -185,7 +185,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
       throw new HttpError(409, "WITHDRAWAL_BLOCKED", `진행 중인 예약·환불 ${blocker!.c}건이 있어 탈퇴할 수 없습니다. 이용 완료 또는 환불 완료 후 다시 시도해주세요.`);
     }
     const deletedEmail = `deleted_${user.id}@deleted.local`;
-    const unusableHash = await hashPassword(randomToken(32));
+    const unusableHash = await hashPassword(randomToken(32), resolvePbkdf2Iterations(env));
     const reason = str(body.reason, 300) || "USER_REQUEST";
     await env.DB.batch([
       // Profile and credential purge (anonymized, login-impossible afterwards).

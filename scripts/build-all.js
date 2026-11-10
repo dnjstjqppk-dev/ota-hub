@@ -38,8 +38,14 @@ try {
     : 'npm --prefix frontend-partner install && npm --prefix frontend-partner run build';
   execSync(partnerCmd, { cwd: rootDir, stdio: 'inherit' });
 
-  // 3. Build User App
+  // 3. Build User App (C7: refresh the SEO snapshot first; best-effort — the
+  // committed files are kept when no API answers, so the build never blocks).
   console.log('\n📦 [3/4] Generating frontend-user (Nuxt 3 SPA / Prerender)...');
+  try {
+    execSync('node scripts/gen-seo-snapshot.mjs', { cwd: rootDir, stdio: 'inherit' });
+  } catch (e) {
+    console.log('⚠️ SEO snapshot refresh failed; building with the committed files.');
+  }
   execSync('npm --prefix frontend-user run generate', { cwd: rootDir, stdio: 'inherit' });
 
   // 4. Merge Admin dist into user public/admin & Partner dist into user public/partner

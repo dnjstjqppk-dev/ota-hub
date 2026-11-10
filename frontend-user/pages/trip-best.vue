@@ -68,8 +68,8 @@ onMounted(() => {
               <h3 class="text-lg font-black text-slate-900">{{ h.name_ko }}</h3>
               <div class="flex items-center gap-2 mt-1">
                 <span v-if="h.review_score != null" class="px-2 py-0.5 bg-trip-blue text-white rounded text-[11px] font-bold">{{ h.review_score }}점</span>
-                <span v-else class="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[11px] font-bold">리뷰 없음</span>
-                <span class="text-xs text-slate-500 font-medium">({{ Number(h.review_count || 0).toLocaleString() }}개 리뷰)</span>
+                <span v-else class="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[11px] font-bold">신규</span>
+                <span class="text-xs text-slate-500 font-medium">(인증 후기 {{ Number(h.review_count || 0).toLocaleString() }}개)</span>
               </div>
             </div>
           </div>

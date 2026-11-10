@@ -1,0 +1,516 @@
+{
+ "generatedAt": "2026-11-10T09:52:54.780Z",
+ "via": "http://localhost:8797/api/v1",
+ "products": {
+  "HOTEL": {
+   "htl_bangkok_01": {
+    "name": "샹그릴라 방콕 차오프라야",
+    "city": "방콕",
+    "image": null,
+    "priceKrw": 210000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_bangkok_02": {
+    "name": "더 수코타이 방콕",
+    "city": "방콕",
+    "image": null,
+    "priceKrw": 195000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_fukuoka_01": {
+    "name": "그랜드 하얏트 후쿠오카 캐널시티",
+    "city": "후쿠오카",
+    "image": null,
+    "priceKrw": 245000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_fukuoka_02": {
+    "name": "솔라리아 니시테츠 호텔 후쿠오카 텐진",
+    "city": "후쿠오카",
+    "image": null,
+    "priceKrw": 145000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_osaka_01": {
+    "name": "스위소텔 난카이 오사카",
+    "city": "오사카",
+    "image": null,
+    "priceKrw": 275000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_osaka_02": {
+    "name": "인터컨티넨탈 호텔 오사카",
+    "city": "오사카",
+    "image": null,
+    "priceKrw": 380000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_paris_01": {
+    "name": "풀만 파리 투르 에펠",
+    "city": "파리",
+    "image": null,
+    "priceKrw": 480000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_paris_02": {
+    "name": "인터컨티넨탈 파리 르 그랑",
+    "city": "파리",
+    "image": null,
+    "priceKrw": 620000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_seoul_01": {
+    "name": "시그니엘 서울 롯데월드타워",
+    "city": "서울",
+    "image": null,
+    "priceKrw": 550000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_seoul_02": {
+    "name": "서울 신라호텔",
+    "city": "서울",
+    "image": null,
+    "priceKrw": 460000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_seoul_03": {
+    "name": "파크 하얏트 서울",
+    "city": "서울",
+    "image": null,
+    "priceKrw": 490000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_tokyo_01": {
+    "name": "그랜드 하얏트 도쿄 롯폰기 힐스",
+    "city": "도쿄",
+    "image": null,
+    "priceKrw": 385000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_tokyo_02": {
+    "name": "파크 하얏트 도쿄 신주쿠",
+    "city": "도쿄",
+    "image": null,
+    "priceKrw": 450000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "htl_tokyo_03": {
+    "name": "게이오 플라자 호텔 도쿄 신주쿠",
+    "city": "도쿄",
+    "image": null,
+    "priceKrw": 230000,
+    "score": null,
+    "reviewCount": 0
+   }
+  },
+  "FLIGHT": {
+   "flt_7c1101_ret": {
+    "name": "제주항공 7C1101",
+    "city": "도쿄 나리타 (NRT)",
+    "image": null,
+    "priceKrw": 195000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_7c1102": {
+    "name": "제주항공 7C1102",
+    "city": "인천국제공항 (ICN)",
+    "image": null,
+    "priceKrw": 189000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_7c1302": {
+    "name": "제주항공 7C1302",
+    "city": "인천국제공항 (ICN)",
+    "image": null,
+    "priceKrw": 168000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_af267": {
+    "name": "에어프랑스 AF267",
+    "city": "인천국제공항 (ICN)",
+    "image": null,
+    "priceKrw": 940000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_ke657": {
+    "name": "대한항공 KE657",
+    "city": "인천국제공항 (ICN)",
+    "image": null,
+    "priceKrw": 395000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_ke658_ret": {
+    "name": "대한항공 KE658",
+    "city": "방콕 수완나품 (BKK)",
+    "image": null,
+    "priceKrw": 410000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_ke703": {
+    "name": "대한항공 KE703",
+    "city": "인천국제공항 (ICN)",
+    "image": null,
+    "priceKrw": 245000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_ke704_ret": {
+    "name": "대한항공 KE704",
+    "city": "도쿄 나리타 (NRT)",
+    "image": null,
+    "priceKrw": 250000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_ke705": {
+    "name": "대한항공 KE705",
+    "city": "인천국제공항 (ICN)",
+    "image": null,
+    "priceKrw": 260000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_ke723": {
+    "name": "대한항공 KE723",
+    "city": "인천국제공항 (ICN)",
+    "image": null,
+    "priceKrw": 215000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_ke724_ret": {
+    "name": "대한항공 KE724",
+    "city": "오사카 간사이 (KIX)",
+    "image": null,
+    "priceKrw": 220000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_ke901": {
+    "name": "대한항공 KE901",
+    "city": "인천국제공항 (ICN)",
+    "image": null,
+    "priceKrw": 980000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_ke902_ret": {
+    "name": "대한항공 KE902",
+    "city": "파리 샤를 드골 (CDG)",
+    "image": null,
+    "priceKrw": 990000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_oz101_ret": {
+    "name": "아시아나항공 OZ101",
+    "city": "도쿄 나리타 (NRT)",
+    "image": null,
+    "priceKrw": 242000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_oz102": {
+    "name": "아시아나항공 OZ102",
+    "city": "인천국제공항 (ICN)",
+    "image": null,
+    "priceKrw": 238000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "flt_tg659": {
+    "name": "타이항공 TG659",
+    "city": "인천국제공항 (ICN)",
+    "image": null,
+    "priceKrw": 380000,
+    "score": null,
+    "reviewCount": 0
+   }
+  },
+  "TRAIN": {
+   "trn_eurostar_9015": {
+    "name": "EUROSTAR Eurostar 9015",
+    "city": "파리 북역 (Paris Gare du Nord)",
+    "image": null,
+    "priceKrw": 168000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "trn_ktx_021": {
+    "name": "KTX-산천 KTX 021",
+    "city": "서울역",
+    "image": null,
+    "priceKrw": 59800,
+    "score": null,
+    "reviewCount": 0
+   },
+   "trn_ktx_022_ret": {
+    "name": "KTX-산천 KTX 022",
+    "city": "부산역",
+    "image": null,
+    "priceKrw": 59800,
+    "score": null,
+    "reviewCount": 0
+   },
+   "trn_ktx_025": {
+    "name": "KTX KTX 025",
+    "city": "서울역",
+    "image": null,
+    "priceKrw": 59800,
+    "score": null,
+    "reviewCount": 0
+   },
+   "trn_ktx_034_ret": {
+    "name": "KTX KTX 034",
+    "city": "부산역",
+    "image": null,
+    "priceKrw": 59800,
+    "score": null,
+    "reviewCount": 0
+   },
+   "trn_ktx_041": {
+    "name": "KTX-산천 KTX 041",
+    "city": "서울역",
+    "image": null,
+    "priceKrw": 83700,
+    "score": null,
+    "reviewCount": 0
+   },
+   "trn_ktx_055": {
+    "name": "KTX KTX 055",
+    "city": "서울역",
+    "image": null,
+    "priceKrw": 59800,
+    "score": null,
+    "reviewCount": 0
+   },
+   "trn_shinkansen_nozomi23": {
+    "name": "SHINKANSEN NOZOMI 23",
+    "city": "도쿄역",
+    "image": null,
+    "priceKrw": 145000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "trn_shinkansen_nozomi28_ret": {
+    "name": "SHINKANSEN NOZOMI 28",
+    "city": "신오사카역",
+    "image": null,
+    "priceKrw": 145000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "trn_shinkansen_nozomi45": {
+    "name": "SHINKANSEN NOZOMI 45",
+    "city": "도쿄역",
+    "image": null,
+    "priceKrw": 205000,
+    "score": null,
+    "reviewCount": 0
+   }
+  },
+  "CAR": {
+   "car_avante_01": {
+    "name": "현대 더 뉴 아반떼 CN7 (2025/2026)",
+    "city": "제주국제공항 렌터카하우스 셔틀 1구역 (도보 3분)",
+    "image": null,
+    "priceKrw": 48000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "car_carnival_01": {
+    "name": "기아 더 뉴 카니발 9인승 리무진",
+    "city": "제주국제공항 렌터카하우스 셔틀 1구역",
+    "image": null,
+    "priceKrw": 95000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "car_tucson_01": {
+    "name": "현대 디 올 뉴 투싼 1.6T (2025)",
+    "city": "제주국제공항 셔틀 탑승장 2구역 SK렌터카 지점",
+    "image": null,
+    "priceKrw": 65000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "car_yaris_01": {
+    "name": "Toyota Yaris Hybrid (2025/2026)",
+    "city": "도쿄 나리타 국제공항 제1터미널 렌터카 카운터",
+    "image": null,
+    "priceKrw": 62000,
+    "score": null,
+    "reviewCount": 0
+   }
+  },
+  "TRANSFER": {
+   "tf_gmp_van_01": {
+    "name": "김포공항 비즈니스 패밀리 밴",
+    "city": "서울 도심 (명동/강남/잠실) 전역",
+    "image": null,
+    "priceKrw": 80000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "tf_hnd_van_01": {
+    "name": "토요타 알파드 하이브리드 리무진 (Alphard Executive)",
+    "city": "도쿄 23구 (신주쿠/시부야/긴자/롯폰기) 전역",
+    "image": null,
+    "priceKrw": 165000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "tf_icn_comfort_01": {
+    "name": "컴포트 프리미엄 세단 (Comfort Sedan)",
+    "city": "서울 도심 및 강남권 (강남/서초/송파)",
+    "image": null,
+    "priceKrw": 95000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "tf_icn_luxury_01": {
+    "name": "럭셔리 퍼스트 클래스 세단 (VIP Luxury)",
+    "city": "서울 전역 및 경기/인천 수도권",
+    "image": null,
+    "priceKrw": 220000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "tf_icn_sedan_01": {
+    "name": "이코노미 정숙 세단 (Economy Sedan)",
+    "city": "서울 도심 (명동/중구/마포/종로) 전역",
+    "image": null,
+    "priceKrw": 75000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "tf_icn_van_01": {
+    "name": "비즈니스 밴 리무진 (Business Van)",
+    "city": "서울 도심 (명동/중구/용산/강남) 전역",
+    "image": null,
+    "priceKrw": 120000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "tf_kix_van_01": {
+    "name": "토요타 알파드 / 하이에이스 리무진",
+    "city": "오사카 시내 (난바/우메다/신사이바시) / 교토",
+    "image": null,
+    "priceKrw": 180000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "tf_nrt_van_01": {
+    "name": "토요타 하이에이스 / 알파드 프리미엄 리무진",
+    "city": "도쿄 23구 호텔/숙소 직행",
+    "image": null,
+    "priceKrw": 260000,
+    "score": null,
+    "reviewCount": 0
+   }
+  },
+  "ACTIVITY": {
+   "act_disney_tokyo": {
+    "name": "도쿄 디즈니랜드 1일 e-티켓 (모바일 QR 즉시 입장 확정)",
+    "city": "도쿄",
+    "image": null,
+    "priceKrw": 89000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "act_esim_japan": {
+    "name": "[초고속 5G] 일본 무제한 데이터 eSIM (도쿄/오사카/후쿠오카 당일 QR 수령)",
+    "city": "도쿄",
+    "image": null,
+    "priceKrw": 6900,
+    "score": null,
+    "reviewCount": 0
+   },
+   "act_fuji_tour": {
+    "name": "[한국어 가이드] 후지산 & 하코네 당일 럭셔리 버스 투어 (케이블카 포함)",
+    "city": "도쿄",
+    "image": null,
+    "priceKrw": 78000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "act_lotte_world": {
+    "name": "서울 롯데월드 어드벤처 종합이용권 (종일권 + 아쿠아리움 옵션)",
+    "city": "서울",
+    "image": null,
+    "priceKrw": 42000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "act_louvre_tour": {
+    "name": "[공인 한국어 해설] 파리 루브르 박물관 모바일 패스트트랙 + 3시간 도슨트 투어",
+    "city": "파리",
+    "image": null,
+    "priceKrw": 68000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "act_usj_osaka": {
+    "name": "유니버설 스튜디오 재팬 1일 스튜디오 패스 (공식 파트너 QR)",
+    "city": "오사카",
+    "image": null,
+    "priceKrw": 82000,
+    "score": null,
+    "reviewCount": 0
+   }
+  },
+  "PACKAGE": {
+   "pkg_bangkok_5d4n": {
+    "name": "[리버사이드 힐링] 방콕 샹그릴라 호텔 5일 (대한항공 직항 왕복 + 리버뷰 4박)",
+    "city": "방콕",
+    "image": null,
+    "priceKrw": 990000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "pkg_osaka_3d2n": {
+    "name": "[인기 에어텔] 오사카 난바 스위소텔 올인원 3일 (아시아나 직항 + 5성급 2박)",
+    "city": "오사카",
+    "image": null,
+    "priceKrw": 750000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "pkg_paris_6d5n": {
+    "name": "[유럽 프리미엄] 파리 풀만 에펠탑 6일 (에어프랑스 직항 + 에펠뷰 5박)",
+    "city": "파리",
+    "image": null,
+    "priceKrw": 2650000,
+    "score": null,
+    "reviewCount": 0
+   },
+   "pkg_tokyo_4d3n": {
+    "name": "[항공+호텔 결합] 도쿄 롯폰기 하얏트 럭셔리 에어텔 4일 (대한항공 직항 왕복 + 5성급 3박)",
+    "city": "도쿄",
+    "image": null,
+    "priceKrw": 1150000,
+    "score": null,
+    "reviewCount": 0
+   }
+  }
+ }
+}

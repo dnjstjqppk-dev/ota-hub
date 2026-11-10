@@ -1,7 +1,7 @@
 import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
-import { jwtSecret, rateLimit, requirePartner, resetSubjectSessions } from "../lib/auth.ts";
-import { hashPassword, newId, randomToken, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
+import { jwtSecret, rateLimit, requirePartner, requirePartnerOnboarding, resetSubjectSessions } from "../lib/auth.ts";
+import { hashPassword, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 import { EMAIL_RE, validatePasswordPolicy } from "./auth.ts";
 import * as S from "../services/booking-service.ts";
@@ -56,7 +56,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     }
 
     const partnerId = `ptn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-    const passHash = await hashPassword(password);
+    const passHash = await hashPassword(password, resolvePbkdf2Iterations(env));
 
     await db.batch([
       db.prepare(
@@ -108,7 +108,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
          WHERE s.email = ?`
       ).bind(email).first<any>();
       if (!s) throw new HttpError(401, "INVALID_CREDENTIALS", "파트너 이메일 또는 비밀번호가 일치하지 않습니다.");
-      const sv = await verifyPasswordDetailed(pass, s.password_hash);
+      const sv = await verifyPasswordDetailed(pass, s.password_hash, resolvePbkdf2Iterations(env));
       if (!sv.ok) throw new HttpError(401, "INVALID_CREDENTIALS", "파트너 이메일 또는 비밀번호가 일치하지 않습니다.");
       if (s.is_active !== 1) throw new HttpError(403, "STAFF_DEACTIVATED", "비활성화된 직원 계정입니다. 관리자에게 문의하세요.");
       const sProfile = String(s.profile_status || "").toUpperCase();
@@ -139,15 +139,14 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       });
     }
 
-    const v = await verifyPasswordDetailed(pass, p.password_hash);
+    const v = await verifyPasswordDetailed(pass, p.password_hash, resolvePbkdf2Iterations(env));
     if (!v.ok) {
       throw new HttpError(401, "INVALID_CREDENTIALS", "파트너 이메일 또는 비밀번호가 일치하지 않습니다.");
     }
 
+    // C1: PENDING owners log in to complete onboarding (profile + docs).
+    // Business endpoints stay ACTIVE-only via requirePartner.
     const profileStatus = String(p.profile_status || "").toUpperCase();
-    if (profileStatus === "PENDING_APPROVAL" || profileStatus === "PENDING") {
-      throw new HttpError(403, "PENDING_APPROVAL", "파트너 가입 승인 심사 중입니다. 승인 완료 후 로그인하실 수 있습니다.");
-    }
     if (p.is_active !== 1 || profileStatus === "SUSPENDED" || profileStatus === "REJECTED") {
       throw new HttpError(403, "PARTNER_SUSPENDED", "운영 정책에 따라 이용이 정지된 파트너 계정입니다.");
     }
@@ -167,6 +166,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
         companyName: p.company_name,
         partnerType: p.partner_type,
         settlementRateBps: p.rate_bps,
+        profileStatus: p.profile_status,
       },
     });
   }
@@ -210,9 +210,9 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const stmts: any[] = [env.DB.prepare("UPDATE password_reset_tokens SET used = 1 WHERE token = ? AND used = 0").bind(rec.token)];
     const owner = await env.DB.prepare("SELECT id FROM partners WHERE email = ?").bind(rec.email).first<{ id: string }>();
     if (owner) {
-      stmts.push(env.DB.prepare("UPDATE partners SET password_hash = ? WHERE id = ?").bind(await hashPassword(pw), owner.id));
+      stmts.push(env.DB.prepare("UPDATE partners SET password_hash = ? WHERE id = ?").bind(await hashPassword(pw, resolvePbkdf2Iterations(env)), owner.id));
     } else {
-      stmts.push(env.DB.prepare("UPDATE partner_staff SET password_hash = ? WHERE email = ?").bind(await hashPassword(pw), rec.email));
+      stmts.push(env.DB.prepare("UPDATE partner_staff SET password_hash = ? WHERE email = ?").bind(await hashPassword(pw, resolvePbkdf2Iterations(env)), rec.email));
     }
     const done = await env.DB.batch(stmts);
     // Same single-use guard as the user flow: a raced twin finds used = 1 and fails here.
@@ -224,7 +224,10 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   // -------------------------------------------------------------------------
   // Authenticated Partner Area
   // -------------------------------------------------------------------------
-  const partner = await requirePartner(request, env);
+  // C1: profile completion stays open during PENDING_APPROVAL; everything else
+  // needs an ACTIVE profile.
+  const onboarding = path === "/api/v1/partner/profile" && (method === "GET" || method === "PATCH");
+  const partner = onboarding ? await requirePartnerOnboarding(request, env) : await requirePartner(request, env);
   const pId = partner.partnerId;
   // Role split (2026-11-09 audit [M]): the owner has no staff row; MANAGER and
   // STAFF come from partner_staff. Money infrastructure (bank details, staff
@@ -296,7 +299,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   if (path === "/api/v1/partner/profile" && method === "GET") {
     // Explicit allowlist: password_hash and legacy api_key must never reach the client (2026-11-09 audit [M]).
     const p = await db.prepare("SELECT id, email, company_name, partner_type, business_number, contact_phone, settlement_rate, webhook_url, is_active, created_at FROM partners WHERE id = ?").bind(pId).first<any>();
-    const pr = await db.prepare("SELECT partner_id, status, representative_name, bank_name, bank_account_number, bank_account_holder, tax_invoice_email, business_cert_url, settlement_rate_bps, approved_by, approved_at, rejection_reason, created_at, updated_at FROM partner_profiles WHERE partner_id = ?").bind(pId).first<any>();
+    const pr = await db.prepare("SELECT partner_id, status, representative_name, bank_name, bank_account_number, bank_account_holder, tax_invoice_email, business_cert_url, bank_cert_url, business_verified_at, business_verify_method, settlement_rate_bps, approved_by, approved_at, rejection_reason, created_at, updated_at FROM partner_profiles WHERE partner_id = ?").bind(pId).first<any>();
     return json({ success: true, partner: { ...p, profile: pr } });
   }
 
@@ -374,7 +377,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const rooms = b.rooms !== undefined ? parseRooms(b.rooms) : null;
     if (title !== null && !title) throw new HttpError(400, "TITLE_REQUIRED", "상품명을 입력해주세요.");
     if (price !== null && (!Number.isInteger(price) || price < 0)) throw new HttpError(400, "INVALID_PRICE", "요금은 0 이상의 정수(원)여야 합니다.");
-    if (title === null && city === null && price === null && isActive === null && rooms === null) {
+    if (title === null && city === null && price === null && isActive === null && rooms === null && b.imageIds === undefined) {
       throw new HttpError(400, "NOTHING_TO_UPDATE", "수정할 항목이 없습니다.");
     }
     const pid = prodMatch[1];
@@ -392,6 +395,26 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       ).bind(title, city, price, isActive, pid).run();
       if (rooms !== null && cfg.t === "hotels") {
         await db.prepare("UPDATE hotels SET rooms_json = ? WHERE id = ?").bind(JSON.stringify(rooms), pid).run();
+      }
+      // C1: attach uploaded product images (ownership-verified) to the catalog row.
+      if (b.imageIds !== undefined) {
+        const ids = Array.isArray(b.imageIds) ? b.imageIds : [];
+        if (ids.length > 10) throw new HttpError(400, "TOO_MANY_IMAGES", "상품 이미지는 최대 10장까지 등록할 수 있습니다.");
+        const urls: string[] = [];
+        for (const raw of ids) {
+          const u = await db.prepare("SELECT id, owner_type, owner_id, purpose FROM uploads WHERE id = ?").bind(str(raw, 64)).first<any>();
+          if (!u || u.purpose !== "PRODUCT_IMAGE" || u.owner_type !== "PARTNER" || u.owner_id !== pId) {
+            throw new HttpError(400, "INVALID_IMAGE", "본인이 업로드한 상품 이미지만 연결할 수 있습니다.");
+          }
+          urls.push(`/api/v1/uploads/${u.id}/file`);
+        }
+        if (cfg.t === "hotels") {
+          await db.prepare("UPDATE hotels SET images_json = ?, thumbnail_url = ? WHERE id = ?").bind(JSON.stringify(urls), urls[0] || null, pid).run();
+        } else if (cfg.t === "cars") {
+          await db.prepare("UPDATE cars SET image_url = ? WHERE id = ?").bind(urls[0] || null, pid).run();
+        } else {
+          await db.prepare("UPDATE activities SET thumbnail_url = ? WHERE id = ?").bind(urls[0] || null, pid).run();
+        }
       }
       return json({ success: true, id: pid });
     }
@@ -583,7 +606,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     validatePasswordPolicy(pass);
     const dup = await db.prepare("SELECT id FROM partner_staff WHERE partner_id = ? AND email = ?").bind(pId, email).first();
     if (dup) throw new HttpError(409, "STAFF_EXISTS", "이미 등록된 직원 이메일입니다.");
-    const passHash = await hashPassword(pass);
+    const passHash = await hashPassword(pass, resolvePbkdf2Iterations(env));
 
     const id = newId("stf");
     await db.prepare(

@@ -534,8 +534,8 @@ export function searchFlightCatalog(params: {
       brand_name: '이코노미 스탠다드 (Standard)',
       cabin_class: '일반석 (Economy)',
       checked_baggage: `위탁수하물 1개 (${f.free_baggage_kg}kg)`,
-      change_policy: '출발 24시간 전 수수료 30,000원 후 변경 가능',
-      refund_policy: '환불 수수료 50,000원 공제 후 환불',
+      change_policy: '일정 변경 미지원 (취소 후 재예약)',
+      refund_policy: '결제 전 표시되는 취소·환불 규정을 따릅니다',
       seat_selection: '체크인 시 무료 좌석 배정',
       price_krw: f.base_price_krw
     }
@@ -545,8 +545,8 @@ export function searchFlightCatalog(params: {
       brand_name: '이코노미 플렉스 (Flex Plus)',
       cabin_class: '일반석 (Economy Plus)',
       checked_baggage: `위탁수하물 2개 (${f.free_baggage_kg + 5}kg)`,
-      change_policy: '무료 여정 변경 1회 보장',
-      refund_policy: '출발 전 전액 환불 가능 (수수료 0원)',
+      change_policy: '일정 변경 미지원 (취소 후 재예약)',
+      refund_policy: '결제 전 표시되는 취소·환불 규정을 따릅니다',
       seat_selection: '사전 선호 좌석 무료 지정',
       price_krw: f.base_price_krw + 45000
     }
@@ -556,8 +556,8 @@ export function searchFlightCatalog(params: {
       brand_name: '프레스티지 / 비즈니스 (Business)',
       cabin_class: '비즈니스석 (Lie-flat)',
       checked_baggage: '위탁수하물 2개 (각 32kg) + 전용 수속',
-      change_policy: '무제한 무료 여정 변경',
-      refund_policy: '전액 환불 (수수료 면제)',
+      change_policy: '일정 변경 미지원 (취소 후 재예약)',
+      refund_policy: '결제 전 표시되는 취소·환불 규정을 따릅니다',
       seat_selection: '공항 프리미엄 라운지 이용권 포함',
       price_krw: f.base_price_krw * 2.4
     }

@@ -192,8 +192,9 @@ const PROMISES = [
             <h3 class="mt-1 line-clamp-1 font-bold text-ink group-hover:text-primary">{{ h.name_ko }}</h3>
             <p v-if="h.review_score" class="mt-1.5 flex items-center gap-1.5 text-sm">
               <span class="rounded-md bg-primary px-1.5 py-0.5 text-xs font-bold text-primary-ink tabular">{{ Number(h.review_score).toFixed(1) }}</span>
-              <span v-if="h.review_count" class="text-xs text-ink-subtle">후기 {{ Number(h.review_count).toLocaleString() }}개</span>
+              <span v-if="h.review_count" class="text-xs text-ink-subtle">인증 후기 {{ Number(h.review_count).toLocaleString() }}개</span>
             </p>
+            <p v-else class="mt-1.5 text-xs font-semibold text-ink-subtle">신규 숙소 · 아직 인증 후기가 없어요</p>
             <div class="mt-3 flex items-end justify-between border-t border-line pt-3">
               <span class="text-xs text-ink-subtle">{{ h.bookable === false ? '현재 직접 예약 불가' : '1박 참고가' }}</span>
               <span v-if="fromPrice(h)" class="text-right"><span class="text-lg font-bold text-ink tabular">{{ currency.formatKRW(fromPrice(h)!) }}</span><span class="text-xs text-ink-subtle">~</span></span>

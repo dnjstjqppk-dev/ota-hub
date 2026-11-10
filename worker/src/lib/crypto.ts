@@ -65,7 +65,21 @@ export function newBookingNumber(now = new Date()): string {
 // ---------------------------------------------------------------------------
 // Passwords: PBKDF2-HMAC-SHA256, 100k iterations, 16-byte salt.
 // ---------------------------------------------------------------------------
-const PBKDF2_ITER = 100_000;
+export const PBKDF2_ITER = 100_000;
+export const PBKDF2_ITER_MIN = 10_000;
+export const PBKDF2_ITER_MAX = 1_000_000;
+
+// C9: iteration count is env-tunable (PBKDF2_ITERATIONS, clamped to the range
+// verifyPassword accepts). Measured ~16ms wall for 100k on a desktop CPU;
+// Workers isolates are slower per op, so the free 10ms CPU budget cannot take
+// 100k — production must run on a paid plan, which is documented in
+// docs/GO_LIVE_CHECKLIST.md instead of weakening the default. Logins re-hash
+// automatically when the stored count drifts from the configured one.
+export function resolvePbkdf2Iterations(env?: { PBKDF2_ITERATIONS?: string }): number {
+  const n = Number(env?.PBKDF2_ITERATIONS);
+  if (!Number.isInteger(n)) return PBKDF2_ITER;
+  return Math.min(PBKDF2_ITER_MAX, Math.max(PBKDF2_ITER_MIN, n));
+}
 
 async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<string> {
   const km = await crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits"]);
@@ -73,9 +87,10 @@ async function pbkdf2(password: string, salt: Uint8Array, iterations: number): P
   return hex(bits);
 }
 
-export async function hashPassword(password: string): Promise<string> {
+export async function hashPassword(password: string, iterations: number = PBKDF2_ITER): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  return `pbkdf2:sha256:${PBKDF2_ITER}:${hex(salt)}:${await pbkdf2(password, salt, PBKDF2_ITER)}`;
+  const iter = Number.isInteger(iterations) ? Math.min(PBKDF2_ITER_MAX, Math.max(PBKDF2_ITER_MIN, iterations)) : PBKDF2_ITER;
+  return `pbkdf2:sha256:${iter}:${hex(salt)}:${await pbkdf2(password, salt, iter)}`;
 }
 
 /**
@@ -83,9 +98,13 @@ export async function hashPassword(password: string): Promise<string> {
  * existing users are not locked out (no email provider exists yet for resets),
  * but callers must re-hash on success (`needsRehash`).
  */
-export async function verifyPasswordDetailed(password: string, stored: string | null | undefined): Promise<{ ok: boolean; needsRehash: boolean }> {
+export async function verifyPasswordDetailed(password: string, stored: string | null | undefined, expectedIterations: number = PBKDF2_ITER): Promise<{ ok: boolean; needsRehash: boolean }> {
   if (!stored) return { ok: false, needsRehash: false };
-  if (stored.startsWith("pbkdf2:sha256:")) return { ok: await verifyPassword(password, stored), needsRehash: false };
+  if (stored.startsWith("pbkdf2:sha256:")) {
+    const ok = await verifyPassword(password, stored);
+    const storedIter = Number(stored.split(":")[2]);
+    return { ok, needsRehash: ok && storedIter !== expectedIterations };
+  }
   if (/^[0-9a-f]{64}$/.test(stored)) {
     const ok = constantTimeEqual(await sha256Hex(password + "_gft_salt_2026"), stored);
     return { ok, needsRehash: ok };

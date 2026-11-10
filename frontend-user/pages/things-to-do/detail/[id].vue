@@ -2,10 +2,11 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCatalogDetail, jsonLdScript } from '~/composables/useCatalogDetail'
+import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.activityId || route.query.id || '')
-const { item: a, state, reload } = useCatalogDetail('/activities', id)
+const { item: a, state, reload } = useCatalogDetail('/activities', id, generatedFallback('ACTIVITY', id))
 
 const CATEGORY_KO: Record<string, string> = { THEME_PARK: '테마파크', DAY_TOUR: '일일 투어', TICKET: '입장권', EXPERIENCE: '체험', CRUISE: '크루즈', SHOW: '공연' }
 const DURATION_KO: Record<string, string> = { FULL_DAY: '종일', HALF_DAY: '반나절', FLEXIBLE: '자유 이용', HOURS: '몇 시간' }
@@ -50,9 +51,9 @@ useHead(() => {
           <template #badges>
             <p v-if="a.review_score" class="mt-2 flex items-center gap-1.5 text-sm text-ink-muted">
               <span class="rounded-lg bg-primary px-2 py-0.5 text-sm font-bold text-primary-ink tabular">{{ Number(a.review_score).toFixed(1) }}</span>
-              <span v-if="a.review_count">평가 {{ Number(a.review_count).toLocaleString('ko-KR') }}건</span>
-              <span class="text-xs text-ink-subtle">· 공급사 제공 평점</span>
+              <span v-if="a.review_count">인증 후기 {{ Number(a.review_count).toLocaleString('ko-KR') }}건</span>
             </p>
+            <p v-else class="mt-2 text-xs font-semibold text-ink-subtle">신규 상품 · 아직 인증 후기가 없어요</p>
           </template>
           <div v-if="highlights.length" class="mt-6">
             <h2 class="text-sm font-bold text-ink">상품 소개</h2>

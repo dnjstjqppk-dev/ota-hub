@@ -17,7 +17,7 @@ import { HttpError, clientIp, str } from "../lib/http.ts";
 import { consentStmts, currentVersions, validateTxConsents } from "../lib/consents.ts";
 import { newBookingNumber, newId, encryptField, decryptField, randomToken } from "../lib/crypto.ts";
 import type { AuthUser } from "../lib/auth.ts";
-import { loadProduct, loadSupplier, bookabilityOf, assertTicketable, assertQuotableDomain, assertInventoryConfigured, type SupplierRow } from "./catalog.ts";
+import { loadProduct, loadStructuredPolicy, loadSupplier, bookabilityOf, assertTicketable, assertQuotableDomain, assertInventoryConfigured, type SupplierRow } from "./catalog.ts";
 import { adapterFor, type Simulation, type SupplierContext } from "../suppliers/adapter.ts";
 import { getPaymentProvider, requirePaymentProvider } from "../payments/provider.ts";
 import { planOrderSettlement } from "./marketplace-service.ts";
@@ -149,6 +149,37 @@ function journalStmts(db: D1Database, j: L.Journal | null, b: Pick<BookingRow, "
     db.prepare("INSERT INTO ledger_entries (id, journal_id, booking_id, entity_id, supplier_id, account, direction, amount_minor, currency, event_type, reference_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
       .bind(newId("led"), journalId, b.id, b.entity_id, b.supplier_id, l.account, l.direction, l.amountMinor, b.currency, j.eventType, j.referenceId),
   );
+}
+
+/**
+ * Recognition reversal owed before a refund's REFUND_PAID journal. Ledger-state
+ * driven (recognized minus already-reversed), so every refund path — customer,
+ * admin, offline, external — lands exactly-once idempotent journals: the
+ * customer path pre-posts at request time and no-ops here, the others post.
+ */
+async function recognitionReversalStmts(env: Env, db: D1Database, b: Pick<BookingRow, "id" | "entity_id" | "supplier_id" | "currency" | "paid_minor" | "discount_amount_krw">, takeMinor: number): Promise<Stmt[]> {
+  const paid = Number(b.paid_minor || 0);
+  if (!Number.isSafeInteger(takeMinor) || takeMinor <= 0 || !Number.isSafeInteger(paid) || paid <= 0) return [];
+  const row = await db.prepare(
+    `SELECT COALESCE((SELECT SUM(amount_minor) FROM ledger_entries WHERE booking_id = ? AND event_type = 'FULFILMENT_RECOGNIZED' AND account = 'CUSTOMER_DEPOSITS' AND direction = 'DEBIT'), 0) AS rec,
+            COALESCE((SELECT SUM(amount_minor) FROM ledger_entries WHERE booking_id = ? AND event_type = 'FULFILMENT_REVERSED' AND account = 'CUSTOMER_DEPOSITS' AND direction = 'CREDIT'), 0) AS rev`
+  ).bind(b.id, b.id).first<any>();
+  const remaining = Math.min(Number(row?.rec || 0), paid) - Number(row?.rev || 0);
+  const take = Math.min(takeMinor, Math.max(remaining, 0));
+  if (take <= 0) return [];
+  const supplier = await loadSupplier(env, b.supplier_id).catch(() => null);
+  const split = L.recognitionSplit(paid, Math.round(Number(b.discount_amount_krw || 0)), (supplier as any)?.settlement_rate_bps ?? 9000);
+  return journalStmts(db, L.fulfilmentReversedPartial(b.id, take, split, paid), b);
+}
+
+/** Retained remainder not yet journaled as cancellation-fee revenue (B7 partials). */
+async function unrecordedFeeMinor(db: D1Database, bookingId: string, paidMinor: number, totalRefundedAfterMinor: number): Promise<number> {
+  const fee = Number(paidMinor || 0) - Number(totalRefundedAfterMinor || 0);
+  if (!Number.isSafeInteger(fee) || fee <= 0) return 0;
+  const row = await db.prepare(
+    "SELECT COALESCE(SUM(amount_minor), 0) AS f FROM ledger_entries WHERE booking_id = ? AND event_type = 'CANCELLATION_FEE' AND account = 'CANCELLATION_FEE_REVENUE' AND direction = 'CREDIT'"
+  ).bind(bookingId).first<any>();
+  return Math.max(fee - Number(row?.f || 0), 0);
 }
 
 async function runBatch(db: D1Database, stmts: Stmt[]): Promise<D1Result[]> {
@@ -365,6 +396,9 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
   if (!getPaymentProvider(env)) throw new HttpError(503, "PAYMENTS_DISABLED", "현재 온라인 결제가 활성화되어 있지 않습니다. (PG 계약/설정 대기)");
 
   const inbound = await loadInbound(env, domain, params);
+  // C6: snapshot the structured policy (if any) so refunds use the displayed tiers.
+  product.structuredPolicy = await loadStructuredPolicy(env, domain, itemId);
+  if (inbound) inbound.structuredPolicy = await loadStructuredPolicy(env, domain, inbound.itemId);
   const promo = await loadPromotion(env, body.promotionCode ? str(body.promotionCode, 40) : null);
   const ovDates = [params.startDate, params.endDate, params.returnDate].filter((d): d is string => !!d).sort();
   const nightly = nightlyResolver(ovDates.length
@@ -754,6 +788,7 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
       db.prepare("UPDATE inventory_holds SET status = 'COMMITTED' WHERE booking_id = ? AND status = 'HELD'").bind(b.id),
       ...journalStmts(db, L.paymentCaptured(paymentId, r.amountMinor), cur),
       ...hookEnqueueStmts(db, hook, "booking.created", hookSnapshot(b, "PAYMENT_AUTHORIZED", { paid_minor: r.amountMinor, payment_id: paymentId })),
+      outboxInsert(db, "EMAIL", b.customer_email, "PAYMENT_COMPLETED", { bookingId: b.id, bookingNumber: b.booking_number, amountMinor: r.amountMinor }),
     ]);
     cur = await fulfil(env, await mustGet(env, b.id));
     return { alreadyProcessed: false, booking: await serializeBooking(env, cur, user) };
@@ -821,6 +856,7 @@ export async function fulfil(env: Env, b: BookingRow): Promise<BookingRow> {
     await runBatch(db, [
       ...transition(db, cur, "REFUND_PENDING", { type: "SUPPLIER", id: b.supplier_id }, `SUPPLIER_FAILED:${r.code}`, { supplier_status: "FAILED" }),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+      outboxInsert(db, "EMAIL", b.customer_email, "SUPPLIER_REJECTED", { bookingId: b.id, bookingNumber: b.booking_number }),
     ]);
     cur = await mustGet(env, b.id);
     await startRefund(env, cur, cur.paid_minor, `공급사 예약 실패 전액 환불 (${r.code})`);
@@ -961,6 +997,11 @@ export async function applyRefundSucceeded(env: Env, b: BookingRow, pay: any, rf
   // PENDING payout payable (P0 2026-11-10). Partial refunds on live orders
   // keep PENDING until the remainder settles.
   const supplierGone = b.supplier_status === "CANCELLED" || b.supplier_status === "FAILED";
+  // The order always ends REFUNDED here: unwind the full remaining recognition
+  // and journal any retained remainder as fee revenue, so deposits net to zero.
+  // Ledger-state guards make customer pre-posted journals no-op (exactly-once).
+  const reversal = await recognitionReversalStmts(env, db, b, Number(b.paid_minor || 0));
+  const feeDue = await unrecordedFeeMinor(db, b.id, Number(b.paid_minor || 0), Number(b.refunded_minor || 0) + Number(rf.amount_minor || 0));
   await runBatch(db, [
     ...transition(db, b, "REFUNDED", actor, rf.source && rf.source !== "INTERNAL" ? `REFUND_${rf.source}` : null, {
       refunded_minor: b.refunded_minor + rf.amount_minor,
@@ -970,8 +1011,12 @@ export async function applyRefundSucceeded(env: Env, b: BookingRow, pay: any, rf
     db.prepare("UPDATE refunds SET status = 'SUCCEEDED', provider_refund_id = COALESCE(?, provider_refund_id), attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'PENDING'").bind(providerRefundId, rf.id),
     db.prepare("UPDATE payments SET refunded_minor = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
       .bind(newRefunded, fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED", pay.id),
+    ...reversal,
+    ...journalStmts(db, L.cancellationFeeRetained(b.id, feeDue), b),
     ...journalStmts(db, L.refundPaid(rf.id, rf.amount_minor), b),
     ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "REFUNDED", { refunded_minor: newRefunded, refund_id: rf.id })),
+    outboxInsert(db, "EMAIL", b.customer_email, "BOOKING_CANCELLED", { bookingId: b.id, bookingNumber: b.booking_number }),
+    outboxInsert(db, "EMAIL", b.customer_email, "REFUND_COMPLETED", { bookingId: b.id, bookingNumber: b.booking_number, amountMinor: rf.amount_minor }),
     // A fully refunded order must never stay payable (2026-11-09 audit [M]).
     ...((fullyRefunded || supplierGone) ? [db.prepare("UPDATE marketplace_order_settlements SET settlement_status = 'REFUNDED', fulfillment_status = 'FAILED' WHERE booking_id = ? AND settlement_status IN ('PENDING', 'HELD')").bind(b.id)] : []),
     ...(await coinRestoreStmtsOnce(db, b)),
@@ -1003,6 +1048,7 @@ export async function cancelByCustomer(env: Env, user: AuthUser, bookingId: stri
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
       ...coinRestoreStmts(db, b),
       ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "CANCELLED")),
+      outboxInsert(db, "EMAIL", b.customer_email, "BOOKING_CANCELLED", { bookingId: b.id, bookingNumber: b.booking_number }),
     ]);
     return serializeBooking(env, await mustGet(env, b.id), user);
   }
@@ -1039,7 +1085,8 @@ export async function cancelByCustomer(env: Env, user: AuthUser, bookingId: stri
   if (refundMinor <= 0) {
     const hook = await loadPartnerHook(db, b.partner_id);
     await runBatch(db, [...transition(db, cur, "CANCELLED", { type: "SUPPLIER", id: b.supplier_id }, "CANCELLED_NO_REFUND_DUE", { supplier_status: "CANCELLED" }), ...ledger,
-      ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "CANCELLED"))]);
+      ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "CANCELLED")),
+      outboxInsert(db, "EMAIL", b.customer_email, "BOOKING_CANCELLED", { bookingId: b.id, bookingNumber: b.booking_number })]);
     return serializeBooking(env, await mustGet(env, b.id), user);
   }
   await runBatch(db, [...transition(db, cur, "REFUND_PENDING", { type: "SUPPLIER", id: b.supplier_id }, null, { supplier_status: "CANCELLED" }), ...ledger]);
@@ -1189,7 +1236,11 @@ export async function applyExternalCancel(env: Env, bookingId: string, ext: Exte
       .bind(newRefunded, fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED", pay.id),
     // Our own in-flight refunds are superseded: the PG already returned the money.
     db.prepare("UPDATE refunds SET status = 'FAILED', last_error = 'EXTERNAL_CANCEL_SUPERSEDED', updated_at = CURRENT_TIMESTAMP WHERE payment_id = ? AND status = 'PENDING'").bind(pay.id),
+    // Full external cancel unwinds the whole recognition; a partial one unwinds
+    // only its slice so the live remainder stays recognized (never negative).
+    ...(await recognitionReversalStmts(env, db, b, fullyRefunded ? Number(b.paid_minor || 0) : delta)),
     ...journalStmts(db, L.refundPaid(rfId, delta), b),
+    outboxInsert(db, "EMAIL", b.customer_email, "REFUND_COMPLETED", { bookingId: b.id, bookingNumber: b.booking_number, amountMinor: delta }),
   ];
   if (fullyRefunded) {
     money.push(
@@ -1197,6 +1248,7 @@ export async function applyExternalCancel(env: Env, bookingId: string, ext: Exte
       db.prepare("UPDATE marketplace_order_settlements SET settlement_status = 'REFUNDED', fulfillment_status = 'FAILED' WHERE booking_id = ? AND settlement_status IN ('PENDING', 'HELD')").bind(b.id),
       ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "REFUNDED", { refunded_minor: newRefunded, refund_id: rfId, external: true })),
       ...(await coinRestoreStmtsOnce(db, b)),
+      outboxInsert(db, "EMAIL", b.customer_email, "BOOKING_CANCELLED", { bookingId: b.id, bookingNumber: b.booking_number }),
     );
     if (supplierCancelled) money.push(db.prepare("UPDATE booking_items SET supplier_status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(b.id));
   }
@@ -1356,12 +1408,14 @@ export async function adminSupplierDecision(env: Env, decider: AuthUser, booking
         ...transition(db, b, "FAILED", actor, note || "OPERATOR_REJECTED_UNPAID"),
         db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
         ...coinRestoreStmts(db, b),
+        outboxInsert(db, "EMAIL", b.customer_email, "SUPPLIER_REJECTED", { bookingId: b.id, bookingNumber: b.booking_number }),
       ]);
       return mustGet(env, b.id);
     }
     await runBatch(db, [
       ...transition(db, b, "REFUND_PENDING", actor, note || "OPERATOR_REJECTED", { supplier_status: "FAILED" }),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+      outboxInsert(db, "EMAIL", b.customer_email, "SUPPLIER_REJECTED", { bookingId: b.id, bookingNumber: b.booking_number }),
     ]);
     const cur = await mustGet(env, b.id);
     await startRefund(env, cur, cur.paid_minor - cur.refunded_minor, "운영자 확정 거절 전액 환불");
@@ -1433,6 +1487,7 @@ export async function adminForceCancel(env: Env, admin: AuthUser, bookingId: str
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
       ...coinRestoreStmts(db, b),
       ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "CANCELLED")),
+      outboxInsert(db, "EMAIL", b.customer_email, "BOOKING_CANCELLED", { bookingId: b.id, bookingNumber: b.booking_number }),
     ]);
     return mustGet(env, b.id);
   }

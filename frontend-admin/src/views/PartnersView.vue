@@ -6,6 +6,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, toast } from '../composables/session'
+import { adminFetch } from '../config/api'
 import { useResource } from '../composables/useResource'
 import { PARTNER_STATUS, dateTime, partnerStatus } from '../composables/format'
 import PageHeader from '../components/PageHeader.vue'
@@ -81,6 +82,32 @@ function submitStatus() {
   const label = { ACTIVE: '승인', REJECTED: '반려', SUSPENDED: '정지' }[form.action as 'ACTIVE']
   apply({ status: form.action, reason: form.reason.trim() || undefined }, `파트너를 ${label}했어요.`)
 }
+
+// C1/C2: onboarding docs + business verification gate the approval.
+const docsReady = computed(() => !!selected.value?.business_cert_url && !!selected.value?.bank_cert_url)
+const verifiedReady = computed(() => !!selected.value?.business_verified_at)
+const canApprove = computed(() => docsReady.value && verifiedReady.value)
+const vform = reactive({ note: '' })
+async function openDoc(url: string) {
+  busy.value = true
+  try {
+    const r = await adminFetch(url.replace(/^\/api\/v1/, '') || '/')
+    if (!r.ok) throw new Error('서류를 열 수 없어요.')
+    window.open(URL.createObjectURL(await r.blob()), '_blank')
+  } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
+}
+async function verifyBusiness(method: 'NTS_API' | 'MANUAL') {
+  if (method === 'MANUAL' && !vform.note.trim()) { toast('수동 확인 근거를 입력해 주세요.', 'danger'); return }
+  busy.value = true
+  try {
+    await api(`/admin/partners/${encodeURIComponent(selected.value.id)}/verify-business`, { method: 'POST', json: { method, note: vform.note.trim() || undefined } })
+    toast(method === 'NTS_API' ? '국세청 조회로 사업자 확인을 마쳤어요.' : '수동 확인을 기록했어요.')
+    vform.note = ''
+    await list.reload()
+    selected.value = list.data.value.find((p: any) => p.id === selected.value.id) || null
+    if (selected.value) open(selected.value)
+  } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
+}
 </script>
 
 <template>
@@ -154,9 +181,30 @@ function submitStatus() {
         </dl>
 
         <section class="space-y-2">
+          <h3 class="font-bold">심사 서류 · 사업자 확인</h3>
+          <div class="flex flex-wrap gap-2 text-xs">
+            <button v-if="selected.business_cert_url" type="button" class="btn-secondary btn-sm" @click="openDoc(selected.business_cert_url)">사업자등록증 보기</button>
+            <span v-else class="rounded-field bg-surface-sunken px-3 py-2 text-ink-muted">사업자등록증 미등록</span>
+            <button v-if="selected.bank_cert_url" type="button" class="btn-secondary btn-sm" @click="openDoc(selected.bank_cert_url)">통장사본 보기</button>
+            <span v-else class="rounded-field bg-surface-sunken px-3 py-2 text-ink-muted">통장사본 미등록</span>
+          </div>
+          <p class="text-xs text-ink-muted">사업자 진위확인: {{ selected.business_verified_at ? `${selected.business_verify_method === 'NTS_API' ? '국세청 조회' : '수동 확인'} 완료 (${dateTime(selected.business_verified_at)})` : '미확인' }}</p>
+          <div v-if="!selected.business_verified_at" class="space-y-2">
+            <div class="flex flex-wrap gap-2">
+              <button type="button" class="btn-secondary btn-sm" :disabled="busy" @click="verifyBusiness('NTS_API')">국세청으로 확인</button>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <input v-model="vform.note" class="input flex-1" maxlength="300" placeholder="수동 확인 근거 (예: 등록증 원본 대조 완료)" />
+              <button type="button" class="btn-secondary btn-sm" :disabled="busy" @click="verifyBusiness('MANUAL')">수동 확인 기록</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="space-y-2">
           <h3 class="font-bold">상태 변경</h3>
+          <p v-if="!canApprove && selected.profile_status !== 'ACTIVE'" class="text-xs text-danger">서류 2종과 사업자 확인이 끝나야 승인할 수 있어요.</p>
           <div class="flex flex-wrap gap-2">
-            <button v-if="selected.profile_status !== 'ACTIVE'" type="button" class="btn-primary btn-sm" @click="form.action = 'ACTIVE'">{{ selected.profile_status === 'SUSPENDED' ? '다시 활성화' : '승인' }}</button>
+            <button v-if="selected.profile_status !== 'ACTIVE'" type="button" class="btn-primary btn-sm" :disabled="!canApprove" @click="form.action = 'ACTIVE'">{{ selected.profile_status === 'SUSPENDED' ? '다시 활성화' : '승인' }}</button>
             <button v-if="selected.profile_status === 'PENDING_APPROVAL'" type="button" class="btn-secondary btn-sm" @click="form.action = 'REJECTED'">반려</button>
             <button v-if="selected.profile_status === 'ACTIVE'" type="button" class="btn-secondary btn-sm text-danger" @click="form.action = 'SUSPENDED'">이용 정지</button>
           </div>

@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { apiUrl, partnerToken } from '../config/api'
 
+const route = useRoute()
 const partner = ref<any>(null)
+// C1: PENDING owners land here from login (?onboarding=1) and complete the
+// company profile + verification docs before the admin can approve them.
+const onboardingPending = computed(() => {
+  const st = String(partner.value?.profile?.status || '').toUpperCase()
+  return route.query.onboarding === '1' || st === 'PENDING_APPROVAL' || st === 'PENDING'
+})
 const contactPhone = ref('')
 const bankName = ref('')
 const bankAccountNumber = ref('')
@@ -13,6 +21,34 @@ const error = ref('')
 const saveLoading = ref(false)
 const saveSuccess = ref(false)
 const saveError = ref('')
+
+const uploadState = ref<Record<string, string>>({})
+const uploadFile = async (purpose: 'BUSINESS_CERT' | 'BANK_CERT', ev: Event) => {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  uploadState.value = { ...uploadState.value, [purpose]: '업로드 중…' }
+  saveError.value = ''
+  try {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('purpose', purpose)
+    const res = await fetch(apiUrl('/uploads'), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${partnerToken()}` },
+      body: form
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(json.error || '업로드에 실패했습니다.')
+    uploadState.value = { ...uploadState.value, [purpose]: '등록 완료' }
+    await fetchProfile()
+  } catch (e: any) {
+    uploadState.value = { ...uploadState.value, [purpose]: '' }
+    saveError.value = e.message || '업로드에 실패했습니다.'
+  } finally {
+    input.value = ''
+  }
+}
 
 const fetchProfile = async () => {
   loading.value = true
@@ -87,6 +123,13 @@ onMounted(() => {
       </h1>
       <p class="mt-1 text-sm font-medium text-ink-subtle">
         사업자등록 기본 정보, 세금계산서 수신 이메일 및 정산 대금 입금 계좌를 설정합니다.
+      </p>
+    </div>
+
+    <div v-if="onboardingPending" class="rounded-2xl border border-warning/40 bg-warning-soft px-4 py-3 text-xs font-semibold text-ink" role="status">
+      <p class="font-black">입점 심사 전 정보 입력 단계입니다.</p>
+      <p class="mt-1 font-medium text-ink-subtle">
+        아래 회사 정보와 정산 계좌를 입력하고 사업자등록증·통장사본을 등록해 주세요. 서류가 갖춰지면 관리자가 심사 후 승인하며, 승인 완료 전까지 상품·주문·정산 메뉴는 이용할 수 없습니다.
       </p>
     </div>
 
@@ -184,6 +227,23 @@ onMounted(() => {
               placeholder="tax@company.com"
               class="input font-medium"
             />
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <h3 class="border-b border-line pb-2 text-sm font-black text-ink">입점 심사 서류 (승인 필수)</h3>
+        <p class="-mt-2 text-xs text-ink-subtle">사업자등록증과 통장사본을 등록해야 관리자 승인이 진행돼요. 이미지 또는 PDF, 장당 8MB 이하.</p>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div class="space-y-1">
+            <label class="label">사업자등록증 {{ partner?.profile?.business_cert_url ? '· 등록됨' : '· 미등록' }}</label>
+            <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" class="input text-xs" @change="uploadFile('BUSINESS_CERT', $event)" />
+            <p v-if="uploadState['BUSINESS_CERT']" class="text-xs font-bold text-success">{{ uploadState['BUSINESS_CERT'] }}</p>
+          </div>
+          <div class="space-y-1">
+            <label class="label">통장사본 {{ partner?.profile?.bank_cert_url ? '· 등록됨' : '· 미등록' }}</label>
+            <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" class="input text-xs" @change="uploadFile('BANK_CERT', $event)" />
+            <p v-if="uploadState['BANK_CERT']" class="text-xs font-bold text-success">{{ uploadState['BANK_CERT'] }}</p>
           </div>
         </div>
       </div>

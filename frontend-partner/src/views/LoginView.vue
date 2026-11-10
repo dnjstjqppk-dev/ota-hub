@@ -37,7 +37,17 @@ const handleLogin = async () => {
     // Set partner cookie for edge authorization
     document.cookie = `getfortrip_partner_jwt=${data.token}; path=/; max-age=86400; SameSite=Lax`
 
-    router.push('/dashboard')
+    // C1: PENDING owners finish onboarding (profile + docs) before they can
+    // use the extranet; ACTIVE accounts go to the dashboard.
+    const profileStatus = String(data.partner?.profileStatus || '').toUpperCase()
+    if (profileStatus === 'PENDING_APPROVAL' || profileStatus === 'PENDING') {
+      router.push({ path: '/profile', query: { onboarding: '1' } })
+    } else {
+      const redirect = typeof router.currentRoute.value.query.redirect === 'string'
+        ? (router.currentRoute.value.query.redirect as string)
+        : '/dashboard'
+      router.push(redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/dashboard')
+    }
   } catch (err: any) {
     errorMessage.value = err.message || '로그인 중 오류가 발생했습니다.'
   } finally {

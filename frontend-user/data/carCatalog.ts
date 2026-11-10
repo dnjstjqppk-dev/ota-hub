@@ -31,7 +31,7 @@ export interface RentalCarProperty {
   free_cancellation_hours: number
   min_driver_age: number
   min_driving_experience_years: number
-  image_url: string
+  image_url: string | null
   gallery: string[]
   features: string[]
   insurance_plans: CarInsurancePlan[]
@@ -56,13 +56,9 @@ export const MASTER_CAR_CATALOG: RentalCarProperty[] = [
     free_cancellation_hours: 48,
     min_driver_age: 21,
     min_driving_experience_years: 1,
-    image_url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800',
-      'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800',
-      'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800'
-    ],
-    features: ['스마트 크루즈 컨트롤', '열선/통풍 시트', '후방 카메라 & 전후방 센서', '블루투스/애플 카플레이', '하이패스 내장'],
+    image_url: null,
+    gallery: [],
+    features: [],
     insurance_plans: [
       {
         id: 'super',
@@ -100,12 +96,9 @@ export const MASTER_CAR_CATALOG: RentalCarProperty[] = [
     free_cancellation_hours: 48,
     min_driver_age: 21,
     min_driving_experience_years: 1,
-    image_url: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800',
-      'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800'
-    ],
-    features: ['하이브리드 고연비 (30km/L)', '일본 현지 한국어 내비게이션', 'ETC 하이패스 단말기 장착', '비상 자동제동 시스템'],
+    image_url: null,
+    gallery: [],
+    features: [],
     insurance_plans: [
       {
         id: 'super',
@@ -143,11 +136,9 @@ export const MASTER_CAR_CATALOG: RentalCarProperty[] = [
     free_cancellation_hours: 48,
     min_driver_age: 21,
     min_driving_experience_years: 1,
-    image_url: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=800'
-    ],
-    features: ['넓은 트렁크 캠핑/골프백 3개 적재', '어라운드 뷰 360 카메라', '파노라마 선루프', '스마트폰 무선충전'],
+    image_url: null,
+    gallery: [],
+    features: [],
     insurance_plans: [
       {
         id: 'super',
@@ -185,11 +176,9 @@ export const MASTER_CAR_CATALOG: RentalCarProperty[] = [
     free_cancellation_hours: 48,
     min_driver_age: 26,
     min_driving_experience_years: 2,
-    image_url: 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800',
-    gallery: [
-      'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800'
-    ],
-    features: ['가족/단체 여행 최적 9인승', '고속도로 버스전용차로 통행 가능(6인 이상 탑승시)', '파워 슬라이딩 도어', '독립 2열 리클라이닝'],
+    image_url: null,
+    gallery: [],
+    features: [],
     insurance_plans: [
       {
         id: 'super',

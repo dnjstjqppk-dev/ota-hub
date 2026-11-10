@@ -2,10 +2,11 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCatalogDetail, jsonLdScript } from '~/composables/useCatalogDetail'
+import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
-const { item: c, state, reload } = useCatalogDetail('/cars', id)
+const { item: c, state, reload } = useCatalogDetail('/cars', id, generatedFallback('CAR', id))
 
 const TYPE_KO: Record<string, string> = { SEDAN: '세단', SUV: 'SUV', VAN: '승합/밴', COMPACT: '소형', LUXURY: '고급', EV: '전기차' }
 const facts = computed(() => {
