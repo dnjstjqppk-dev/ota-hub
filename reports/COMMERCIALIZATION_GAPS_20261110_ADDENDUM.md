@@ -18,14 +18,14 @@
 
 ## 신규 A — 법적 의무와 연결된 코드 갭
 
-- A1. **회원탈퇴 없음.** API·UI 0. `privacy.vue:48`은 "탈퇴 시 즉시 파기"를 약속. 탈퇴 + 거래기록 법정보존분 분리·익명화 필요 [M]
-- A2. **약관 동의 이력 미저장.** `auth.ts:39-47`은 동의 여부만 검사하고 버전·시각을 저장하지 않음(`marketing_consent`만 저장). `legal_documents` 버전과 연결 0 → 개정 시 재동의 불가 [M]
-- A3. **결제 시 간주동의.** `checkout/index.vue:333` "결제하면 동의한 것으로 봅니다". 공급사에 여행자 정보 제공(제3자 제공) 별도 명시 동의 + 기록 필요 [S]
-- A4. 마케팅 수신동의 변경/철회 UI·API 없음, 동의일 미기록 [S]
-- A5. **푸터 사업자 표시 누락.** `GlobalFooter.vue:52`는 상호·신고번호만 표시. 대표자·주소·사업자등록번호·전화·호스팅제공자 없음 [S]
-- A6. 개인정보처리방침: 보호책임자 성명·직책 없음(`privacy.vue:81` 팀명+메일). 처리위탁·국외이전(Cloudflare·Toss·Resend·Sentry) 고지 0건 [S]
-- A7. "통신판매 중개" 표시(`GlobalFooter.vue:54`, checkout:333) vs 1P 직판(`ptn_direct_01`, MERCHANT_OF_RECORD) 모순 → 판매형태별 고지 분리 [S]
-- A8. 회원 정지 불가 (`admin.ts:848` NOT_SUPPORTED). 사기·부정사용 대응 수단 없음 [M]
+- [x] A1. **회원탈퇴 없음.** → 완료 (29081f4 / `routes/auth.ts` POST /auth/me/withdraw, `0029_account_lifecycle.sql`, `my/profile.vue`). 비밀번호 확인 + 진행예약 차단 + PII 파기 + retained_records 5년 분리보관. E2E A1 통과
+- [x] A2. **약관 동의 이력 미저장.** → 완료 (29081f4 / `lib/consents.ts`, `0028_user_consents.sql`, `routes/auth.ts` register). 가입 시 TERMS/PRIVACY/MARKETING 버전·시각·IP·UA append-only 기록. E2E A3 내 등록이력 검증 통과
+- [x] A3. **결제 시 간주동의.** → 완료 (29081f4 / `booking-service.ts` validateTxConsents + consentStmts, `checkout/index.vue` 필수 3종 체크박스). 간주 문구 폐기, 버전 불일치 시 CONSENT_STALE. 유닛 consents 3건 + E2E A3 통과
+- [x] A4. 마케팅 수신동의 변경/철회 → 완료 (29081f4 / PATCH /auth/me marketingConsent + `my/profile.vue` 토글). 변경마다 동의일 기록. E2E A4 통과
+- [x] A5. **푸터 사업자 표시 누락.** → 완료 (29081f4 / `GlobalFooter.vue`, `composables/useCompany.ts`, `nuxt.config.ts` NUXT_PUBLIC_COMPANY_*). 미입력값은 "준비 중" 표시, Phase 7 사전검사에서 감지
+- [x] A6. 개인정보처리방침 CPO·위탁·국외이전 → 완료 (29081f4 / `privacy.vue` v2.1 + `0030_legal_versions_2_1.sql`). CPO 바인딩, 4사 위탁/국외이전 테이블, 암호화 실측 문구(PBKDF2/AES-256-GCM/TLS)
+- [x] A7. 판매형태 고지 모순 → 완료 (29081f4 / `terms.vue` v2.1 제2·3·4·5·6조, 푸터/결제 문구, `serializeBooking` salesType + `BookingDetail.vue` 표시). E2E A7 통과
+- [x] A8. 회원 정지 불가 → 완료 (29081f4 / PATCH /admin/users isActive + `lib/auth.ts` 상태 게이트 + `UsersView.vue`). 사유 필수, 세션 즉시 종료, 본인 정지 금지. E2E A8 통과
 
 ## 신규 B — 돈·정산
 
