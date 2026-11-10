@@ -16,7 +16,7 @@ const EFFECTIVE = '2026년 11월 7일'
       <section class="space-y-2">
         <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">1. 개인정보의 수집 및 이용 목적</h2>
         <p>
-          {{ BRAND.name }} Inc.(이하 "회사")는 호텔, 항공권, 기차, 렌터카, 투어 상품 예약 및 발권, 본인 확인, 결제 및 정산, 고객 상담(24/7 CS)을 위해 최소한의 개인정보를 수집합니다.
+          {{ BRAND.name }} Inc.(이하 "회사")는 호텔, 항공권, 기차, 렌터카, 투어 상품 예약 및 발권, 본인 확인, 결제 및 정산, 고객 상담을 위해 최소한의 개인정보를 수집합니다.
         </p>
       </section>
 

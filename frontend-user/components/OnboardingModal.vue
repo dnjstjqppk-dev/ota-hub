@@ -28,20 +28,20 @@ onBeforeUnmount(() => { document.documentElement.style.overflow = '' })
         <ul class="mt-4 space-y-3">
           <li class="flex items-center gap-3 rounded-2xl bg-surface-sunken px-4 py-3">
             <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-soft text-primary"><AppIcon name="search" :size="18" /></span>
-            <span class="text-sm font-semibold">실시간 최저가 검색 <span class="font-normal text-ink-muted">— 7개 도메인 통합 비교</span></span>
+            <span class="text-sm font-semibold">통합 검색 <span class="font-normal text-ink-muted">— 7개 도메인 한 번에 비교</span></span>
           </li>
           <li class="flex items-center gap-3 rounded-2xl bg-surface-sunken px-4 py-3">
             <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-success-soft text-success"><AppIcon name="ticket" :size="18" /></span>
-            <span class="text-sm font-semibold">즉시 발권·바우처 <span class="font-normal text-ink-muted">— 결제 후 바로 확인</span></span>
+            <span class="text-sm font-semibold">예약 확정 안내 <span class="font-normal text-ink-muted">— 바우처는 예약 상세에서 확인</span></span>
           </li>
           <li class="flex items-center gap-3 rounded-2xl bg-surface-sunken px-4 py-3">
             <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-warning-soft text-warning"><AppIcon name="gift" :size="18" /></span>
-            <span class="text-sm font-semibold">신규 쿠폰팩 <span class="font-normal text-ink-muted">— 가입하고 매달 할인받기</span></span>
+            <span class="text-sm font-semibold">최저가 알림 <span class="font-normal text-ink-muted">— 목표가 도달 시 알림</span></span>
           </li>
         </ul>
         <div class="mt-5 flex gap-2">
           <NuxtLink to="/deals" class="flex-1 rounded-xl bg-primary py-3 text-center text-sm font-bold text-primary-ink hover:bg-primary-hover" @click="emit('close')">
-            쿠폰 받으러 가기
+            특가 보러 가기
           </NuxtLink>
           <button type="button" class="flex-1 rounded-xl border border-line py-3 text-sm font-semibold text-ink-muted hover:border-line-strong hover:text-ink" @click="emit('close')">
             둘러보기

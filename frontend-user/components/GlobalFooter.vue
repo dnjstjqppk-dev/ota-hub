@@ -49,8 +49,8 @@ const year = new Date().getFullYear()
 
       <div class="mt-12 flex flex-col gap-4 border-t border-line pt-6 text-xs leading-relaxed text-ink-subtle md:flex-row md:items-start md:justify-between">
         <div class="space-y-1">
-          <p>{{ BRAND.companyName }} · 통신판매업 신고 {{ BRAND.businessLicense }}</p>
-          <p>결제는 토스페이먼츠를 통해 처리되며, getfortrip은 카드 번호를 저장하지 않습니다. 외화 표시는 참고용 환산 금액입니다.</p>
+          <p>{{ BRAND.companyName }} · 통신판매업 신고 준비 중</p>
+          <p>결제는 결제대행(PG)사를 통해 처리되며, getfortrip은 카드 번호를 저장하지 않습니다. 외화 표시는 참고용 환산 금액입니다.</p>
           <p>getfortrip은 직접 예약에 대해 통신판매를 중개하고, 제휴 링크로 이동한 거래는 해당 제휴사의 약관이 적용됩니다. 상세 조건은 이용약관과 취소·환불 규정을 확인해 주세요.</p>
           <p>© {{ year }} {{ BRAND.companyName }}</p>
         </div>

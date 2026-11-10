@@ -1,29 +1,7 @@
 <script setup lang="ts">
 import { BRAND } from '~/config/brand'
 
-const articles = [
-  {
-    id: 1,
-    date: '2026.10.15',
-    category: '보도자료',
-    title: `${BRAND.name}, 전 세계 140만 호텔 실시간 직계약 재고 및 패싯 필터 엔진 전격 오픈`,
-    summary: 'Trip 스타일의 7대 도메인 다차원 패싯 필터와 고속 인메모리 검색 엔진을 결합하여 0.2초대 검색 속도를 달성했습니다.'
-  },
-  {
-    id: 2,
-    date: '2026.10.01',
-    category: '서비스 업데이트',
-    title: `${BRAND.name} B2B 파트너 비즈니스 허브 출시... 공급사 정산 자동화 지원`,
-    summary: '호텔, 투어, 렌터카 파트너사가 직접 재고와 요금을 실시간 관리하고 월 2회 90% 정산 명세서를 확인하는 공급사 포털을 공개했습니다.'
-  },
-  {
-    id: 3,
-    date: '2026.09.15',
-    category: '기업 소식',
-    title: `${BRAND.name}, 글로벌 주요 항공사 및 KTX/신칸센 철도망 다이렉트 API 연동 완료`,
-    summary: '해외 항공권과 아시아/유럽 고속철도망을 결합한 스마트 여행 상품 예약 서비스를 정식 개시했습니다.'
-  }
-]
+const articles: Array<{ id: number; date: string; category: string; title: string; summary: string }> = []
 </script>
 
 <template>
@@ -40,7 +18,7 @@ const articles = [
       </p>
     </div>
 
-    <div class="space-y-4">
+    <div v-if="articles.length" class="space-y-4">
       <article
         v-for="a in articles"
         :key="a.id"
@@ -53,6 +31,10 @@ const articles = [
         <h2 class="text-lg font-black text-slate-900 dark:text-slate-100">{{ a.title }}</h2>
         <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{{ a.summary }}</p>
       </article>
+    </div>
+    <div v-else class="bg-white dark:bg-slate-800 p-10 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm text-center">
+      <p class="text-sm text-slate-500 dark:text-slate-400 font-bold">아직 등록된 소식이 없습니다.</p>
+      <p class="text-xs text-slate-400 dark:text-slate-500 mt-2">서비스 소식이 나오는 대로 이곳에 안내해 드립니다.</p>
     </div>
   </div>
 </template>

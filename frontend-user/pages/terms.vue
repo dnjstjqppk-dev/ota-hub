@@ -9,7 +9,7 @@ const EFFECTIVE = '2026년 11월 7일'
     <div class="space-y-2 border-b border-slate-200 dark:border-slate-700 pb-6">
       <span class="text-xs font-bold text-trip-blue">Terms of Service · v{{ VERSION }}</span>
       <h1 class="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">{{ BRAND.name }} 서비스 이용약관</h1>
-      <p class="text-xs text-slate-400">시행일: {{ EFFECTIVE }} · 통신판매업 신고 {{ BRAND.businessLicense }}</p>
+      <p class="text-xs text-slate-400">시행일: {{ EFFECTIVE }}</p>
     </div>
 
     <div class="prose prose-slate dark:prose-invert max-w-none text-xs leading-relaxed text-slate-700 dark:text-slate-200 space-y-6">

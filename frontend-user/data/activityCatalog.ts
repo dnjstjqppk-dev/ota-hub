@@ -66,7 +66,7 @@ export const MASTER_ACTIVITY_CATALOG: ActivityProperty[] = [
     highlights: [
       '도쿄 디즈니랜드 매표소 대기 없이 모바일 QR 바로 입장',
       '디즈니 프리미어 액세스(DPA) 연동 가능',
-      '성인/아동/청소년 실시간 즉시 발권',
+      '성인/아동/청소년 모바일 QR 입장',
       '지정일 24시간 전까지 100% 무료 취소'
     ],
     included: ['도쿄 디즈니랜드 1일 자유이용권', '모바일 전자 바우처'],
@@ -286,7 +286,7 @@ export const MASTER_ACTIVITY_CATALOG: ActivityProperty[] = [
       '일본 1위 통신사 NTT Docomo / SoftBank 5G 망 자동 로밍',
       '데이터 무제한 (매일 2GB 사용 후 128kbps 무제한 유지)'
     ],
-    included: ['일본 데이터 eSIM QR 프로파일', '카카오톡 실시간 고객상담'],
+    included: ['일본 데이터 eSIM QR 프로파일', '도움 센터 고객상담'],
     excluded: ['음성 통화 및 SMS'],
     ticket_options: [
       {
