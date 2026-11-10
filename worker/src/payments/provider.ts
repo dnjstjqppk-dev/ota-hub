@@ -27,6 +27,8 @@ export type RefundResult =
 export type LookupResult =
   | { outcome: "CAPTURED"; paymentKey: string; amountMinor: number; method: string; approvedAt: string }
   | { outcome: "NOT_CAPTURED" }
+  | { outcome: "CANCELED"; paymentKey: string; canceledMinor: number; cancelReason: string; transactionKey: string | null }
+  | { outcome: "PARTIAL_CANCELED"; paymentKey: string; canceledMinor: number; remainingMinor: number; cancelReason: string; transactionKey: string | null }
   | { outcome: "UNKNOWN"; message: string };
 
 export interface PaymentProvider {
@@ -46,6 +48,8 @@ export interface PaymentProvider {
 //   refundfail  -> captured, but every refund attempt fails
 //   mismatch    -> captured a different amount (exercises the PG_AMOUNT_MISMATCH path)
 //   lost        -> provider response lost and nothing captured (lookup reveals NOT_CAPTURED)
+//   extcancel   -> captured, then canceled OUTSIDE our API (dashboard/chargeback)
+//   extpartial  -> captured, then HALF canceled outside our API
 // ---------------------------------------------------------------------------
 export function sandboxProvider(): PaymentProvider {
   const scenario = (key: string) => key.split("_")[1] || "ok";
@@ -72,6 +76,11 @@ export function sandboxProvider(): PaymentProvider {
       if (!paymentKey) return { outcome: "NOT_CAPTURED" };
       const s = scenario(paymentKey);
       if (s === "declined" || s === "lost") return { outcome: "NOT_CAPTURED" };
+      if (s === "extcancel") return { outcome: "CANCELED", paymentKey, canceledMinor: amountMinor, cancelReason: "외부 취소 (테스트)", transactionKey: `sbx_tx_${paymentKey}` };
+      if (s === "extpartial") {
+        const half = Math.floor(amountMinor / 2);
+        return { outcome: "PARTIAL_CANCELED", paymentKey, canceledMinor: half, remainingMinor: amountMinor - half, cancelReason: "외부 부분취소 (테스트)", transactionKey: `sbx_tx_${paymentKey}` };
+      }
       // For "timeout" the simulated PG did capture: reconciliation must discover it.
       return { outcome: "CAPTURED", paymentKey, amountMinor, method: "CARD(SANDBOX)", approvedAt: new Date().toISOString() };
     },
@@ -123,10 +132,22 @@ export function tossProvider(secretKey: string, clientKey: string | undefined, a
       const r = await call(`/payments/orders/${encodeURIComponent(orderId)}`, { method: "GET" });
       if (!r || r.status >= 500) return { outcome: "UNKNOWN", message: "PG 조회 실패" };
       if (r.status === 404) return { outcome: "NOT_CAPTURED" };
-      if (r.status === 200 && r.body?.status === "DONE") {
+      if (r.status !== 200) return { outcome: "UNKNOWN", message: `HTTP_${r.status}` };
+      const st = String(r.body?.status || "");
+      if (st === "DONE") {
         return { outcome: "CAPTURED", paymentKey: r.body.paymentKey, amountMinor: Number(r.body.totalAmount), method: String(r.body.method || "CARD"), approvedAt: String(r.body.approvedAt) };
       }
-      return r.status === 200 ? { outcome: "NOT_CAPTURED" } : { outcome: "UNKNOWN", message: `HTTP_${r.status}` };
+      // B1: dashboard cancels / chargebacks surface here, never in our refund flow.
+      if (st === "CANCELED" || st === "PARTIAL_CANCELED") {
+        const cancels = Array.isArray(r.body?.cancels) ? r.body.cancels : [];
+        const canceledMinor = cancels.reduce((n: number, c: any) => n + (Number(c?.cancelAmount) || 0), 0);
+        const last = cancels[cancels.length - 1] || {};
+        const base = { paymentKey: String(r.body.paymentKey), canceledMinor, cancelReason: String(last?.cancelReason || "PG 외부 취소"), transactionKey: last?.transactionKey ? String(last.transactionKey) : null };
+        if (st === "CANCELED") return { outcome: "CANCELED", ...base };
+        const remaining = Number(r.body?.balanceAmount ?? (Number(r.body?.totalAmount || 0) - canceledMinor));
+        return { outcome: "PARTIAL_CANCELED", ...base, remainingMinor: remaining };
+      }
+      return { outcome: "NOT_CAPTURED" };
     },
   };
 }

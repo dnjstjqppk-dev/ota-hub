@@ -21,6 +21,17 @@ const loading = ref(true)
 const error = ref('')
 const cancelling = ref(false)
 const cancelMsg = ref('')
+// B6: receipt is fetched on demand from recorded payments (never fabricated).
+const receipt = ref<any>(null)
+const receiptLoading = ref(false)
+async function loadReceipt(open: boolean) {
+  if (!open || receipt.value || receiptLoading.value) return
+  receiptLoading.value = true
+  try {
+    const r = await apiFetch(`/bookings/${props.bookingId}/receipt`)
+    if (r.ok) receipt.value = r.data.receipt
+  } finally { receiptLoading.value = false }
+}
 let pollTimer: any
 let polls = 0
 
@@ -205,6 +216,25 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
         </button>
         <p v-if="cancelMsg" class="mt-2 text-sm text-danger" role="alert">{{ cancelMsg }}</p>
       </section>
+
+      <details v-if="booking.paidMinor > 0" class="rounded-2xl border border-line bg-surface p-5 text-sm" data-testid="receipt-block" @toggle="(e: any) => loadReceipt(e.target.open)">
+        <summary class="cursor-pointer font-semibold text-ink">결제 영수증</summary>
+        <p v-if="receiptLoading" class="mt-3 text-ink-muted">불러오는 중…</p>
+        <div v-else-if="receipt" class="mt-3 space-y-2">
+          <dl class="space-y-1">
+            <div class="flex justify-between"><dt class="text-ink-subtle">예약번호</dt><dd class="font-mono">{{ receipt.bookingNumber }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-subtle">판매 형태</dt><dd>{{ receipt.salesTypeLabel }}</dd></div>
+            <div v-for="p in receipt.payments" :key="p.id" class="border-t border-line pt-2">
+              <div class="flex justify-between"><dt class="text-ink-subtle">결제 {{ p.method || p.provider }}</dt><dd class="font-bold">{{ formatKrw(p.amountMinor) }}</dd></div>
+              <div v-if="p.card?.company" class="flex justify-between text-xs text-ink-muted"><span>{{ p.card.company }} {{ p.card.number }}</span><span>{{ p.card.installmentMonths ? `할부 ${p.card.installmentMonths}개월` : '일시불' }}</span></div>
+              <div class="flex justify-between text-xs text-ink-muted"><span>승인 {{ p.approvedAt ? fmt(p.approvedAt) : '—' }}</span><span>{{ p.status }}</span></div>
+            </div>
+            <div v-for="rf in receipt.refunds" :key="rf.id" class="flex justify-between text-success"><dt>환불 · {{ rf.status }}</dt><dd>{{ formatKrw(rf.amountMinor) }}</dd></div>
+            <div class="flex justify-between border-t border-line pt-2"><dt class="text-ink-subtle">실결제액</dt><dd class="font-bold">{{ formatKrw(receipt.paidMinor - receipt.refundedMinor) }}</dd></div>
+          </dl>
+          <button class="rounded-xl border border-line-strong px-4 py-2 text-xs font-semibold print:hidden" @click="window.print()">영수증 인쇄</button>
+        </div>
+      </details>
 
       <details class="rounded-2xl border border-line bg-surface p-5 text-sm">
         <summary class="cursor-pointer font-semibold text-ink">처리 이력</summary>

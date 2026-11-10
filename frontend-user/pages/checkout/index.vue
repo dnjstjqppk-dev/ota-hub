@@ -58,6 +58,8 @@ const agreePrivacyTx = ref(false)
 const agreeThirdParty = ref(false)
 const legalVersions = ref<Record<string, string>>({})
 const simSupplier = ref('confirm')
+// B8: Toss v2 payment method. CARD default; TRANSFER/VIRTUAL_ACCOUNT pass through to the PG.
+const payMethod = ref('CARD')
 const simTicketing = ref('ok')
 const simPayment = ref('ok')
 
@@ -154,7 +156,7 @@ async function payWithToss() {
   const toss = w.TossPayments(payConfig.value.clientKey)
   const payment = toss.payment({ customerKey: auth.user?.id })
   await payment.requestPayment({
-    method: 'CARD',
+    method: payMethod.value,
     amount: { currency: 'KRW', value: booking.value.totalMinor },
     orderId: booking.value.id,
     orderName: booking.value.title.slice(0, 100),
@@ -351,6 +353,14 @@ onBeforeUnmount(() => clearInterval(timer))
           <label v-if="payConfig?.provider === 'sandbox'" class="mt-4 block text-sm text-ink">테스트 결제 결과
             <select v-model="simPayment" class="ml-1 rounded-lg border border-line bg-surface px-2 py-1" data-testid="sim-payment"><option value="ok">승인</option><option value="declined">카드 거절</option><option value="timeout">PG 응답 유실</option><option value="refundfail">승인(환불 실패)</option></select>
           </label>
+          <div v-if="payConfig?.enabled && payConfig?.provider !== 'sandbox'" class="mt-4 flex items-center gap-2 text-sm">
+            <label for="pay-method" class="font-semibold text-ink">결제 수단</label>
+            <select id="pay-method" v-model="payMethod" class="rounded-lg border border-line bg-surface px-2 py-1.5" data-testid="pay-method">
+              <option value="CARD">신용·체크카드</option>
+              <option value="TRANSFER">계좌이체</option>
+              <option value="VIRTUAL_ACCOUNT">가상계좌</option>
+            </select>
+          </div>
           <p v-if="!payConfig?.enabled" class="mt-4 text-sm font-medium text-danger">지금은 온라인 결제를 사용할 수 없어요.</p>
           <button type="button" :disabled="busy || !payConfig?.enabled || paySecondsLeft === 0" class="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3.5 text-base font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40" data-testid="pay" @click="pay">
             <AppIcon name="lock" :size="18" />{{ busy ? '결제 처리 중…' : `${formatKrw(booking.totalMinor)} 결제하기` }}

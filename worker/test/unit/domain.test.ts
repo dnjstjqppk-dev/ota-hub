@@ -36,8 +36,15 @@ test("state machine: PNR (SUPPLIER_CONFIRMED) and ticket (TICKETED) are distinct
 });
 
 test("state machine: terminal states have no exits; every state is reachable-defined", () => {
-  for (const s of TERMINAL_STATUSES) assert.deepEqual([...allowedNext(s)], []);
+  for (const s of TERMINAL_STATUSES) {
+    // Deliberate contract change (B3/B7): a COMPLETED order can enter review
+    // for a post-completion dispute, but never refunds or cancels directly.
+    if (s === "COMPLETED") assert.deepEqual([...allowedNext(s)], ["MANUAL_REVIEW_REQUIRED"]);
+    else assert.deepEqual([...allowedNext(s)], []);
+  }
   for (const s of BOOKING_STATUSES) assert.ok(Array.isArray(allowedNext(s)));
+  assert.equal(canTransition("COMPLETED", "REFUND_PENDING"), false);
+  assert.equal(canTransition("COMPLETED", "CANCELLATION_REQUESTED"), false);
   assert.throws(() => assertTransition("REFUNDED", "AWAITING_PAYMENT"), /ILLEGAL_TRANSITION/);
   assert.throws(() => assertTransition("BOGUS", "FAILED"), /ILLEGAL_TRANSITION/);
 });

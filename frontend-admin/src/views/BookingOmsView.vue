@@ -64,6 +64,29 @@ const canDecide = computed(() => ['SUPPLIER_BOOKING_PENDING', 'MANUAL_REVIEW_REQ
 const hasPendingRefund = computed(() => (b.value?.refunds || []).some((r: any) => r.status === 'PENDING'))
 
 const form = reactive({ mode: '' as '' | 'CONFIRM' | 'REJECT', supplierReference: '', pnr: '', note: '' })
+// B7: force-cancel / manual PG refund / offline bank refund. Shown for non-terminal orders.
+const TERMINAL = ['COMPLETED', 'REFUNDED', 'CANCELLED', 'EXPIRED', 'FAILED']
+const canForce = computed(() => !!b.value && !TERMINAL.includes(b.value.status))
+const refundable = computed(() => Math.max(0, (b.value?.paidMinor || 0) - (b.value?.refundedMinor || 0)))
+const rform = reactive({ mode: '' as '' | 'FORCE' | 'REFUND' | 'OFFLINE', amount: '', bank: '', account: '', reason: '' })
+function openR(mode: 'FORCE' | 'REFUND' | 'OFFLINE') { Object.assign(rform, { mode, amount: String(refundable.value), bank: '', account: '', reason: '' }) }
+async function submitR() {
+  const id = b.value.id
+  if (!rform.reason.trim()) { toast('사유를 입력해 주세요.', 'danger'); return }
+  const amount = Math.floor(Number(rform.amount))
+  if (rform.mode !== 'FORCE' && (!Number.isInteger(amount) || amount <= 0)) { toast('환불 금액을 입력해 주세요.', 'danger'); return }
+  if (rform.mode === 'OFFLINE' && (!rform.bank.trim() || !rform.account.trim())) { toast('환불 은행과 계좌번호를 입력해 주세요.', 'danger'); return }
+  const verb = rform.mode === 'FORCE' ? '직권 취소' : rform.mode === 'REFUND' ? `${amount.toLocaleString('ko-KR')}원 PG 환불` : `${amount.toLocaleString('ko-KR')}원 수기 환불`
+  if (!confirm(`${b.value.bookingNumber} 예약을 ${verb}할까요? 되돌릴 수 없어요.`)) return
+  busy.value = true
+  try {
+    const endpoint = rform.mode === 'FORCE' ? 'force-cancel' : rform.mode === 'REFUND' ? 'refund' : 'offline-refund'
+    await api(`/admin/bookings/${id}/${endpoint}`, { method: 'POST', json: { amountMinor: amount, bank: rform.bank.trim() || undefined, account: rform.account.trim() || undefined, reason: rform.reason.trim() } })
+    toast(`${verb}했어요.`)
+    rform.mode = ''
+    await Promise.all([detail.reload(), list.reload()])
+  } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
+}
 const busy = ref(false)
 function openForm(mode: 'CONFIRM' | 'REJECT') { Object.assign(form, { mode, supplierReference: '', pnr: '', note: '' }) }
 async function decide(decision: 'CONFIRM' | 'REJECT' | 'RETRY_REFUND') {
@@ -164,6 +187,27 @@ const ACTOR: Record<string, string> = { SYSTEM: '시스템', USER: '고객', ADM
           </div>
 
           <!-- Operator actions -->
+          <section v-if="canForce" class="rounded-card border border-danger/40 bg-danger-soft/40 p-4">
+            <h3 class="font-bold text-ink">직권 처리</h3>
+            <p class="mt-1 text-xs text-ink-muted">환불 가능액 {{ krw(refundable) }} · 수동·수기 환불은 주문을 종료하고 남은 금액을 위약금으로 기록해요. 정산 완료 건의 환불은 미환수금으로 자동 전환돼요.</p>
+            <div v-if="!rform.mode" class="mt-3 flex flex-wrap gap-2">
+              <button type="button" class="btn-danger btn-sm" :disabled="busy" @click="openR('FORCE')">직권 취소</button>
+              <button type="button" class="btn-secondary btn-sm" :disabled="busy || refundable <= 0" @click="openR('REFUND')">수동 환불 (PG)</button>
+              <button type="button" class="btn-secondary btn-sm" :disabled="busy || refundable <= 0" @click="openR('OFFLINE')">수기 환불 (계좌)</button>
+            </div>
+            <form v-else class="mt-3 space-y-3" @submit.prevent="submitR">
+              <div v-if="rform.mode !== 'FORCE'"><label class="label" for="r-amount">환불 금액 (원) *</label><input id="r-amount" v-model="rform.amount" class="input tabular" inputmode="numeric" :max="refundable" required /></div>
+              <template v-if="rform.mode === 'OFFLINE'">
+                <div><label class="label" for="r-bank">환불 은행 *</label><input id="r-bank" v-model="rform.bank" class="input" maxlength="40" placeholder="예: 신한은행" required /></div>
+                <div><label class="label" for="r-account">환불 계좌번호 *</label><input id="r-account" v-model="rform.account" class="input font-mono" maxlength="40" required /></div>
+              </template>
+              <div><label class="label" for="r-reason">사유 *</label><textarea id="r-reason" v-model="rform.reason" class="input min-h-[72px] py-2" maxlength="300" required /></div>
+              <div class="flex gap-2">
+                <button type="submit" class="btn-danger btn-sm" :disabled="busy">{{ busy ? '처리 중…' : rform.mode === 'FORCE' ? '직권 취소 실행' : rform.mode === 'REFUND' ? 'PG 환불 실행' : '수기 환불 기록' }}</button>
+                <button type="button" class="btn-ghost btn-sm" @click="rform.mode = ''">취소</button>
+              </div>
+            </form>
+          </section>
           <section v-if="canDecide || hasPendingRefund" class="rounded-card border border-warning/40 bg-warning-soft/50 p-4">
             <h3 class="font-bold text-ink">운영자 처리</h3>
             <p class="mt-1 text-xs text-ink-muted">공급사 확정은 결제가 완료된 예약만 가능해요. 결제된 예약을 거절하면 전액 환불이 자동으로 시작돼요.</p>
@@ -224,7 +268,7 @@ const ACTOR: Record<string, string> = { SYSTEM: '시스템', USER: '고객', ADM
             <p v-if="!b.payments?.length && !b.refunds?.length" class="text-ink-muted">기록이 없어요.</p>
             <ul class="space-y-1.5">
               <li v-for="p in b.payments" :key="p.id" class="flex flex-wrap justify-between gap-2"><span>결제 · {{ p.provider }} · {{ p.status }}<span v-if="p.failure_message" class="text-danger"> · {{ p.failure_message }}</span></span><span class="tabular">{{ krw(p.amount_minor) }}</span></li>
-              <li v-for="r in b.refunds" :key="r.id" class="flex flex-wrap justify-between gap-2"><span>환불 · {{ r.status }} · 시도 {{ r.attempts }}회<span v-if="r.reason" class="text-ink-muted"> · {{ r.reason }}</span></span><span class="tabular">{{ krw(r.amount_minor) }}</span></li>
+              <li v-for="r in b.refunds" :key="r.id" class="flex flex-wrap justify-between gap-2"><span>환불 · {{ r.status }}<span v-if="r.source && r.source !== 'INTERNAL'"> · {{ r.source === 'EXTERNAL' ? '외부취소' : r.source === 'OFFLINE' ? `수기(${r.offline?.bank || ''} ${r.offline?.account || ''})` : '수동' }}</span> · 시도 {{ r.attempts }}회<span v-if="r.reason" class="text-ink-muted"> · {{ r.reason }}</span></span><span class="tabular">{{ krw(r.amount_minor) }}</span></li>
             </ul>
           </section>
 

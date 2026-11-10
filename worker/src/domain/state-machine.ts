@@ -54,7 +54,9 @@ const T: Record<BookingStatus, readonly BookingStatus[]> = {
     "CANCELLED",
     "FAILED",
   ],
-  COMPLETED: [],
+  // Post-completion disputes (chargebacks, complaints) route through review —
+  // a COMPLETED order never refunds itself, only an operator decision does (B3/B7).
+  COMPLETED: ["MANUAL_REVIEW_REQUIRED"],
   REFUNDED: [],
   CANCELLED: [],
   EXPIRED: [],

@@ -102,6 +102,25 @@ test("toss: lookup distinguishes captured, missing, and in-flight payments", asy
   assert.equal((await p.lookup({ orderId: "b", paymentKey: null, amountMinor: 0 })).outcome, "NOT_CAPTURED");
 });
 
+test("toss: lookup maps dashboard cancels and chargebacks (B1)", async () => {
+  const p = tossProvider(SECRET, undefined, stub);
+  handler = () => ({ status: 200, json: { status: "CANCELED", paymentKey: "k", totalAmount: 50000, cancels: [{ cancelAmount: 50000, cancelReason: "고객 변심", transactionKey: "tx1" }] } });
+  const c = await p.lookup({ orderId: "b", paymentKey: "k", amountMinor: 50000 });
+  assert.equal(c.outcome, "CANCELED");
+  if (c.outcome === "CANCELED") {
+    assert.equal(c.canceledMinor, 50000);
+    assert.equal(c.cancelReason, "고객 변심");
+    assert.equal(c.transactionKey, "tx1");
+  }
+  handler = () => ({ status: 200, json: { status: "PARTIAL_CANCELED", paymentKey: "k", totalAmount: 50000, balanceAmount: 30000, cancels: [{ cancelAmount: 20000, cancelReason: "부분 취소", transactionKey: "tx2" }] } });
+  const pc = await p.lookup({ orderId: "b", paymentKey: "k", amountMinor: 50000 });
+  assert.equal(pc.outcome, "PARTIAL_CANCELED");
+  if (pc.outcome === "PARTIAL_CANCELED") {
+    assert.equal(pc.canceledMinor, 20000);
+    assert.equal(pc.remainingMinor, 30000);
+  }
+});
+
 test("toss: test_ keys run in SANDBOX mode, live_ keys in LIVE mode", () => {
   assert.equal(tossProvider("test_sk_abc", undefined).mode, "SANDBOX");
   assert.equal(tossProvider("live_sk_abc", undefined).mode, "LIVE");

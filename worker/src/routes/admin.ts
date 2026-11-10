@@ -217,6 +217,35 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     return json({ success: true, booking: await S.serializeBooking(env, after, admin) });
   }
 
+  // B7: admin force-cancel / manual PG refund / offline bank-transfer refund.
+  m = path.match(/^\/api\/v1\/admin\/bookings\/([A-Za-z0-9_-]+)\/force-cancel$/);
+  if (m && method === "POST") {
+    const body = await readJson(request);
+    const before = await S.getBooking(env, m[1]);
+    if (!before) throw new HttpError(404, "BOOKING_NOT_FOUND", "예약을 찾을 수 없습니다.");
+    const after = await S.adminForceCancel(env, admin, before.id, str(body.reason, 300));
+    await audit(env, admin.id, "ADMIN_FORCE_CANCEL", "BOOKING", before.id, { from: before.status, to: after.status, reason: str(body.reason, 300) });
+    return json({ success: true, booking: await S.serializeBooking(env, after, admin) });
+  }
+  m = path.match(/^\/api\/v1\/admin\/bookings\/([A-Za-z0-9_-]+)\/refund$/);
+  if (m && method === "POST") {
+    const body = await readJson(request);
+    const before = await S.getBooking(env, m[1]);
+    if (!before) throw new HttpError(404, "BOOKING_NOT_FOUND", "예약을 찾을 수 없습니다.");
+    const after = await S.adminRefund(env, admin, before.id, Number(body.amountMinor), str(body.reason, 300));
+    await audit(env, admin.id, "ADMIN_REFUND", "BOOKING", before.id, { from: before.status, to: after.status, amountMinor: Number(body.amountMinor), reason: str(body.reason, 300) });
+    return json({ success: true, booking: await S.serializeBooking(env, after, admin) });
+  }
+  m = path.match(/^\/api\/v1\/admin\/bookings\/([A-Za-z0-9_-]+)\/offline-refund$/);
+  if (m && method === "POST") {
+    const body = await readJson(request);
+    const before = await S.getBooking(env, m[1]);
+    if (!before) throw new HttpError(404, "BOOKING_NOT_FOUND", "예약을 찾을 수 없습니다.");
+    const after = await S.adminOfflineRefund(env, admin, before.id, body);
+    await audit(env, admin.id, "ADMIN_OFFLINE_REFUND", "BOOKING", before.id, { from: before.status, to: after.status, amountMinor: Number(body.amountMinor), bank: str(body.bank, 40), reason: str(body.reason, 300) });
+    return json({ success: true, booking: await S.serializeBooking(env, after, admin) });
+  }
+
   if (path === "/api/v1/admin/maintenance/run" && method === "POST") {
     const stats = await S.runMaintenance(env);
     await audit(env, admin.id, "RUN_MAINTENANCE", "SYSTEM", "maintenance", stats);

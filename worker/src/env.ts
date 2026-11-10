@@ -13,6 +13,7 @@ export interface Env {
   PAYMENT_PROVIDER?: string;
   TOSS_SECRET_KEY?: string;
   TOSS_CLIENT_KEY?: string;
+  TOSS_WEBHOOK_SECRET?: string;
   /** Contract-test stub base URL for the Toss provider. Honored in development/test only; production always uses api.tosspayments.com. */
   TOSS_API_BASE?: string;
   /** "true" allows suppliers with adapter=simulator to fulfil bookings. Refused outside development/test. */

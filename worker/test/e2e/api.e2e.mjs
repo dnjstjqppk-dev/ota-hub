@@ -1370,7 +1370,13 @@ test("settlement batches: settling a partner-seller row rolls into the monthly b
   const s = sql(`SELECT * FROM marketplace_order_settlements WHERE booking_id = '${b.id}'`)[0];
   assert.equal(s.attribution_source, "CATALOG");
   assert.equal(s.seller_id, P.id);
-  assert.equal((await api("PATCH", `/api/v1/admin/marketplace/settlements/${s.id}/settle`, { token: ADMIN })).status, 200);
+  // B2: payout before tour completion is refused.
+  assert.equal((await api("PATCH", `/api/v1/admin/marketplace/settlements/${s.id}/settle`, { token: ADMIN })).data.code, "SETTLEMENT_TOUR_INCOMPLETE");
+  sql(`UPDATE bookings SET status = 'COMPLETED', service_end = '2020-01-02' WHERE id = '${b.id}'`);
+  const settled = await api("PATCH", `/api/v1/admin/marketplace/settlements/${s.id}/settle`, { token: ADMIN, body: { payoutMethod: "MANUAL_TRANSFER", payoutReference: "E2E-TR-1" } });
+  assert.equal(settled.status, 200, JSON.stringify(settled.data));
+  assert.equal(settled.data.payout.method, "MANUAL_TRANSFER");
+  assert.ok(settled.data.message.includes("별도로"), "no fake auto-transfer claim");
   const row = sql(`SELECT settlement_status AS st, payout_batch_id AS batch FROM marketplace_order_settlements WHERE id = '${s.id}'`)[0];
   assert.equal(row.st, "SETTLED");
   assert.ok(row.batch && row.batch.startsWith(`psb_${P.id}_`));
@@ -1803,4 +1809,145 @@ test("A7: booking detail discloses per-order sales type and supplier", async () 
   assert.ok(["DIRECT_1P", "AGENCY_3P"].includes(det.salesType), JSON.stringify(det.salesType));
   assert.ok(det.salesTypeLabel, "label present");
   assert.ok(det.supplierName, "supplier name present");
+});
+
+test("B1: PG-confirmed external cancel syncs booking, refund, holds, coins, payout; duplicates ignored", async () => {
+  const W = await register("extcx");
+  assert.equal((await api("PATCH", `/api/v1/admin/users/${W.id}`, { token: ADMIN, headers: { "Idempotency-Key": idem() }, body: { coinAdjustment: 5000, note: "e2e b1" } })).status, 200);
+  const { b, p } = await fullHotelBooking(W.token, {}, "extcancel", { coinAmount: 1000 });
+  assert.equal(p.data.booking.status, "VOUCHER_ISSUED");
+  assert.equal(sql(`SELECT trip_coins AS v FROM users WHERE id = '${W.id}'`)[0].v, 4000);
+  const hook = { eventType: "PAYMENT_CANCELED", data: { orderId: b.id, paymentKey: "toss_hint", status: "CANCELED" } };
+  const w1 = await api("POST", "/api/v1/webhooks/toss", { body: hook });
+  assert.equal(w1.data.action, "RECONCILED_EXTERNAL_CANCEL", JSON.stringify(w1.data));
+  const det = (await api("GET", `/api/v1/bookings/${b.id}`, { token: W.token })).data.booking;
+  assert.equal(det.status, "REFUNDED");
+  assert.equal(det.refunds.length, 1);
+  assert.equal(det.refunds[0].source, "EXTERNAL");
+  assert.equal(det.payments[0].status, "REFUNDED");
+  assert.equal(sql(`SELECT settlement_status AS v FROM marketplace_order_settlements WHERE booking_id = '${b.id}'`)[0].v, "REFUNDED");
+  assert.equal(sql(`SELECT trip_coins AS v FROM users WHERE id = '${W.id}'`)[0].v, 5000, "coins restored");
+  assert.equal(sql(`SELECT COUNT(*) AS v FROM inventory_holds WHERE booking_id = '${b.id}' AND status != 'RELEASED'`)[0].v, 0);
+  const w2 = await api("POST", "/api/v1/webhooks/toss", { body: hook });
+  assert.equal(w2.data.duplicate, true);
+  assert.equal(sql(`SELECT COUNT(*) AS v FROM refunds WHERE booking_id = '${b.id}'`)[0].v, 1, "no double record");
+});
+
+test("B1: external partial cancel records the delta and keeps the live order", async () => {
+  const W = await register("extpt");
+  const { b, p } = await fullHotelBooking(W.token, {}, "extpartial");
+  assert.equal(p.data.booking.status, "VOUCHER_ISSUED");
+  const total = Number(sql(`SELECT amount_minor AS v FROM payments WHERE booking_id = '${b.id}'`)[0].v);
+  const w = await api("POST", "/api/v1/webhooks/toss", { body: { eventType: "PAYMENT_STATUS_CHANGED", data: { orderId: b.id, status: "PARTIAL_CANCELED" } } });
+  assert.equal(w.data.action, "RECONCILED_EXTERNAL_CANCEL");
+  const det = (await api("GET", `/api/v1/bookings/${b.id}`, { token: W.token })).data.booking;
+  assert.equal(det.status, "VOUCHER_ISSUED", "live order stays live");
+  assert.equal(det.paymentStatus, "PARTIALLY_REFUNDED");
+  assert.equal(det.refunds[0].amount_minor, Math.floor(total / 2));
+});
+
+test("B3: post-payout refund becomes a recovery claim auto-deducted from the next payout", async () => {
+  const R = await register("recov");
+  const mk = async () => {
+    const { b, p } = await fullHotelBooking(R.token, {});
+    assert.equal(p.data.booking.status, "VOUCHER_ISSUED");
+    sql(`UPDATE bookings SET status = 'COMPLETED', service_end = '2020-01-02' WHERE id = '${b.id}'`);
+    return b;
+  };
+  const b1 = await mk();
+  const b2 = await mk();
+  const s1 = sql(`SELECT * FROM marketplace_order_settlements WHERE booking_id = '${b1.id}'`)[0];
+  assert.equal((await api("PATCH", `/api/v1/admin/marketplace/settlements/${s1.id}/settle`, { token: ADMIN })).status, 200);
+  // Post-payout admin refund (the approval): money out + OPEN claim, not silent loss.
+  const rf = await api("POST", `/api/v1/admin/bookings/${b1.id}/refund`, { token: ADMIN, body: { amountMinor: b1.totalMinor, reason: "E2E 지급 후 환불" } });
+  assert.equal(rf.data.booking.status, "REFUNDED", JSON.stringify(rf.data));
+  const claims = sql(`SELECT * FROM settlement_recoveries WHERE booking_id = '${b1.id}'`);
+  assert.equal(claims.length, 1);
+  assert.equal(claims[0].status, "OPEN");
+  assert.equal(claims[0].amount_minor, b1.totalMinor);
+  assert.equal((await api("GET", "/api/v1/admin/marketplace/recoveries?status=OPEN", { token: ADMIN })).data.recoveries.length >= 1, true);
+  // Next payout to the same seller auto-deducts the claim.
+  const s2 = sql(`SELECT * FROM marketplace_order_settlements WHERE booking_id = '${b2.id}'`)[0];
+  assert.equal(s2.seller_id, s1.seller_id);
+  const st = await api("PATCH", `/api/v1/admin/marketplace/settlements/${s2.id}/settle`, { token: ADMIN });
+  assert.equal(st.status, 200, JSON.stringify(st.data));
+  const expectDed = Math.min(Number(s2.seller_payout_minor), b1.totalMinor);
+  assert.equal(st.data.payout.recoveryDeductedMinor, expectDed);
+  assert.equal(st.data.payout.netMinor, Number(s2.seller_payout_minor) - expectDed);
+});
+
+test("B3: auto-refund on a settled order parks for approval instead of paying twice", async () => {
+  const G = await register("guard");
+  const { b, p } = await fullHotelBooking(G.token, {});
+  assert.equal(p.data.booking.status, "VOUCHER_ISSUED");
+  sql(`UPDATE bookings SET status = 'COMPLETED', service_end = '2020-01-02' WHERE id = '${b.id}'`);
+  const s = sql(`SELECT id FROM marketplace_order_settlements WHERE booking_id = '${b.id}'`)[0];
+  assert.equal((await api("PATCH", `/api/v1/admin/marketplace/settlements/${s.id}/settle`, { token: ADMIN })).status, 200);
+  // Legacy early-settled live order: flip back to a cancellable live state.
+  sql(`UPDATE bookings SET status = 'VOUCHER_ISSUED' WHERE id = '${b.id}'`);
+  const c = await api("POST", `/api/v1/bookings/${b.id}/cancel`, { token: G.token });
+  assert.equal(c.data.booking.status, "MANUAL_REVIEW_REQUIRED", JSON.stringify(c.data.booking));
+  assert.equal(c.data.booking.statusReason, "SETTLED_REFUND_NEEDS_APPROVAL");
+  assert.equal(sql(`SELECT COUNT(*) AS v FROM refunds WHERE booking_id = '${b.id}' AND status = 'PENDING'`)[0].v, 0);
+});
+
+test("B7: force-cancel, manual partial refund, and offline refund with masked customer view", async () => {
+  const F = await register("force");
+  const { b: bf } = await fullHotelBooking(F.token, {});
+  const fc = await api("POST", `/api/v1/admin/bookings/${bf.id}/force-cancel`, { token: ADMIN, body: { reason: "E2E 공급사 폐업" } });
+  assert.equal(fc.data.booking.status, "REFUNDED", JSON.stringify(fc.data));
+  assert.equal(fc.data.booking.refunds[0].source, "ADMIN_MANUAL");
+  const { b: bp } = await fullHotelBooking(F.token, {});
+  const half = Math.floor(bp.totalMinor / 2);
+  const pr = await api("POST", `/api/v1/admin/bookings/${bp.id}/refund`, { token: ADMIN, body: { amountMinor: half, reason: "E2E CS 부분보상" } });
+  assert.equal(pr.data.booking.status, "REFUNDED");
+  assert.equal(pr.data.booking.paymentStatus, "PARTIALLY_REFUNDED");
+  assert.equal(pr.data.booking.refundedMinor, half);
+  assert.ok(pr.data.booking.cancellationFeeMinor > 0, "retained remainder recorded as fee");
+  const { b: bo } = await fullHotelBooking(F.token, {});
+  const bad = await api("POST", `/api/v1/admin/bookings/${bo.id}/offline-refund`, { token: ADMIN, body: { amountMinor: 1000, reason: "x" } });
+  assert.equal(bad.data.code, "OFFLINE_DETAIL_REQUIRED");
+  const off = await api("POST", `/api/v1/admin/bookings/${bo.id}/offline-refund`, { token: ADMIN, body: { amountMinor: bo.totalMinor, bank: "신한은행", account: "110123456789", reason: "E2E PG 장애 수기환불" } });
+  assert.equal(off.data.booking.status, "REFUNDED", JSON.stringify(off.data));
+  assert.equal(off.data.booking.refunds[0].source, "OFFLINE");
+  assert.equal(off.data.booking.refunds[0].offline.account, "110123456789", "admin sees full account");
+  const cust = (await api("GET", `/api/v1/bookings/${bo.id}`, { token: F.token })).data.booking;
+  assert.ok(!JSON.stringify(cust.refunds[0].offline).includes("110123456789"), "customer sees masked account");
+  assert.equal(cust.refunds[0].offline.bank, "신한은행");
+});
+
+test("B4/B5: payout statement JSON + CSV carry settled lines, tax email, and payout account", async () => {
+  const P = await approvedPartner("stmt");
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 명세 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
+  const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 명세 투어", domain: "ACTIVITY", city: "서울", price: 50000, capacity: 10 } });
+  const itemId = reg.data.product.item_id;
+  const q = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "ACTIVITY", itemId, startDate: day(96), travelers: { adults: 1 } } })).data.quote;
+  const b = (await book(A.token, q)).data.booking;
+  assert.equal((await pay(A.token, b)).data.booking.status, "VOUCHER_ISSUED");
+  sql(`UPDATE bookings SET status = 'COMPLETED', service_end = '2020-01-02' WHERE id = '${b.id}'`);
+  const s = sql(`SELECT id FROM marketplace_order_settlements WHERE booking_id = '${b.id}'`)[0];
+  assert.equal((await api("PATCH", `/api/v1/admin/marketplace/settlements/${s.id}/settle`, { token: ADMIN })).status, 200);
+  const batchId = sql(`SELECT payout_batch_id AS v FROM marketplace_order_settlements WHERE id = '${s.id}'`)[0].v;
+  const st = await api("GET", `/api/v1/admin/marketplace/batches/${batchId}/statement`, { token: ADMIN });
+  assert.equal(st.status, 200);
+  assert.equal(st.data.issuance, "MANUAL");
+  assert.ok(st.data.lines.length >= 1);
+  assert.ok(typeof st.data.lines[0].net_payout_minor === "number");
+  const res = await fetch(`${BASE}/api/v1/admin/marketplace/batches/${batchId}/statement?format=csv`, { headers: { Authorization: `Bearer ${ADMIN}` } });
+  const csv = await res.text();
+  assert.ok(csv.includes("net_payout_minor"), csv.slice(0, 200));
+  assert.ok(csv.includes("tax_invoice_email"), csv.slice(0, 300));
+});
+
+test("B6: customer receipt exposes recorded payments, refunds, and totals", async () => {
+  const { b, p } = await fullHotelBooking(B.token, {});
+  assert.equal(p.data.booking.status, "VOUCHER_ISSUED");
+  const r = await api("GET", `/api/v1/bookings/${b.id}/receipt`, { token: B.token });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.receipt.bookingNumber, b.bookingNumber);
+  assert.equal(r.data.receipt.paidMinor, b.totalMinor);
+  assert.equal(r.data.receipt.payments.length, 1);
+  assert.equal(r.data.receipt.payments[0].amountMinor, b.totalMinor);
+  assert.ok(r.data.receipt.issuedAt);
+  assert.equal((await api("GET", `/api/v1/bookings/${b.id}/receipt`, { token: A.token })).status, 403);
 });

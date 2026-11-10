@@ -69,6 +69,35 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
     return json({ success: true, booking: await S.cancelByCustomer(env, user, m[1]) });
   }
 
+  // B6: customer payment receipt. Every figure comes from recorded payments.
+  m = path.match(/^\/api\/v1\/bookings\/([A-Za-z0-9_-]{4,64})\/receipt$/);
+  if (m && method === "GET") {
+    const ruser = await requireUser(request, env);
+    const rb = await S.getBooking(env, m[1]);
+    if (!rb) throw new HttpError(404, "BOOKING_NOT_FOUND", "예약 정보를 찾을 수 없습니다.");
+    if (rb.user_id !== ruser.id && ruser.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "타인의 예약에는 접근할 수 없습니다.");
+    const full = await S.serializeBooking(env, rb, ruser);
+    const raws = await env.DB.prepare("SELECT id, raw_json FROM payments WHERE booking_id = ?").bind(rb.id).all<any>();
+    const cardById: Record<string, any> = {};
+    for (const r of raws.results || []) {
+      try {
+        const card = JSON.parse(r.raw_json || "null")?.card;
+        if (card) cardById[r.id] = { company: card.company || null, number: card.number || null, installmentMonths: card.installmentPlanMonths ?? null };
+      } catch { /* sandbox rows carry no card */ }
+    }
+    return json({
+      success: true,
+      receipt: {
+        bookingNumber: full.bookingNumber, title: full.title, serviceStart: full.serviceStart, serviceEnd: full.serviceEnd,
+        salesTypeLabel: full.salesTypeLabel, supplierName: full.supplierName, contact: full.contact,
+        currency: full.currency, totalMinor: full.totalMinor, paidMinor: full.paidMinor, refundedMinor: full.refundedMinor,
+        payments: (full.payments || []).map((p: any) => ({ id: p.id, provider: p.provider, mode: p.mode, method: p.method, amountMinor: p.amount_minor, refundedMinor: p.refunded_minor, status: p.status, approvedAt: p.approved_at, card: cardById[p.id] || null })),
+        refunds: (full.refunds || []).map((r: any) => ({ id: r.id, amountMinor: r.amount_minor, status: r.status, reason: r.reason, source: r.source, offline: r.offline, createdAt: r.created_at })),
+        issuedAt: new Date().toISOString(),
+      },
+    });
+  }
+
   if (/^\/api\/v1\/bookings\/[^/]+\/pay$/.test(path)) {
     throw new HttpError(410, "ENDPOINT_REMOVED", "이 결제 경로는 폐기되었습니다. /api/v1/payments/confirm 을 사용하세요.");
   }
