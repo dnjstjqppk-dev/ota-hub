@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { BRAND } from '~/config/brand'
-const VERSION = '2.0'
-const EFFECTIVE = '2026년 11월 7일'
+import { useCompany } from '~/composables/useCompany'
+const VERSION = '2.1'
+const EFFECTIVE = '2026년 11월 10일'
+const co = useCompany()
 </script>
 
 <template>
@@ -40,7 +42,57 @@ const EFFECTIVE = '2026년 11월 7일'
       </section>
 
       <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">4. 개인정보의 보유 및 파기</h2>
+        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">4. 개인정보 처리위탁 및 국외이전</h2>
+        <p>
+          회사는 서비스 운영을 위해 아래와 같이 개인정보 처리를 위탁하며, 일부 수탁자는 국외 사업자입니다.
+          이전은 서비스 이용 시점에 암호화 통신으로 수시로 이루어지며, 아래 보유 기간이 지나면 파기됩니다.
+        </p>
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse border border-slate-300 text-left">
+            <thead>
+              <tr class="bg-slate-100 dark:bg-slate-800">
+                <th class="border border-slate-300 px-2 py-1">수탁자 (국가)</th>
+                <th class="border border-slate-300 px-2 py-1">위탁 업무</th>
+                <th class="border border-slate-300 px-2 py-1">이전 항목</th>
+                <th class="border border-slate-300 px-2 py-1">보유·이용 기간</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border border-slate-300 px-2 py-1">Cloudflare, Inc. (미국 등)</td>
+                <td class="border border-slate-300 px-2 py-1">호스팅·CDN·보안</td>
+                <td class="border border-slate-300 px-2 py-1">서비스 이용 기록, 접속 IP, 캐시된 페이지 데이터</td>
+                <td class="border border-slate-300 px-2 py-1">회원 탈퇴 또는 위탁 계약 종료 시까지</td>
+              </tr>
+              <tr>
+                <td class="border border-slate-300 px-2 py-1">토스페이먼츠 주식회사 (대한민국)</td>
+                <td class="border border-slate-300 px-2 py-1">결제 승인·취소·정산</td>
+                <td class="border border-slate-300 px-2 py-1">주문번호, 결제 금액, 카드사·승인 정보, 예약자 연락처</td>
+                <td class="border border-slate-300 px-2 py-1">전자상거래법상 5년</td>
+              </tr>
+              <tr>
+                <td class="border border-slate-300 px-2 py-1">Resend (미국)</td>
+                <td class="border border-slate-300 px-2 py-1">예약·결제 알림 메일 발송</td>
+                <td class="border border-slate-300 px-2 py-1">수신 이메일 주소, 예약번호, 알림 내용</td>
+                <td class="border border-slate-300 px-2 py-1">발송 후 최대 30일</td>
+              </tr>
+              <tr>
+                <td class="border border-slate-300 px-2 py-1">Sentry (미국)</td>
+                <td class="border border-slate-300 px-2 py-1">오류 추적·서비스 품질 개선</td>
+                <td class="border border-slate-300 px-2 py-1">오류 로그, 기기·브라우저 정보 (여권번호·카드번호는 수집하지 않음)</td>
+                <td class="border border-slate-300 px-2 py-1">수집 후 최대 90일</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          회사는 수탁자가 개인정보를 안전하게 처리하도록 관리·감독하며, 위탁 업무가 변경되면 본 방침을 개정하여 고지합니다.
+          국외이전을 원하지 않는 이용자는 회원 탈퇴를 통해 이전을 중단할 수 있습니다.
+        </p>
+      </section>
+
+      <section class="space-y-2">
+        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">5. 개인정보의 보유 및 파기</h2>
         <ul class="list-disc list-inside space-y-1">
           <li><strong>예약·결제 기록:</strong> 전자상거래법상 5년 (계약·청약철회·대금결제·공급 기록)</li>
           <li><strong>소비자 불만·분쟁 처리 기록:</strong> 3년</li>
@@ -53,7 +105,7 @@ const EFFECTIVE = '2026년 11월 7일'
       </section>
 
       <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">5. 쿠키 및 트래킹 로그 운영</h2>
+        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">6. 쿠키 및 트래킹 로그 운영</h2>
         <p>
           회사는 로그인 유지·보안·예약 흐름 유지를 위한 필수 쿠키와, 이용자 편의를 위한 기능성 쿠키(통화·언어·최근 검색)를 사용합니다.
           제휴 링크 클릭 추적에는 개인 식별이 아닌 클릭 ID와 서브 ID만을 기록합니다. 상세 내용은 쿠키 정책을 따릅니다.
@@ -61,7 +113,7 @@ const EFFECTIVE = '2026년 11월 7일'
       </section>
 
       <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">6. 이용자의 권리와 행사 방법</h2>
+        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">7. 이용자의 권리와 행사 방법</h2>
         <p>
           이용자는 언제든지 자신의 개인정보에 대한 열람·정정·삭제·처리정지를 요청할 수 있습니다.
           마이페이지 또는 고객센터 이메일({{ BRAND.supportEmail }})로 요청하시면 본인 확인 후 지체 없이 조치합니다.
@@ -69,16 +121,18 @@ const EFFECTIVE = '2026년 11월 7일'
       </section>
 
       <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">7. 기술적·관리적 보호 조치</h2>
+        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">8. 기술적·관리적 보호 조치</h2>
         <p>
-          회사는 이용자의 개인정보를 전송 구간 및 저장소 전반에서 TLS 256-bit 표준 암호화 알고리즘으로 보호하며, 침입탐지 시스템 및 데이터베이스 접근 권한 통제를 엄격히 시행하고 있습니다.
+          회사는 개인정보를 전송 구간 TLS 암호화, 비밀번호 단방향 해시(PBKDF2), 여권번호 AES-256-GCM 암호화로 보호하며,
+          데이터베이스 접근 권한 통제와 접근 기록 관리를 시행하고 있습니다.
         </p>
       </section>
 
       <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">8. 개인정보 보호책임자</h2>
+        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">9. 개인정보 보호책임자</h2>
         <p>
-          개인정보 보호책임자: {{ BRAND.companyName }} 고객지원팀 · 연락처: {{ BRAND.supportEmail }}.
+          개인정보 보호책임자: {{ co.orPending(co.cpoName) }} ({{ co.orPending(co.cpoDept) }}) ·
+          연락처: {{ co.orPending(co.cpoPhone) }} · {{ co.orPending(co.cpoEmail) }}.
           그 밖에 개인정보 침해 신고는 개인정보보호위원회(privacy.go.kr)·한국인터넷진흥원(118)으로 하실 수 있습니다.
         </p>
       </section>

@@ -1,6 +1,6 @@
 import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
-import { audit, rateLimit, requireAdmin } from "../lib/auth.ts";
+import { audit, rateLimit, requireAdmin, resetSubjectSessions } from "../lib/auth.ts";
 import * as S from "../services/booking-service.ts";
 import { BOOKING_STATUSES } from "../domain/state-machine.ts";
 import { newId } from "../lib/crypto.ts";
@@ -818,8 +818,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   if (path === "/api/v1/admin/users" && method === "GET") {
     const q = str(url.searchParams.get("q"), 80);
     const role = str(url.searchParams.get("role"), 20).toUpperCase();
-    // No is_active column exists on users, so none is reported (accounts cannot be suspended yet).
-    const cols = "id, email, full_name, phone_number, role, tier, trip_coins AS coin_balance, created_at";
+    const cols = "id, email, full_name, phone_number, role, status, tier, trip_coins AS coin_balance, created_at";
     let where = "1=1";
     const p: unknown[] = [];
     if (q) {
@@ -845,8 +844,9 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const coinAdjustment = b.coinAdjustment !== undefined && b.coinAdjustment !== null && b.coinAdjustment !== "" ? Number(b.coinAdjustment) : null;
     const note = str(b.note, 200) || null;
 
-    if (b.isActive !== undefined) {
-      throw new HttpError(400, "NOT_SUPPORTED", "회원 정지 기능은 아직 지원하지 않습니다.");
+    const suspend = b.isActive === undefined ? null : b.isActive === false;
+    if (suspend !== null && userId === admin.id) {
+      throw new HttpError(400, "CANNOT_SUSPEND_SELF", "자기 자신의 계정을 정지할 수 없습니다.");
     }
     if (role !== null && !(USER_ROLES as readonly string[]).includes(role)) {
       throw new HttpError(400, "INVALID_ROLE", `role은 ${USER_ROLES.join(" | ")} 중 하나여야 합니다.`);
@@ -857,8 +857,22 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     if (userId === admin.id && role && role !== "ADMIN") {
       throw new HttpError(400, "CANNOT_DEMOTE_SELF", "자기 자신의 관리자 권한을 해제할 수 없습니다.");
     }
-    const user = await db.prepare("SELECT id, trip_coins FROM users WHERE id = ?").bind(userId).first<{ id: string; trip_coins: number }>();
+    const user = await db.prepare("SELECT id, trip_coins, status FROM users WHERE id = ?").bind(userId).first<{ id: string; trip_coins: number; status: string }>();
     if (!user) throw new HttpError(404, "USER_NOT_FOUND", "회원을 찾을 수 없습니다.");
+
+    if (suspend !== null) {
+      if (user.status === "DELETED") throw new HttpError(409, "ACCOUNT_DELETED", "탈퇴한 계정은 복구할 수 없습니다.");
+      if (suspend) {
+        const reason = str(b.reason, 300) || note;
+        if (!reason) throw new HttpError(400, "REASON_REQUIRED", "회원 정지에는 사유가 필요합니다.");
+        await db.prepare("UPDATE users SET status = 'SUSPENDED', suspended_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), suspended_reason = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").bind(reason, userId).run();
+        await resetSubjectSessions(env, userId);
+        await audit(env, admin.id, "SUSPEND_USER", "USER", userId, { reason });
+      } else {
+        await db.prepare("UPDATE users SET status = 'ACTIVE', suspended_at = NULL, suspended_reason = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").bind(userId).run();
+        await audit(env, admin.id, "UNSUSPEND_USER", "USER", userId, {});
+      }
+    }
 
     if (role !== null) {
       await db.prepare("UPDATE users SET role = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").bind(role, userId).run();

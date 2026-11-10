@@ -2,6 +2,7 @@
 /**
  * Member profile (design system "Horizon"). Values are the server's (GET /auth/me); saving uses
  * PATCH /auth/me and reports the server's answer. Nothing is pre-filled with sample data.
+ * Withdrawal is confirmed, password-verified, and clears the local session on success.
  */
 import { ref } from 'vue'
 import { useAuthStore } from '~/stores/auth'
@@ -12,6 +13,7 @@ const auth = useAuthStore()
 const fullName = ref('')
 const phone = ref('')
 const email = ref('')
+const marketing = ref(false)
 const saving = ref(false)
 const msg = ref<{ ok: boolean; text: string } | null>(null)
 
@@ -21,16 +23,33 @@ async function load() {
   fullName.value = u?.fullName || ''
   phone.value = u?.phoneNumber || ''
   email.value = u?.email || ''
+  marketing.value = u?.marketingConsent === true
 }
 async function save() {
   msg.value = null; saving.value = true
-  const r = await apiFetch('/auth/me', { method: 'PATCH', body: { fullName: fullName.value.trim(), phoneNumber: phone.value.trim() } })
+  const r = await apiFetch('/auth/me', { method: 'PATCH', body: { fullName: fullName.value.trim(), phoneNumber: phone.value.trim(), marketingConsent: marketing.value } })
   saving.value = false
   if (!r.ok) { msg.value = { ok: false, text: r.data.error || '저장하지 못했어요.' }; return }
   if (auth.user) { const u = auth.user as any; u.fullName = r.data.fullName; u.phoneNumber = r.data.phoneNumber; u.phone = r.data.phoneNumber; try { localStorage.setItem('getfortrip_user', JSON.stringify(auth.user)) } catch {} }
   msg.value = { ok: true, text: '회원 정보를 저장했어요.' }
 }
 function logout() { auth.logout(); navigateTo('/') }
+// A1: confirmed, password-verified withdrawal. Session is cleared on success.
+const withdrawing = ref(false)
+const withdrawPw = ref('')
+const confirmText = ref('')
+const withdrawError = ref('')
+async function withdraw() {
+  withdrawError.value = ''
+  if (confirmText.value.trim() !== '탈퇴합니다') { withdrawError.value = '확인을 위해 "탈퇴합니다"를 입력해 주세요.'; return }
+  if (!withdrawPw.value) { withdrawError.value = '비밀번호를 입력해 주세요.'; return }
+  withdrawing.value = true
+  const r = await apiFetch('/auth/me/withdraw', { method: 'POST', body: { password: withdrawPw.value, reason: 'USER_REQUEST_PROFILE' } })
+  withdrawing.value = false
+  if (!r.ok) { withdrawError.value = r.data.error || '탈퇴하지 못했어요.'; return }
+  auth.logout()
+  navigateTo('/')
+}
 const FIELD = 'w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus disabled:bg-surface-sunken disabled:text-ink-muted'
 </script>
 
@@ -40,11 +59,23 @@ const FIELD = 'w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 tex
       <label class="block"><span class="field-label">이메일 (로그인 아이디)</span><input :value="email" disabled :class="FIELD" /></label>
       <label class="block"><span class="field-label">이름</span><input v-model="fullName" autocomplete="name" :class="FIELD" /></label>
       <label class="block"><span class="field-label">휴대전화</span><input v-model="phone" type="tel" autocomplete="tel" placeholder="+82-10-0000-0000" :class="FIELD" /></label>
+      <label class="flex cursor-pointer items-start gap-2.5 text-sm"><input v-model="marketing" type="checkbox" class="mt-0.5 h-4 w-4 accent-primary" data-testid="marketing-consent" /><span class="text-ink">할인·이벤트 소식 받기 (선택 · 언제든 변경할 수 있어요)</span></label>
       <p v-if="msg" :class="['rounded-xl px-4 py-2.5 text-sm font-medium', msg.ok ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger']" :role="msg.ok ? 'status' : 'alert'">{{ msg.text }}</p>
       <div class="flex flex-wrap gap-2 pt-1">
         <button type="submit" class="btn-primary" :disabled="saving">{{ saving ? '저장 중…' : '저장' }}</button>
       </div>
     </form>
     <button type="button" class="mt-6 flex items-center gap-2 text-sm font-semibold text-ink-muted hover:text-danger" @click="logout"><AppIcon name="logout" :size="18" />로그아웃</button>
+    <details class="card mt-6 max-w-xl border-danger/30 p-5 sm:p-6">
+      <summary class="cursor-pointer text-sm font-bold text-danger">회원탈퇴</summary>
+      <div class="mt-3 space-y-3 text-sm text-ink">
+        <p>탈퇴하면 이름·이메일·전화번호·여권정보 등 개인식별정보가 즉시 파기되고, 보유한 코인·쿠폰·찜·알림은 모두 사라져요. 계약·결제·분쟁 기록은 전자상거래법 제6조에 따라 5년간 별도 보관돼요.</p>
+        <p>진행 중인 예약이나 미처리 환불이 있으면 탈퇴할 수 없어요.</p>
+        <label class="block"><span class="field-label">"탈퇴합니다" 입력</span><input v-model="confirmText" placeholder="탈퇴합니다" :class="FIELD" data-testid="withdraw-confirm" /></label>
+        <label class="block"><span class="field-label">비밀번호 확인</span><input v-model="withdrawPw" type="password" autocomplete="current-password" :class="FIELD" data-testid="withdraw-password" /></label>
+        <p v-if="withdrawError" role="alert" class="rounded-xl bg-danger-soft px-4 py-2.5 font-medium text-danger">{{ withdrawError }}</p>
+        <button type="button" :disabled="withdrawing" class="rounded-xl bg-danger px-5 py-2.5 font-bold text-white disabled:opacity-40" data-testid="withdraw-submit" @click="withdraw">{{ withdrawing ? '처리 중…' : '탈퇴하기' }}</button>
+      </div>
+    </details>
   </MyShell>
 </template>

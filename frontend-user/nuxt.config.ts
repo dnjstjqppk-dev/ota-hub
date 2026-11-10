@@ -116,7 +116,25 @@ export default defineNuxtConfig({
       sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
       sentryEnv: process.env.NUXT_PUBLIC_SENTRY_ENV || 'production',
       brandName: 'getfortrip',
-      brandDomain: process.env.PUBLIC_SITE_URL ? new URL(process.env.PUBLIC_SITE_URL).hostname : 'getfortrip.com'
+      brandDomain: process.env.PUBLIC_SITE_URL ? new URL(process.env.PUBLIC_SITE_URL).hostname : 'getfortrip.com',
+      // A5/A6: company + CPO facts are build-time env, never hardcoded. Empty = "preparing"
+      // in the UI and a failure in the pre-deploy commercialization check (Phase 7).
+      company: {
+        name: process.env.NUXT_PUBLIC_COMPANY_NAME || '',
+        ceo: process.env.NUXT_PUBLIC_COMPANY_CEO || '',
+        address: process.env.NUXT_PUBLIC_COMPANY_ADDRESS || '',
+        bizNo: process.env.NUXT_PUBLIC_COMPANY_BIZ_NO || '',
+        mailOrderNo: process.env.NUXT_PUBLIC_COMPANY_MAILORDER_NO || '',
+        travelNo: process.env.NUXT_PUBLIC_COMPANY_TRAVEL_NO || '',
+        insurance: process.env.NUXT_PUBLIC_COMPANY_INSURANCE || '',
+        csPhone: process.env.NUXT_PUBLIC_COMPANY_CS_PHONE || '',
+        csHours: process.env.NUXT_PUBLIC_COMPANY_CS_HOURS || '',
+        cpoName: process.env.NUXT_PUBLIC_COMPANY_CPO_NAME || '',
+        cpoDept: process.env.NUXT_PUBLIC_COMPANY_CPO_DEPT || '',
+        cpoPhone: process.env.NUXT_PUBLIC_COMPANY_CPO_PHONE || '',
+        cpoEmail: process.env.NUXT_PUBLIC_COMPANY_CPO_EMAIL || '',
+        hosting: process.env.NUXT_PUBLIC_COMPANY_HOSTING || 'Cloudflare'
+      }
     }
   },
   app: {

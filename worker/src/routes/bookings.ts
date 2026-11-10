@@ -22,7 +22,7 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
   if (path === "/api/v1/bookings" && method === "POST") {
     const user = await requireUser(request, env);
     await rateLimit(request, env, "bookings", 120, 60);
-    const r = await S.createBooking(env, user, await readJson(request), request.headers.get("Idempotency-Key"));
+    const r = await S.createBooking(env, user, await readJson(request), request.headers.get("Idempotency-Key"), request);
     return json({ success: true, replayed: r.replayed, booking: r.booking }, r.replayed ? 200 : 201);
   }
 

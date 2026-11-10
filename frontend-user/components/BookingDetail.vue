@@ -133,6 +133,7 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
         <div class="flex items-start justify-between gap-3">
           <div>
             <div class="text-xs font-semibold opacity-80">{{ DOMAIN_LABEL[booking.domain] || booking.domain }} · 예약번호 <span class="font-mono">{{ booking.bookingNumber }}</span></div>
+            <div v-if="booking.salesTypeLabel" class="mt-1 text-xs font-semibold opacity-80" data-testid="sales-type">판매 형태: {{ booking.salesTypeLabel }}<span v-if="booking.supplierName"> · {{ booking.supplierName }}</span></div>
             <h1 class="mt-1 text-lg md:text-xl font-bold">{{ headline }}</h1>
             <p v-if="subline" class="mt-1 text-sm opacity-90">{{ subline }}</p>
           </div>

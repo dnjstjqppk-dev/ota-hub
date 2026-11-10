@@ -84,8 +84,8 @@ async function quote(token, extra = {}) {
   return api("POST", "/api/v1/quotes", { token, body: { ...HOTEL, startDate: day(stayOffset), endDate: day(stayOffset + 1), rooms: 1, travelers: { adults: 2 }, ...extra } });
 }
 
-async function book(token, q, { simulation, travelers = lead, key = idem() } = {}) {
-  return api("POST", "/api/v1/bookings", { token, headers: { "Idempotency-Key": key }, body: { quoteId: q.quoteId, contact, travelers, simulation } });
+async function book(token, q, { simulation, travelers = lead, key = idem(), consents = TXC } = {}) {
+  return api("POST", "/api/v1/bookings", { token, headers: { "Idempotency-Key": key }, body: { quoteId: q.quoteId, contact, travelers, simulation, ...(consents === false ? {} : { consents }) } });
 }
 
 async function pay(token, b, scenario = "ok") {
@@ -99,9 +99,13 @@ async function fullHotelBooking(token, simulation, scenario = "ok", qextra = {})
   return { q, b, p };
 }
 
-let A, B, ADMIN;
+let A, B, ADMIN, TXC;
 before(async () => {
   sql("DELETE FROM login_attempts"); // local DB only: reset rate-limit window between runs
+  // A3: transaction consents ride on every booking-create, pinned to /legal versions.
+  const docs = (await api("GET", "/api/v1/legal")).data.documents || [];
+  const ver = Object.fromEntries(docs.map((d) => [d.slug, d.version]));
+  TXC = { refundPolicy: ver["refund-policy"], privacy: ver.privacy, thirdParty: ver.privacy };
   // Committed holds never release, so runs accumulate them until dates sell out
   // (suite rot: SOLD_OUT on helper dates after enough runs). Holds belong to
   // dead prior-run bookings; every test creates its own.
@@ -151,7 +155,7 @@ test("quote: server computes price; client price fields ignored; invalid inputs 
 
 test("booking: idempotency key required, replay returns same booking, quote single-use", async () => {
   const q = (await quote(A.token)).data.quote;
-  assert.equal((await api("POST", "/api/v1/bookings", { token: A.token, body: { quoteId: q.quoteId, contact, travelers: lead } })).data.code, "IDEMPOTENCY_KEY_REQUIRED");
+  assert.equal((await api("POST", "/api/v1/bookings", { token: A.token, body: { quoteId: q.quoteId, contact, travelers: lead, consents: TXC } })).data.code, "IDEMPOTENCY_KEY_REQUIRED");
   const key = idem();
   const [r1, r2] = await Promise.all([book(A.token, q, { key }), book(A.token, q, { key })]);
   assert.ok([r1.status, r2.status].every((s) => s === 200 || s === 201), `${r1.status} ${r2.status}`);
@@ -1536,14 +1540,14 @@ test("small surfaces: moment likes toggle, entity changes read, traveler import,
   const pax = await api("POST", "/api/v1/user/passengers", { token: I.token, body: { nameKo: "김여행", lastNameEn: "KIM", firstNameEn: "YOHENG", birthDate: "1990-01-01", passportNumber: "M1122334", passportExpiry: day(900), nationality: "KOR" } });
   assert.equal(pax.status, 201);
   const fq = (await api("POST", "/api/v1/quotes", { token: I.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: fday(60), travelers: { adults: 1 } } })).data.quote;
-  const fb = (await api("POST", "/api/v1/bookings", { token: I.token, headers: { "Idempotency-Key": idem() }, body: { quoteId: fq.quoteId, contact, travelers: [{ savedTravelerId: pax.data.id }] } })).data.booking;
+  const fb = (await api("POST", "/api/v1/bookings", { token: I.token, headers: { "Idempotency-Key": idem() }, body: { quoteId: fq.quoteId, contact, travelers: [{ savedTravelerId: pax.data.id }], consents: TXC } })).data.booking;
   const det = (await api("GET", `/api/v1/bookings/${fb.id}`, { token: I.token })).data.booking;
   assert.equal(det.travelers[0].lastNameEn, "KIM");
   assert.equal(det.travelers[0].firstNameEn, "YOHENG");
   assert.ok(det.travelers[0].passport, "imported passport stored");
   assert.ok(!JSON.stringify(det.travelers[0]).includes("M1122334"), "passport number never serialized");
   const fq2 = (await api("POST", "/api/v1/quotes", { token: I.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: fday(60), travelers: { adults: 1 } } })).data.quote;
-  assert.equal((await api("POST", "/api/v1/bookings", { token: I.token, headers: { "Idempotency-Key": idem() }, body: { quoteId: fq2.quoteId, contact, travelers: [{ savedTravelerId: "stv_nope" }] } })).data.code, "SAVED_TRAVELER_NOT_FOUND");
+  assert.equal((await api("POST", "/api/v1/bookings", { token: I.token, headers: { "Idempotency-Key": idem() }, body: { quoteId: fq2.quoteId, contact, travelers: [{ savedTravelerId: "stv_nope" }], consents: TXC } })).data.code, "SAVED_TRAVELER_NOT_FOUND");
   // Completion: fulfilled + past service_end completes through maintenance.
   const { b } = await fullHotelBooking(A.token, {});
   sql(`UPDATE bookings SET service_end = '2020-01-02' WHERE id = '${b.id}'`);
@@ -1719,4 +1723,84 @@ test("p0 calendar: default-unit closure blocks sale; overrides reprice dates", a
   assert.equal(hq.lines.filter((l) => l.code === "ROOM_NIGHT").length, 2);
   const hb = (await book(A.token, hq)).data.booking;
   assert.equal((await pay(A.token, hb)).data.booking.status, "VOUCHER_ISSUED");
+});
+
+test("A3: booking requires all three tx consents; stale versions rejected", async () => {
+  const q1 = (await quote(A.token)).data.quote;
+  const no = await book(A.token, q1, { consents: false });
+  assert.equal(no.data.code, "CONSENT_REQUIRED");
+  const q2 = (await quote(A.token)).data.quote;
+  const partial = await book(A.token, q2, { consents: { refundPolicy: TXC.refundPolicy } });
+  assert.equal(partial.data.code, "CONSENT_REQUIRED");
+  const q3 = (await quote(A.token)).data.quote;
+  const stale = await book(A.token, q3, { consents: { refundPolicy: "0.0", privacy: "0.0", thirdParty: "0.0" } });
+  assert.equal(stale.data.code, "CONSENT_STALE");
+  const q4 = (await quote(A.token)).data.quote;
+  const ok = await book(A.token, q4);
+  assert.equal(ok.status, 201, JSON.stringify(ok.data));
+  // Registration recorded TERMS + PRIVACY against legal versions.
+  const rows = sql(`SELECT consent_type, version, agreed FROM user_consents WHERE user_id = '${A.id}'`);
+  assert.ok(rows.some((r) => r.consent_type === "TERMS" && r.agreed === 1));
+  assert.ok(rows.some((r) => r.consent_type === "PRIVACY" && r.agreed === 1));
+  assert.ok(rows.some((r) => r.consent_type === "THIRD_PARTY_SUPPLIER" && r.agreed === 1 && r.version === TXC.privacy));
+});
+
+test("A4: marketing consent toggles and every change is recorded with a date", async () => {
+  const M = await register("mktg");
+  const on = await api("PATCH", "/api/v1/auth/me", { token: M.token, body: { fullName: "QA mktg", phoneNumber: "+82-10-0000-0001", marketingConsent: true } });
+  assert.equal(on.status, 200);
+  assert.equal(on.data.marketingConsent, true);
+  const off = await api("PATCH", "/api/v1/auth/me", { token: M.token, body: { fullName: "QA mktg", phoneNumber: "+82-10-0000-0001", marketingConsent: false } });
+  assert.equal(off.status, 200);
+  assert.equal(off.data.marketingConsent, false);
+  const rows = sql(`SELECT agreed, agreed_at, version FROM user_consents WHERE user_id = '${M.id}' AND consent_type = 'MARKETING' ORDER BY agreed_at`);
+  assert.equal(rows.length, 3, "register default + opt-in + opt-out");
+  assert.deepEqual(rows.map((r) => r.agreed), [0, 1, 0]);
+  assert.ok(rows.every((r) => r.agreed_at && r.version));
+});
+
+test("A1: withdrawal blocked by active booking; wrong password rejected; success purges PII and retains records", async () => {
+  const W = await register("wdraw");
+  const { b } = await fullHotelBooking(W.token, {});
+  assert.equal((await api("POST", "/api/v1/auth/me/withdraw", { token: W.token, body: { password: "Passw0rd-QA-1" } })).data.code, "WITHDRAWAL_BLOCKED");
+  assert.equal((await api("POST", "/api/v1/auth/me/withdraw", { token: W.token, body: { password: "wrong-pw-1234" } })).status, 401);
+  sql(`UPDATE bookings SET status = 'COMPLETED' WHERE id = '${b.id}'`);
+  const w = await api("POST", "/api/v1/auth/me/withdraw", { token: W.token, body: { password: "Passw0rd-QA-1", reason: "E2E" } });
+  assert.equal(w.status, 200, JSON.stringify(w.data));
+  const u = sql(`SELECT status, email, full_name, phone_number, trip_coins FROM users WHERE id = '${W.id}'`)[0];
+  assert.equal(u.status, "DELETED");
+  assert.ok(u.email.startsWith("deleted_"), u.email);
+  assert.equal(u.full_name, "탈퇴회원");
+  assert.equal(u.phone_number, null);
+  assert.equal(u.trip_coins, 0);
+  const retained = sql(`SELECT record_type FROM retained_records WHERE user_id = '${W.id}'`);
+  assert.ok(retained.some((r) => r.record_type === "BOOKING"), "contract record retained");
+  assert.ok(retained.some((r) => r.record_type === "PAYMENT"), "payment record retained");
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: W.email, password: "Passw0rd-QA-1" } })).status, 401);
+  assert.equal((await api("GET", "/api/v1/auth/me", { token: W.token })).status, 401);
+});
+
+test("A8: admin suspends with reason → sessions die → unsuspend restores; self-suspend refused", async () => {
+  const S = await register("susp");
+  assert.equal((await api("PATCH", `/api/v1/admin/users/${S.id}`, { token: ADMIN, body: { isActive: false } })).data.code, "REASON_REQUIRED");
+  const susp = await api("PATCH", `/api/v1/admin/users/${S.id}`, { token: ADMIN, body: { isActive: false, reason: "E2E fraud probe" } });
+  assert.equal(susp.status, 200, JSON.stringify(susp.data));
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: S.email, password: "Passw0rd-QA-1" } })).data.code, "ACCOUNT_SUSPENDED");
+  assert.equal((await api("GET", "/api/v1/auth/me", { token: S.token })).status, 401);
+  const uns = await api("PATCH", `/api/v1/admin/users/${S.id}`, { token: ADMIN, body: { isActive: true } });
+  assert.equal(uns.status, 200);
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: S.email, password: "Passw0rd-QA-1" } })).status, 200);
+  // Self-suspend is refused; the admin list now carries account status.
+  const me = (await api("GET", "/api/v1/auth/me", { token: ADMIN })).data;
+  assert.equal((await api("PATCH", `/api/v1/admin/users/${me.id}`, { token: ADMIN, body: { isActive: false, reason: "x" } })).data.code, "CANNOT_SUSPEND_SELF");
+  const listed = (await api("GET", `/api/v1/admin/users?q=${encodeURIComponent(S.email)}`, { token: ADMIN })).data.users[0];
+  assert.equal(listed.status, "ACTIVE");
+});
+
+test("A7: booking detail discloses per-order sales type and supplier", async () => {
+  const { b } = await fullHotelBooking(A.token, {});
+  const det = (await api("GET", `/api/v1/bookings/${b.id}`, { token: A.token })).data.booking;
+  assert.ok(["DIRECT_1P", "AGENCY_3P"].includes(det.salesType), JSON.stringify(det.salesType));
+  assert.ok(det.salesTypeLabel, "label present");
+  assert.ok(det.supplierName, "supplier name present");
 });

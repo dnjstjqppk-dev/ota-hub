@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { BRAND } from '~/config/brand'
 import { CATEGORIES, SUPPORT_LINKS } from '~/config/navigation'
+import { useCompany } from '~/composables/useCompany'
 
 const year = new Date().getFullYear()
+const co = useCompany()
 </script>
 
 <template>
@@ -49,10 +51,13 @@ const year = new Date().getFullYear()
 
       <div class="mt-12 flex flex-col gap-4 border-t border-line pt-6 text-xs leading-relaxed text-ink-subtle md:flex-row md:items-start md:justify-between">
         <div class="space-y-1">
-          <p>{{ BRAND.companyName }} · 통신판매업 신고 준비 중</p>
+          <p>{{ co.orPending(co.name || BRAND.companyName) }} · 대표 {{ co.orPending(co.ceo) }} · {{ co.orPending(co.address) }}</p>
+          <p>사업자등록번호 {{ co.orPending(co.bizNo) }} · 통신판매업 신고 {{ co.orPending(co.mailOrderNo) }} · 여행업 등록 {{ co.orPending(co.travelNo) }}</p>
+          <p>영업보증보험 {{ co.orPending(co.insurance) }} · 호스팅 제공 {{ co.hosting }}</p>
+          <p>고객센터 {{ co.orPending(co.csPhone) }} ({{ co.orPending(co.csHours) }}) · {{ BRAND.supportEmail }}</p>
           <p>결제는 결제대행(PG)사를 통해 처리되며, getfortrip은 카드 번호를 저장하지 않습니다. 외화 표시는 참고용 환산 금액입니다.</p>
-          <p>getfortrip은 직접 예약에 대해 통신판매를 중개하고, 제휴 링크로 이동한 거래는 해당 제휴사의 약관이 적용됩니다. 상세 조건은 이용약관과 취소·환불 규정을 확인해 주세요.</p>
-          <p>© {{ year }} {{ BRAND.companyName }}</p>
+          <p>판매 형태에 따라 계약 당사자가 달라요. 회사 직판 상품은 회사가 판매자이고, 중개 상품은 공급사가 판매자이며 회사는 통신판매를 중개하고, 제휴 링크로 이동한 거래는 해당 제휴사의 약관이 적용됩니다. 주문별 판매 형태는 예약 상세에서 확인해 주세요.</p>
+          <p>© {{ year }} {{ co.orPending(co.name || BRAND.companyName) }}</p>
         </div>
         <div class="flex shrink-0 gap-5 font-medium text-ink-muted">
           <NuxtLink to="/terms" class="hover:text-ink">이용약관</NuxtLink>

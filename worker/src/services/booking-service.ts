@@ -13,7 +13,8 @@ import { computeQuote, computeRoundTripQuote, computeCancellation, isDomain, Quo
 import { assertTransition, CUSTOMER_CANCELLABLE, STATUS_LABEL_KO, type BookingStatus } from "../domain/state-machine.ts";
 import * as L from "../domain/ledger.ts";
 import { convertMinor } from "../domain/money.ts";
-import { HttpError, str } from "../lib/http.ts";
+import { HttpError, clientIp, str } from "../lib/http.ts";
+import { consentStmts, currentVersions, validateTxConsents } from "../lib/consents.ts";
 import { newBookingNumber, newId, encryptField, decryptField, randomToken } from "../lib/crypto.ts";
 import type { AuthUser } from "../lib/auth.ts";
 import { loadProduct, loadSupplier, bookabilityOf, assertTicketable, assertQuotableDomain, assertInventoryConfigured, type SupplierRow } from "./catalog.ts";
@@ -527,7 +528,7 @@ function itemRows(quote: any, product: CatalogProduct, inbound: CatalogProduct |
   ];
 }
 
-export async function createBooking(env: Env, user: AuthUser, body: any, idemKey: string | null) {
+export async function createBooking(env: Env, user: AuthUser, body: any, idemKey: string | null, request?: Request) {
   if (!idemKey || !/^[A-Za-z0-9_-]{16,80}$/.test(idemKey)) {
     throw new HttpError(400, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key 헤더가 필요합니다.");
   }
@@ -536,6 +537,9 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
 
   const quote = await env.DB.prepare("SELECT * FROM quotes WHERE id = ?").bind(str(body.quoteId, 64)).first<any>();
   if (!quote || quote.user_id !== user.id) throw new HttpError(404, "QUOTE_NOT_FOUND", "견적을 찾을 수 없습니다. 다시 조회해주세요.");
+  // Mandatory transaction consents (A3): refund policy, privacy, and the
+  // supplier disclosure — each pinned to the current legal version.
+  const txConsents = validateTxConsents(body, await currentVersions(env.DB));
 
   // Feature Flag Guard: check domain availability on booking creation
   const flagByDomain: Record<string, string> = {
@@ -640,6 +644,11 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
     ...(quote.promotion_code
       ? [db.prepare("UPDATE user_coupons SET is_used = 1 WHERE user_id = ? AND coupon_code = ? AND is_used = 0").bind(user.id, quote.promotion_code)]
       : []),
+    ...consentStmts(db, user.id, [
+      { type: "REFUND_POLICY", version: txConsents.refundPolicy, agreed: true },
+      { type: "PRIVACY", version: txConsents.privacy, agreed: true },
+      { type: "THIRD_PARTY_SUPPLIER", version: txConsents.thirdParty, agreed: true, target: supplier.id },
+    ], request ? clientIp(request) : null, request?.headers.get("User-Agent") ?? null),
   ];
   for (const [i, t] of travelers.entries()) {
     const enc = t.passportNumber ? await encryptField(t.passportNumber, env.PII_ENC_KEY!) : null;
@@ -1246,9 +1255,15 @@ export async function serializeBooking(env: Env, b: BookingRow, viewer: AuthUser
   try {
     details = JSON.parse(b.details_json || "{}");
   } catch {}
+  // A7: per-order sales type so the UI can disclose the actual seller (1P vs 3P).
+  const sup = await loadSupplier(env, b.supplier_id).catch(() => null);
+  const salesType = sup?.transaction_model === "MERCHANT_OF_RECORD" ? "DIRECT_1P" : "AGENCY_3P";
   return {
     id: b.id,
     bookingNumber: b.booking_number,
+    salesType,
+    salesTypeLabel: salesType === "DIRECT_1P" ? "회사 직판" : "공급사 판매(회사 중개)",
+    supplierName: sup?.name || null,
     domain: b.domain_type,
     itemId: b.item_id,
     title: b.title,

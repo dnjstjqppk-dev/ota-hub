@@ -47,6 +47,11 @@ export async function getAuthUser(request: Request, env: Env): Promise<AuthUser 
     const rs = await env.DB.prepare("SELECT reset_at FROM session_resets WHERE subject_id = ?").bind(p.id).first<{ reset_at: number }>();
     if (rs && p.iat < Number(rs.reset_at)) return null;
   }
+  // Suspended/deleted accounts lose API access immediately, even with a live JWT (A8/A1).
+  if (!p.role || p.role === "USER") {
+    const st = await env.DB.prepare("SELECT status FROM users WHERE id = ?").bind(p.id).first<{ status: string }>();
+    if (!st || st.status !== "ACTIVE") return null;
+  }
   return { id: p.id, email: p.email, fullName: p.fullName, role: p.role, tier: p.tier, staffId: p.staffId, staffRole: p.staffRole };
 }
 

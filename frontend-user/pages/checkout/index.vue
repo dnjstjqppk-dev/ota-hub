@@ -52,6 +52,11 @@ let timer: any
 const contact = ref({ name: auth.user?.fullName || '', email: auth.user?.email || '', phone: auth.user?.phoneNumber || '' })
 const travelers = ref<any[]>([])
 const specialRequests = ref('')
+// A3: three mandatory transaction consents, each pinned to the current legal version from /legal.
+const agreeRefund = ref(false)
+const agreePrivacyTx = ref(false)
+const agreeThirdParty = ref(false)
+const legalVersions = ref<Record<string, string>>({})
 const simSupplier = ref('confirm')
 const simTicketing = ref('ok')
 const simPayment = ref('ok')
@@ -113,15 +118,25 @@ async function getQuote(retry = true) {
 
 async function createBooking() {
   error.value = ''
+  if (!agreeRefund.value || !agreePrivacyTx.value || !agreeThirdParty.value) { error.value = '예약하려면 취소·환불 규정, 개인정보 수집·이용, 공급사 제3자 제공에 모두 동의해 주세요.'; return }
   for (const t of travelers.value) { t.lastNameEn = t.lastNameEn.trim().toUpperCase(); t.firstNameEn = t.firstNameEn.trim().toUpperCase() }
   busy.value = true
-  const body: any = { quoteId: quote.value.quoteId, contact: contact.value, travelers: travelers.value.map((t) => ({ ...t, birthDate: t.birthDate || null, passportNumber: t.passportNumber || null, passportExpiry: t.passportExpiry || null, gender: t.gender || null })), specialRequests: specialRequests.value }
+  const body: any = { quoteId: quote.value.quoteId, contact: contact.value, travelers: travelers.value.map((t) => ({ ...t, birthDate: t.birthDate || null, passportNumber: t.passportNumber || null, passportExpiry: t.passportExpiry || null, gender: t.gender || null })), specialRequests: specialRequests.value, consents: { refundPolicy: legalVersions.value['refund-policy'], privacy: legalVersions.value['privacy'], thirdParty: legalVersions.value['privacy'] } }
   if (quote.value.fulfilmentMode === 'SIMULATED') body.simulation = { supplier: simSupplier.value, ticketing: simTicketing.value }
   const r = await apiFetch('/bookings', { method: 'POST', body, headers: { 'Idempotency-Key': idemKeyFor(quote.value.quoteId) } })
   busy.value = false
   if (r.status === 401) return goLogin()
   if (!r.ok) {
     if (r.data.code === 'PRICE_CHANGED' || r.data.code === 'QUOTE_EXPIRED') { error.value = `${r.data.error} 다시 가격을 확인해주세요.`; quote.value = null; step.value = 'details'; return }
+    if (r.data.code === 'CONSENT_STALE') {
+      agreeRefund.value = agreePrivacyTx.value = agreeThirdParty.value = false
+      try {
+        const lv = await apiFetch('/legal')
+        if (lv.ok) { legalVersions.value = {}; for (const d of lv.data.documents || []) legalVersions.value[d.slug] = d.version }
+      } catch { /* keep old versions; server will reject again */ }
+      error.value = r.data.error || '약관이 변경되었습니다. 다시 확인하고 동의해 주세요.'
+      return
+    }
     error.value = r.data.error || '예약을 생성하지 못했습니다.'
     return
   }
@@ -179,6 +194,10 @@ onMounted(async () => {
   if (!contact.value.email) contact.value.email = auth.user?.email || ''
   if (!contact.value.phone) contact.value.phone = auth.user?.phoneNumber || ''
   if (!DOMAIN_LABEL[domain] || !itemId) { error.value = '잘못된 상품 정보입니다.'; return }
+  try {
+    const lv = await apiFetch('/legal')
+    if (lv.ok) for (const d of lv.data.documents || []) legalVersions.value[d.slug] = d.version
+  } catch { /* consent checkboxes stay disabled without versions */ }
   if (q.bookingId) await resumeBooking(String(q.bookingId))
   // Arriving from a product page with dates already chosen: price it right away.
   else if (datesReady.value) await getQuote()
@@ -310,6 +329,12 @@ onBeforeUnmount(() => clearInterval(timer))
               <select v-model="simTicketing" class="ml-1 rounded-lg border border-line bg-surface px-2 py-1"><option value="ok">성공</option><option value="fail">실패</option></select>
             </label>
           </div>
+          <fieldset v-if="step === 'travelers'" class="mt-5 space-y-2.5 rounded-2xl border border-line bg-surface p-4">
+            <legend class="px-1 text-sm font-bold text-ink">필수 동의</legend>
+            <label class="flex items-start gap-2.5 text-sm"><input v-model="agreeRefund" type="checkbox" class="mt-0.5 h-4 w-4 accent-primary" data-testid="agree-refund" /><span class="text-ink"><b>(필수)</b> <NuxtLink to="/refund-policy" target="_blank" class="underline">취소·환불 규정</NuxtLink>에 동의합니다</span></label>
+            <label class="flex items-start gap-2.5 text-sm"><input v-model="agreePrivacyTx" type="checkbox" class="mt-0.5 h-4 w-4 accent-primary" data-testid="agree-privacy" /><span class="text-ink"><b>(필수)</b> 예약 처리를 위한 <NuxtLink to="/privacy" target="_blank" class="underline">개인정보 수집·이용</NuxtLink>에 동의합니다</span></label>
+            <label class="flex items-start gap-2.5 text-sm"><input v-model="agreeThirdParty" type="checkbox" class="mt-0.5 h-4 w-4 accent-primary" data-testid="agree-thirdparty" /><span class="text-ink"><b>(필수)</b> 이 상품의 공급사(파트너)에게 예약 이행을 위해 예약자·여행자 정보(이름, 연락처, 여권정보 등)를 제공하고, 이용 완료 후 5년간 보관하는 것에 동의합니다</span></label>
+          </fieldset>
           <button v-if="step === 'travelers'" type="button" :disabled="busy" class="btn-primary mt-5 px-6 py-3" data-testid="create-booking" @click="createBooking">{{ busy ? '처리 중…' : '예약 정보 확인 후 결제 단계로' }}</button>
         </div>
 
@@ -330,7 +355,7 @@ onBeforeUnmount(() => clearInterval(timer))
           <button type="button" :disabled="busy || !payConfig?.enabled || paySecondsLeft === 0" class="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3.5 text-base font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40" data-testid="pay" @click="pay">
             <AppIcon name="lock" :size="18" />{{ busy ? '결제 처리 중…' : `${formatKrw(booking.totalMinor)} 결제하기` }}
           </button>
-          <p class="mt-3 text-xs leading-relaxed text-ink-subtle">결제하면 <NuxtLink to="/terms" class="underline">이용약관</NuxtLink>과 <NuxtLink to="/refund-policy" class="underline">취소·환불 규정</NuxtLink>에 동의한 것으로 봅니다. getfortrip은 통신판매를 중개하며, 실제 여행 서비스는 각 공급사가 제공해요.</p>
+          <p class="mt-3 text-xs leading-relaxed text-ink-subtle">예약 단계에서 동의한 <NuxtLink to="/refund-policy" class="underline">취소·환불 규정</NuxtLink>과 <NuxtLink to="/privacy" class="underline">개인정보 수집·이용 및 공급사 제3자 제공</NuxtLink>에 따라 결제가 진행돼요. 이 주문의 판매 형태(직판·중개)는 예약 상세에서 확인할 수 있어요.</p>
         </div>
 
         <p v-if="error" class="flex items-start gap-2 rounded-2xl bg-danger-soft px-4 py-3 text-sm font-medium text-danger" role="alert" data-testid="error"><AppIcon name="close" :size="16" class="mt-0.5" />{{ error }}</p>

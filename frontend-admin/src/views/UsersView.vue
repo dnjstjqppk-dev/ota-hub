@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * Members (GET /admin/users ?q ?role, PATCH /admin/users/:id). Search suggests as you type (email,
- * name, phone, id). Role changes and coin adjustments are audited; coin adjustments are written to
- * coin_ledger by the server. Account suspension is not supported by the schema, so it is not offered.
+ * name, phone, id). Role changes, coin adjustments, and suspensions are audited; coin adjustments
+ * are written to coin_ledger by the server. Suspending kills the member's sessions immediately.
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -50,12 +50,15 @@ onMounted(list.reload)
 const suggest = async (term: string, signal: AbortSignal) => (await api(`/admin/users?q=${encodeURIComponent(term)}&limit=8`, { signal })).users || []
 
 const ROLE: Record<string, { label: string; tone: any }> = { USER: { label: '회원', tone: 'neutral' }, ADMIN: { label: '관리자', tone: 'info' } }
+const STATUS: Record<string, { label: string; tone: any }> = { ACTIVE: { label: '정상', tone: 'success' }, SUSPENDED: { label: '정지', tone: 'danger' }, DELETED: { label: '탈퇴', tone: 'neutral' } }
 
 const selected = ref<any | null>(null)
-const form = reactive({ role: 'USER', coin: '', note: '' })
+const form = reactive({ role: 'USER', coin: '', note: '', suspended: false, reason: '' })
 const busy = ref(false)
-function open(u: any) { selected.value = u; Object.assign(form, { role: u.role, coin: '', note: '' }) }
+function open(u: any) { selected.value = u; Object.assign(form, { role: u.role, coin: '', note: '', suspended: u.status === 'SUSPENDED', reason: '' }) }
 const isSelf = computed(() => selected.value?.id === session.user?.id)
+const isDeleted = computed(() => selected.value?.status === 'DELETED')
+const suspensionChanged = computed(() => !!selected.value && !isDeleted.value && form.suspended !== (selected.value.status === 'SUSPENDED'))
 const coinValue = computed(() => (form.coin.trim() === '' ? null : Number(form.coin)))
 const coinError = computed(() => {
   const v = coinValue.value
@@ -64,20 +67,27 @@ const coinError = computed(() => {
   if (Math.abs(v) > 10_000_000) return '한 번에 ±10,000,000 코인까지 조정할 수 있어요.'
   return ''
 })
-const dirty = computed(() => !!selected.value && (form.role !== selected.value.role || coinValue.value !== null))
+const dirty = computed(() => !!selected.value && (form.role !== selected.value.role || coinValue.value !== null || suspensionChanged.value))
 
 async function save() {
   if (coinError.value) return
   if (form.role !== selected.value.role && !confirm(`${selected.value.email}의 권한을 ${ROLE[form.role].label}(으)로 바꿀까요?`)) return
+  if (suspensionChanged.value) {
+    if (form.suspended && !form.reason.trim()) { toast('정지 사유를 입력해 주세요.', 'danger', 6000); return }
+    const verb = form.suspended ? '정지' : '정지 해제'
+    if (!confirm(`${selected.value.email} 회원을 ${verb}할까요?${form.suspended ? ' 즉시 모든 세션이 끊깁니다.' : ''}`)) return
+  }
   busy.value = true
   try {
     const body: Record<string, unknown> = {}
     if (form.role !== selected.value.role) body.role = form.role
     if (coinValue.value !== null) { body.coinAdjustment = coinValue.value; body.note = form.note.trim() || undefined }
+    if (suspensionChanged.value) { body.isActive = !form.suspended; if (form.suspended) body.reason = form.reason.trim() }
     const r = await api(`/admin/users/${encodeURIComponent(selected.value.id)}`, { method: 'PATCH', json: body })
-    selected.value = { ...selected.value, role: form.role, coin_balance: r.coinBalance ?? selected.value.coin_balance }
+    selected.value = { ...selected.value, role: form.role, coin_balance: r.coinBalance ?? selected.value.coin_balance, status: suspensionChanged.value ? (form.suspended ? 'SUSPENDED' : 'ACTIVE') : selected.value.status }
     form.coin = ''
     form.note = ''
+    form.reason = ''
     toast('회원 정보를 저장했어요.')
     list.reload()
   } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
@@ -121,12 +131,13 @@ async function save() {
     <StatePanel :state="list.state.value" :error="list.error.value" :empty="!list.data.value.length" empty-text="조건에 맞는 회원이 없어요." @retry="list.reload()">
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th>회원</th><th>전화번호</th><th>권한</th><th>등급</th><th class="text-right">코인</th><th>가입</th></tr></thead>
+          <thead><tr><th>회원</th><th>전화번호</th><th>권한</th><th>상태</th><th>등급</th><th class="text-right">코인</th><th>가입</th></tr></thead>
           <tbody>
             <tr v-for="u in list.data.value" :key="u.id" class="row-link" tabindex="0" @click="open(u)" @keydown.enter="open(u)">
               <td><p class="font-medium">{{ u.full_name || '이름 없음' }}</p><p class="text-2xs text-ink-subtle">{{ u.email }}</p></td>
               <td class="text-xs tabular">{{ u.phone_number || '—' }}</td>
               <td><StatusBadge v-bind="ROLE[u.role] || { label: u.role }" /></td>
+              <td><StatusBadge v-bind="STATUS[u.status] || { label: u.status }" /></td>
               <td class="text-xs">{{ u.tier || '—' }}</td>
               <td class="text-right tabular">{{ num(u.coin_balance) }}</td>
               <td class="whitespace-nowrap text-xs text-ink-muted tabular">{{ dateTime(u.created_at) }}</td>
@@ -144,6 +155,7 @@ async function save() {
           <div><dt class="text-2xs text-ink-subtle">가입</dt><dd class="tabular">{{ dateTime(selected.created_at) }}</dd></div>
           <div><dt class="text-2xs text-ink-subtle">전화번호</dt><dd>{{ selected.phone_number || '—' }}</dd></div>
           <div><dt class="text-2xs text-ink-subtle">코인 잔액</dt><dd class="font-semibold tabular">{{ num(selected.coin_balance) }}</dd></div>
+          <div><dt class="text-2xs text-ink-subtle">상태</dt><dd><StatusBadge v-bind="STATUS[selected.status] || { label: selected.status }" /></dd></div>
         </dl>
 
         <fieldset>
@@ -164,7 +176,16 @@ async function save() {
           <input v-if="coinValue !== null" v-model="form.note" class="input" maxlength="200" placeholder="조정 사유 (원장에 기록)" />
         </fieldset>
 
-        <p class="rounded-field bg-surface-sunken px-3 py-2 text-2xs text-ink-muted">회원 이용 정지는 아직 지원하지 않아요.</p>
+        <fieldset v-if="!isDeleted" class="space-y-2">
+          <legend class="label">이용 정지</legend>
+          <label class="flex cursor-pointer items-center gap-2 text-sm" :class="isSelf && 'cursor-not-allowed opacity-50'">
+            <input v-model="form.suspended" type="checkbox" :disabled="isSelf" />이 회원의 이용을 정지합니다
+          </label>
+          <p v-if="isSelf" class="text-2xs text-ink-subtle">본인 계정은 정지할 수 없어요.</p>
+          <input v-if="form.suspended" v-model="form.reason" class="input" maxlength="200" placeholder="정지 사유 (필수 · 감사 로그에 기록)" />
+          <p v-if="form.suspended" class="text-2xs text-ink-subtle">정지하면 즉시 모든 세션이 끊기고 로그인이 차단돼요.</p>
+        </fieldset>
+        <p v-else class="rounded-field bg-surface-sunken px-3 py-2 text-2xs text-ink-muted">탈퇴한 회원은 복구할 수 없어요.</p>
       </form>
       <template #footer>
         <button type="button" class="btn-ghost" @click="selected = null">닫기</button>
