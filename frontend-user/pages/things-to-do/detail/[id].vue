@@ -22,7 +22,7 @@ const facts = computed(() => {
     ['소요 시간', DURATION_KO[x.duration_type] || x.duration_type],
     ['가이드', x.guide_language],
     ['바우처', VOUCHER_KO[x.voucher_type] || x.voucher_type],
-    ['확정 방식', x.instant_confirmation ? '즉시 확정' : '공급사 확인 후 확정']
+    ['확정 방식', x.instant_confirmed ? '즉시 확정' : '공급사 확인 후 확정']
   ] as [string, string | null][]).filter(([, v]) => v)
 })
 

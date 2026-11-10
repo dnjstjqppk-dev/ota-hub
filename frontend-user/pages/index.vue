@@ -224,7 +224,7 @@ const PROMISES = [
             <p class="text-xs text-ink-subtle">{{ a.city }}</p>
             <h3 class="mt-0.5 line-clamp-2 text-sm font-bold leading-snug text-ink group-hover:text-primary">{{ a.title }}</h3>
             <div class="mt-auto flex items-center gap-2 pt-2">
-              <span v-if="a.instant_confirmation" class="flex items-center gap-0.5 text-2xs font-semibold text-success"><AppIcon name="bolt" :size="12" />즉시 확정</span>
+              <span v-if="a.instant_confirmed" class="flex items-center gap-0.5 text-2xs font-semibold text-success"><AppIcon name="bolt" :size="12" />즉시 확정</span>
               <span v-if="Number(a.price_krw) > 0" class="ml-auto text-sm font-bold text-ink tabular">{{ currency.formatKRW(Number(a.price_krw)) }}~</span>
             </div>
           </div>

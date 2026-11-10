@@ -862,12 +862,20 @@ async function runVerificationSuite() {
       throw new Error(`Insurance plans returned empty: ${JSON.stringify(insJson)}`);
     }
 
-    // 3. Supplier Registry
-    const supRes = await fetch(`${BASE_URL}/api/v1/suppliers/registry`);
+    // 3. Supplier Registry (#41: admin-gated, de-named — the public path is gone)
+    const supPub = await fetch(`${BASE_URL}/api/v1/suppliers/registry`);
+    if (supPub.status !== 404) throw new Error(`Public supplier registry should be 404, got HTTP ${supPub.status}`);
+    const supRes = await fetch(`${BASE_URL}/api/v1/admin/suppliers/registry`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
     if (!supRes.ok) throw new Error(`Supplier registry failed: HTTP ${supRes.status}`);
     const supJson = await supRes.json();
     if (!supJson.success || !Array.isArray(supJson.suppliers) || supJson.suppliers.length < 5) {
       throw new Error(`Supplier registry returned incomplete adapters: ${JSON.stringify(supJson)}`);
+    }
+    const supBlob = JSON.stringify(supJson.suppliers);
+    for (const vendor of ['Amadeus', 'Agoda', 'Viator', 'Airalo', 'Chubb', 'Rentalcars']) {
+      if (supBlob.includes(vendor)) throw new Error(`Supplier registry leaks vendor name: ${vendor}`);
     }
   });
 

@@ -312,7 +312,7 @@ useHead(() => ({ title: q.value.origin && q.value.dest ? `${cityOf(q.value.origi
                     </div>
                     <div class="flex gap-2">
                       <NuxtLink :to="detailLink(f)" class="btn-secondary px-3.5">상세</NuxtLink>
-                      <button v-if="f.bookable !== false" type="button" class="btn-primary" :disabled="!q.date" @click="choose(f)">{{ roundTrip && step === 'outbound' ? '가는 편 선택' : '선택' }}</button>
+                      <button v-if="f.bookable === true" type="button" class="btn-primary" :disabled="!q.date" @click="choose(f)">{{ roundTrip && step === 'outbound' ? '가는 편 선택' : '선택' }}</button>
                     </div>
                   </div>
                 </article>

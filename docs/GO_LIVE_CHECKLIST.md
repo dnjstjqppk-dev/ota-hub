@@ -29,6 +29,17 @@ npx wrangler d1 execute ota_production --remote --command "SELECT id, adapter, i
 > npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT COUNT(*) FROM activities WHERE daily_capacity IS NULL) AS act, (SELECT COUNT(*) FROM transfers WHERE daily_capacity IS NULL) AS trf, (SELECT COUNT(*) FROM packages WHERE daily_capacity IS NULL) AS pkg;"
 > # 기대: 전부 0 (판매 개시 전)
 > ```
+>
+> 0037(이행 정합) 주의: 판매 경로 없는 1P 4행(ESIM·보험·항공·철도)이 PAUSED로
+> 공개 카탈로그에서 내려간다(정산 귀속은 상태 무관이라 영향 없음). eSIM·실시간재고·
+> 즉시확정·공급사API 플래그 4종은 OFF+PENDING_CONTRACT가 된다. trains·packages에
+> partner_id가 생기지만 기존 행은 NULL(미배선)이라 견적이 409로 거부된다.
+> 철도·패키지 판매 개시 전 공급사 계약 후 행별 partner_id를 반드시 배선한다.
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT COUNT(*) FROM marketplace_catalog_items WHERE id IN ('mkt_esim_jp_01','mkt_ins_standard','mkt_flt_ke723','mkt_trn_ktx_025') AND status = 'PAUSED') AS paused, (SELECT COUNT(*) FROM feature_flags WHERE key IN ('ESIM','REALTIME_INVENTORY_SYNC','AUTO_BOOKING_CONFIRMATION','SUPPLIER_API_INTEGRATION') AND is_enabled = 0) AS flags_off;"
+> # 기대: paused 4, flags_off 4
+> ```
 
 ## 1. 판매주체 ACTIVE (사업자 정보 필요)
 

@@ -72,16 +72,16 @@
 
 ### 이행·공급
 
-38. `booking-service.ts:227-242,603-611` — 파트너 캘린더는 견적에서만, 예약 홀드는 카탈로그 수용량 사용. 마감일도 결제전환 → 예약 시 재확인+가드 INSERT [M]
-39. `catalog.ts:202-206` — FLIGHT는 직계약/시뮬/API 전부 거부. 항공 판매경로 0 → GDS/NDC 연동 또는 판매표면 제거 [L]
-40. `0005:71-72` — ESIM/보험이 1P ACTIVE로 공개노출인데 견적 409. 허위광고 → PAUSE/원가제거/어드민전용 [S]
-41. `catalog.ts:526-537` + `external-adapters.ts:24-200` — Amadeus/Agoda/Viator 등 실명+지원메서드 공개, Airalo는 가짜 ICCID/QR 생성. 허위 제휴 → 어드민게이트+실명삭제 [S]
-42. `things-to-do/index.vue:115` — 즉시확정 표시 vs 직계약 PENDING → 이행모드 기반 표시 [S]
-43. `catalog.ts:108,146` — TRAIN/PACKAGE 공급사 하드코딩·partner_id 없음. LIVE 1회에 전량 판매 → partner_id 추가 또는 NOT_INTEGRATED 유지 [M]
-44. `affiliate.ts:46-55` — 미확인 click_id 전환허용, REAL float 금액·통화 미검증 → 클릭행 매칭+정수+allowlist [M]
-45. `booking-service.ts:756-759,1076-1121` — PENDING 예약에 크론 순회·에스컬·타임아웃환불 없음. 무기한 대기 → SLA+타임아웃환불 [M]
-46. `0004:106-121` — 공개 플래그가 ESIM/AUTO/REALTIME을 ON+ACTIVE로 광고. 실체와 모순 → off/PENDING_CONTRACT [S]
-47. `affiliate.ts:13-27` — /out/ 클릭에 제목 NULL·IP 빈문자·미검증 → CF-IP+제목해결+검증 [S]
+[x] 38. 예약 홀드가 캘린더 무시 → 완료 (6e / 예약 시 `availableUnits` 재확인(코인·쿠폰 소비 전) + 캘린더 인식 가드 INSERT + 결제 시 재검증(마감 시 EXPIRED 전환·홀드 해제); 마감일은 부(−)재고로 판독). E2E #38 통과
+[x] 39. 항공 판매경로 0 → 완료 (6e / GDS 연동 대신 판매표면 제거: 0037에서 `mkt_flt_ke723` PAUSE + `search.vue` 선택 CTA fail-closed(`bookable === true`); 머니게이트·bookable 게이트는 유지). E2E #39 통과
+[x] 40. ESIM/보험 1P 허위노출 → 완료 (6e / 0037에서 2행 PAUSE — 공개 ACTIVE 목록에서 제외, 정산귀속(상태 무관)은 유지). E2E #40 통과
+[x] 41. 허위 제휴 레지스트리 → 완료 (6e / 공개 `/suppliers/registry` 삭제 → 어드민 전용으로 이동 + 실명 6종 일반화(GDS_FLIGHT_01 등) + Airalo 가짜 ICCID/QR 발행 제거(전 스펙 BLOCKED); verify T37도 공개404+어드민 검증으로 교체). E2E #41 통과
+[x] 42. 즉시확정 허위 뱃지 → 완료 (6e / 서버 `instant_confirmed`(행 플래그+시뮬레이터+bookable) + `instant` 필터 공급사 조인 + UI 3곳(이용권 목록·상세·홈) 이행모드 기반). 직계약은 PENDING이라 뱃지 없음. E2E #42 통과
+[x] 43. TRAIN/PACKAGE 공급사 하드코딩 → 완료 (6e / 0037 `partner_id` 2종 + `loadProduct` 행별 해석(미배선은 unassigned 유지) + `mkt_trn_ktx_025` PAUSE). E2E #43 통과
+[x] 44. 포스트백 무결성 → 완료 (6e / 클릭행 매칭(UNKNOWN_CLICK 404) + 정수 금액(INVALID_AMOUNT) + 통화 allowlist 6종(INVALID_CURRENCY) + 커미션 유한·≥0; #21 테스트 실클릭으로 전환). E2E #44 통과
+[x] 45. PENDING 무기한 대기 → 완료 (6e / 24시간 SLA `sweepSupplierTimeouts` — REFUND_PENDING+홀드해제+전액환불, 환불재시도보다 먼저 실행해 동일 패스에 완결; `supplierTimeouts` 통계로 에스컬 가시화). E2E #45 통과
+[x] 46. 허위 자동화 플래그 → 완료 (6e / 0037에서 ESIM·REALTIME_INVENTORY_SYNC·AUTO_BOOKING_CONFIRMATION·SUPPLIER_API_INTEGRATION OFF+PENDING_CONTRACT; enforced 없음 확인). E2E #46 통과
+[x] 47. 클릭행 부실 기록 → 완료 (6e / CF-Connecting-IP→XFF→NULL + 도메인 allowlist(그 외 UNKNOWN) + 카탈로그 제목 해석(불가 시 NULL)). E2E #47 통과
 
 ### 운영·테스트·배포
 

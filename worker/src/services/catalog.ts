@@ -122,7 +122,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
       const t = await db.prepare("SELECT * FROM trains WHERE id = ?").bind(itemId).first<any>();
     if (!t || t.is_active === 0) throw notFound();
       return {
-        domain, itemId, unitId: t.seat_class || "STANDARD", supplierId: "unassigned_train", currency: "KRW",
+        domain, itemId, unitId: t.seat_class || "STANDARD", supplierId: t.partner_id || "unassigned_train", currency: "KRW", // #43 (0037): per-product supplier; unwired rows stay NOT_INTEGRATED
         title: `${t.train_type} ${t.train_number} ${t.departure_station}→${t.arrival_station}`,
         unitPriceMajor: Number(t.price_krw), capacity: Number(t.available_seats) || 0, maxOccupancy: null,
         freeCancellation: true, instantConfirmation: true, departureClock: t.departure_time || null,
@@ -160,7 +160,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
       const p = await db.prepare("SELECT * FROM packages WHERE id = ?").bind(itemId).first<any>();
     if (!p || p.is_active === 0) throw notFound();
       return {
-        domain, itemId, unitId: null, supplierId: "unassigned_package", currency: "KRW",
+        domain, itemId, unitId: null, supplierId: p.partner_id || "unassigned_package", currency: "KRW", // #43 (0037): per-product supplier; unwired rows stay NOT_INTEGRATED
         title: p.title, unitPriceMajor: Number(p.total_package_krw), capacity: p.daily_capacity === null || p.daily_capacity === undefined ? null : Number(p.daily_capacity), maxOccupancy: null,
         freeCancellation: false, instantConfirmation: false, departureClock: null,
       };
@@ -232,8 +232,8 @@ export function assertTicketable(domain: string, supplier: SupplierRow | null): 
 /**
  * eSIM and travel insurance sell plan listings only (`/esim/plans`,
  * `/insurance/plans`): quoting was never built for them (pricing DOMAINS has
- * 7 entries, no ESIM/INSURANCE) and the Airalo adapter is an uncontracted
- * sandbox mock. Refuse at the money gates with an explicit code instead of a
+ * 7 entries, no ESIM/INSURANCE) and no eSIM/insurance fulfilment is contracted
+ * (#41: the old mock minted fake fulfilment). Refuse at the money gates with an explicit code instead of a
  * generic INVALID_DOMAIN so clients can explain the state (2026-11-10 policy:
  * explicit unsupported, not a silent gap). Mirrors assertTicketable().
  */

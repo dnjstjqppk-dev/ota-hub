@@ -285,6 +285,20 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   if (path === "/api/v1/admin/suppliers" && method === "GET") {
     return json({ success: true, suppliers: (await db.prepare("SELECT * FROM suppliers ORDER BY product_domain, id").all()).results });
   }
+  // #41: external fulfilment capability specs. Admin-only: the public surface
+  // must not advertise vendor integrations the platform has not contracted.
+  if (path === "/api/v1/admin/suppliers/registry" && method === "GET") {
+    const { externalSupplierRegistry } = await import("../suppliers/external-adapters.ts");
+    const list = Object.values(externalSupplierRegistry).map((s) => ({
+      supplierCode: s.supplierCode,
+      supplierName: s.supplierName,
+      category: s.category,
+      contractStatus: s.contractStatus,
+      apiDocsUrl: s.apiDocsUrl,
+      supportedMethods: s.supportedMethods,
+    }));
+    return json({ success: true, suppliers: list });
+  }
   m = path.match(/^\/api\/v1\/admin\/suppliers\/([A-Za-z0-9_-]+)$/);
   if (m && method === "PATCH") {
     const b = await readJson(request);

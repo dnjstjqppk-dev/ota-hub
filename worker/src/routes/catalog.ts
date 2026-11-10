@@ -28,7 +28,13 @@ function annotate(rows: any[], map: Map<string, Bookability>, fallbackSupplier: 
     const outlink = b.reason === "EXTERNAL_LINK_ONLY" && b.outlinkPartner && r.id
       ? `/out/${b.outlinkPartner}/${encodeURIComponent(String(r.id))}${domain ? `?domain=${domain}` : ""}`
       : null;
-    return { ...r, bookable: bb.bookable, bookable_reason: bb.reason, fulfilment_mode: bb.mode, price_notice: PRICE_NOTICE, ...(outlink ? { outlink_path: outlink } : {}) };
+    // #42: "instant confirmation" is a fulfilment-mode claim, not a catalog
+    // flag: direct_contract bookings always PENDING for operator confirmation,
+    // so only the auto-confirming simulator (dev/test) earns the badge. When a
+    // real instant adapter ships, extend the adapter check here (and the
+    // instantOnly filter below) — never the row flag alone.
+    const instantConfirmed = Number(r.instant_confirmation) === 1 && b.adapter === "simulator" && bb.bookable === true;
+    return { ...r, bookable: bb.bookable, bookable_reason: bb.reason, fulfilment_mode: bb.mode, instant_confirmed: instantConfirmed, price_notice: PRICE_NOTICE, ...(outlink ? { outlink_path: outlink } : {}) };
   });
 }
 
@@ -384,7 +390,8 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
         p.push(category);
       }
       if (instantOnly) {
-        q += " AND instant_confirmation = 1";
+        // #42: mirror the annotate() rule — the row flag alone is not enough.
+        q += " AND instant_confirmation = 1 AND COALESCE((SELECT s.adapter FROM suppliers s WHERE s.id = COALESCE(NULLIF(activities.partner_id, ''), 'ptn_tour_01')), '') = 'simulator'";
       }
       if (freeCancelOnly) {
         q += " AND free_cancellation = 1";
@@ -535,18 +542,8 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       return json({ success: true, plans: calculated, duration_days: durationDays });
     }
 
-    // 14. External Supplier Registry Status: GET /api/v1/suppliers/registry
-    if (path === "/api/v1/suppliers/registry") {
-      const { externalSupplierRegistry } = await import("../suppliers/external-adapters.ts");
-      const list = Object.values(externalSupplierRegistry).map(s => ({
-        supplierCode: s.supplierCode,
-        supplierName: s.supplierName,
-        category: s.category,
-        contractStatus: s.contractStatus,
-        apiDocsUrl: s.apiDocsUrl,
-        supportedMethods: s.supportedMethods
-      }));
-      return json({ success: true, suppliers: list });
-    }
+    // 14. External supplier registry moved behind admin auth (#41):
+    // GET /api/v1/admin/suppliers/registry. The public surface must not
+    // advertise vendor integrations the platform has not contracted.
   return null;
 }

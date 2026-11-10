@@ -113,7 +113,7 @@ useHead(() => ({
                 </p>
                 <p v-else class="mt-1.5 text-2xs font-semibold text-ink-subtle">신규</p>
                 <ul class="mt-2 flex flex-wrap gap-x-2.5 gap-y-1 text-2xs font-semibold">
-                  <li v-if="Number(a.instant_confirmation)" class="flex items-center gap-0.5 text-success"><AppIcon name="bolt" :size="12" />즉시 확정</li>
+                  <li v-if="a.instant_confirmed" class="flex items-center gap-0.5 text-success"><AppIcon name="bolt" :size="12" />즉시 확정</li>
                   <li v-if="Number(a.free_cancellation)" class="flex items-center gap-0.5 text-success"><AppIcon name="check" :size="12" />무료 취소</li>
                 </ul>
                 <div class="mt-auto flex items-end justify-between pt-3">

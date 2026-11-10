@@ -418,22 +418,29 @@ test("#18: every ACTIVE marketplace row resolves a real domain item (no ghosts)"
 test("#21: duplicate affiliate postbacks (sequential + concurrent) book once", async () => {
   const secret = `e2e-secret-${rnd()}${rnd()}`;
   sql(`INSERT OR REPLACE INTO affiliate_partners_config (partner_id, name, deep_link_template, affiliate_id, secret_key, is_active) VALUES ('e2e-aff-test', 'e2e-aff', 'https://x.test/{item_id}?c={click_id}', 'E2E', '${secret}', 1)`);
-  const post = async (orderId, amount) => {
-    const payload = JSON.stringify({ partner: "e2e-aff-test", click_id: `clk_${rnd()}`, order_id: orderId, amount, currency: "KRW" });
+  // #44: conversions must reference real clicks — mint them through /out/ first.
+  const click = async () => {
+    const r = await fetch(BASE + "/api/v1/out/e2e-aff-test/room1", { redirect: "manual" });
+    assert.equal(r.status, 302);
+    return new URL(r.headers.get("location")).searchParams.get("c");
+  };
+  const post = async (orderId, amount, clickId) => {
+    const payload = JSON.stringify({ partner: "e2e-aff-test", click_id: clickId, order_id: orderId, amount, currency: "KRW" });
     const ts = Math.floor(Date.now() / 1000);
     const sig = createHmac("sha256", secret).update(`${ts}.${payload}`).digest("hex");
     const r = await fetch(BASE + "/api/v1/webhooks/postback", { method: "POST", headers: { "Content-Type": "application/json", "X-Signature": sig, "X-Timestamp": String(ts) }, body: payload });
     return { status: r.status, data: await r.json() };
   };
   const o1 = `ord_${rnd()}`;
-  const r1 = await post(o1, 100000);
+  const r1 = await post(o1, 100000, await click());
   assert.equal(r1.status, 200, JSON.stringify(r1.data));
   assert.equal(r1.data.duplicate, false);
-  const r2 = await post(o1, 100000);
+  const r2 = await post(o1, 100000, await click());
   assert.equal(r2.status, 200);
   assert.equal(r2.data.duplicate, true);
   const o2 = `ord_${rnd()}`;
-  const [c1, c2] = await Promise.all([post(o2, 50000), post(o2, 50000)]);
+  const [k1, k2] = [await click(), await click()];
+  const [c1, c2] = await Promise.all([post(o2, 50000, k1), post(o2, 50000, k2)]);
   assert.equal(c1.status, 200);
   assert.equal(c2.status, 200);
   assert.equal([c1.data.duplicate, c2.data.duplicate].filter(Boolean).length, 1, "exactly one concurrent winner");
@@ -1882,7 +1889,7 @@ test("passport wallet: encrypted at rest, masked in reads, owner-scoped", async 
 test("surface smoke: read-only endpoints answer; unregistered affiliate surface stays safe; 410 stubs hold", async () => {
   assert.equal((await api("GET", "/api/v1/feature-flags")).status, 200);
   assert.equal((await api("GET", "/api/v1/admin/feature-flags", { token: ADMIN })).status, 200);
-  assert.equal((await api("GET", "/api/v1/suppliers/registry")).status, 200);
+  assert.equal((await api("GET", "/api/v1/suppliers/registry")).status, 404, "public registry removed (#41)");
   assert.equal((await api("GET", "/api/v1/esim/plans")).status, 200);
   assert.equal((await api("GET", "/api/v1/insurance/plans")).status, 200);
   assert.equal((await api("GET", "/api/v1/payments/config")).data.success, true);
@@ -1988,8 +1995,11 @@ test("quote: ESIM/INSURANCE rejected with explicit 409; plan listings stay live"
   }
   assert.equal((await api("GET", "/api/v1/esim/plans")).status, 200);
   assert.equal((await api("GET", "/api/v1/insurance/plans?days=7")).status, 200);
-  const reg = (await api("GET", "/api/v1/suppliers/registry")).data.suppliers;
-  assert.equal(reg.find((s) => s.supplierCode === "AIRALO_ESIM").contractStatus, "SANDBOX_MOCK");
+  const reg = (await api("GET", "/api/v1/admin/suppliers/registry", { token: ADMIN })).data.suppliers;
+  assert.ok(reg.length >= 6, "six capability specs listed for admins");
+  assert.ok(reg.every((s) => s.contractStatus === "PENDING_CONTRACT"), "nothing contracted (#41)");
+  assert.ok(!/Amadeus|Agoda|Viator|Airalo|Chubb|Rentalcars/.test(JSON.stringify(reg)), "no vendor names (#41)");
+  assert.ok(reg.some((s) => s.supplierCode === "ESIM_GLOBAL_01"), "generic eSIM capability listed");
 });
 
 test("p0 money: platform-failure refunds restore coins; fee-cancel voids settlement", async () => {
@@ -2322,4 +2332,190 @@ test("B6: customer receipt exposes recorded payments, refunds, and totals", asyn
   assert.equal(r.data.receipt.payments[0].amountMinor, b.totalMinor);
   assert.ok(r.data.receipt.issuedAt);
   assert.equal((await api("GET", `/api/v1/bookings/${b.id}/receipt`, { token: A.token })).status, 403);
+});
+
+// ---------------------------------------------------------------------------
+// Phase 6e (P1 #38-47): fulfilment truth.
+// ---------------------------------------------------------------------------
+
+test("#38: calendar closed after quote blocks booking; closed after booking blocks payment", async () => {
+  const U = await register("cal38");
+  const close = (id, date) => sql(`INSERT INTO partner_inventory (id, partner_id, domain_type, item_id, unit_id, service_date, allocated_units, is_closed) VALUES ('${id}', 'ptn_htl_01', 'HOTEL', 'htl_seoul_01', 'rm_seoul_01_dlx', '${date}', 5, 1)`);
+  // Booking-time recheck: quote passes, partner closes the date, booking refuses.
+  const q1 = (await quote(U.token, { startDate: day(200), endDate: day(201) })).data.quote;
+  assert.ok(q1?.quoteId, "quote before close");
+  const pin1 = `pinv_${rnd()}`;
+  try {
+    close(pin1, day(200));
+    const blocked = await book(U.token, q1);
+    assert.equal(blocked.status, 409, JSON.stringify(blocked.data));
+    assert.equal(blocked.data.code, "SOLD_OUT");
+  } finally {
+    sql(`DELETE FROM partner_inventory WHERE id = '${pin1}'`);
+  }
+  // Payment-time revalidation: book passes, partner closes, payment refuses + expires.
+  const q2 = (await quote(U.token, { startDate: day(202), endDate: day(203) })).data.quote;
+  const b2 = (await book(U.token, q2)).data.booking;
+  assert.equal(b2.status, "AWAITING_PAYMENT");
+  const pin2 = `pinv_${rnd()}`;
+  try {
+    close(pin2, day(202));
+    const denied = await pay(U.token, b2);
+    assert.equal(denied.status, 409, JSON.stringify(denied.data));
+    assert.equal(denied.data.code, "SOLD_OUT");
+    assert.equal((await api("GET", `/api/v1/bookings/${b2.id}`, { token: U.token })).data.booking.status, "EXPIRED");
+    assert.equal(sql(`SELECT id FROM inventory_holds WHERE booking_id = '${b2.id}' AND status != 'RELEASED'`).length, 0, "holds released");
+  } finally {
+    sql(`DELETE FROM partner_inventory WHERE id = '${pin2}'`);
+  }
+});
+
+test("#39/#40: unsellable-domain 1P rows are paused out of the public catalog", async () => {
+  const items = (await api("GET", "/api/v1/marketplace/catalog?model=1P")).data.items;
+  for (const d of ["ESIM", "INSURANCE", "FLIGHT", "TRAIN"]) {
+    assert.ok(!items.some((it) => it.domain_type === d), `no ${d} in public 1P catalog`);
+  }
+  assert.equal((await api("GET", "/api/v1/marketplace/catalog?domain=ESIM")).data.items.length, 0);
+  // Rows survive as PAUSED so settlement attribution (no status filter) still resolves.
+  const rows = sql("SELECT id, status FROM marketplace_catalog_items WHERE id IN ('mkt_esim_jp_01','mkt_ins_standard','mkt_flt_ke723','mkt_trn_ktx_025')");
+  assert.equal(rows.length, 4);
+  assert.ok(rows.every((r) => r.status === "PAUSED"), JSON.stringify(rows));
+  // Flight search annotates bookability so the UI fails closed (#39 CTA gate).
+  const fl = (await api("GET", "/api/v1/flights?limit=5")).data.data;
+  assert.ok(fl.length >= 1, "seeded flights listed");
+  assert.ok(fl.every((f) => typeof f.bookable === "boolean"), "every flight carries bookable");
+});
+
+test("#41: supplier registry is admin-only", async () => {
+  assert.equal((await api("GET", "/api/v1/admin/suppliers/registry")).status, 401);
+  assert.equal((await api("GET", "/api/v1/admin/suppliers/registry", { token: A.token })).status, 403);
+  const r = await api("GET", "/api/v1/admin/suppliers/registry", { token: ADMIN });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.ok(r.data.suppliers.length >= 6);
+});
+
+test("#42: instant-confirm badge follows fulfilment mode, not the row flag", async () => {
+  const tag = `E2EINSTANT${rnd()}`.toUpperCase();
+  const aid = `act_${rnd()}`;
+  sql(`INSERT INTO activities (id, partner_id, title, category, city, country, price_krw, instant_confirmation, is_active) VALUES ('${aid}', 'ptn_tour_01', '${tag}', 'TICKET', 'Seoul', 'KR', 10000, 1, 1)`);
+  const before = sql("SELECT adapter, integration_status FROM suppliers WHERE id = 'ptn_tour_01'")[0];
+  try {
+    // Dev simulator auto-confirms: badge on, filter matches.
+    let hits = (await api("GET", `/api/v1/activities?q=${tag}`)).data.data;
+    assert.equal(hits.length, 1, JSON.stringify(hits));
+    assert.equal(hits[0].instant_confirmed, true);
+    assert.equal((await api("GET", "/api/v1/activities?instant=true")).data.data.some((a) => a.id === aid), true);
+    // Direct-contract always PENDING: badge off, filter excludes. Flip through
+    // the admin API (SANDBOX_VERIFIED needs no contract) so the bookability
+    // cache invalidates in the same call.
+    const flip = await api("PATCH", "/api/v1/admin/suppliers/ptn_tour_01", { token: ADMIN, body: { adapter: "direct_contract", integrationStatus: "SANDBOX_VERIFIED" } });
+    assert.equal(flip.status, 200, JSON.stringify(flip.data));
+    hits = (await api("GET", `/api/v1/activities?q=${tag}`)).data.data;
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0].instant_confirmed, false, "direct-contract never instant");
+    assert.equal((await api("GET", "/api/v1/activities?instant=true")).data.data.some((a) => a.id === aid), false);
+  } finally {
+    await api("PATCH", "/api/v1/admin/suppliers/ptn_tour_01", { token: ADMIN, body: { adapter: before.adapter, integrationStatus: before.integration_status, notes: "e2e #42 restore" } });
+    sql(`DELETE FROM activities WHERE id = '${aid}'`);
+  }
+});
+
+test("#43: trains/packages resolve per-product suppliers; unwired rows cannot sell", async () => {
+  const U = await register("sup43");
+  // Unwired: the shared unassigned_* placeholder refuses.
+  const t0 = await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "TRAIN", itemId: "trn_ktx_025", startDate: day(210), travelers: { adults: 1 } } });
+  assert.equal(t0.status, 409, JSON.stringify(t0.data));
+  assert.equal(t0.data.code, "NOT_DIRECTLY_BOOKABLE");
+  const p0 = await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "PACKAGE", itemId: "pkg_osaka_3d2n", startDate: day(210), travelers: { adults: 2 } } });
+  assert.equal(p0.status, 409, JSON.stringify(p0.data));
+  // Wire a scratch simulator supplier: per-product quotes work.
+  const sid = `e2e_sup_${rnd()}`;
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${sid}', 'E2E', 'ALL', 'simulator', 'NOT_INTEGRATED', 'AGENCY', 9000)`);
+  try {
+    sql(`UPDATE trains SET partner_id = '${sid}' WHERE id = 'trn_ktx_025'`);
+    sql(`UPDATE packages SET partner_id = '${sid}' WHERE id = 'pkg_osaka_3d2n'`);
+    const t1 = await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "TRAIN", itemId: "trn_ktx_025", startDate: day(211), travelers: { adults: 1 } } });
+    assert.equal(t1.status, 201, JSON.stringify(t1.data));
+    const p1 = await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "PACKAGE", itemId: "pkg_osaka_3d2n", startDate: day(211), travelers: { adults: 2 } } });
+    assert.equal(p1.status, 201, JSON.stringify(p1.data));
+  } finally {
+    sql("UPDATE trains SET partner_id = NULL WHERE id = 'trn_ktx_025'");
+    sql("UPDATE packages SET partner_id = NULL WHERE id = 'pkg_osaka_3d2n'");
+    sql(`DELETE FROM suppliers WHERE id = '${sid}'`);
+  }
+});
+
+test("#44: postback requires a real click, integer amount, allowlisted currency", async () => {
+  const secret = `e2e-secret44-${rnd()}${rnd()}`;
+  sql(`INSERT OR REPLACE INTO affiliate_partners_config (partner_id, name, deep_link_template, affiliate_id, secret_key, is_active) VALUES ('e2e-aff-44', 'e2e-44', 'https://x.test/{item_id}?c={click_id}', 'E2E', '${secret}', 1)`);
+  try {
+    const click = await fetch(BASE + "/api/v1/out/e2e-aff-44/item9?domain=HOTEL", { redirect: "manual" });
+    assert.equal(click.status, 302);
+    const clickId = new URL(click.headers.get("location")).searchParams.get("c");
+    const post = async (payload) => {
+      const raw = JSON.stringify({ partner: "e2e-aff-44", ...payload });
+      const ts = String(Math.floor(Date.now() / 1000));
+      const sig = createHmac("sha256", secret).update(`${ts}.${raw}`).digest("hex");
+      const r = await fetch(BASE + "/api/v1/webhooks/postback", { method: "POST", headers: { "Content-Type": "application/json", "X-Signature": sig, "X-Timestamp": ts }, body: raw });
+      return { status: r.status, data: await r.json() };
+    };
+    assert.equal((await post({ click_id: `clk_nope_${rnd()}`, order_id: `o_${rnd()}`, amount: 1000 })).data.code, "UNKNOWN_CLICK");
+    assert.equal((await post({ click_id: clickId, order_id: `o_${rnd()}`, amount: 19.99 })).data.code, "INVALID_AMOUNT");
+    assert.equal((await post({ click_id: clickId, order_id: `o_${rnd()}`, amount: 1000, currency: "XXX" })).data.code, "INVALID_CURRENCY");
+    const ok = await post({ click_id: clickId, order_id: `o_${rnd()}`, amount: 1000, currency: "krw" });
+    assert.equal(ok.status, 200, JSON.stringify(ok.data));
+    assert.equal(sql(`SELECT currency FROM affiliate_conversions WHERE click_id = '${clickId}' ORDER BY created_at DESC LIMIT 1`)[0].currency, "KRW");
+  } finally {
+    sql("DELETE FROM affiliate_conversions WHERE partner_name = 'e2e-aff-44'");
+    sql("DELETE FROM affiliate_clicks WHERE partner_name = 'e2e-aff-44'");
+    sql("DELETE FROM affiliate_partners_config WHERE partner_id = 'e2e-aff-44'");
+  }
+});
+
+test("#45: supplier-confirm timeout auto-refunds via maintenance", async () => {
+  const F = await register("t45");
+  const q = (await quote(F.token)).data.quote;
+  const b = (await book(F.token, q, { simulation: { supplier: "pending" } })).data.booking;
+  const p = await pay(F.token, b);
+  assert.equal(p.data.booking.status, "SUPPLIER_BOOKING_PENDING", JSON.stringify(p.data));
+  sql(`UPDATE bookings SET updated_at = '2020-01-01T00:00:00.000Z' WHERE id = '${b.id}'`);
+  const stats = (await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN })).data.stats;
+  assert.ok(stats.supplierTimeouts >= 1, JSON.stringify(stats));
+  assert.equal((await api("GET", `/api/v1/bookings/${b.id}`, { token: F.token })).data.booking.status, "REFUNDED");
+  assert.equal(sql(`SELECT status FROM refunds WHERE booking_id = '${b.id}' ORDER BY created_at DESC LIMIT 1`)[0].status, "SUCCEEDED");
+  assert.equal(sql(`SELECT id FROM inventory_holds WHERE booking_id = '${b.id}' AND status != 'RELEASED'`).length, 0, "holds released");
+});
+
+test("#46: unbuilt automation flags are off + pending-contract", async () => {
+  const reg = (await api("GET", "/api/v1/feature-flags")).data.registry;
+  for (const k of ["ESIM", "REALTIME_INVENTORY_SYNC", "AUTO_BOOKING_CONFIRMATION", "SUPPLIER_API_INTEGRATION"]) {
+    const f = reg.find((x) => x.key === k);
+    assert.ok(f, k);
+    assert.equal(f.is_enabled, false, k);
+    assert.equal(f.external_contract_status, "PENDING_CONTRACT", k);
+  }
+});
+
+test("#47: click rows carry real IP, allowlisted domain, resolved title", async () => {
+  const secret = `e2e-secret47-${rnd()}${rnd()}`;
+  sql(`INSERT OR REPLACE INTO affiliate_partners_config (partner_id, name, deep_link_template, affiliate_id, secret_key, is_active) VALUES ('e2e-aff-47', 'e2e-47', 'https://x.test/{item_id}?c={click_id}', 'E2E', '${secret}', 1)`);
+  try {
+    const act = sql("SELECT id, title FROM activities WHERE is_active = 1 LIMIT 1")[0];
+    const r1 = await fetch(BASE + `/api/v1/out/e2e-aff-47/${act.id}?domain=ACTIVITY`, { redirect: "manual", headers: { "CF-Connecting-IP": "203.0.113.7" } });
+    assert.equal(r1.status, 302);
+    const c1 = new URL(r1.headers.get("location")).searchParams.get("c");
+    const row = sql(`SELECT domain_type, item_title, ip_address FROM affiliate_clicks WHERE click_id = '${c1}'`)[0];
+    assert.equal(row.domain_type, "ACTIVITY");
+    assert.equal(row.item_title, act.title);
+    assert.equal(row.ip_address, "203.0.113.7");
+    const r2 = await fetch(BASE + "/api/v1/out/e2e-aff-47/whatever?domain=BOGUS", { redirect: "manual" });
+    assert.equal(r2.status, 302);
+    const c2 = new URL(r2.headers.get("location")).searchParams.get("c");
+    const row2 = sql(`SELECT domain_type, item_title FROM affiliate_clicks WHERE click_id = '${c2}'`)[0];
+    assert.equal(row2.domain_type, "UNKNOWN");
+    assert.equal(row2.item_title, null);
+  } finally {
+    sql("DELETE FROM affiliate_clicks WHERE partner_name = 'e2e-aff-47'");
+    sql("DELETE FROM affiliate_partners_config WHERE partner_id = 'e2e-aff-47'");
+  }
 });

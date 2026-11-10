@@ -1,13 +1,17 @@
 /**
- * External Supplier GDS/NDC/Bed-Bank Adapter Specifications
- * ==========================================================
- * Compliant with PO Directive Section 2 & 8:
- * - Implements real API request/response structures and data contracts.
- * - Distinguishes between LIVE_CONTRACT_ACTIVE and BLOCKED_PENDING_CONTRACT.
- * - Safely returns structured errors when live supplier credentials are not configured.
+ * External supplier capability specifications.
+ * ============================================
+ * Admin-only reference: which fulfilment capabilities the platform has
+ * actually contracted (none, today) and which data contracts a future
+ * integration must implement. No vendor names appear here — naming a vendor
+ * would imply a partnership that does not exist (#41).
+ *
+ * Every spec reports BLOCKED_PENDING_CONTRACT. In particular nothing here
+ * may fabricate fulfilment artifacts (the old eSIM mock minted fake ICCIDs
+ * and QR codes; that is gone).
  */
 
-export type ContractStatus = 'ACTIVE' | 'PENDING_CONTRACT' | 'SANDBOX_MOCK';
+export type ContractStatus = 'ACTIVE' | 'PENDING_CONTRACT';
 
 export interface ExternalAdapterSpec {
   supplierCode: string;
@@ -21,181 +25,129 @@ export interface ExternalAdapterSpec {
   cancelOrder(orderId: string, reason: string): Promise<any>;
 }
 
-// 1. Amadeus GDS / NDC Flight Adapter
-export const amadeusFlightAdapter: ExternalAdapterSpec = {
-  supplierCode: 'AMADEUS_GDS',
-  supplierName: 'Amadeus Global Travel Network',
+function blocked(code: string, message: string) {
+  return { status: 'BLOCKED_PENDING_CONTRACT', code, message };
+}
+
+// 1. GDS / NDC flight fulfilment (no contract: no ticketing exists)
+export const gdsFlightAdapter: ExternalAdapterSpec = {
+  supplierCode: 'GDS_FLIGHT_01',
+  supplierName: 'GDS 항공 공급사 (미계약)',
   category: 'FLIGHT',
   contractStatus: 'PENDING_CONTRACT',
   apiDocsUrl: 'https://developers.amadeus.com/self-service/category/air',
   supportedMethods: ['v2/shopping/flight-offers', 'v1/booking/flight-orders', 'v1/booking/flight-orders/cancellation'],
   async search(params: any) {
-    return {
-      status: 'BLOCKED_PENDING_CONTRACT',
-      message: 'Amadeus GDS 글로벌 정식 운영 계약 체결 대기 중입니다. (규격 및 어댑터 매핑 완료)',
-      query: params,
-      fallbackMode: 'LOCAL_INVENTORY'
-    };
+    return { ...blocked('GDS_CONTRACT_REQUIRED', 'GDS/NDC 항공 공급 계약이 없어 실시간 요금 조회·발권을 할 수 없습니다.'), query: params };
   },
   async createOrder(payload: any) {
-    return {
-      status: 'BLOCKED_PENDING_CONTRACT',
-      code: 'AMADEUS_CONTRACT_REQUIRED',
-      message: 'Amadeus PNR 자동 생성 및 실발권은 IATA/GDS 운영사 계약 인가가 필요합니다.',
-      payload
-    };
+    return { ...blocked('GDS_CONTRACT_REQUIRED', 'GDS/NDC 항공 공급 계약이 없어 PNR 생성·발권을 할 수 없습니다.'), payload };
   },
   async cancelOrder(orderId: string, reason: string) {
-    return {
-      status: 'BLOCKED_PENDING_CONTRACT',
-      orderId,
-      reason
-    };
+    return { ...blocked('GDS_CONTRACT_REQUIRED', 'GDS/NDC 항공 공급 계약이 없어 취소 연동을 할 수 없습니다.'), orderId, reason };
   }
 };
 
-// 2. Agoda YCS / Hotelbeds Adapter
-export const agodaHotelAdapter: ExternalAdapterSpec = {
-  supplierCode: 'AGODA_YCS',
-  supplierName: 'Agoda Strategic Partner Bed-Bank',
+// 2. Bed-bank hotel fulfilment (no contract)
+export const bedbankHotelAdapter: ExternalAdapterSpec = {
+  supplierCode: 'BEDBANK_HOTEL_01',
+  supplierName: '베드뱅크 호텔 공급사 (미계약)',
   category: 'HOTEL',
   contractStatus: 'PENDING_CONTRACT',
   apiDocsUrl: 'https://partners.agoda.com/api',
   supportedMethods: ['hotels/availability', 'bookings/create', 'bookings/cancel'],
   async search(params: any) {
-    return {
-      status: 'BLOCKED_PENDING_CONTRACT',
-      message: 'Agoda Partner B2B API 정식 키 발급 대기 중입니다.',
-      params
-    };
+    return { ...blocked('BEDBANK_CONTRACT_REQUIRED', '베드뱅크 공급 계약이 없어 실시간 객실 재고 조회를 할 수 없습니다.'), params };
   },
   async createOrder(payload: any) {
-    return {
-      status: 'BLOCKED_PENDING_CONTRACT',
-      code: 'AGODA_KEY_REQUIRED',
-      message: 'Agoda Bed-Bank 실시간 객실 확정은 공급사 정산 계약 완료 후 활성화됩니다.'
-    };
+    return { ...blocked('BEDBANK_CONTRACT_REQUIRED', '베드뱅크 공급 계약이 없어 실시간 객실 확정을 할 수 없습니다.'), payload };
   },
   async cancelOrder(orderId: string) {
-    return { status: 'BLOCKED_PENDING_CONTRACT', orderId };
+    return { ...blocked('BEDBANK_CONTRACT_REQUIRED', '베드뱅크 공급 계약이 없어 취소 연동을 할 수 없습니다.'), orderId };
   }
 };
 
-// 3. Viator / Tripadvisor Activity Adapter
-export const viatorActivityAdapter: ExternalAdapterSpec = {
-  supplierCode: 'VIATOR_API',
-  supplierName: 'Viator / Tripadvisor Experiences',
+// 3. Global activity fulfilment (no contract)
+export const globalActivityAdapter: ExternalAdapterSpec = {
+  supplierCode: 'OTA_ACTIVITY_01',
+  supplierName: '글로벌 액티비티 공급사 (미계약)',
   category: 'ACTIVITY',
   contractStatus: 'PENDING_CONTRACT',
   apiDocsUrl: 'https://docs.viator.com/partner-api',
   supportedMethods: ['products/search', 'availability/check', 'bookings/book', 'bookings/cancel'],
   async search(params: any) {
-    return {
-      status: 'BLOCKED_PENDING_CONTRACT',
-      message: 'Viator 글로벌 어필리에이트/공급사 API 계약 대기 중입니다.',
-      params
-    };
+    return { ...blocked('ACTIVITY_CONTRACT_REQUIRED', '액티비티 공급 계약이 없어 실시간 상품 조회를 할 수 없습니다.'), params };
   },
   async createOrder(payload: any) {
-    return {
-      status: 'BLOCKED_PENDING_CONTRACT',
-      code: 'VIATOR_CONTRACT_REQUIRED',
-      message: 'Viator 티켓/바우처 실시간 발권 연동은 공급사 심사 후 활성화됩니다.'
-    };
+    return { ...blocked('ACTIVITY_CONTRACT_REQUIRED', '액티비티 공급 계약이 없어 실시간 바우처 발권을 할 수 없습니다.'), payload };
   },
   async cancelOrder(orderId: string) {
-    return { status: 'BLOCKED_PENDING_CONTRACT', orderId };
+    return { ...blocked('ACTIVITY_CONTRACT_REQUIRED', '액티비티 공급 계약이 없어 취소 연동을 할 수 없습니다.'), orderId };
   }
 };
 
-// 4. Rentalcars / Booking.com Transport Adapter
-export const rentalcarsAdapter: ExternalAdapterSpec = {
-  supplierCode: 'RENTALCARS_CONNECT',
-  supplierName: 'Rentalcars Connect (Booking Holdings)',
+// 4. Global car-rental fulfilment (no contract)
+export const globalCarAdapter: ExternalAdapterSpec = {
+  supplierCode: 'CAR_GLOBAL_01',
+  supplierName: '글로벌 렌터카 공급사 (미계약)',
   category: 'CAR',
   contractStatus: 'PENDING_CONTRACT',
   apiDocsUrl: 'https://www.rentalcars.com/affiliates',
   supportedMethods: ['search/vehicles', 'bookings/quote', 'bookings/confirm'],
   async search(params: any) {
-    return {
-      status: 'BLOCKED_PENDING_CONTRACT',
-      message: 'Rentalcars Connect 글로벌 B2B 공급사 계약 대기 중입니다.',
-      params
-    };
+    return { ...blocked('CAR_CONTRACT_REQUIRED', '렌터카 공급 계약이 없어 실시간 차량 조회를 할 수 없습니다.'), params };
   },
   async createOrder(payload: any) {
-    return {
-      status: 'BLOCKED_PENDING_CONTRACT',
-      code: 'RENTALCARS_KEY_REQUIRED',
-      message: '해외 렌터카 실시간 공급 연동은 정식 파트너사 등록 후 활성화됩니다.'
-    };
+    return { ...blocked('CAR_CONTRACT_REQUIRED', '렌터카 공급 계약이 없어 실시간 예약을 할 수 없습니다.'), payload };
   },
   async cancelOrder(orderId: string) {
-    return { status: 'BLOCKED_PENDING_CONTRACT', orderId };
+    return { ...blocked('CAR_CONTRACT_REQUIRED', '렌터카 공급 계약이 없어 취소 연동을 할 수 없습니다.'), orderId };
   }
 };
 
-// 5. Airalo eSIM Adapter
-export const airaloEsimAdapter: ExternalAdapterSpec = {
-  supplierCode: 'AIRALO_ESIM',
-  supplierName: 'Airalo Global eSIM Platform',
+// 5. eSIM fulfilment (no contract — listings only, never issuance)
+export const globalEsimAdapter: ExternalAdapterSpec = {
+  supplierCode: 'ESIM_GLOBAL_01',
+  supplierName: '글로벌 eSIM 공급사 (미계약)',
   category: 'ESIM',
-  contractStatus: 'SANDBOX_MOCK',
+  contractStatus: 'PENDING_CONTRACT',
   apiDocsUrl: 'https://partners.airalo.com/api',
   supportedMethods: ['packages/list', 'orders/create', 'esim/status'],
   async search(params: any) {
-    return {
-      status: 'ACTIVE_SANDBOX',
-      message: 'Airalo eSIM 데이터 패키지 샌드박스 연동 활성화 상태입니다.',
-      params
-    };
+    return { ...blocked('ESIM_CONTRACT_REQUIRED', 'eSIM 공급 계약이 없어 개통 연동을 할 수 없습니다. 요금제 조회만 제공합니다.'), params };
   },
   async createOrder(payload: any) {
-    return {
-      status: 'CONFIRMED',
-      iccid: `890141032111${Date.now().toString().slice(-7)}`,
-      qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=LPA:1$smdp.airalo.com$TEST-VOUCHER',
-      matchingId: `AIRALO-${Date.now()}`
-    };
+    return { ...blocked('ESIM_CONTRACT_REQUIRED', 'eSIM 공급 계약이 없어 개통·QR 발급을 할 수 없습니다.'), payload };
   },
   async cancelOrder(orderId: string) {
-    return { status: 'CANCELLED', orderId };
+    return { ...blocked('ESIM_CONTRACT_REQUIRED', 'eSIM 공급 계약이 없어 취소 연동을 할 수 없습니다.'), orderId };
   }
 };
 
-// 6. Chubb Travel Insurance Adapter
-export const chubbInsuranceAdapter: ExternalAdapterSpec = {
-  supplierCode: 'CHUBB_INSURANCE',
-  supplierName: 'Chubb Overseas Travel Insurance',
+// 6. Travel-insurance fulfilment (no contract — listings only, never issuance)
+export const travelInsuranceAdapter: ExternalAdapterSpec = {
+  supplierCode: 'INSURANCE_01',
+  supplierName: '여행자보험 공급사 (미계약)',
   category: 'INSURANCE',
   contractStatus: 'PENDING_CONTRACT',
   apiDocsUrl: 'https://www.chubb.com/kr-kr/corporate-partners.html',
   supportedMethods: ['policy/quote', 'policy/issue', 'policy/endorsement', 'policy/cancel'],
   async search(params: any) {
-    return {
-      status: 'BLOCKED_PENDING_CONTRACT',
-      message: '에이스손해보험(Chubb) 단체여행보험 제휴 심사 진행 중입니다.',
-      params
-    };
+    return { ...blocked('INSURANCE_CONTRACT_REQUIRED', '여행자보험 제휴가 없어 실시간 견적을 할 수 없습니다. 플랜 조회만 제공합니다.'), params };
   },
   async createOrder(payload: any) {
-    return {
-      status: 'BLOCKED_PENDING_CONTRACT',
-      code: 'CHUBB_UNDERWRITING_REQUIRED',
-      message: '여행자보험 실증권 발행은 손해보험협회 대리점 등록 및 승인 후 활성화됩니다.'
-    };
+    return { ...blocked('INSURANCE_CONTRACT_REQUIRED', '여행자보험 제휴가 없어 실증권 발행을 할 수 없습니다.'), payload };
   },
   async cancelOrder(orderId: string) {
-    return { status: 'BLOCKED_PENDING_CONTRACT', orderId };
+    return { ...blocked('INSURANCE_CONTRACT_REQUIRED', '여행자보험 제휴가 없어 취소 연동을 할 수 없습니다.'), orderId };
   }
 };
 
 export const externalSupplierRegistry: Record<string, ExternalAdapterSpec> = {
-  AMADEUS_GDS: amadeusFlightAdapter,
-  AGODA_YCS: agodaHotelAdapter,
-  VIATOR_API: viatorActivityAdapter,
-  RENTALCARS_CONNECT: rentalcarsAdapter,
-  AIRALO_ESIM: airaloEsimAdapter,
-  CHUBB_INSURANCE: chubbInsuranceAdapter
+  GDS_FLIGHT_01: gdsFlightAdapter,
+  BEDBANK_HOTEL_01: bedbankHotelAdapter,
+  OTA_ACTIVITY_01: globalActivityAdapter,
+  CAR_GLOBAL_01: globalCarAdapter,
+  ESIM_GLOBAL_01: globalEsimAdapter,
+  INSURANCE_01: travelInsuranceAdapter
 };
-

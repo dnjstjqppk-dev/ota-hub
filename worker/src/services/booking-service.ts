@@ -316,6 +316,10 @@ function nightlyResolver(map: Map<string, number>): NightlyRateFn {
 }
 
 const ACTIVE_HOLD_SUM = "SELECT COALESCE(SUM(quantity), 0) FROM inventory_holds WHERE item_id = ? AND unit_key = ? AND service_date = ? AND (status = 'COMMITTED' OR (status = 'HELD' AND expires_at > ?))";
+// #38: partner-calendar allotment for one (item, unit, date): exact unit
+// first, then the "default" row — the same precedence availableUnits() uses.
+// Closed dates yield 0; no row yields NULL so callers COALESCE to catalog capacity.
+const CALENDAR_CAP_SUM = "SELECT CASE WHEN is_closed = 1 THEN 0 ELSE allocated_units END FROM partner_inventory WHERE item_id = ? AND service_date = ? AND (unit_id = ? OR unit_id = 'default') ORDER BY CASE WHEN unit_id = ? THEN 0 ELSE 1 END LIMIT 1";
 
 async function availableUnits(env: Env, itemId: string, unitKey: string, date: string, capacity: number): Promise<number> {
   const r = await env.DB.prepare(`SELECT (${ACTIVE_HOLD_SUM}) AS used`).bind(itemId, unitKey, date, nowIso()).first<{ used: number }>();
@@ -328,7 +332,10 @@ async function availableUnits(env: Env, itemId: string, unitKey: string, date: s
      AND (unit_id = ? OR unit_id = 'default') ORDER BY CASE WHEN unit_id = ? THEN 0 ELSE 1 END LIMIT 1`,
   ).bind(itemId, date, unitKey, unitKey).first<{ allocated_units: number; is_closed: number }>();
   if (ov) {
-    if (Number(ov.is_closed) === 1) return 0;
+    // Closed dates read as fully consumed: negative while holds exist, so a
+    // revalidation that adds back its own holds still fails (#38). Quote and
+    // booking checks (`avail < qty`, qty >= 1) behave exactly as before.
+    if (Number(ov.is_closed) === 1) return -used;
     return Number(ov.allocated_units) - used;
   }
   return capacity - used;
@@ -658,6 +665,16 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
     await env.DB.prepare("UPDATE quotes SET status = 'EXPIRED' WHERE id = ?").bind(quote.id).run();
     throw new HttpError(409, "PRICE_CHANGED", "가격이 변경되었습니다. 변경된 금액을 확인해주세요.", { previousTotalMinor: quote.total_minor, newTotalMinor: freshCashDue });
   }
+  // #38: the quote-time availability check is stale by now — the partner may
+  // have closed the date or cut the allotment since. Re-check against the
+  // live calendar BEFORE consuming coins/coupons; the guarded hold INSERT
+  // below stays as the race backstop for concurrent bookings.
+  const recheckQty = holdQuantity(quote.domain_type, params);
+  for (const t of holdTargets(quote.domain_type, product, inbound, { serviceStart: quote.service_start, serviceEnd: quote.service_end, legs: fresh.legs })) {
+    if ((await availableUnits(env, t.itemId, t.unitKey, t.date, t.capacity)) < recheckQty) {
+      throw new HttpError(409, "SOLD_OUT", `${t.date} 일정의 잔여 재고가 부족합니다.`);
+    }
+  }
   const entity = await activeEntity(env);
   if (!entity) throw new HttpError(503, "SALES_NOT_ENABLED", "판매 주체(사업자) 정보가 활성화되지 않았습니다.");
 
@@ -759,12 +776,13 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
     );
   }
   const qty = holdQuantity(quote.domain_type, params);
-  for (const t of holdTargets(quote.domain_type, product, inbound, { serviceStart: quote.service_start, serviceEnd: quote.service_end, legs: fresh.legs })) {
+  const targets = holdTargets(quote.domain_type, product, inbound, { serviceStart: quote.service_start, serviceEnd: quote.service_end, legs: fresh.legs });
+  for (const t of targets) {
     stmts.push(
       db.prepare(
         `INSERT INTO inventory_holds (id, booking_id, domain_type, item_id, unit_key, service_date, quantity, status, expires_at)
-         SELECT ?, ?, ?, ?, ?, ?, CASE WHEN ? - (${ACTIVE_HOLD_SUM}) >= ? THEN ? ELSE 0 END, 'HELD', ?`,
-      ).bind(newId("hld"), id, quote.domain_type, t.itemId, t.unitKey, t.date, t.capacity, t.itemId, t.unitKey, t.date, nowIso(), qty, qty, lockExpires),
+         SELECT ?, ?, ?, ?, ?, ?, CASE WHEN COALESCE((${CALENDAR_CAP_SUM}), ?) - (${ACTIVE_HOLD_SUM}) >= ? THEN ? ELSE 0 END, 'HELD', ?`,
+      ).bind(newId("hld"), id, quote.domain_type, t.itemId, t.unitKey, t.date, t.itemId, t.date, t.unitKey, t.unitKey, t.capacity, t.itemId, t.unitKey, t.date, nowIso(), qty, qty, lockExpires),
     );
   }
   try {
@@ -815,6 +833,20 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
   if (b.inventory_lock_expires_at <= nowIso()) {
     await expireBooking(env, b, "PAYMENT_WINDOW_ELAPSED");
     throw new HttpError(409, "PAYMENT_WINDOW_EXPIRED", "결제 가능 시간이 지났습니다. 다시 예약해주세요.");
+  }
+  // #38: the partner may have closed the date or cut the allotment after the
+  // booking was made — never capture money for inventory that no longer
+  // exists. Own HELD rows count as used inside availableUnits, so a revoked
+  // calendar reads strictly negative here.
+  const heldRows = await env.DB.prepare("SELECT item_id, unit_key, service_date, quantity FROM inventory_holds WHERE booking_id = ? AND status = 'HELD'").bind(b.id).all<{ item_id: string; unit_key: string; service_date: string; quantity: number }>();
+  for (const h of heldRows.results || []) {
+    const heldProduct = await loadProduct(env, b.domain_type, h.item_id, h.unit_key === "default" ? null : h.unit_key).catch(() => null);
+    if (!heldProduct || heldProduct.capacity === null) continue;
+    const own = Number(h.quantity) || 0;
+    if ((await availableUnits(env, h.item_id, h.unit_key, h.service_date, heldProduct.capacity)) + own < own) {
+      await expireBooking(env, b, "INVENTORY_REVOKED");
+      throw new HttpError(409, "SOLD_OUT", "선택하신 일정의 재고가 판매자에 의해 마감되어 결제를 진행할 수 없습니다.");
+    }
   }
   // Real money must never be taken for a booking fulfilled by a simulated supplier.
   if (b.payment_mode === "SANDBOX" && provider.mode === "LIVE") {
@@ -1443,14 +1475,49 @@ export async function completePastBookings(env: Env): Promise<number> {
   return done;
 }
 
+// #45: SLA for supplier confirmation. A paid booking the operator/partner
+// never confirms must not wait forever — past the SLA the platform
+// auto-refunds in full through the same path as an explicit supplier
+// failure. Surfaced in the maintenance stats (audited by the admin trigger),
+// so ops sees every timeout as an escalation trail.
+const SUPPLIER_CONFIRM_SLA_MS = 24 * 60 * 60 * 1000;
+
+export async function sweepSupplierTimeouts(env: Env): Promise<number> {
+  const cutoff = new Date(Date.now() - SUPPLIER_CONFIRM_SLA_MS).toISOString();
+  const rows = await env.DB.prepare(
+    "SELECT * FROM bookings WHERE status = 'SUPPLIER_BOOKING_PENDING' AND updated_at <= ? ORDER BY updated_at LIMIT 50",
+  ).bind(cutoff).all<BookingRow>();
+  let done = 0;
+  for (const r of rows.results || []) {
+    const b = await getBooking(env, r.id);
+    if (!b || b.status !== "SUPPLIER_BOOKING_PENDING") continue;
+    try {
+      await runBatch(env.DB, [
+        ...transition(env.DB, b, "REFUND_PENDING", { type: "SYSTEM", id: null }, "SUPPLIER_CONFIRM_TIMEOUT", { supplier_status: "TIMEOUT" }),
+        env.DB.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+        outboxInsert(env.DB, "EMAIL", b.customer_email, "SUPPLIER_REJECTED", { bookingId: b.id, bookingNumber: b.booking_number }),
+      ]);
+      const cur = await mustGet(env, b.id);
+      await startRefund(env, cur, cur.paid_minor, "공급사 확정 기한(24시간) 초과 전액 환불");
+      done++;
+    } catch {
+      // Raced with an operator decision: leave it for the next run.
+    }
+  }
+  return done;
+}
+
 export async function runMaintenance(env: Env): Promise<Record<string, number>> {
-  const stats = { expired: 0, paymentsReconciled: 0, refundsRetried: 0, quotesExpired: 0, emailsSent: 0, emailsPending: 0, webhooksSent: 0, webhooksPending: 0, rowsPruned: 0, alertsFired: 0, completed: 0 };
+  const stats = { expired: 0, paymentsReconciled: 0, refundsRetried: 0, quotesExpired: 0, emailsSent: 0, emailsPending: 0, webhooksSent: 0, webhooksPending: 0, rowsPruned: 0, alertsFired: 0, completed: 0, supplierTimeouts: 0 };
   const now = nowIso();
   const stale = await env.DB.prepare("SELECT * FROM bookings WHERE status = 'AWAITING_PAYMENT' AND inventory_lock_expires_at <= ? LIMIT 100").bind(now).all<BookingRow>();
   for (const b of stale.results || []) {
     await expireBooking(env, b, "PAYMENT_WINDOW_ELAPSED");
     stats.expired++;
   }
+  // #45 runs before the refund retry below so a timeout-created PENDING
+  // refund is picked up in the same maintenance pass.
+  stats.supplierTimeouts = await sweepSupplierTimeouts(env);
   const q = await env.DB.prepare("UPDATE quotes SET status = 'EXPIRED' WHERE status = 'ACTIVE' AND expires_at <= ?").bind(now).run();
   stats.quotesExpired = q.meta.changes || 0;
 
