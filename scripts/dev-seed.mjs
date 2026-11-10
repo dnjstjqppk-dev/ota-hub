@@ -46,7 +46,7 @@ d1(["--file", "database/seed_catalogs_remote.sql"]);
 d1(["--file", "database/seed_transfers.sql"]);
 
 const sql = `
-UPDATE suppliers SET adapter = 'simulator', integration_status = 'NOT_INTEGRATED', notes = 'LOCAL DEV: simulator adapter' ;
+UPDATE suppliers SET adapter = 'simulator', integration_status = 'NOT_INTEGRATED', notes = 'LOCAL DEV: simulator adapter' WHERE id NOT IN ('unassigned_transfer', 'unassigned_train', 'unassigned_package');
 UPDATE partners SET password_hash = '${PARTNER_DEV_HASH}', is_active = 1 WHERE id IN ('ptn_htl_01', 'ptn_car_01', 'ptn_tour_01');
 UPDATE partner_staff SET password_hash = '${PARTNER_DEV_HASH}' WHERE id IN ('stf_hotel_01', 'stf_car_01', 'stf_tour_01');
 INSERT INTO users (id, email, password_hash, full_name, role, tier, trip_coins)

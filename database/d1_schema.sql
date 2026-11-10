@@ -1,6 +1,11 @@
 -- ==============================================================================
 -- ✈️ getfortrip Production Database Schema (Cloudflare D1 / SQLite Unified Engine)
--- Version: 2026.10-v2.0 (Phase 1~4 (및 상용 OTA 필수 기능) Full Commercial OTA Schema - 21 Tables)
+-- Version: 2026.10-v2.0 (Phase 1~4 Full Commercial OTA Schema - 21 Tables) [SUPERSEDED — DO NOT USE FOR RESTORE]
+--
+-- #22: point-in-time 2026-10 snapshot. Live schema is owned by
+-- worker/migrations/0001..0035+. To capture the current schema, migrate a
+-- scratch DB then: npx wrangler d1 export ota_local --local --output schema-DATE.sql
+-- Shared credential seeds were scrubbed; affiliate secrets below are placeholders.
 -- ==============================================================================
 
 CREATE TABLE IF NOT EXISTS users (

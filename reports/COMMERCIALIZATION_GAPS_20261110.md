@@ -43,11 +43,11 @@
 
 ### 데이터·시드
 
-18. `0005:78 mkt_htl_shilla_01` — 없는 htl_shilla_01 참조(Hyatt vs sup_shilla 불일치). ACTIVE 유령상품 → 시드 추가 또는 삭제+무결성 테스트 [S]
-19. `scripts/seed-d1-production.js:59-87` — INSERT OR REPLACE가 is_active 누락(1로 리셋)·가격 덮어씀. 재실행 시 중단상품 부활 → 운영컬럼 제외 ON CONFLICT로 변경 [S]
-20. `seed_transfers.sql` — 8건 transfers가 partners에 없는 unassigned_transfer 참조. 법적 판매자 없음 → 파트너행 추가 또는 재배정 [S]
-21. `affiliate.ts:52` — postback 중복방지가 NOT EXISTS인데 UNIQUE 인덱스 없음. 동시 중복 전환 시 이중 커미션 → UNIQUE(partner,order) [S]
-22. `database/d1_schema.sql` — 0002~0026 누락인데 복구가이드가 복원용으로 인용 + 실시크릿 잔재 → 재생성 또는 폐기표시 [S]
+[x] 18. 유령 마켓상품 → 완료 (6b / 0035에서 mkt_htl_shilla_01·ing_sample 2건 삭제 + E2E #18 무결성 테스트). ESIM/INS는 #40 범위
+[x] 19. 시드 OR REPLACE 덮어씀 → 완료 (6b / `seed-d1-production.js` ON CONFLICT 콘텐츠 전용 upsert + `seed_catalogs_remote.sql` 재생성 + 유닛 seed 테스트). 운영컬럼(is_active·가격·재고·평점집계) 보호
+[x] 20. unassigned_transfer 판매자 없음 → 설계상 해소 확인 + dev 정합 (6b / 마이그레이션 원상태 adapter='none'/NOT_INTEGRATED로 prod 판매불가; `dev-seed.mjs` simulator 일괄전환에서 unassigned 3종 제외로 dev도 동일). 허위 판매자 행 추가 대신 미계약 판매 차단 유지
+[x] 21. postback 이중 커미션 → 완료 (6b / 0035 `idx_affiliate_conv_once` + `affiliate.ts` OR IGNORE + E2E #21 순차·동시 중복 테스트)
+[x] 22. d1_schema 폐기표시 → 완료 (6b / SUPERSEDED 헤더 + 현행 마이그레이션·export 재생성 안내; 공유해시·실시크릿 없음 확인)
 
 ### 프론트 기능 결함
 

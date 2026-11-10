@@ -47,10 +47,12 @@ export async function handleAffiliate(request: Request, env: Env, url: URL): Pro
     const orderId = String(p.order_id || "");
     const amount = Number(p.amount);
     if (!clickId || !orderId || !Number.isFinite(amount) || amount <= 0) throw new HttpError(400, "INVALID_PAYLOAD", "click_id, order_id, amount가 필요합니다.");
+    // #21: INSERT OR IGNORE on idx_affiliate_conv_once — concurrent postbacks
+    // for one order collapse to a single row instead of double commission.
     const r = await env.DB.prepare(
-      `INSERT INTO affiliate_conversions (id, click_id, partner_name, order_id, amount, currency, commission, status, signature, raw_payload)
-       SELECT ?, ?, ?, ?, ?, ?, ?, 'REPORTED', ?, ? WHERE NOT EXISTS (SELECT 1 FROM affiliate_conversions WHERE partner_name = ? AND order_id = ?)`,
-    ).bind(newId("cnv"), clickId, partner, orderId, amount, String(p.currency || "KRW").slice(0, 3), Number(p.commission) || 0, sig, raw.slice(0, 4000), partner, orderId).run();
+      `INSERT OR IGNORE INTO affiliate_conversions (id, click_id, partner_name, order_id, amount, currency, commission, status, signature, raw_payload)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'REPORTED', ?, ?)`,
+    ).bind(newId("cnv"), clickId, partner, orderId, amount, String(p.currency || "KRW").slice(0, 3), Number(p.commission) || 0, sig, raw.slice(0, 4000)).run();
     if (r.meta.changes) await env.DB.prepare("UPDATE affiliate_clicks SET status = 'CONVERTED' WHERE click_id = ?").bind(clickId).run();
     return json({ success: true, duplicate: !r.meta.changes });
   }

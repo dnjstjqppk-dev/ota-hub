@@ -401,6 +401,45 @@ test("user data: price alerts / coupons / reviews are owner-scoped and verified"
   assert.equal(rv.data.code, "REVIEW_BOOKING_REQUIRED");
 });
 
+test("#18: every ACTIVE marketplace row resolves a real domain item (no ghosts)", async () => {
+  const cat = await api("GET", "/api/v1/marketplace/catalog");
+  assert.equal(cat.status, 200);
+  const tables = { HOTEL: "hotels", FLIGHT: "flights", TRAIN: "trains", CAR: "cars", TRANSFER: "transfers", ACTIVITY: "activities", PACKAGE: "packages" };
+  for (const row of cat.data.items || cat.data.catalog || []) {
+    if (row.domain_type === "ESIM" || row.domain_type === "INSURANCE") continue; // #40 scope
+    const t = tables[row.domain_type];
+    assert.ok(t, `unknown domain ${row.domain_type}`);
+    const hit = sql(`SELECT id FROM ${t} WHERE id = '${row.item_id}'`);
+    assert.equal(hit.length, 1, `ghost marketplace row ${row.id} -> ${row.domain_type}/${row.item_id}`);
+  }
+  assert.equal(sql("SELECT id FROM marketplace_catalog_items WHERE id IN ('mkt_htl_shilla_01','mkt_ing_sample_01','mkt_ing_sample_02')").length, 0);
+});
+
+test("#21: duplicate affiliate postbacks (sequential + concurrent) book once", async () => {
+  const secret = `e2e-secret-${rnd()}${rnd()}`;
+  sql(`INSERT OR REPLACE INTO affiliate_partners_config (partner_id, name, deep_link_template, affiliate_id, secret_key, is_active) VALUES ('e2e-aff-test', 'e2e-aff', 'https://x.test/{item_id}?c={click_id}', 'E2E', '${secret}', 1)`);
+  const post = async (orderId, amount) => {
+    const payload = JSON.stringify({ partner: "e2e-aff-test", click_id: `clk_${rnd()}`, order_id: orderId, amount, currency: "KRW" });
+    const ts = Math.floor(Date.now() / 1000);
+    const sig = createHmac("sha256", secret).update(`${ts}.${payload}`).digest("hex");
+    const r = await fetch(BASE + "/api/v1/webhooks/postback", { method: "POST", headers: { "Content-Type": "application/json", "X-Signature": sig, "X-Timestamp": String(ts) }, body: payload });
+    return { status: r.status, data: await r.json() };
+  };
+  const o1 = `ord_${rnd()}`;
+  const r1 = await post(o1, 100000);
+  assert.equal(r1.status, 200, JSON.stringify(r1.data));
+  assert.equal(r1.data.duplicate, false);
+  const r2 = await post(o1, 100000);
+  assert.equal(r2.status, 200);
+  assert.equal(r2.data.duplicate, true);
+  const o2 = `ord_${rnd()}`;
+  const [c1, c2] = await Promise.all([post(o2, 50000), post(o2, 50000)]);
+  assert.equal(c1.status, 200);
+  assert.equal(c2.status, 200);
+  assert.equal([c1.data.duplicate, c2.data.duplicate].filter(Boolean).length, 1, "exactly one concurrent winner");
+  assert.equal(sql(`SELECT COUNT(*) AS n FROM affiliate_conversions WHERE order_id IN ('${o1}','${o2}')`)[0].n, 2);
+});
+
 test("affiliate postback: unconfigured partner rejected, cannot touch bookings", async () => {
   const q = (await quote(A.token)).data.quote;
   const b = (await book(A.token, q)).data.booking;

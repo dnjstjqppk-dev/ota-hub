@@ -1,8 +1,5 @@
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_seoul_01',
     'ptn_htl_01',
@@ -26,13 +23,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_seoul_01_dlx","name":"그랜드 디럭스 더블룸 (시티뷰)","name_ko":"그랜드 디럭스 더블룸 (시티뷰)","bed_type":"슈퍼킹베드 1개","max_occupancy":2,"room_size_sqm":48,"base_price_krw":550000,"breakfast_included":true,"free_cancellation":true,"available_inventory":5},{"id":"rm_seoul_01_ste","name":"프리미어 리버뷰 스위트","name_ko":"프리미어 리버뷰 스위트","bed_type":"로열 킹베드 1개","max_occupancy":3,"room_size_sqm":85,"base_price_krw":890000,"breakfast_included":true,"free_cancellation":true,"available_inventory":2}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_seoul_02',
     'ptn_htl_01',
@@ -56,13 +67,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_seoul_02_dlx","name":"디럭스 킹 룸 (남산뷰)","name_ko":"디럭스 킹 룸 (남산뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":43,"base_price_krw":460000,"breakfast_included":true,"free_cancellation":true,"available_inventory":4}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_seoul_03',
     'ptn_htl_01',
@@ -86,13 +111,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_seoul_03_std","name":"파크 킹 룸 (코엑스 시티뷰)","name_ko":"파크 킹 룸 (코엑스 시티뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":42,"base_price_krw":490000,"breakfast_included":false,"free_cancellation":true,"available_inventory":6}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_tokyo_01',
     'ptn_htl_01',
@@ -116,13 +155,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_tokyo_01_dlx","name":"디럭스 킹 룸 (시티뷰)","name_ko":"디럭스 킹 룸 (시티뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":42,"base_price_krw":385000,"breakfast_included":true,"free_cancellation":true,"available_inventory":7},{"id":"rm_tokyo_01_ste","name":"그랜드 이그제큐티브 스위트","name_ko":"그랜드 이그제큐티브 스위트","bed_type":"킹베드 1개 + 거실","max_occupancy":3,"room_size_sqm":78,"base_price_krw":680000,"breakfast_included":true,"free_cancellation":true,"available_inventory":3}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_tokyo_02',
     'ptn_htl_01',
@@ -146,13 +199,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_tokyo_02_std","name":"파크 디럭스 룸 (후지산 전망)","name_ko":"파크 디럭스 룸 (후지산 전망)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":55,"base_price_krw":450000,"breakfast_included":true,"free_cancellation":true,"available_inventory":4}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_tokyo_03',
     'ptn_htl_01',
@@ -176,13 +243,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_tokyo_03_std","name":"스탠다드 더블룸 (본관)","name_ko":"스탠다드 더블룸 (본관)","bed_type":"더블베드 1개","max_occupancy":2,"room_size_sqm":28,"base_price_krw":230000,"breakfast_included":false,"free_cancellation":true,"available_inventory":12}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_osaka_01',
     'ptn_htl_01',
@@ -206,13 +287,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_osaka_01_sel","name":"스위스 셀렉트 킹룸","name_ko":"스위스 셀렉트 킹룸","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":32,"base_price_krw":275000,"breakfast_included":false,"free_cancellation":true,"available_inventory":8},{"id":"rm_osaka_01_adv","name":"어드밴티지 이그제큐티브 룸 (라운지 포함)","name_ko":"어드밴티지 이그제큐티브 룸 (라운지 포함)","bed_type":"슈퍼킹베드 1개","max_occupancy":2,"room_size_sqm":38,"base_price_krw":390000,"breakfast_included":true,"free_cancellation":true,"available_inventory":4}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_osaka_02',
     'ptn_htl_01',
@@ -236,13 +331,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_osaka_02_std","name":"클래식 킹룸 (우메다 시티뷰)","name_ko":"클래식 킹룸 (우메다 시티뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":49,"base_price_krw":380000,"breakfast_included":true,"free_cancellation":true,"available_inventory":5}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_bangkok_01',
     'ptn_htl_01',
@@ -266,13 +375,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_bkk_01_dlx","name":"디럭스 리버뷰 킹룸","name_ko":"디럭스 리버뷰 킹룸","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":40,"base_price_krw":210000,"breakfast_included":true,"free_cancellation":true,"available_inventory":9},{"id":"rm_bkk_01_ste","name":"크룽텝 윙 프라이빗 발코니 스위트","name_ko":"크룽텝 윙 프라이빗 발코니 스위트","bed_type":"슈퍼킹베드 1개","max_occupancy":3,"room_size_sqm":76,"base_price_krw":395000,"breakfast_included":true,"free_cancellation":true,"available_inventory":3}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_bangkok_02',
     'ptn_htl_01',
@@ -296,13 +419,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_bkk_02_std","name":"슈페리어 더블룸 (연못 가든 뷰)","name_ko":"슈페리어 더블룸 (연못 가든 뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":38,"base_price_krw":195000,"breakfast_included":true,"free_cancellation":true,"available_inventory":6}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_fukuoka_01',
     'ptn_htl_01',
@@ -326,13 +463,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_fuk_01_std","name":"스탠다드 킹 룸 (분수쇼 뷰)","name_ko":"스탠다드 킹 룸 (분수쇼 뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":34,"base_price_krw":245000,"breakfast_included":true,"free_cancellation":true,"available_inventory":8},{"id":"rm_fuk_01_dlx","name":"클럽 킹 룸 (라운지 해피아워 포함)","name_ko":"클럽 킹 룸 (라운지 해피아워 포함)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":40,"base_price_krw":340000,"breakfast_included":true,"free_cancellation":true,"available_inventory":4}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_fukuoka_02',
     'ptn_htl_01',
@@ -356,13 +507,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_fuk_02_std","name":"모던 더블룸 (텐진 파크뷰)","name_ko":"모던 더블룸 (텐진 파크뷰)","bed_type":"더블베드 1개","max_occupancy":2,"room_size_sqm":24,"base_price_krw":145000,"breakfast_included":false,"free_cancellation":true,"available_inventory":11}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_paris_01',
     'ptn_htl_01',
@@ -386,13 +551,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_paris_01_efl","name":"디럭스 킹 룸 (에펠탑 전망 발코니)","name_ko":"디럭스 킹 룸 (에펠탑 전망 발코니)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":32,"base_price_krw":480000,"breakfast_included":true,"free_cancellation":true,"available_inventory":6},{"id":"rm_paris_01_ste","name":"주니어 스위트 (화이트 에펠 파노라마)","name_ko":"주니어 스위트 (화이트 에펠 파노라마)","bed_type":"슈퍼킹베드 1개 + 소파베드","max_occupancy":3,"room_size_sqm":52,"base_price_krw":780000,"breakfast_included":true,"free_cancellation":true,"available_inventory":2}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO hotels (
-    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude,
-    star_rating, property_type, review_score, review_count, neighborhood, subway_nearby,
-    free_cancellation, free_breakfast, base_price_krw, thumbnail_url,
-    images_json, amenities_json, rooms_json
+INSERT INTO hotels (
+    id, partner_id, name_ko, name_en, city, country, address, latitude, longitude, star_rating, property_type, review_score, review_count, neighborhood, subway_nearby, free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json
   ) VALUES (
     'htl_paris_02',
     'ptn_htl_01',
@@ -416,13 +595,27 @@ INSERT OR REPLACE INTO hotels (
     '[]',
     '[]',
     '[{"id":"rm_paris_02_std","name":"클래식 룸 (오페라 하우스 뷰)","name_ko":"클래식 룸 (오페라 하우스 뷰)","bed_type":"킹베드 1개","max_occupancy":2,"room_size_sqm":35,"base_price_krw":620000,"breakfast_included":true,"free_cancellation":true,"available_inventory":4}]'
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    name_ko = excluded.name_ko,
+    name_en = excluded.name_en,
+    city = excluded.city,
+    country = excluded.country,
+    address = excluded.address,
+    latitude = excluded.latitude,
+    longitude = excluded.longitude,
+    star_rating = excluded.star_rating,
+    property_type = excluded.property_type,
+    neighborhood = excluded.neighborhood,
+    subway_nearby = excluded.subway_nearby,
+    free_cancellation = excluded.free_cancellation,
+    free_breakfast = excluded.free_breakfast,
+    thumbnail_url = excluded.thumbnail_url,
+    images_json = excluded.images_json,
+    amenities_json = excluded.amenities_json,
+    rooms_json = excluded.rooms_json;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke703',
     'ptn_flt_01',
@@ -442,13 +635,24 @@ INSERT OR REPLACE INTO flights (
     245000,
     23,
     9
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_oz102',
     'ptn_flt_01',
@@ -468,13 +672,24 @@ INSERT OR REPLACE INTO flights (
     238000,
     23,
     6
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_7c1102',
     'ptn_flt_01',
@@ -494,13 +709,24 @@ INSERT OR REPLACE INTO flights (
     189000,
     15,
     14
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke705',
     'ptn_flt_01',
@@ -520,13 +746,24 @@ INSERT OR REPLACE INTO flights (
     260000,
     23,
     8
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke704_ret',
     'ptn_flt_01',
@@ -546,13 +783,24 @@ INSERT OR REPLACE INTO flights (
     250000,
     23,
     8
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_oz101_ret',
     'ptn_flt_01',
@@ -572,13 +820,24 @@ INSERT OR REPLACE INTO flights (
     242000,
     23,
     5
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_7c1101_ret',
     'ptn_flt_01',
@@ -598,13 +857,24 @@ INSERT OR REPLACE INTO flights (
     195000,
     15,
     11
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke723',
     'ptn_flt_01',
@@ -624,13 +894,24 @@ INSERT OR REPLACE INTO flights (
     215000,
     23,
     12
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_7c1302',
     'ptn_flt_01',
@@ -650,13 +931,24 @@ INSERT OR REPLACE INTO flights (
     168000,
     15,
     16
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke724_ret',
     'ptn_flt_01',
@@ -676,13 +968,24 @@ INSERT OR REPLACE INTO flights (
     220000,
     23,
     9
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke657',
     'ptn_flt_01',
@@ -702,13 +1005,24 @@ INSERT OR REPLACE INTO flights (
     395000,
     23,
     8
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_tg659',
     'ptn_flt_01',
@@ -728,13 +1042,24 @@ INSERT OR REPLACE INTO flights (
     380000,
     30,
     10
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke658_ret',
     'ptn_flt_01',
@@ -754,13 +1079,24 @@ INSERT OR REPLACE INTO flights (
     410000,
     23,
     7
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke901',
     'ptn_flt_01',
@@ -780,13 +1116,24 @@ INSERT OR REPLACE INTO flights (
     980000,
     23,
     5
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_af267',
     'ptn_flt_01',
@@ -806,13 +1153,24 @@ INSERT OR REPLACE INTO flights (
     940000,
     23,
     7
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO flights (
-    id, partner_id, flight_number, airline_name, airline_code, departure_airport,
-    arrival_airport, departure_city, arrival_city, departure_time, arrival_time,
-    duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw,
-    free_baggage_kg, available_seats
+INSERT INTO flights (
+    id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke902_ret',
     'ptn_flt_01',
@@ -832,11 +1190,24 @@ INSERT OR REPLACE INTO flights (
     990000,
     23,
     4
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    flight_number = excluded.flight_number,
+    airline_name = excluded.airline_name,
+    airline_code = excluded.airline_code,
+    departure_airport = excluded.departure_airport,
+    arrival_airport = excluded.arrival_airport,
+    departure_city = excluded.departure_city,
+    arrival_city = excluded.arrival_city,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    stops = excluded.stops,
+    departure_time_slot = excluded.departure_time_slot,
+    cabin_class = excluded.cabin_class,
+    free_baggage_kg = excluded.free_baggage_kg;
 
-INSERT OR REPLACE INTO trains (
-    id, train_number, train_type, departure_station, arrival_station,
-    departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
+INSERT INTO trains (
+    id, train_number, train_type, departure_station, arrival_station, departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
   ) VALUES (
     'trn_ktx_021',
     'KTX 021',
@@ -849,11 +1220,18 @@ INSERT OR REPLACE INTO trains (
     '일반실',
     59800,
     42
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    train_number = excluded.train_number,
+    train_type = excluded.train_type,
+    departure_station = excluded.departure_station,
+    arrival_station = excluded.arrival_station,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    seat_class = excluded.seat_class;
 
-INSERT OR REPLACE INTO trains (
-    id, train_number, train_type, departure_station, arrival_station,
-    departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
+INSERT INTO trains (
+    id, train_number, train_type, departure_station, arrival_station, departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
   ) VALUES (
     'trn_ktx_025',
     'KTX 025',
@@ -866,11 +1244,18 @@ INSERT OR REPLACE INTO trains (
     '일반실',
     59800,
     18
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    train_number = excluded.train_number,
+    train_type = excluded.train_type,
+    departure_station = excluded.departure_station,
+    arrival_station = excluded.arrival_station,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    seat_class = excluded.seat_class;
 
-INSERT OR REPLACE INTO trains (
-    id, train_number, train_type, departure_station, arrival_station,
-    departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
+INSERT INTO trains (
+    id, train_number, train_type, departure_station, arrival_station, departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
   ) VALUES (
     'trn_ktx_041',
     'KTX 041',
@@ -883,11 +1268,18 @@ INSERT OR REPLACE INTO trains (
     '특실 / 우등실',
     83700,
     12
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    train_number = excluded.train_number,
+    train_type = excluded.train_type,
+    departure_station = excluded.departure_station,
+    arrival_station = excluded.arrival_station,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    seat_class = excluded.seat_class;
 
-INSERT OR REPLACE INTO trains (
-    id, train_number, train_type, departure_station, arrival_station,
-    departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
+INSERT INTO trains (
+    id, train_number, train_type, departure_station, arrival_station, departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
   ) VALUES (
     'trn_ktx_055',
     'KTX 055',
@@ -900,11 +1292,18 @@ INSERT OR REPLACE INTO trains (
     '일반실',
     59800,
     27
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    train_number = excluded.train_number,
+    train_type = excluded.train_type,
+    departure_station = excluded.departure_station,
+    arrival_station = excluded.arrival_station,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    seat_class = excluded.seat_class;
 
-INSERT OR REPLACE INTO trains (
-    id, train_number, train_type, departure_station, arrival_station,
-    departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
+INSERT INTO trains (
+    id, train_number, train_type, departure_station, arrival_station, departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
   ) VALUES (
     'trn_ktx_022_ret',
     'KTX 022',
@@ -917,11 +1316,18 @@ INSERT OR REPLACE INTO trains (
     '일반실',
     59800,
     31
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    train_number = excluded.train_number,
+    train_type = excluded.train_type,
+    departure_station = excluded.departure_station,
+    arrival_station = excluded.arrival_station,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    seat_class = excluded.seat_class;
 
-INSERT OR REPLACE INTO trains (
-    id, train_number, train_type, departure_station, arrival_station,
-    departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
+INSERT INTO trains (
+    id, train_number, train_type, departure_station, arrival_station, departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
   ) VALUES (
     'trn_ktx_034_ret',
     'KTX 034',
@@ -934,11 +1340,18 @@ INSERT OR REPLACE INTO trains (
     '일반실',
     59800,
     19
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    train_number = excluded.train_number,
+    train_type = excluded.train_type,
+    departure_station = excluded.departure_station,
+    arrival_station = excluded.arrival_station,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    seat_class = excluded.seat_class;
 
-INSERT OR REPLACE INTO trains (
-    id, train_number, train_type, departure_station, arrival_station,
-    departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
+INSERT INTO trains (
+    id, train_number, train_type, departure_station, arrival_station, departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
   ) VALUES (
     'trn_shinkansen_nozomi23',
     'NOZOMI 23',
@@ -951,11 +1364,18 @@ INSERT OR REPLACE INTO trains (
     '지정석 (Standard Reserved)',
     145000,
     25
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    train_number = excluded.train_number,
+    train_type = excluded.train_type,
+    departure_station = excluded.departure_station,
+    arrival_station = excluded.arrival_station,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    seat_class = excluded.seat_class;
 
-INSERT OR REPLACE INTO trains (
-    id, train_number, train_type, departure_station, arrival_station,
-    departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
+INSERT INTO trains (
+    id, train_number, train_type, departure_station, arrival_station, departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
   ) VALUES (
     'trn_shinkansen_nozomi45',
     'NOZOMI 45',
@@ -968,11 +1388,18 @@ INSERT OR REPLACE INTO trains (
     '그린샤 (Green Car 1등석)',
     205000,
     8
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    train_number = excluded.train_number,
+    train_type = excluded.train_type,
+    departure_station = excluded.departure_station,
+    arrival_station = excluded.arrival_station,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    seat_class = excluded.seat_class;
 
-INSERT OR REPLACE INTO trains (
-    id, train_number, train_type, departure_station, arrival_station,
-    departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
+INSERT INTO trains (
+    id, train_number, train_type, departure_station, arrival_station, departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
   ) VALUES (
     'trn_shinkansen_nozomi28_ret',
     'NOZOMI 28',
@@ -985,11 +1412,18 @@ INSERT OR REPLACE INTO trains (
     '지정석 (Standard Reserved)',
     145000,
     19
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    train_number = excluded.train_number,
+    train_type = excluded.train_type,
+    departure_station = excluded.departure_station,
+    arrival_station = excluded.arrival_station,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    seat_class = excluded.seat_class;
 
-INSERT OR REPLACE INTO trains (
-    id, train_number, train_type, departure_station, arrival_station,
-    departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
+INSERT INTO trains (
+    id, train_number, train_type, departure_station, arrival_station, departure_time, arrival_time, duration_minutes, seat_class, price_krw, available_seats
   ) VALUES (
     'trn_eurostar_9015',
     'Eurostar 9015',
@@ -1002,12 +1436,18 @@ INSERT OR REPLACE INTO trains (
     'Standard',
     168000,
     14
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    train_number = excluded.train_number,
+    train_type = excluded.train_type,
+    departure_station = excluded.departure_station,
+    arrival_station = excluded.arrival_station,
+    departure_time = excluded.departure_time,
+    arrival_time = excluded.arrival_time,
+    duration_minutes = excluded.duration_minutes,
+    seat_class = excluded.seat_class;
 
-INSERT OR REPLACE INTO cars (
-    id, partner_id, company_name, vehicle_model, vehicle_type, seats,
-    transmission, daily_price_krw, pickup_location, insurance_included,
-    image_url, available_stock
+INSERT INTO cars (
+    id, partner_id, company_name, vehicle_model, vehicle_type, seats, transmission, daily_price_krw, pickup_location, insurance_included, image_url, available_stock
   ) VALUES (
     'car_avante_01',
     'ptn_car_01',
@@ -1021,12 +1461,18 @@ INSERT OR REPLACE INTO cars (
     1,
     NULL,
     10
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    company_name = excluded.company_name,
+    vehicle_model = excluded.vehicle_model,
+    vehicle_type = excluded.vehicle_type,
+    seats = excluded.seats,
+    transmission = excluded.transmission,
+    pickup_location = excluded.pickup_location,
+    insurance_included = excluded.insurance_included,
+    image_url = excluded.image_url;
 
-INSERT OR REPLACE INTO cars (
-    id, partner_id, company_name, vehicle_model, vehicle_type, seats,
-    transmission, daily_price_krw, pickup_location, insurance_included,
-    image_url, available_stock
+INSERT INTO cars (
+    id, partner_id, company_name, vehicle_model, vehicle_type, seats, transmission, daily_price_krw, pickup_location, insurance_included, image_url, available_stock
   ) VALUES (
     'car_yaris_01',
     'ptn_car_01',
@@ -1040,12 +1486,18 @@ INSERT OR REPLACE INTO cars (
     1,
     NULL,
     10
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    company_name = excluded.company_name,
+    vehicle_model = excluded.vehicle_model,
+    vehicle_type = excluded.vehicle_type,
+    seats = excluded.seats,
+    transmission = excluded.transmission,
+    pickup_location = excluded.pickup_location,
+    insurance_included = excluded.insurance_included,
+    image_url = excluded.image_url;
 
-INSERT OR REPLACE INTO cars (
-    id, partner_id, company_name, vehicle_model, vehicle_type, seats,
-    transmission, daily_price_krw, pickup_location, insurance_included,
-    image_url, available_stock
+INSERT INTO cars (
+    id, partner_id, company_name, vehicle_model, vehicle_type, seats, transmission, daily_price_krw, pickup_location, insurance_included, image_url, available_stock
   ) VALUES (
     'car_tucson_01',
     'ptn_car_01',
@@ -1059,12 +1511,18 @@ INSERT OR REPLACE INTO cars (
     1,
     NULL,
     10
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    company_name = excluded.company_name,
+    vehicle_model = excluded.vehicle_model,
+    vehicle_type = excluded.vehicle_type,
+    seats = excluded.seats,
+    transmission = excluded.transmission,
+    pickup_location = excluded.pickup_location,
+    insurance_included = excluded.insurance_included,
+    image_url = excluded.image_url;
 
-INSERT OR REPLACE INTO cars (
-    id, partner_id, company_name, vehicle_model, vehicle_type, seats,
-    transmission, daily_price_krw, pickup_location, insurance_included,
-    image_url, available_stock
+INSERT INTO cars (
+    id, partner_id, company_name, vehicle_model, vehicle_type, seats, transmission, daily_price_krw, pickup_location, insurance_included, image_url, available_stock
   ) VALUES (
     'car_carnival_01',
     'ptn_car_01',
@@ -1078,12 +1536,18 @@ INSERT OR REPLACE INTO cars (
     1,
     NULL,
     10
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    company_name = excluded.company_name,
+    vehicle_model = excluded.vehicle_model,
+    vehicle_type = excluded.vehicle_type,
+    seats = excluded.seats,
+    transmission = excluded.transmission,
+    pickup_location = excluded.pickup_location,
+    insurance_included = excluded.insurance_included,
+    image_url = excluded.image_url;
 
-INSERT OR REPLACE INTO activities (
-    id, partner_id, title, category, city, country, price_krw, review_score,
-    review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
+INSERT INTO activities (
+    id, partner_id, title, category, city, country, price_krw, review_score, review_count, instant_confirmation, free_cancellation, duration_type, guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     'act_disney_tokyo',
     'ptn_tour_01',
@@ -1103,12 +1567,22 @@ INSERT OR REPLACE INTO activities (
     '도쿄 디즈니랜드 매표소 대기 없이 모바일 QR 바로 입장; 디즈니 프리미어 액세스(DPA) 연동 가능; 성인/아동/청소년 모바일 QR 입장; 지정일 24시간 전까지 100% 무료 취소',
     '["도쿄 디즈니랜드 1일 자유이용권","모바일 전자 바우처"]',
     30
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    title = excluded.title,
+    category = excluded.category,
+    city = excluded.city,
+    country = excluded.country,
+    instant_confirmation = excluded.instant_confirmation,
+    free_cancellation = excluded.free_cancellation,
+    duration_type = excluded.duration_type,
+    guide_language = excluded.guide_language,
+    voucher_type = excluded.voucher_type,
+    thumbnail_url = excluded.thumbnail_url,
+    description = excluded.description,
+    packages_json = excluded.packages_json;
 
-INSERT OR REPLACE INTO activities (
-    id, partner_id, title, category, city, country, price_krw, review_score,
-    review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
+INSERT INTO activities (
+    id, partner_id, title, category, city, country, price_krw, review_score, review_count, instant_confirmation, free_cancellation, duration_type, guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     'act_usj_osaka',
     'ptn_tour_01',
@@ -1128,12 +1602,22 @@ INSERT OR REPLACE INTO activities (
     '슈퍼 닌텐도 월드 & 해리포터 마법의 세계 입장; 공식 파트너 인증 다이렉트 QR코드 발권; 현장 매표소 교환 없이 개찰구 직행',
     '["USJ 1일 입장권","모바일 입장 QR"]',
     30
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    title = excluded.title,
+    category = excluded.category,
+    city = excluded.city,
+    country = excluded.country,
+    instant_confirmation = excluded.instant_confirmation,
+    free_cancellation = excluded.free_cancellation,
+    duration_type = excluded.duration_type,
+    guide_language = excluded.guide_language,
+    voucher_type = excluded.voucher_type,
+    thumbnail_url = excluded.thumbnail_url,
+    description = excluded.description,
+    packages_json = excluded.packages_json;
 
-INSERT OR REPLACE INTO activities (
-    id, partner_id, title, category, city, country, price_krw, review_score,
-    review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
+INSERT INTO activities (
+    id, partner_id, title, category, city, country, price_krw, review_score, review_count, instant_confirmation, free_cancellation, duration_type, guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     'act_fuji_tour',
     'ptn_tour_01',
@@ -1153,12 +1637,22 @@ INSERT OR REPLACE INTO activities (
     '신주쿠 출발 전용 리무진 버스로 후지산 5합목 방문; 하코네 로프웨이 케이블카 탑승 & 아시노코 해적유람선 조망; 한국인 베테랑 인솔 가이드 전 일정 동행',
     '["왕복 전용 버스","한국어 가이드","케이블카 티켓","여행자 보험"]',
     30
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    title = excluded.title,
+    category = excluded.category,
+    city = excluded.city,
+    country = excluded.country,
+    instant_confirmation = excluded.instant_confirmation,
+    free_cancellation = excluded.free_cancellation,
+    duration_type = excluded.duration_type,
+    guide_language = excluded.guide_language,
+    voucher_type = excluded.voucher_type,
+    thumbnail_url = excluded.thumbnail_url,
+    description = excluded.description,
+    packages_json = excluded.packages_json;
 
-INSERT OR REPLACE INTO activities (
-    id, partner_id, title, category, city, country, price_krw, review_score,
-    review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
+INSERT INTO activities (
+    id, partner_id, title, category, city, country, price_krw, review_score, review_count, instant_confirmation, free_cancellation, duration_type, guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     'act_lotte_world',
     'ptn_tour_01',
@@ -1178,12 +1672,22 @@ INSERT OR REPLACE INTO activities (
     '국내 최대 실내외 테마파크 어드벤처 & 매직아일랜드 종일 이용; 모바일 바코드 즉시 입장 (당일 구매 후 바로 사용 가능); 민속박물관 무료 관람 포함',
     '["롯데월드 종합이용권","민속박물관 입장"]',
     30
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    title = excluded.title,
+    category = excluded.category,
+    city = excluded.city,
+    country = excluded.country,
+    instant_confirmation = excluded.instant_confirmation,
+    free_cancellation = excluded.free_cancellation,
+    duration_type = excluded.duration_type,
+    guide_language = excluded.guide_language,
+    voucher_type = excluded.voucher_type,
+    thumbnail_url = excluded.thumbnail_url,
+    description = excluded.description,
+    packages_json = excluded.packages_json;
 
-INSERT OR REPLACE INTO activities (
-    id, partner_id, title, category, city, country, price_krw, review_score,
-    review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
+INSERT INTO activities (
+    id, partner_id, title, category, city, country, price_krw, review_score, review_count, instant_confirmation, free_cancellation, duration_type, guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     'act_louvre_tour',
     'ptn_tour_01',
@@ -1203,12 +1707,22 @@ INSERT OR REPLACE INTO activities (
     '모나리자, 밀로의 비너스, 사모트라케의 니케 등 핵심 걸작 집중 해설; 프랑스 공인 국가 가이드의 깊이 있는 역사/예술 스토리텔링; 개인 무선 수신기 제공으로 편안한 관람',
     '["한국어 공인 도슨트 해설","개인 무선 수신기"]',
     30
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    title = excluded.title,
+    category = excluded.category,
+    city = excluded.city,
+    country = excluded.country,
+    instant_confirmation = excluded.instant_confirmation,
+    free_cancellation = excluded.free_cancellation,
+    duration_type = excluded.duration_type,
+    guide_language = excluded.guide_language,
+    voucher_type = excluded.voucher_type,
+    thumbnail_url = excluded.thumbnail_url,
+    description = excluded.description,
+    packages_json = excluded.packages_json;
 
-INSERT OR REPLACE INTO activities (
-    id, partner_id, title, category, city, country, price_krw, review_score,
-    review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
+INSERT INTO activities (
+    id, partner_id, title, category, city, country, price_krw, review_score, review_count, instant_confirmation, free_cancellation, duration_type, guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     'act_esim_japan',
     'ptn_tour_01',
@@ -1228,11 +1742,22 @@ INSERT OR REPLACE INTO activities (
     '유심 교체 없이 이메일/카카오톡 QR코드 스캔 즉시 개통; 일본 1위 통신사 NTT Docomo / SoftBank 5G 망 자동 로밍; 데이터 무제한 (매일 2GB 사용 후 128kbps 무제한 유지)',
     '["일본 데이터 eSIM QR 프로파일","도움 센터 고객상담"]',
     30
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    title = excluded.title,
+    category = excluded.category,
+    city = excluded.city,
+    country = excluded.country,
+    instant_confirmation = excluded.instant_confirmation,
+    free_cancellation = excluded.free_cancellation,
+    duration_type = excluded.duration_type,
+    guide_language = excluded.guide_language,
+    voucher_type = excluded.voucher_type,
+    thumbnail_url = excluded.thumbnail_url,
+    description = excluded.description,
+    packages_json = excluded.packages_json;
 
-INSERT OR REPLACE INTO packages (
-    id, title, destination_city, hotel_id, flight_id, package_discount_rate,
-    total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
+INSERT INTO packages (
+    id, title, destination_city, hotel_id, flight_id, package_discount_rate, total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
   ) VALUES (
     'pkg_tokyo_4d3n',
     '[항공+호텔 결합] 도쿄 롯폰기 하얏트 럭셔리 에어텔 4일 (대한항공 직항 왕복 + 5성급 3박)',
@@ -1245,11 +1770,16 @@ INSERT OR REPLACE INTO packages (
     NULL,
     '{"features":["대한항공 직항 왕복 (위탁수하물 23kg 포함)","그랜드 하얏트 도쿄 3박 전 일정 조식 뷔페 포함","롯폰기 힐스 쇼핑몰 & 전망대 직결","24시간 한국인 안심 여행 케어 컨시어지"],"gallery":[]}',
     16
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    title = excluded.title,
+    destination_city = excluded.destination_city,
+    hotel_id = excluded.hotel_id,
+    flight_id = excluded.flight_id,
+    thumbnail_url = excluded.thumbnail_url,
+    details_json = excluded.details_json;
 
-INSERT OR REPLACE INTO packages (
-    id, title, destination_city, hotel_id, flight_id, package_discount_rate,
-    total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
+INSERT INTO packages (
+    id, title, destination_city, hotel_id, flight_id, package_discount_rate, total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
   ) VALUES (
     'pkg_osaka_3d2n',
     '[인기 에어텔] 오사카 난바 스위소텔 올인원 3일 (아시아나 직항 + 5성급 2박)',
@@ -1262,11 +1792,16 @@ INSERT OR REPLACE INTO packages (
     NULL,
     '{"features":["아시아나항공 직항 왕복 (수하물 23kg)","난카이 난바역 직결 5성급 호텔 2박","간사이공항 특급 라피트 왕복 승차권 증정","도톤보리 도보 3분 초역세권"],"gallery":[]}',
     16
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    title = excluded.title,
+    destination_city = excluded.destination_city,
+    hotel_id = excluded.hotel_id,
+    flight_id = excluded.flight_id,
+    thumbnail_url = excluded.thumbnail_url,
+    details_json = excluded.details_json;
 
-INSERT OR REPLACE INTO packages (
-    id, title, destination_city, hotel_id, flight_id, package_discount_rate,
-    total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
+INSERT INTO packages (
+    id, title, destination_city, hotel_id, flight_id, package_discount_rate, total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
   ) VALUES (
     'pkg_bangkok_5d4n',
     '[리버사이드 힐링] 방콕 샹그릴라 호텔 5일 (대한항공 직항 왕복 + 리버뷰 4박)',
@@ -1279,11 +1814,16 @@ INSERT OR REPLACE INTO packages (
     NULL,
     '{"features":["대한항공 주간 직항 (수하물 23kg)","차오프라야 강변 5성급 샹그릴라 4박 전 일정 조식","샹그릴라 전용 디너 크루즈 1회 할인권","아이콘시암 무료 셔틀보트 이용"],"gallery":[]}',
     16
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    title = excluded.title,
+    destination_city = excluded.destination_city,
+    hotel_id = excluded.hotel_id,
+    flight_id = excluded.flight_id,
+    thumbnail_url = excluded.thumbnail_url,
+    details_json = excluded.details_json;
 
-INSERT OR REPLACE INTO packages (
-    id, title, destination_city, hotel_id, flight_id, package_discount_rate,
-    total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
+INSERT INTO packages (
+    id, title, destination_city, hotel_id, flight_id, package_discount_rate, total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
   ) VALUES (
     'pkg_paris_6d5n',
     '[유럽 프리미엄] 파리 풀만 에펠탑 6일 (에어프랑스 직항 + 에펠뷰 5박)',
@@ -1296,4 +1836,10 @@ INSERT OR REPLACE INTO packages (
     NULL,
     '{"features":["에어프랑스 직항 왕복 (위탁수하물 23kg)","에펠탑 초근접 4성급 호텔 5박","루브르 박물관 모바일 패스트트랙 e-티켓 포함","세느강 바토무슈 유람선 탑승권 증정"],"gallery":[]}',
     16
-  );
+  ) ON CONFLICT(id) DO UPDATE SET
+    title = excluded.title,
+    destination_city = excluded.destination_city,
+    hotel_id = excluded.hotel_id,
+    flight_id = excluded.flight_id,
+    thumbnail_url = excluded.thumbnail_url,
+    details_json = excluded.details_json;
