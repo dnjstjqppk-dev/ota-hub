@@ -69,6 +69,7 @@ const CATALOG_DOMAINS: Record<string, CatalogDomain> = {
     { col: "vehicle_class", type: "text", max: 50 }, { col: "max_passengers", type: "int", min: 0 },
     { col: "max_luggage", type: "int", min: 0 }, { col: "price_krw", type: "num", min: 0, required: true },
     { col: "flight_tracking", type: "bool" }, { col: "image_url", type: "text", max: 500 }, { col: "is_active", type: "bool" },
+    { col: "daily_capacity", type: "int", min: 0 },
   ] },
   ACTIVITY: { table: "activities", prefix: "act", fields: [
     { col: "partner_id", type: "text", max: 100 }, { col: "title", type: "text", max: 300, required: true },
@@ -79,14 +80,14 @@ const CATALOG_DOMAINS: Record<string, CatalogDomain> = {
     { col: "duration_type", type: "text", max: 50 }, { col: "guide_language", type: "text", max: 50 },
     { col: "voucher_type", type: "text", max: 50 }, { col: "thumbnail_url", type: "text", max: 500 },
     { col: "description", type: "text", max: 2000 }, { col: "packages_json", type: "json", array: true },
-    { col: "is_active", type: "bool" },
+    { col: "is_active", type: "bool" }, { col: "daily_capacity", type: "int", min: 0 },
   ] },
   PACKAGE: { table: "packages", prefix: "pkg", fields: [
     { col: "title", type: "text", max: 300, required: true }, { col: "destination_city", type: "text", max: 100, required: true },
     { col: "hotel_id", type: "text", max: 100 }, { col: "flight_id", type: "text", max: 100 },
     { col: "package_discount_rate", type: "num", min: 0 }, { col: "total_original_krw", type: "num", min: 0, required: true },
     { col: "total_package_krw", type: "num", min: 0, required: true }, { col: "thumbnail_url", type: "text", max: 500 },
-    { col: "details_json", type: "json" }, { col: "is_active", type: "bool" },
+    { col: "details_json", type: "json" }, { col: "is_active", type: "bool" }, { col: "daily_capacity", type: "int", min: 0 },
   ] },
 };
 
@@ -620,6 +621,53 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       (SELECT COALESCE(SUM(amount), 0) FROM affiliate_conversions c WHERE c.partner_name = k.partner_name) AS gmv
       FROM affiliate_clicks k GROUP BY partner_name ORDER BY clicks DESC LIMIT 50`).all();
     return json({ success: true, summary: { clicks: clicks?.c || 0, conversions: conv?.c || 0, gmv: conv?.gmv || 0, commission: conv?.commission || 0 }, byPartner: byPartner.results || [] });
+  }
+
+  // Affiliate partner registry. /out/* redirects and postbacks read this table
+  // but nothing could write it (2026-11-09 audit [M]: dead surface). Validation
+  // mirrors the runtime gates exactly: lowercase ids (lookups lowercase), an
+  // https template (/out/ 404s otherwise), and a 24+ char secret (postbacks
+  // reject shorter ones). The secret is write-only and never serialized.
+  if (path === "/api/v1/admin/affiliate/partners" && method === "GET") {
+    const rows = await db.prepare("SELECT partner_id, name, deep_link_template, affiliate_id, is_active, updated_at FROM affiliate_partners_config ORDER BY partner_id").all();
+    return json({ success: true, partners: rows.results || [] });
+  }
+  if (path === "/api/v1/admin/affiliate/partners" && method === "POST") {
+    const b = await readJson(request);
+    const partnerId = str(b.partnerId, 64);
+    const name = str(b.name, 200);
+    const template = str(b.deepLinkTemplate, 500);
+    const affiliateId = str(b.affiliateId, 200);
+    const secret = typeof b.secretKey === "string" ? b.secretKey : "";
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(partnerId)) throw new HttpError(400, "INVALID_PARTNER_ID", "partnerId는 소문자 영문·숫자·-_ (64자 이하)만 허용됩니다.");
+    if (!name || !affiliateId) throw new HttpError(400, "FIELD_REQUIRED", "name과 affiliateId는 필수 항목입니다.");
+    if (!/^https:\/\/.+/.test(template)) throw new HttpError(400, "INVALID_DEEP_LINK", "deepLinkTemplate은 https:// URL이어야 합니다. ({click_id}, {item_id} 치환 지원)");
+    if (secret.length < 24 || secret.length > 200) throw new HttpError(400, "WEAK_PARTNER_SECRET", "secretKey는 24자 이상이어야 합니다.");
+    if (await db.prepare("SELECT partner_id FROM affiliate_partners_config WHERE partner_id = ?").bind(partnerId).first()) {
+      throw new HttpError(409, "ID_EXISTS", "이미 등록된 제휴사 ID입니다.");
+    }
+    await db.prepare("INSERT INTO affiliate_partners_config (partner_id, name, deep_link_template, affiliate_id, secret_key, is_active) VALUES (?, ?, ?, ?, ?, 1)")
+      .bind(partnerId, name, template, affiliateId, secret).run();
+    await audit(env, admin.id, "CREATE_AFFILIATE_PARTNER", "AFFILIATE_PARTNER", partnerId, { name });
+    return json({ success: true, id: partnerId }, 201);
+  }
+  m = path.match(/^\/api\/v1\/admin\/affiliate\/partners\/([A-Za-z0-9_-]+)$/);
+  if (m && method === "PATCH") {
+    const b = await readJson(request);
+    const before = await db.prepare("SELECT * FROM affiliate_partners_config WHERE partner_id = ?").bind(m[1]).first<any>();
+    if (!before) throw new HttpError(404, "PARTNER_NOT_FOUND", "제휴사를 찾을 수 없습니다.");
+    const name = b.name !== undefined ? str(b.name, 200) : before.name;
+    const template = b.deepLinkTemplate !== undefined ? str(b.deepLinkTemplate, 500) : before.deep_link_template;
+    const affiliateId = b.affiliateId !== undefined ? str(b.affiliateId, 200) : before.affiliate_id;
+    const secret = b.secretKey !== undefined ? (typeof b.secretKey === "string" ? b.secretKey : "") : before.secret_key;
+    const active = b.isActive !== undefined ? (b.isActive ? 1 : 0) : before.is_active;
+    if (!name || !affiliateId) throw new HttpError(400, "FIELD_REQUIRED", "name과 affiliateId는 필수 항목입니다.");
+    if (!/^https:\/\/.+/.test(template)) throw new HttpError(400, "INVALID_DEEP_LINK", "deepLinkTemplate은 https:// URL이어야 합니다.");
+    if (secret.length < 24 || secret.length > 200) throw new HttpError(400, "WEAK_PARTNER_SECRET", "secretKey는 24자 이상이어야 합니다.");
+    await db.prepare("UPDATE affiliate_partners_config SET name = ?, deep_link_template = ?, affiliate_id = ?, secret_key = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE partner_id = ?")
+      .bind(name, template, affiliateId, secret, active, m[1]).run();
+    await audit(env, admin.id, "UPDATE_AFFILIATE_PARTNER", "AFFILIATE_PARTNER", m[1], { before: before.is_active, after: active });
+    return json({ success: true });
   }
 
   // Product policy read (null when the product follows domain defaults).

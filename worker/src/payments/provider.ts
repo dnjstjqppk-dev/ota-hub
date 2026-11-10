@@ -44,13 +44,15 @@ export interface PaymentProvider {
 //   declined    -> card declined
 //   timeout     -> provider response lost (payment actually captured; lookup reveals it)
 //   refundfail  -> captured, but every refund attempt fails
+//   mismatch    -> captured a different amount (exercises the PG_AMOUNT_MISMATCH path)
+//   lost        -> provider response lost and nothing captured (lookup reveals NOT_CAPTURED)
 // ---------------------------------------------------------------------------
 export function sandboxProvider(): PaymentProvider {
   const scenario = (key: string) => key.split("_")[1] || "ok";
   return {
     name: "sandbox",
     mode: "SANDBOX",
-    publicConfig: () => ({ provider: "sandbox", mode: "SANDBOX", scenarios: ["ok", "declined", "timeout", "refundfail"] }),
+    publicConfig: () => ({ provider: "sandbox", mode: "SANDBOX", scenarios: ["ok", "declined", "timeout", "refundfail", "mismatch", "lost"] }),
     async confirm({ paymentKey, amountMinor }) {
       if (!/^sbx_[a-z]+_[A-Za-z0-9]{6,}$/.test(paymentKey)) {
         return { outcome: "FAILED", code: "INVALID_PAYMENT_KEY", message: "유효하지 않은 결제 키입니다.", raw: null };
@@ -58,6 +60,8 @@ export function sandboxProvider(): PaymentProvider {
       const s = scenario(paymentKey);
       if (s === "declined") return { outcome: "FAILED", code: "REJECT_CARD_PAYMENT", message: "카드사에서 결제를 거절했습니다. (테스트)", raw: { scenario: s } };
       if (s === "timeout") return { outcome: "UNKNOWN", message: "PG 응답 시간 초과 (테스트)" };
+      if (s === "lost") return { outcome: "UNKNOWN", message: "PG 응답 분실, 미결제 확인됨 (테스트)" };
+      if (s === "mismatch") return { outcome: "CAPTURED", paymentKey, amountMinor: amountMinor + 1, method: "CARD(SANDBOX)", approvedAt: new Date().toISOString(), raw: { scenario: s } };
       return { outcome: "CAPTURED", paymentKey, amountMinor, method: "CARD(SANDBOX)", approvedAt: new Date().toISOString(), raw: { scenario: s } };
     },
     async refund({ paymentKey, idempotencyKey }) {
@@ -67,7 +71,7 @@ export function sandboxProvider(): PaymentProvider {
     async lookup({ paymentKey, amountMinor }) {
       if (!paymentKey) return { outcome: "NOT_CAPTURED" };
       const s = scenario(paymentKey);
-      if (s === "declined") return { outcome: "NOT_CAPTURED" };
+      if (s === "declined" || s === "lost") return { outcome: "NOT_CAPTURED" };
       // For "timeout" the simulated PG did capture: reconciliation must discover it.
       return { outcome: "CAPTURED", paymentKey, amountMinor, method: "CARD(SANDBOX)", approvedAt: new Date().toISOString() };
     },

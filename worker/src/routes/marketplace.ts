@@ -148,6 +148,13 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     const domain = str(b.domain || 'ACTIVITY', 20).toUpperCase();
     const city = str(b.city || '서울', 100);
     const retailPrice = Math.max(1000, Number(b.price || 50000));
+    // Daily sellable capacity. Unset (null) means the product cannot be quoted
+    // until an operator configures it (P0 2026-11-10: capacity-less products
+    // used to sell unlimited inventory).
+    const capacity = b.capacity === undefined || b.capacity === null ? null : Number(b.capacity);
+    if (capacity !== null && (!Number.isInteger(capacity) || capacity < 0)) {
+      throw new HttpError(400, 'INVALID_CAPACITY', 'capacity는 0 이상의 정수여야 합니다.');
+    }
     const commissionBps = 1000; // 10% standard platform take-rate
     const sellerPayout = Math.round(retailPrice * 0.90);
     const platformMargin = retailPrice - sellerPayout;
@@ -166,9 +173,9 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     } else {
       newDomainItemId = newId('act');
       await env.DB.prepare(`
-        INSERT INTO activities (id, partner_id, title, category, city, country, price_krw, description, created_at)
-        VALUES (?, ?, ?, 'EXPERIENCE', ?, '대한민국', ?, ?, ?)
-      `).bind(newDomainItemId, pId, title, city, retailPrice, `${title} - 파트너 직등록 상품`, now).run();
+        INSERT INTO activities (id, partner_id, title, category, city, country, price_krw, description, daily_capacity, created_at)
+        VALUES (?, ?, ?, 'EXPERIENCE', ?, '대한민국', ?, ?, ?, ?)
+      `).bind(newDomainItemId, pId, title, city, retailPrice, `${title} - 파트너 직등록 상품`, capacity, now).run();
     }
 
     // 2. Insert into unified marketplace_catalog_items with 3P Partner Attribution

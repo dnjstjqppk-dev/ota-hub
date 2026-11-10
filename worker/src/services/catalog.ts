@@ -126,7 +126,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
     if (!t || t.is_active === 0) throw notFound();
       return {
         domain, itemId, unitId: null, supplierId: t.partner_id || "unassigned_transfer", currency: "KRW",
-        title: t.service_title, unitPriceMajor: Number(t.price_krw), capacity: null, maxOccupancy: Number(t.max_passengers) || null,
+        title: t.service_title, unitPriceMajor: Number(t.price_krw), capacity: t.daily_capacity === null || t.daily_capacity === undefined ? null : Number(t.daily_capacity), maxOccupancy: Number(t.max_passengers) || null,
         freeCancellation: true, instantConfirmation: true, departureClock: null,
       };
     }
@@ -135,7 +135,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
       if (!a || a.is_active === 0) throw notFound();
       return {
         domain, itemId, unitId: null, supplierId: a.partner_id || "ptn_tour_01", currency: "KRW",
-        title: a.title, unitPriceMajor: Number(a.price_krw), capacity: null, maxOccupancy: null,
+        title: a.title, unitPriceMajor: Number(a.price_krw), capacity: a.daily_capacity === null || a.daily_capacity === undefined ? null : Number(a.daily_capacity), maxOccupancy: null,
         freeCancellation: Boolean(a.free_cancellation), instantConfirmation: Boolean(a.instant_confirmation), departureClock: null,
       };
     }
@@ -144,7 +144,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
     if (!p || p.is_active === 0) throw notFound();
       return {
         domain, itemId, unitId: null, supplierId: "unassigned_package", currency: "KRW",
-        title: p.title, unitPriceMajor: Number(p.total_package_krw), capacity: null, maxOccupancy: null,
+        title: p.title, unitPriceMajor: Number(p.total_package_krw), capacity: p.daily_capacity === null || p.daily_capacity === undefined ? null : Number(p.daily_capacity), maxOccupancy: null,
         freeCancellation: false, instantConfirmation: false, departureClock: null,
       };
     }
@@ -202,6 +202,33 @@ export function bookabilityOf(env: Env, supplier: SupplierRow | null): Bookabili
 export function assertTicketable(domain: string, supplier: SupplierRow | null): void {
   if (domain === "FLIGHT" && supplier?.adapter === "direct_contract") {
     throw new HttpError(409, "FLIGHT_TICKETING_UNSUPPORTED", "직계약 공급사 상품은 항공 발권이 지원되지 않습니다. 발권 가능 공급사의 상품을 선택해주세요.");
+  }
+}
+
+/**
+ * eSIM and travel insurance sell plan listings only (`/esim/plans`,
+ * `/insurance/plans`): quoting was never built for them (pricing DOMAINS has
+ * 7 entries, no ESIM/INSURANCE) and the Airalo adapter is an uncontracted
+ * sandbox mock. Refuse at the money gates with an explicit code instead of a
+ * generic INVALID_DOMAIN so clients can explain the state (2026-11-10 policy:
+ * explicit unsupported, not a silent gap). Mirrors assertTicketable().
+ */
+export function assertQuotableDomain(domain: string): void {
+  if (domain === "ESIM" || domain === "INSURANCE") {
+    throw new HttpError(409, "ESIM_INSURANCE_QUOTE_UNSUPPORTED", "eSIM·여행자보험은 요금제 조회만 지원하며 견적·예약은 준비 중입니다.", { domain });
+  }
+}
+
+/**
+ * ACTIVITY / TRANSFER / PACKAGE sell dated inventory through the same hold
+ * machinery as every other domain — but their capacity used to be hardcoded
+ * null, so holdTargets() returned [] and both the quote check and the guarded
+ * booking INSERT were skipped (P0 2026-11-10: unlimited paid oversell).
+ * A product without configured daily_capacity must not sell at all.
+ */
+export function assertInventoryConfigured(domain: string, product: { capacity: number | null }): void {
+  if ((domain === "ACTIVITY" || domain === "TRANSFER" || domain === "PACKAGE") && product.capacity === null) {
+    throw new HttpError(409, "INVENTORY_NOT_CONFIGURED", "해당 상품은 판매 수량이 설정되지 않아 예약할 수 없습니다.", { domain });
   }
 }
 

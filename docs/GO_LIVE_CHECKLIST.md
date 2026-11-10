@@ -16,6 +16,15 @@ npx wrangler d1 execute ota_production --remote --command "SELECT id, adapter, i
 # 기대: ptn_direct_01 | direct_contract | NOT_INTEGRATED
 ```
 
+> 0027(수용량) 주의: `daily_capacity`가 NULL인 액티비티·픽업·패키지는
+> 견적·예약이 409로 거부된다. 마이그레이션 백필(30/10/16)은 그 시점 행에만
+> 적용되므로, 운영 상품의 실수용량을 어드민 카탈로그에서 반드시 검토·설정한다.
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT COUNT(*) FROM activities WHERE daily_capacity IS NULL) AS act, (SELECT COUNT(*) FROM transfers WHERE daily_capacity IS NULL) AS trf, (SELECT COUNT(*) FROM packages WHERE daily_capacity IS NULL) AS pkg;"
+> # 기대: 전부 0 (판매 개시 전)
+> ```
+
 ## 1. 판매주체 ACTIVE (사업자 정보 필요)
 
 어드민 콘솔 Suppliers/Entities 화면 또는 API로 실정보를 입력하고 ACTIVE로 전환한다.

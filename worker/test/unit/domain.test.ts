@@ -52,6 +52,21 @@ test("quote: hotel nights x rooms + 10% tax, integer total", () => {
   assert.equal(q.cancellationPolicy.freeUntil, "2026-11-30T00:00:00.000Z");
 });
 
+test("quote: partner nightly overrides reprice per night; uniform stays aggregated", () => {
+  const params = { startDate: "2026-12-01", endDate: "2026-12-03", rooms: 1, travelers: { adults: 2, children: 0, infants: 0 } };
+  const mixed = computeQuote(hotel, params, null, NOW, (id, d) => (id === "htl_x" && d === "2026-12-01" ? 600_000 : null));
+  assert.equal(mixed.baseMinor, 1_150_000);
+  assert.equal(mixed.totalMinor, 1_265_000);
+  assert.equal(mixed.lines.filter((l) => l.code === "ROOM_NIGHT").length, 2);
+  assert.ok(mixed.lines.some((l) => l.label.includes("2026-12-01") && l.unitMinor === 600_000));
+  const uniform = computeQuote(hotel, params, null, NOW, () => null);
+  assert.equal(uniform.lines.filter((l) => l.code === "ROOM_NIGHT").length, 1);
+  assert.equal(uniform.totalMinor, 1_210_000);
+  const act = { ...hotel, domain: "ACTIVITY" as const, unitId: null, unitPriceMajor: 30000 };
+  const single = computeQuote(act, { startDate: "2026-12-01", travelers: { adults: 2, children: 0, infants: 0 } }, null, NOW, () => 45000);
+  assert.equal(single.totalMinor, 90000);
+});
+
 test("quote: rejects past dates, impossible dates, zero nights, occupancy overflow", () => {
   const t = { adults: 2, children: 0, infants: 0 };
   assert.throws(() => computeQuote(hotel, { startDate: "2026-11-01", endDate: "2026-11-03", travelers: t }, null, NOW), (e: any) => e instanceof QuoteError && e.code === "DATE_IN_PAST");

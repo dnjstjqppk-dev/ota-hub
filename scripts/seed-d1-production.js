@@ -171,7 +171,7 @@ activities.forEach(a => {
   sqlStatements.push(`INSERT OR REPLACE INTO activities (
     id, partner_id, title, category, city, country, price_krw, review_score,
     review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json
+    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     ${escapeSql(a.id)},
     'ptn_tour_01',
@@ -189,7 +189,8 @@ activities.forEach(a => {
     'QR_CODE',
     ${escapeSql(a.image_url)},
     ${escapeSql(Array.isArray(a.highlights) ? a.highlights.join('; ') : '')},
-    ${escapeSql(JSON.stringify(a.included || []))}
+    ${escapeSql(JSON.stringify(a.included || []))},
+    ${a.daily_capacity || 30}
   );`);
 });
 
@@ -199,7 +200,7 @@ console.log(`  - Packages: ${packages.length} items`);
 packages.forEach(p => {
   sqlStatements.push(`INSERT OR REPLACE INTO packages (
     id, title, destination_city, hotel_id, flight_id, package_discount_rate,
-    total_original_krw, total_package_krw, thumbnail_url, details_json
+    total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
   ) VALUES (
     ${escapeSql(p.id)},
     ${escapeSql(p.title)},
@@ -210,7 +211,8 @@ packages.forEach(p => {
     ${p.original_price_krw || 1200000},
     ${p.bundle_price_krw || 990000},
     ${escapeSql(p.hero_image_url)},
-    ${escapeSql(JSON.stringify({ features: p.features || [], gallery: p.gallery || [] }))}
+    ${escapeSql(JSON.stringify({ features: p.features || [], gallery: p.gallery || [] }))},
+    ${p.daily_capacity || 16}
   );`);
 });
 

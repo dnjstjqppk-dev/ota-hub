@@ -193,7 +193,27 @@ interface PricedLines {
 }
 
 /** Base (pre-tax) price lines of one product for the given parameters. Validates dates and occupancy. */
-function priceLines(product: CatalogProduct, rawParams: QuoteParams, now: Date): PricedLines {
+/**
+ * Partner calendar price overrides, in minor units for (itemId, date), or
+ * null when the catalog price applies. One resolver serves every leg so
+ * round-trip legs (different products/dates) price consistently.
+ */
+export type NightlyRateFn = (itemId: string, date: string) => number | null;
+
+/** Stay-length lines: per-night breakdown when overrides diverge, else the single aggregated line. */
+function stayLines(code: string, uniformLabel: string, nightLabel: string, qty: number, nights: number, startMs: number, itemId: string, catalogMinor: number, nightly?: NightlyRateFn | null): QuoteLine[] {
+  const perNight: Array<{ d: string; u: number }> = [];
+  for (let t = startMs, i = 0; i < nights; t += MS_DAY, i++) {
+    const d = isoDay(t);
+    perNight.push({ d, u: assertMinor(nightly?.(itemId, d) ?? catalogMinor, "nightly rate") });
+  }
+  if (!nightly || perNight.every((n) => n.u === catalogMinor)) {
+    return [{ code, label: uniformLabel, quantity: qty * nights, unitMinor: catalogMinor, amountMinor: catalogMinor * qty * nights }];
+  }
+  return perNight.map((n) => ({ code, label: `${n.d} ${nightLabel}`, quantity: qty, unitMinor: n.u, amountMinor: n.u * qty }));
+}
+
+function priceLines(product: CatalogProduct, rawParams: QuoteParams, now: Date, nightly?: NightlyRateFn | null): PricedLines {
   const travelers = normalizeTravelers(rawParams.travelers);
   const startMs = parseDate("이용 시작", rawParams.startDate);
   const todayMs = Date.parse(now.toISOString().slice(0, 10) + "T00:00:00Z");
@@ -202,6 +222,9 @@ function priceLines(product: CatalogProduct, rawParams: QuoteParams, now: Date):
 
   const unitMinor = toMinor(product.unitPriceMajor, "KRW");
   if (unitMinor <= 0) throw new QuoteError("PRICE_UNAVAILABLE", "현재 판매 가격을 확인할 수 없는 상품입니다.");
+  // Single-date price: the partner calendar override wins when present
+  // (P0 2026-11-10: overrides were silently ignored, closed dates sold on).
+  const singleMinor = assertMinor(nightly?.(product.itemId, isoDay(startMs)) ?? unitMinor, "nightly rate");
 
   const lines: QuoteLine[] = [];
   let endMs = startMs;
@@ -220,7 +243,7 @@ function priceLines(product: CatalogProduct, rawParams: QuoteParams, now: Date):
         throw new QuoteError("OCCUPANCY_EXCEEDED", `객실당 최대 ${product.maxOccupancy}명까지 투숙할 수 있습니다.`);
       }
       pricedUnits = rooms;
-      lines.push({ code: "ROOM_NIGHT", label: `객실 ${rooms}개 × ${nights}박`, quantity: rooms * nights, unitMinor, amountMinor: unitMinor * rooms * nights });
+      lines.push(...stayLines("ROOM_NIGHT", `객실 ${rooms}개 × ${nights}박`, `객실 ${rooms}개`, rooms, nights, startMs, product.itemId, unitMinor, nightly));
       break;
     }
     case "CAR": {
@@ -228,17 +251,17 @@ function priceLines(product: CatalogProduct, rawParams: QuoteParams, now: Date):
       const days = Math.round((endMs - startMs) / MS_DAY);
       if (days < 1 || days > 60) throw new QuoteError("INVALID_RENTAL", "대여 기간은 1~60일이어야 합니다.");
       pricedUnits = 1;
-      lines.push({ code: "VEHICLE_DAY", label: `차량 1대 × ${days}일`, quantity: days, unitMinor, amountMinor: unitMinor * days });
+      lines.push(...stayLines("VEHICLE_DAY", `차량 1대 × ${days}일`, "차량 1대", 1, days, startMs, product.itemId, unitMinor, nightly));
       break;
     }
     case "FLIGHT": {
       pricedUnits = seatTravelers;
-      lines.push({ code: "FARE_ADULT", label: `성인 운임 × ${travelers.adults}`, quantity: travelers.adults, unitMinor, amountMinor: unitMinor * travelers.adults });
+      lines.push({ code: "FARE_ADULT", label: `성인 운임 × ${travelers.adults}`, quantity: travelers.adults, unitMinor: singleMinor, amountMinor: singleMinor * travelers.adults });
       if (travelers.children > 0) {
-        lines.push({ code: "FARE_CHILD", label: `소아 운임 × ${travelers.children}`, quantity: travelers.children, unitMinor, amountMinor: unitMinor * travelers.children });
+        lines.push({ code: "FARE_CHILD", label: `소아 운임 × ${travelers.children}`, quantity: travelers.children, unitMinor: singleMinor, amountMinor: singleMinor * travelers.children });
       }
       if (travelers.infants > 0) {
-        const infantUnit = percentOf(unitMinor, 1000);
+        const infantUnit = percentOf(singleMinor, 1000);
         lines.push({ code: "FARE_INFANT", label: `유아 운임(좌석 미점유) × ${travelers.infants}`, quantity: travelers.infants, unitMinor: infantUnit, amountMinor: infantUnit * travelers.infants });
       }
       break;
@@ -248,7 +271,7 @@ function priceLines(product: CatalogProduct, rawParams: QuoteParams, now: Date):
     case "PACKAGE": {
       pricedUnits = seatTravelers;
       const label = product.domain === "TRAIN" ? "승차권" : product.domain === "ACTIVITY" ? "이용권" : "패키지(1인)";
-      lines.push({ code: "PER_PERSON", label: `${label} × ${seatTravelers}`, quantity: seatTravelers, unitMinor, amountMinor: unitMinor * seatTravelers });
+      lines.push({ code: "PER_PERSON", label: `${label} × ${seatTravelers}`, quantity: seatTravelers, unitMinor: singleMinor, amountMinor: singleMinor * seatTravelers });
       break;
     }
     case "TRANSFER": {
@@ -256,7 +279,7 @@ function priceLines(product: CatalogProduct, rawParams: QuoteParams, now: Date):
         throw new QuoteError("OCCUPANCY_EXCEEDED", `차량 최대 탑승 인원은 ${product.maxOccupancy}명입니다.`);
       }
       pricedUnits = 1;
-      lines.push({ code: "VEHICLE", label: "차량 1대 (편도)", quantity: 1, unitMinor, amountMinor: unitMinor });
+      lines.push({ code: "VEHICLE", label: "차량 1대 (편도)", quantity: 1, unitMinor: singleMinor, amountMinor: singleMinor });
       break;
     }
   }
@@ -292,8 +315,9 @@ export function computeQuote(
   rawParams: QuoteParams,
   promo: Promotion | null,
   now: Date,
+  nightly?: NightlyRateFn | null,
 ): QuoteResult {
-  const p = priceLines(product, rawParams, now);
+  const p = priceLines(product, rawParams, now, nightly);
   const lines = [...p.lines];
   const f = finalizeQuote(product.domain, lines, promo, now);
   return {
@@ -324,6 +348,7 @@ export function computeRoundTripQuote(
   rawParams: QuoteParams,
   promo: Promotion | null,
   now: Date,
+  nightly?: NightlyRateFn | null,
 ): QuoteResult & { legs: [LegResult, LegResult] } {
   if (outbound.domain !== "FLIGHT" || inbound.domain !== "FLIGHT") throw new QuoteError("ROUND_TRIP_FLIGHT_ONLY", "왕복 예약은 항공권에만 적용됩니다.");
   if (outbound.supplierId !== inbound.supplierId) {
@@ -332,8 +357,8 @@ export function computeRoundTripQuote(
   if (outbound.route && inbound.route && (outbound.route.from !== inbound.route.to || outbound.route.to !== inbound.route.from)) {
     throw new QuoteError("ROUND_TRIP_ROUTE_MISMATCH", "오는 편은 가는 편의 역방향 노선이어야 합니다.");
   }
-  const out = priceLines(outbound, rawParams, now);
-  const ret = priceLines(inbound, { ...rawParams, startDate: rawParams.returnDate || "" }, now);
+  const out = priceLines(outbound, rawParams, now, nightly);
+  const ret = priceLines(inbound, { ...rawParams, startDate: rawParams.returnDate || "" }, now, nightly);
   if (ret.startMs < out.startMs) throw new QuoteError("INVALID_RETURN_DATE", "오는 날은 가는 날과 같거나 이후여야 합니다.");
   const tag = (l: QuoteLine, code: string, label: string): QuoteLine => ({ ...l, code: `${code}_${l.code}`, label: `${label} · ${l.label}` });
   const lines = [...out.lines.map((l) => tag(l, "OUT", "가는 편")), ...ret.lines.map((l) => tag(l, "RET", "오는 편"))];

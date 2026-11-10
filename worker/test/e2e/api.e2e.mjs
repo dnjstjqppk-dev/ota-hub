@@ -11,6 +11,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHmac } from "node:crypto";
 
 const BASE = process.env.BASE || "http://127.0.0.1:8799";
 const ADMIN_EMAIL = "admin@local.test";
@@ -35,8 +36,19 @@ function sql(command) {
   // E2E_PERSIST_TO: run against an isolated local D1 (same value as `wrangler dev --persist-to`).
   const persist = process.env.E2E_PERSIST_TO ? ["--persist-to", process.env.E2E_PERSIST_TO] : [];
   const args = ["wrangler", "d1", "execute", "ota_local", "--local", "-c", "wrangler.local.jsonc", ...persist, "--json", "--command", command];
-  const out = execFileSync(isWin ? "cmd.exe" : "npx", isWin ? ["/c", "npx", ...args] : args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-  return JSON.parse(out)[0].results;
+  // The CLI shares the dev server's sqlite file and flakes under concurrency
+  // (intermittent exit 1). Retry the identical statement; assertions unchanged.
+  let lastErr = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const out = execFileSync(isWin ? "cmd.exe" : "npx", isWin ? ["/c", "npx", ...args] : args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      return JSON.parse(out)[0].results;
+    } catch (e) {
+      lastErr = e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400 * (attempt + 1));
+    }
+  }
+  throw lastErr;
 }
 
 /**
@@ -90,6 +102,10 @@ async function fullHotelBooking(token, simulation, scenario = "ok", qextra = {})
 let A, B, ADMIN;
 before(async () => {
   sql("DELETE FROM login_attempts"); // local DB only: reset rate-limit window between runs
+  // Committed holds never release, so runs accumulate them until dates sell out
+  // (suite rot: SOLD_OUT on helper dates after enough runs). Holds belong to
+  // dead prior-run bookings; every test creates its own.
+  sql("DELETE FROM inventory_holds");
   A = await register("a");
   B = await register("b");
   const r = await api("POST", "/api/v1/auth/login", { body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD } });
@@ -1340,7 +1356,7 @@ test("floor price: quotes under the product floor are refused at quote and booki
 test("settlement batches: settling a partner-seller row rolls into the monthly batch", async () => {
   const P = await approvedPartner("batch");
   sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 배치 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
-  const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 배치 투어", domain: "ACTIVITY", city: "서울", price: 50000 } });
+  const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 배치 투어", domain: "ACTIVITY", city: "서울", price: 50000, capacity: 10 } });
   assert.equal(reg.status, 201, JSON.stringify(reg.data));
   const itemId = reg.data.product.item_id;
   const q = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "ACTIVITY", itemId, startDate: day(95), travelers: { adults: 1 } } })).data.quote;
@@ -1488,7 +1504,7 @@ test("passport wallet: encrypted at rest, masked in reads, owner-scoped", async 
   assert.equal((await api("DELETE", `/api/v1/user/passengers/${saved.data.id}`, { token: H.token })).status, 200);
 });
 
-test("surface smoke: read-only endpoints answer; dead affiliate surface stays safe; 410 stubs hold", async () => {
+test("surface smoke: read-only endpoints answer; unregistered affiliate surface stays safe; 410 stubs hold", async () => {
   assert.equal((await api("GET", "/api/v1/feature-flags")).status, 200);
   assert.equal((await api("GET", "/api/v1/admin/feature-flags", { token: ADMIN })).status, 200);
   assert.equal((await api("GET", "/api/v1/suppliers/registry")).status, 200);
@@ -1534,4 +1550,173 @@ test("small surfaces: moment likes toggle, entity changes read, traveler import,
   const mstat = (await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN })).data.stats;
   assert.ok(mstat.completed >= 1);
   assert.equal((await api("GET", `/api/v1/bookings/${b.id}`, { token: A.token })).data.booking.status, "COMPLETED");
+});
+
+test("affiliate partners: admin register → /out/ 302 → signed postback converts → deactivate blocks", async () => {
+  const pid = `e2e_aff_${rnd()}`;
+  const SECRET = "e2e_secret_0123456789abcdef";
+  const template = "https://partner.example.net/offer/{item_id}?click={click_id}";
+  const cfg = { partnerId: pid, name: "E2E 제휴사", deepLinkTemplate: template, affiliateId: "aff_e2e", secretKey: SECRET };
+  assert.equal((await api("POST", "/api/v1/admin/affiliate/partners", { body: cfg })).status, 401);
+  const created = await api("POST", "/api/v1/admin/affiliate/partners", { token: ADMIN, body: cfg });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  assert.equal(created.data.id, pid);
+  assert.ok(!JSON.stringify(created.data).includes(SECRET), "secret never echoed");
+  assert.equal((await api("POST", "/api/v1/admin/affiliate/partners", { token: ADMIN, body: cfg })).data.code, "ID_EXISTS");
+  assert.equal((await api("POST", "/api/v1/admin/affiliate/partners", { token: ADMIN, body: { ...cfg, partnerId: `${pid}x`, deepLinkTemplate: "http://plain.example.net/x" } })).data.code, "INVALID_DEEP_LINK");
+  assert.equal((await api("POST", "/api/v1/admin/affiliate/partners", { token: ADMIN, body: { ...cfg, partnerId: `${pid}y`, secretKey: "short" } })).data.code, "WEAK_PARTNER_SECRET");
+  assert.equal((await api("POST", "/api/v1/admin/affiliate/partners", { token: ADMIN, body: { ...cfg, partnerId: "NOT-lower" } })).data.code, "INVALID_PARTNER_ID");
+  const list = (await api("GET", "/api/v1/admin/affiliate/partners", { token: ADMIN })).data.partners;
+  assert.ok(list.some((p) => p.partner_id === pid));
+  assert.ok(!JSON.stringify(list).includes(SECRET), "secret never listed");
+  // /out/ redirects through the registered template and records the click.
+  const redir = await fetch(`${BASE}/out/${pid}/item123?domain=HOTEL`, { redirect: "manual" });
+  assert.equal(redir.status, 302);
+  const loc = redir.headers.get("location");
+  assert.ok(loc.startsWith("https://partner.example.net/offer/item123?click=clk_"), loc);
+  const clickId = new URL(loc).searchParams.get("click");
+  const orderId = `e2e_ord_${rnd()}`;
+  const post = (payload, secret, sigOverride) => {
+    const raw = JSON.stringify(payload);
+    const ts = String(Math.floor(Date.now() / 1000));
+    const sig = sigOverride ?? createHmac("sha256", secret).update(`${ts}.${raw}`).digest("hex");
+    return { raw, ts, sig };
+  };
+  const payload = { partner: pid, click_id: clickId, order_id: orderId, amount: 120000, currency: "KRW", commission: 6000 };
+  const good = post(payload, SECRET);
+  const cv = await fetch(BASE + "/api/v1/webhooks/postback", { method: "POST", headers: { "Content-Type": "application/json", "X-Signature": good.sig, "X-Timestamp": good.ts }, body: good.raw });
+  assert.equal(cv.status, 200);
+  assert.deepEqual(await cv.json(), { success: true, duplicate: false });
+  const dup = post(payload, SECRET);
+  const cv2 = await fetch(BASE + "/api/v1/webhooks/postback", { method: "POST", headers: { "Content-Type": "application/json", "X-Signature": dup.sig, "X-Timestamp": dup.ts }, body: dup.raw });
+  assert.deepEqual(await cv2.json(), { success: true, duplicate: true });
+  const bad = post(payload, SECRET, "0".repeat(64));
+  assert.equal((await fetch(BASE + "/api/v1/webhooks/postback", { method: "POST", headers: { "Content-Type": "application/json", "X-Signature": bad.sig, "X-Timestamp": bad.ts }, body: bad.raw })).status, 403);
+  const conv = (await api("GET", `/api/v1/admin/affiliate/conversions?q=${orderId}`, { token: ADMIN })).data.conversions;
+  assert.ok(conv.some((c) => c.order_id === orderId && c.partner_name === pid));
+  // Deactivation blocks both legs immediately.
+  assert.equal((await api("PATCH", `/api/v1/admin/affiliate/partners/${pid}`, { token: ADMIN, body: { isActive: false } })).status, 200);
+  assert.equal((await api("GET", `/out/${pid}/item123`)).data.code, "PARTNER_LINK_UNAVAILABLE");
+  const off = post({ ...payload, order_id: `${orderId}b` }, SECRET);
+  assert.equal((await api("POST", "/api/v1/webhooks/postback", { headers: { "X-Signature": off.sig, "X-Timestamp": off.ts }, body: JSON.parse(off.raw) })).data.code, "UNKNOWN_PARTNER");
+  assert.equal((await api("PATCH", "/api/v1/admin/affiliate/partners/no_such", { token: ADMIN, body: { isActive: true } })).data.code, "PARTNER_NOT_FOUND");
+  sql(`DELETE FROM affiliate_conversions WHERE partner_name = '${pid}'`);
+  sql(`DELETE FROM affiliate_clicks WHERE partner_name = '${pid}'`);
+  sql(`DELETE FROM affiliate_partners_config WHERE partner_id = '${pid}'`);
+});
+
+test("quote: ESIM/INSURANCE rejected with explicit 409; plan listings stay live", async () => {
+  for (const d of ["ESIM", "esim", "INSURANCE", "insurance"]) {
+    const r = await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: d, itemId: "x", startDate: day(40), travelers: { adults: 1 } } });
+    assert.equal(r.status, 409, d);
+    assert.equal(r.data.code, "ESIM_INSURANCE_QUOTE_UNSUPPORTED", d);
+  }
+  assert.equal((await api("GET", "/api/v1/esim/plans")).status, 200);
+  assert.equal((await api("GET", "/api/v1/insurance/plans?days=7")).status, 200);
+  const reg = (await api("GET", "/api/v1/suppliers/registry")).data.suppliers;
+  assert.equal(reg.find((s) => s.supplierCode === "AIRALO_ESIM").contractStatus, "SANDBOX_MOCK");
+});
+
+test("p0 money: platform-failure refunds restore coins; fee-cancel voids settlement", async () => {
+  const F = await register("p0fail");
+  const coins = async () => (await api("GET", "/api/v1/auth/me", { token: F.token })).data.tripCoins;
+  const grant = await api("PATCH", `/api/v1/admin/users/${F.id}`, { token: ADMIN, headers: { "Idempotency-Key": idem() }, body: { coinAdjustment: 50000, note: "e2e p0" } });
+  assert.equal(grant.status, 200, JSON.stringify(grant.data));
+  // 1. Supplier-fail full refund restores coins (P0 #1).
+  const q1 = (await quote(F.token, { coinAmount: 5000 })).data.quote;
+  const b1 = (await book(F.token, q1, { simulation: { supplier: "fail" } })).data.booking;
+  const p1 = await pay(F.token, b1);
+  assert.equal(p1.data.booking.status, "REFUNDED");
+  assert.equal(await coins(), 50000, "coins restored on supplier-fail refund");
+  // 2. PG amount-mismatch FAILED restores coins (P0 #2).
+  const q2 = (await quote(F.token, { coinAmount: 4000 })).data.quote;
+  const b2 = (await book(F.token, q2)).data.booking;
+  const p2 = await pay(F.token, b2, "mismatch");
+  assert.equal(p2.data.code, "PG_AMOUNT_MISMATCH");
+  assert.equal((await api("GET", `/api/v1/bookings/${b2.id}`, { token: F.token })).data.booking.status, "FAILED");
+  assert.equal(await coins(), 50000, "coins restored on mismatch FAILED");
+  // 3. Lost payment reconciled to FAILED restores coins (P0 #2).
+  const q3 = (await quote(F.token, { coinAmount: 3000 })).data.quote;
+  const b3 = (await book(F.token, q3)).data.booking;
+  const p3 = await pay(F.token, b3, "lost");
+  assert.equal(p3.data.booking.status, "MANUAL_REVIEW_REQUIRED");
+  await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN });
+  assert.equal((await api("GET", `/api/v1/bookings/${b3.id}`, { token: F.token })).data.booking.status, "FAILED");
+  assert.equal(await coins(), 50000, "coins restored on reconciled FAILED");
+  // 4. Operator REJECT on an uncaptured booking under review restores coins + releases holds (P0 #2).
+  const q4 = (await quote(F.token, { coinAmount: 2000 })).data.quote;
+  const b4 = (await book(F.token, q4)).data.booking;
+  assert.equal((await pay(F.token, b4, "lost")).data.booking.status, "MANUAL_REVIEW_REQUIRED");
+  const rj = await api("POST", `/api/v1/admin/bookings/${b4.id}/supplier-decision`, { token: ADMIN, body: { decision: "REJECT", note: "e2e" } });
+  assert.equal(rj.status, 200, JSON.stringify(rj.data));
+  assert.equal(rj.data.booking.status, "FAILED");
+  assert.equal(await coins(), 50000, "coins restored on unpaid REJECT");
+  assert.equal(sql(`SELECT COUNT(*) AS c FROM inventory_holds WHERE booking_id = '${b4.id}' AND status != 'RELEASED'`)[0].c, 0);
+  // 5. Fee-cancel voids the seller payout (P0 #3).
+  const q5 = (await quote(F.token)).data.quote;
+  const b5 = (await book(F.token, q5)).data.booking;
+  const p5 = await pay(F.token, b5);
+  assert.equal(p5.data.booking.status, "VOUCHER_ISSUED");
+  assert.equal(sql(`SELECT settlement_status AS s FROM marketplace_order_settlements WHERE booking_id = '${b5.id}'`)[0].s, "PENDING");
+  sql(`UPDATE bookings SET cancellation_policy_json = '{"type":"FREE_UNTIL","freeUntil":"2020-01-01T00:00:00.000Z","feeBpsAfter":5000,"source":"CATALOG_RULE"}' WHERE id = '${b5.id}'`);
+  const c5 = await api("POST", `/api/v1/bookings/${b5.id}/cancel`, { token: F.token });
+  assert.equal(c5.data.booking.status, "REFUNDED");
+  assert.ok(c5.data.booking.cancellationFeeMinor > 0 && c5.data.booking.refundedMinor > 0, "partial refund");
+  assert.equal(sql(`SELECT settlement_status AS s FROM marketplace_order_settlements WHERE booking_id = '${b5.id}'`)[0].s, "REFUNDED", "fee-cancel voids payout");
+  assert.equal(sql(`SELECT COALESCE(SUM(delta), 0) AS s FROM coin_ledger WHERE user_id = '${F.id}'`)[0].s, 50000, "no double restore");
+});
+
+test("p0 inventory: unconfigured products refuse sale; capacity caps oversell", async () => {
+  const P = await approvedPartner("cap");
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 수용량 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
+  const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 수용량 투어", domain: "ACTIVITY", city: "서울", price: 30000 } });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
+  const itemId = reg.data.product.item_id;
+  const svc = day(140 + (Date.now() % 40)); // per-run date: committed holds never release
+  const ask = (d) => api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "ACTIVITY", itemId, startDate: d, travelers: { adults: 1 } } });
+  assert.equal((await ask(svc)).data.code, "INVENTORY_NOT_CONFIGURED");
+  assert.equal((await api("PATCH", `/api/v1/admin/catalog/ACTIVITY/${itemId}`, { token: ADMIN, body: { daily_capacity: 1 } })).status, 200);
+  const q1 = (await ask(svc)).data.quote;
+  assert.ok(q1.quoteId, JSON.stringify(q1));
+  const b1 = (await book(A.token, q1)).data.booking;
+  assert.ok(b1.id);
+  assert.equal((await ask(svc)).data.code, "SOLD_OUT", "capacity 1 already held");
+  const p1 = await pay(A.token, b1);
+  assert.equal(p1.data.booking.status, "VOUCHER_ISSUED");
+  assert.equal((await ask(svc)).data.code, "SOLD_OUT", "committed hold still counts");
+});
+
+test("p0 calendar: default-unit closure blocks sale; overrides reprice dates", async () => {
+  const P = await approvedPartner("cal");
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 캘린더 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
+  const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 캘린더 투어", domain: "ACTIVITY", city: "서울", price: 30000, capacity: 5 } });
+  const itemId = reg.data.product.item_id;
+  const D = day(170 + (Date.now() % 20));
+  const ask = () => api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "ACTIVITY", itemId, startDate: D, travelers: { adults: 1 } } });
+  // Closure written the way the extranet calendar writes it (unitId default) blocks the sale.
+  assert.equal((await api("PUT", "/api/v1/partner/inventory", { token: P.token, body: { domain: "ACTIVITY", itemId, unitId: "default", serviceDate: D, allocatedUnits: 5, isClosed: true } })).status, 200);
+  assert.equal((await ask()).data.code, "SOLD_OUT");
+  // Reopen with a price override: the quote reprices to the calendar rate.
+  assert.equal((await api("PUT", "/api/v1/partner/inventory", { token: P.token, body: { domain: "ACTIVITY", itemId, unitId: "default", serviceDate: D, allocatedUnits: 5, priceOverrideMinor: 45000 } })).status, 200);
+  const q = (await ask()).data.quote;
+  assert.equal(q.totalMinor, 45000, JSON.stringify(q));
+  const b = (await book(A.token, q)).data.booking;
+  assert.equal((await pay(A.token, b)).data.booking.status, "VOUCHER_ISSUED");
+  // Hotel nightly overrides price each night; revalidation agrees.
+  const created = await api("POST", "/api/v1/partner/products", { token: P.token, body: { title: "E2E 캘린더 호텔", domain: "HOTEL", city: "서울", price: 100000 } });
+  const hid = created.data.id;
+  const roomId = `e2e_cal_rm_${Date.now().toString(36)}`;
+  assert.equal((await api("PATCH", `/api/v1/partner/products/${hid}`, { token: P.token, body: { rooms: [{ id: roomId, name_ko: "디럭스", base_price_krw: 100000, available_inventory: 5, max_occupancy: 2 }] } })).status, 200);
+  const shift = Date.now() % 20;
+  const N1 = day(190 + shift);
+  const N2 = day(191 + shift);
+  const put = (d, minor) => api("PUT", "/api/v1/partner/inventory", { token: P.token, body: { domain: "HOTEL", itemId: hid, unitId: roomId, serviceDate: d, allocatedUnits: 5, priceOverrideMinor: minor } });
+  assert.equal((await put(N1, 120000)).status, 200);
+  assert.equal((await put(N2, 80000)).status, 200);
+  const hq = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "HOTEL", itemId: hid, unitId: roomId, startDate: N1, endDate: day(192 + shift), travelers: { adults: 2 } } })).data.quote;
+  assert.equal(hq.baseMinor, 200000, JSON.stringify(hq.lines));
+  assert.equal(hq.totalMinor, 220000);
+  assert.equal(hq.lines.filter((l) => l.code === "ROOM_NIGHT").length, 2);
+  const hb = (await book(A.token, hq)).data.booking;
+  assert.equal((await pay(A.token, hb)).data.booking.status, "VOUCHER_ISSUED");
 });

@@ -103,7 +103,7 @@ async function getQuote(retry = true) {
       useCoins.value = r.data.details.maxUsable
       return getQuote(false)
     }
-    if (['NOT_DIRECTLY_BOOKABLE', 'SALES_NOT_ENABLED', 'PAYMENTS_DISABLED', 'BELOW_FLOOR_PRICE', 'FLIGHT_TICKETING_UNSUPPORTED'].includes(r.data.code || '')) blocked.value = { code: r.data.code!, message: r.data.error || '' }
+    if (['NOT_DIRECTLY_BOOKABLE', 'SALES_NOT_ENABLED', 'PAYMENTS_DISABLED', 'BELOW_FLOOR_PRICE', 'FLIGHT_TICKETING_UNSUPPORTED', 'ESIM_INSURANCE_QUOTE_UNSUPPORTED'].includes(r.data.code || '')) blocked.value = { code: r.data.code!, message: r.data.error || '' }
     else error.value = r.data.error || '가격을 확인할 수 없습니다.'
     return
   }
@@ -343,7 +343,7 @@ onBeforeUnmount(() => clearInterval(timer))
           <p class="mt-1 font-bold leading-snug text-ink">{{ quote.title }}</p>
           <p class="mt-1 text-sm text-ink-muted">{{ fmtDay(quote.serviceStart, true) }}<template v-if="quote.serviceEnd && quote.serviceEnd !== quote.serviceStart"> → {{ fmtDay(quote.serviceEnd, true) }}</template></p>
           <dl class="mt-4 space-y-2 border-t border-line pt-4 text-sm">
-            <div v-for="l in quote.lines" :key="l.code" class="flex justify-between gap-3">
+            <div v-for="l in quote.lines" :key="l.code + l.label" class="flex justify-between gap-3">
               <dt class="text-ink-muted">{{ l.label }}</dt><dd :class="['tabular', l.amountMinor < 0 ? 'font-semibold text-success' : 'text-ink']">{{ formatKrw(l.amountMinor) }}</dd>
             </div>
             <div v-if="quote.coinsMinor > 0" class="flex justify-between gap-3">

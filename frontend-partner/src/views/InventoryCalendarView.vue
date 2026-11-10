@@ -94,7 +94,7 @@ const handleSaveDate = async () => {
       body: JSON.stringify({
         domain: selectedDomain.value,
         itemId: selectedProduct.value,
-        unitId: 'standard',
+        unitId: 'default',
         serviceDate: selectedDate.value,
         allocatedUnits: selectedAlloc.value,
         priceOverrideMinor: selectedPrice.value,

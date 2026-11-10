@@ -27,6 +27,24 @@ test("production refuses simulated / unintegrated / affiliate suppliers", () => 
   assert.equal(bookabilityOf(env({}), null).bookable, false);
 });
 
+test("ESIM/INSURANCE quotes refused explicitly; quotable domains pass", async () => {
+  const { assertQuotableDomain } = await import("../../src/services/catalog.ts");
+  for (const d of ["ESIM", "INSURANCE"]) {
+    assert.throws(() => assertQuotableDomain(d), (e: any) => e.status === 409 && e.code === "ESIM_INSURANCE_QUOTE_UNSUPPORTED");
+  }
+  for (const d of ["HOTEL", "FLIGHT", "BOAT"]) assert.doesNotThrow(() => assertQuotableDomain(d));
+});
+
+test("dated-inventory domains refuse sale without configured capacity", async () => {
+  const { assertInventoryConfigured } = await import("../../src/services/catalog.ts");
+  for (const d of ["ACTIVITY", "TRANSFER", "PACKAGE"]) {
+    assert.throws(() => assertInventoryConfigured(d, { capacity: null }), (e: any) => e.status === 409 && e.code === "INVENTORY_NOT_CONFIGURED");
+    assert.doesNotThrow(() => assertInventoryConfigured(d, { capacity: 0 }));
+    assert.doesNotThrow(() => assertInventoryConfigured(d, { capacity: 5 }));
+  }
+  for (const d of ["HOTEL", "FLIGHT", "TRAIN", "CAR"]) assert.doesNotThrow(() => assertInventoryConfigured(d, { capacity: null }));
+});
+
 test("ledger journals always balance; cancel-after-confirm nets customer deposits to zero", () => {
   const paid = 575000, disc = 30000;
   const split = L.recognitionSplit(paid, disc, 9000);

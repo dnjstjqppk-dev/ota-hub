@@ -9,14 +9,14 @@
  */
 import type { Env } from "../env.ts";
 import { flag } from "../env.ts";
-import { computeQuote, computeRoundTripQuote, computeCancellation, isDomain, QuoteError, type CancellationPolicy, type Domain, type CatalogProduct, type LegResult, type Promotion, type QuoteParams, type QuoteResult } from "../domain/pricing.ts";
+import { computeQuote, computeRoundTripQuote, computeCancellation, isDomain, QuoteError, type CancellationPolicy, type Domain, type CatalogProduct, type LegResult, type NightlyRateFn, type Promotion, type QuoteParams, type QuoteResult } from "../domain/pricing.ts";
 import { assertTransition, CUSTOMER_CANCELLABLE, STATUS_LABEL_KO, type BookingStatus } from "../domain/state-machine.ts";
 import * as L from "../domain/ledger.ts";
 import { convertMinor } from "../domain/money.ts";
 import { HttpError, str } from "../lib/http.ts";
 import { newBookingNumber, newId, encryptField, decryptField, randomToken } from "../lib/crypto.ts";
 import type { AuthUser } from "../lib/auth.ts";
-import { loadProduct, loadSupplier, bookabilityOf, assertTicketable, type SupplierRow } from "./catalog.ts";
+import { loadProduct, loadSupplier, bookabilityOf, assertTicketable, assertQuotableDomain, assertInventoryConfigured, type SupplierRow } from "./catalog.ts";
 import { adapterFor, type Simulation, type SupplierContext } from "../suppliers/adapter.ts";
 import { getPaymentProvider, requirePaymentProvider } from "../payments/provider.ts";
 import { planOrderSettlement } from "./marketplace-service.ts";
@@ -127,6 +127,20 @@ function coinRestoreStmts(db: D1Database, b: Pick<BookingRow, "id" | "user_id" |
   ];
 }
 
+/**
+ * Idempotent restore for the refund flow: customer-cancel paths already
+ * restore coins up front (cancelByCustomer), so platform-failure refunds
+ * must skip when a COIN_REFUNDED row exists. Without the guard the same
+ * booking would pay twice (P0 2026-11-10: coins vanished on every
+ * platform-side failure because processRefund never restored them).
+ */
+async function coinRestoreStmtsOnce(db: D1Database, b: Pick<BookingRow, "id" | "user_id" | "trip_coins_used">): Promise<Stmt[]> {
+  const used = Number(b.trip_coins_used || 0);
+  if (!Number.isSafeInteger(used) || used <= 0) return [];
+  const done = await db.prepare("SELECT 1 AS x FROM coin_ledger WHERE reference_id = ? AND reason = 'COIN_REFUNDED' LIMIT 1").bind(b.id).first();
+  return done ? [] : coinRestoreStmts(db, b);
+}
+
 function journalStmts(db: D1Database, j: L.Journal | null, b: Pick<BookingRow, "id" | "entity_id" | "supplier_id" | "currency">): Stmt[] {
   if (!j) return [];
   const journalId = newId("jnl");
@@ -214,12 +228,38 @@ async function loadInbound(env: Env, domain: Domain, params: QuoteParams): Promi
   return loadProduct(env, "FLIGHT", params.returnItemId, null);
 }
 
-function priceOrder(product: CatalogProduct, inbound: CatalogProduct | null, params: QuoteParams, promo: Promotion | null): QuoteResult & { legs?: [LegResult, LegResult] } {
+function priceOrder(product: CatalogProduct, inbound: CatalogProduct | null, params: QuoteParams, promo: Promotion | null, nightly?: NightlyRateFn | null): QuoteResult & { legs?: [LegResult, LegResult] } {
   try {
-    return inbound ? computeRoundTripQuote(product, inbound, params, promo, new Date()) : computeQuote(product, params, promo, new Date());
+    return inbound ? computeRoundTripQuote(product, inbound, params, promo, new Date(), nightly) : computeQuote(product, params, promo, new Date(), nightly);
   } catch (e) {
     quoteErr(e);
   }
+}
+
+/**
+ * Partner calendar price overrides for the quoted products/dates. Exact unit
+ * wins, then the "default" row — the same precedence availableUnits uses for
+ * allotments (P0 2026-11-10: price_override_minor was written but never read,
+ * so calendar prices were silently ignored).
+ */
+async function loadNightlyOverrides(env: Env, itemIds: string[], unitKey: string, fromDate: string, toDate: string): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (!itemIds.length) return map;
+  const rows = await env.DB.prepare(
+    `SELECT item_id, service_date, price_override_minor FROM partner_inventory
+     WHERE item_id IN (${itemIds.map(() => "?").join(",")}) AND service_date BETWEEN ? AND ?
+     AND price_override_minor IS NOT NULL AND (unit_id = ? OR unit_id = 'default')
+     ORDER BY service_date, CASE WHEN unit_id = ? THEN 0 ELSE 1 END`,
+  ).bind(...itemIds, fromDate, toDate, unitKey, unitKey).all<{ item_id: string; service_date: string; price_override_minor: number }>();
+  for (const r of rows.results || []) {
+    const k = `${r.item_id}|${r.service_date}`;
+    if (!map.has(k) && Number.isSafeInteger(Number(r.price_override_minor))) map.set(k, Number(r.price_override_minor));
+  }
+  return map;
+}
+
+function nightlyResolver(map: Map<string, number>): NightlyRateFn {
+  return (itemId: string, date: string) => map.get(`${itemId}|${date}`) ?? null;
 }
 
 const ACTIVE_HOLD_SUM = "SELECT COALESCE(SUM(quantity), 0) FROM inventory_holds WHERE item_id = ? AND unit_key = ? AND service_date = ? AND (status = 'COMMITTED' OR (status = 'HELD' AND expires_at > ?))";
@@ -286,6 +326,7 @@ function quoteErr(e: unknown): never {
 // ---------------------------------------------------------------------------
 export async function createQuote(env: Env, user: AuthUser, body: any) {
   const domain = str(body.domain, 20).toUpperCase();
+  assertQuotableDomain(domain);
   if (!isDomain(domain)) throw new HttpError(400, "INVALID_DOMAIN", "상품 유형이 올바르지 않습니다.");
 
   // Feature Flag Guard: check domain availability
@@ -317,13 +358,18 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
     throw new HttpError(409, "NOT_DIRECTLY_BOOKABLE", "이 상품은 현재 GetForTrip에서 직접 예약·결제할 수 없습니다. (공급사 연동 대기)", { reason: b.reason });
   }
   assertTicketable(domain, supplier);
+  assertInventoryConfigured(domain, product);
   const entity = await activeEntity(env);
   if (!entity) throw new HttpError(503, "SALES_NOT_ENABLED", "판매 주체(사업자) 정보가 활성화되지 않아 결제를 받을 수 없습니다.");
   if (!getPaymentProvider(env)) throw new HttpError(503, "PAYMENTS_DISABLED", "현재 온라인 결제가 활성화되어 있지 않습니다. (PG 계약/설정 대기)");
 
   const inbound = await loadInbound(env, domain, params);
   const promo = await loadPromotion(env, body.promotionCode ? str(body.promotionCode, 40) : null);
-  const q = priceOrder(product, inbound, params, promo);
+  const ovDates = [params.startDate, params.endDate, params.returnDate].filter((d): d is string => !!d).sort();
+  const nightly = nightlyResolver(ovDates.length
+    ? await loadNightlyOverrides(env, inbound ? [product.itemId, inbound.itemId] : [product.itemId], product.unitId || "default", ovDates[0], ovDates[ovDates.length - 1])
+    : new Map());
+  const q = priceOrder(product, inbound, params, promo, nightly);
   const coinRaw = body.coinAmount === undefined || body.coinAmount === null || body.coinAmount === "" ? 0 : Number(body.coinAmount);
   if (!Number.isSafeInteger(coinRaw) || coinRaw < 0) throw new HttpError(400, "INVALID_COIN_AMOUNT", "코인 사용 금액이 올바르지 않습니다.");
   let coinsMinor = 0;
@@ -511,6 +557,7 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   }
   if (quote.status === "CONSUMED") throw new HttpError(409, "QUOTE_ALREADY_USED", "이미 예약에 사용된 견적입니다. 다시 조회해주세요.");
   if (quote.status !== "ACTIVE" || quote.expires_at <= nowIso()) throw new HttpError(409, "QUOTE_EXPIRED", "견적 유효시간이 지났습니다. 가격을 다시 확인해주세요.");
+  assertQuotableDomain(quote.domain_type);
 
   // Price revalidation against the live catalog before taking money.
   const params: QuoteParams = JSON.parse(quote.params_json);
@@ -520,7 +567,12 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   const bk = bookabilityOf(env, supplier);
   if (!bk.bookable) throw new HttpError(409, "NOT_DIRECTLY_BOOKABLE", "이 상품은 현재 직접 예약할 수 없습니다.", { reason: bk.reason });
   assertTicketable(quote.domain_type, supplier);
-  const fresh = priceOrder(product, inbound, params, await loadPromotion(env, quote.promotion_code));
+  assertInventoryConfigured(quote.domain_type, product);
+  const freshDates = [params.startDate, params.endDate, params.returnDate].filter((d): d is string => !!d).sort();
+  const freshNightly = nightlyResolver(freshDates.length
+    ? await loadNightlyOverrides(env, inbound ? [product.itemId, inbound.itemId] : [product.itemId], product.unitId || "default", freshDates[0], freshDates[freshDates.length - 1])
+    : new Map());
+  const fresh = priceOrder(product, inbound, params, await loadPromotion(env, quote.promotion_code), freshNightly);
   const coinsMinor = Number(quote.coins_minor || 0);
   const freshCashDue = fresh.totalMinor - coinsMinor;
   await assertAboveFloor(env, quote.domain_type, quote.item_id, freshCashDue);
@@ -679,6 +731,7 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
       ...transition(db, cur, "FAILED", { type: "PAYMENT_PROVIDER", id: provider.name }, "PG_AMOUNT_MISMATCH_REFUNDED", { payment_status: "FAILED" }),
       db.prepare("UPDATE payments SET status = 'FAILED', failure_code = 'AMOUNT_MISMATCH', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(paymentId),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ? AND status = 'HELD'").bind(b.id),
+      ...coinRestoreStmts(db, cur),
     ]);
     throw new HttpError(502, "PG_AMOUNT_MISMATCH", "결제 금액 검증에 실패하여 결제를 취소했습니다.");
   }
@@ -870,6 +923,11 @@ export async function processRefund(env: Env, refundId: string): Promise<void> {
     const newRefunded = pay.refunded_minor + rf.amount_minor;
     const fullyRefunded = newRefunded >= pay.amount_minor;
     const hook = await loadPartnerHook(db, b.partner_id);
+    // A cancelled/failed supplier delivered nothing: void its payout on ANY
+    // refund, not just full ones. Before this, a fee-cancel left the full
+    // PENDING payout payable (P0 2026-11-10). Partial refunds on live orders
+    // keep PENDING until the remainder settles.
+    const supplierGone = b.supplier_status === "CANCELLED" || b.supplier_status === "FAILED";
     await runBatch(db, [
       ...transition(db, b, "REFUNDED", { type: "PAYMENT_PROVIDER", id: provider.name }, null, {
         refunded_minor: b.refunded_minor + rf.amount_minor,
@@ -882,8 +940,8 @@ export async function processRefund(env: Env, refundId: string): Promise<void> {
       ...journalStmts(db, L.refundPaid(rf.id, rf.amount_minor), b),
       ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "REFUNDED", { refunded_minor: newRefunded, refund_id: rf.id })),
       // A fully refunded order must never stay payable (2026-11-09 audit [M]).
-      // Partial refunds keep the settlement PENDING until the remainder settles.
-      ...(fullyRefunded ? [db.prepare("UPDATE marketplace_order_settlements SET settlement_status = 'REFUNDED', fulfillment_status = 'FAILED' WHERE booking_id = ? AND settlement_status IN ('PENDING', 'HELD')").bind(b.id)] : []),
+      ...((fullyRefunded || supplierGone) ? [db.prepare("UPDATE marketplace_order_settlements SET settlement_status = 'REFUNDED', fulfillment_status = 'FAILED' WHERE booking_id = ? AND settlement_status IN ('PENDING', 'HELD')").bind(b.id)] : []),
+      ...(await coinRestoreStmtsOnce(db, b)),
     ]);
     return;
   }
@@ -1010,6 +1068,7 @@ export async function reconcilePaymentByLookup(env: Env, paymentId: string): Pro
       ...transition(env.DB, b, "FAILED", { type: "PAYMENT_PROVIDER", id: provider.name }, "RECONCILED_NOT_CAPTURED", { payment_status: "FAILED" }),
       env.DB.prepare("UPDATE payments SET status = 'FAILED', failure_code = 'NOT_CAPTURED', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(p.id),
       env.DB.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+      ...coinRestoreStmts(env.DB, b),
     ]);
     return "RECONCILED";
   }
@@ -1141,7 +1200,11 @@ export async function adminSupplierDecision(env: Env, decider: AuthUser, booking
   }
   if (decision === "REJECT") {
     if (b.payment_status !== "CAPTURED") {
-      await runBatch(db, transition(db, b, "FAILED", actor, note || "OPERATOR_REJECTED_UNPAID"));
+      await runBatch(db, [
+        ...transition(db, b, "FAILED", actor, note || "OPERATOR_REJECTED_UNPAID"),
+        db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+        ...coinRestoreStmts(db, b),
+      ]);
       return mustGet(env, b.id);
     }
     await runBatch(db, [

@@ -1083,7 +1083,7 @@ INSERT OR REPLACE INTO cars (
 INSERT OR REPLACE INTO activities (
     id, partner_id, title, category, city, country, price_krw, review_score,
     review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json
+    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     'act_disney_tokyo',
     'ptn_tour_01',
@@ -1101,13 +1101,14 @@ INSERT OR REPLACE INTO activities (
     'QR_CODE',
     'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800',
     '도쿄 디즈니랜드 매표소 대기 없이 모바일 QR 바로 입장; 디즈니 프리미어 액세스(DPA) 연동 가능; 성인/아동/청소년 실시간 즉시 발권; 지정일 24시간 전까지 100% 무료 취소',
-    '["도쿄 디즈니랜드 1일 자유이용권","모바일 전자 바우처"]'
+    '["도쿄 디즈니랜드 1일 자유이용권","모바일 전자 바우처"]',
+    30
   );
 
 INSERT OR REPLACE INTO activities (
     id, partner_id, title, category, city, country, price_krw, review_score,
     review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json
+    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     'act_usj_osaka',
     'ptn_tour_01',
@@ -1125,13 +1126,14 @@ INSERT OR REPLACE INTO activities (
     'QR_CODE',
     'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=800',
     '슈퍼 닌텐도 월드 & 해리포터 마법의 세계 입장; 공식 파트너 인증 다이렉트 QR코드 발권; 현장 매표소 교환 없이 개찰구 직행',
-    '["USJ 1일 입장권","모바일 입장 QR"]'
+    '["USJ 1일 입장권","모바일 입장 QR"]',
+    30
   );
 
 INSERT OR REPLACE INTO activities (
     id, partner_id, title, category, city, country, price_krw, review_score,
     review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json
+    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     'act_fuji_tour',
     'ptn_tour_01',
@@ -1149,13 +1151,14 @@ INSERT OR REPLACE INTO activities (
     'QR_CODE',
     'https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=800',
     '신주쿠 출발 전용 리무진 버스로 후지산 5합목 방문; 하코네 로프웨이 케이블카 탑승 & 아시노코 해적유람선 조망; 한국인 베테랑 인솔 가이드 전 일정 동행',
-    '["왕복 전용 버스","한국어 가이드","케이블카 티켓","여행자 보험"]'
+    '["왕복 전용 버스","한국어 가이드","케이블카 티켓","여행자 보험"]',
+    30
   );
 
 INSERT OR REPLACE INTO activities (
     id, partner_id, title, category, city, country, price_krw, review_score,
     review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json
+    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     'act_lotte_world',
     'ptn_tour_01',
@@ -1173,13 +1176,14 @@ INSERT OR REPLACE INTO activities (
     'QR_CODE',
     'https://images.unsplash.com/photo-1538688525198-9b88f6f53126?w=800',
     '국내 최대 실내외 테마파크 어드벤처 & 매직아일랜드 종일 이용; 모바일 바코드 즉시 입장 (당일 구매 후 바로 사용 가능); 민속박물관 무료 관람 포함',
-    '["롯데월드 종합이용권","민속박물관 입장"]'
+    '["롯데월드 종합이용권","민속박물관 입장"]',
+    30
   );
 
 INSERT OR REPLACE INTO activities (
     id, partner_id, title, category, city, country, price_krw, review_score,
     review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json
+    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     'act_louvre_tour',
     'ptn_tour_01',
@@ -1197,13 +1201,14 @@ INSERT OR REPLACE INTO activities (
     'QR_CODE',
     'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=800',
     '모나리자, 밀로의 비너스, 사모트라케의 니케 등 핵심 걸작 집중 해설; 프랑스 공인 국가 가이드의 깊이 있는 역사/예술 스토리텔링; 개인 무선 수신기 제공으로 편안한 관람',
-    '["한국어 공인 도슨트 해설","개인 무선 수신기"]'
+    '["한국어 공인 도슨트 해설","개인 무선 수신기"]',
+    30
   );
 
 INSERT OR REPLACE INTO activities (
     id, partner_id, title, category, city, country, price_krw, review_score,
     review_count, instant_confirmation, free_cancellation, duration_type,
-    guide_language, voucher_type, thumbnail_url, description, packages_json
+    guide_language, voucher_type, thumbnail_url, description, packages_json, daily_capacity
   ) VALUES (
     'act_esim_japan',
     'ptn_tour_01',
@@ -1221,12 +1226,13 @@ INSERT OR REPLACE INTO activities (
     'QR_CODE',
     'https://images.unsplash.com/photo-1512499617640-c74ae3a79d37?w=800',
     '유심 교체 없이 이메일/카카오톡 QR코드 스캔 즉시 개통; 일본 1위 통신사 NTT Docomo / SoftBank 5G 망 자동 로밍; 데이터 무제한 (매일 2GB 사용 후 128kbps 무제한 유지)',
-    '["일본 데이터 eSIM QR 프로파일","카카오톡 실시간 고객상담"]'
+    '["일본 데이터 eSIM QR 프로파일","카카오톡 실시간 고객상담"]',
+    30
   );
 
 INSERT OR REPLACE INTO packages (
     id, title, destination_city, hotel_id, flight_id, package_discount_rate,
-    total_original_krw, total_package_krw, thumbnail_url, details_json
+    total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
   ) VALUES (
     'pkg_tokyo_4d3n',
     '[항공+호텔 결합] 도쿄 롯폰기 하얏트 럭셔리 에어텔 4일 (대한항공 직항 왕복 + 5성급 3박)',
@@ -1237,12 +1243,13 @@ INSERT OR REPLACE INTO packages (
     1400000,
     1150000,
     'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800',
-    '{"features":["대한항공 직항 왕복 (위탁수하물 23kg 포함)","그랜드 하얏트 도쿄 3박 전 일정 조식 뷔페 포함","롯폰기 힐스 쇼핑몰 & 전망대 직결","24시간 한국인 안심 여행 케어 컨시어지"],"gallery":["https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800","https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800","https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800"]}'
+    '{"features":["대한항공 직항 왕복 (위탁수하물 23kg 포함)","그랜드 하얏트 도쿄 3박 전 일정 조식 뷔페 포함","롯폰기 힐스 쇼핑몰 & 전망대 직결","24시간 한국인 안심 여행 케어 컨시어지"],"gallery":["https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800","https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800","https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?w=800"]}',
+    16
   );
 
 INSERT OR REPLACE INTO packages (
     id, title, destination_city, hotel_id, flight_id, package_discount_rate,
-    total_original_krw, total_package_krw, thumbnail_url, details_json
+    total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
   ) VALUES (
     'pkg_osaka_3d2n',
     '[인기 에어텔] 오사카 난바 스위소텔 올인원 3일 (아시아나 직항 + 5성급 2박)',
@@ -1253,12 +1260,13 @@ INSERT OR REPLACE INTO packages (
     920000,
     750000,
     'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800',
-    '{"features":["아시아나항공 직항 왕복 (수하물 23kg)","난카이 난바역 직결 5성급 호텔 2박","간사이공항 특급 라피트 왕복 승차권 증정","도톤보리 도보 3분 초역세권"],"gallery":["https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800","https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"]}'
+    '{"features":["아시아나항공 직항 왕복 (수하물 23kg)","난카이 난바역 직결 5성급 호텔 2박","간사이공항 특급 라피트 왕복 승차권 증정","도톤보리 도보 3분 초역세권"],"gallery":["https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800","https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"]}',
+    16
   );
 
 INSERT OR REPLACE INTO packages (
     id, title, destination_city, hotel_id, flight_id, package_discount_rate,
-    total_original_krw, total_package_krw, thumbnail_url, details_json
+    total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
   ) VALUES (
     'pkg_bangkok_5d4n',
     '[리버사이드 힐링] 방콕 샹그릴라 호텔 5일 (대한항공 직항 왕복 + 리버뷰 4박)',
@@ -1269,12 +1277,13 @@ INSERT OR REPLACE INTO packages (
     1250000,
     990000,
     'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=800',
-    '{"features":["대한항공 주간 직항 (수하물 23kg)","차오프라야 강변 5성급 샹그릴라 4박 전 일정 조식","샹그릴라 전용 디너 크루즈 1회 할인권","아이콘시암 무료 셔틀보트 이용"],"gallery":["https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=800"]}'
+    '{"features":["대한항공 주간 직항 (수하물 23kg)","차오프라야 강변 5성급 샹그릴라 4박 전 일정 조식","샹그릴라 전용 디너 크루즈 1회 할인권","아이콘시암 무료 셔틀보트 이용"],"gallery":["https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=800"]}',
+    16
   );
 
 INSERT OR REPLACE INTO packages (
     id, title, destination_city, hotel_id, flight_id, package_discount_rate,
-    total_original_krw, total_package_krw, thumbnail_url, details_json
+    total_original_krw, total_package_krw, thumbnail_url, details_json, daily_capacity
   ) VALUES (
     'pkg_paris_6d5n',
     '[유럽 프리미엄] 파리 풀만 에펠탑 6일 (에어프랑스 직항 + 에펠뷰 5박)',
@@ -1285,5 +1294,6 @@ INSERT OR REPLACE INTO packages (
     3200000,
     2650000,
     'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800',
-    '{"features":["에어프랑스 직항 왕복 (위탁수하물 23kg)","에펠탑 초근접 4성급 호텔 5박","루브르 박물관 모바일 패스트트랙 e-티켓 포함","세느강 바토무슈 유람선 탑승권 증정"],"gallery":["https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800"]}'
+    '{"features":["에어프랑스 직항 왕복 (위탁수하물 23kg)","에펠탑 초근접 4성급 호텔 5박","루브르 박물관 모바일 패스트트랙 e-티켓 포함","세느강 바토무슈 유람선 탑승권 증정"],"gallery":["https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800"]}',
+    16
   );

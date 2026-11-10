@@ -36,15 +36,12 @@ import { BRAND } from '~/config/brand'
           <span>해외 현지 긴급 상황 지원</span>
         </h2>
         <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-          예약된 호텔 입실에 문제가 발생하거나 항공편 결항/지연 시 getfortrip 24/7 긴급 헬프데스크로 즉시 연락하시면 현지 대체 숙소 배정 및 항공사 변경 처리를 대행해 드립니다.
+          예약된 호텔 입실에 문제가 발생하거나 항공편 결항/지연 시 도움 센터에 문의해 주세요. 접수된 순서대로 확인하고 예약 내역에서 답변을 안내해 드립니다.
         </p>
         <div class="pt-2 flex flex-wrap gap-3">
           <NuxtLink to="/help" class="px-4 py-2 bg-trip-blue text-white rounded-xl text-xs font-bold shadow-sm">
-            24/7 고객센터 연결 →
+            도움 센터 문의하기 →
           </NuxtLink>
-          <a href="tel:+82-2-1588-0000" class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700">
-            📞 긴급 전화: 1588-0000
-          </a>
         </div>
       </div>
     </div>
