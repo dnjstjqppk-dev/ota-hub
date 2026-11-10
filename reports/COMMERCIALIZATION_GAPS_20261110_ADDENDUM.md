@@ -29,14 +29,14 @@
 
 ## 신규 B — 돈·정산
 
-- B1. **PG 측 취소 미반영.** `webhooks.ts`는 UNKNOWN 결제만 재조회. 토스 대시보드 취소·부분취소·차지백 시 돈은 나갔는데 예약은 확정 유지 [M]
-- B2. **이용 전 지급 가능.** 정산행이 바우처 발급 시점에 PENDING으로 생성(`booking-service.ts:872`), settle은 PENDING/HELD면 바로 지급(`marketplace.ts` settle). 이용완료·취소기한 경과 게이트 없음 [S]
-- B3. **지급 후 환불 환수 없음.** 환불 시 정산 REFUNDED 전환은 PENDING/HELD만(`booking-service.ts:943`). SETTLED 건은 플랫폼 손실, 다음 정산 상계 없음 [M]
-- B4. 실제 지급 수단 없음. "지급 완료 처리"는 상태 변경뿐. 대량이체 파일/펌뱅킹/정산명세서 없음 [M]
-- B5. 수수료 세금계산서 발행 없음(`tax_invoice_email` 수집만) [M]
-- B6. 고객 결제영수증 노출 없음(`payments.raw_json`에만 잘려 저장) [S]
-- B7. **어드민 임의 취소·부분환불·오프라인환불 기록 없음.** supplier-decision은 CONFIRM/REJECT/RETRY_REFUND만(`booking-service.ts:1190-1218`). 확정 후 공급사 취소·불가항력·CS 보상 처리 불가 [M]
-- B8. (권장) 결제수단 카드 단일(`checkout/index.vue:142`). 간편결제·계좌이체 없음 [M]
+- [x] B1. **PG 측 취소 미반영.** → 완료 (3399ba4 / `payments/provider.ts` CANCELED/PARTIAL_CANCELED lookup, `booking-service.ts` applyExternalCancel, `routes/webhooks.ts`). PG 확인 외부취소 기록(재실행 없음) + 재고·코인·정산 동기화 + `?key=` 시크릿 + 멱등. 유닛 1건 + E2E B1 2건 통과
+- [x] B2. **이용 전 지급 가능.** → 완료 (3399ba4 / `routes/marketplace.ts` settle 게이트 + `completePastBookings` fulfillment 동기화). COMPLETED + 서비스종료일 경과 + 환불 미진행 강제. E2E B2(기존 배치 테스트 내) 통과
+- [x] B3. **지급 후 환불 환수 없음.** → 완료 (3399ba4 / `0031_settlement_recovery.sql` settlement_recoveries, `recordRecoveryIfSettled`, settle 차감, `startRefund` 승인파크). COMPLETED→MANUAL 분쟁 엣지 계약변경 포함. E2E B3 2건 통과
+- [x] B4. 실제 지급 수단 없음 → 완료 (3399ba4 / settle payout_method/reference 기록 + 정직한 응답문구 + 배치 명세서 JSON/CSV). 자동이체 레일 없음 명시. E2E B4 통과
+- [x] B5. 수수료 세금계산서 발행 없음 → 완료 (3399ba4 / 명세서에 tax_invoice_email·입금계좌 + issuance: MANUAL). 발행사 미계약 상태 정직 표시, 수동발행 워크플로 지원. E2E B4/B5 통과
+- [x] B6. 고객 결제영수증 노출 없음 → 완료 (3399ba4 / GET /bookings/:id/receipt + `BookingDetail.vue` 영수증 블록). 기록된 결제·환불·카드사 마스킹 전부 실측 노출. E2E B6 통과
+- [x] B7. **어드민 임의 취소·부분환불·오프라인환불 기록 없음.** → 완료 (3399ba4 / force-cancel·refund·offline-refund API + `applyRefundSucceeded` 공용화 + `BookingOmsView.vue` 직권처리 UI + 고객 마스킹). E2E B7 통과
+- [x] B8. (권장) 결제수단 카드 단일 → 완료 (3399ba4 / `checkout/index.vue` 카드/계좌이체/가상계좌 선택 → Toss v2 전달). 빌드 통과 (PG 실연동 시 검증 필요)
 
 ## 신규 C — 운영·상품·인프라
 
