@@ -355,10 +355,16 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const domain = str(b.domain || "HOTEL", 20).toUpperCase();
     const title = str(b.title, 200);
     const city = str(b.city || "서울", 100);
-    const price = Number(b.price || 100000);
+    // #69: the old `Number(b.price || 100000)` swallowed NaN/negatives (and
+    // turned an explicit 0 into 100000). Same rule as the PATCH below.
+    const price = b.price === undefined || b.price === null || b.price === "" ? 100000 : Number(b.price);
     const id = `ptn_prod_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 
     if (!title) throw new HttpError(400, "TITLE_REQUIRED", "상품명을 입력해주세요.");
+    if (!Number.isInteger(price) || price < 0) throw new HttpError(400, "INVALID_PRICE", "요금은 0 이상의 정수(원)여야 합니다.");
+    // #69: this endpoint writes three tables only — anything else used to
+    // fall through into activities. The extranet offers the same three.
+    if (!["HOTEL", "CAR", "ACTIVITY"].includes(domain)) throw new HttpError(400, "INVALID_DOMAIN", "상품 유형은 HOTEL·CAR·ACTIVITY 중 하나여야 합니다.");
 
     if (domain === "HOTEL") {
       // Rooms are required for bookability (loadProduct throws ROOM_REQUIRED
@@ -372,8 +378,10 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
         "INSERT INTO cars (id, partner_id, company_name, vehicle_model, pickup_location, daily_price_krw) VALUES (?, ?, ?, ?, '공항 지점', ?)"
       ).bind(id, pId, partner.companyName || "파트너 렌터카", title, price).run();
     } else {
+      // #69: category is NOT NULL — the old INSERT 500'd every ACTIVITY
+      // create (same default the marketplace route uses).
       await db.prepare(
-        "INSERT INTO activities (id, partner_id, title, city, country, price_krw) VALUES (?, ?, ?, ?, '대한민국', ?)"
+        "INSERT INTO activities (id, partner_id, title, category, city, country, price_krw) VALUES (?, ?, ?, 'EXPERIENCE', ?, '대한민국', ?)"
       ).bind(id, pId, title, city, price).run();
     }
     return json({ success: true, id }, 201);
@@ -638,14 +646,23 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     if (!email || !name) throw new HttpError(400, "FIELDS_REQUIRED", "이메일과 이름을 입력해주세요.");
     if (!["MANAGER", "STAFF"].includes(role)) throw new HttpError(400, "INVALID_ROLE", "직원 역할은 MANAGER 또는 STAFF여야 합니다.");
     validatePasswordPolicy(pass);
-    const dup = await db.prepare("SELECT id FROM partner_staff WHERE partner_id = ? AND email = ?").bind(pId, email).first();
-    if (dup) throw new HttpError(409, "STAFF_EXISTS", "이미 등록된 직원 이메일입니다.");
+    // #68: staff login resolves one global row by email (UNIQUE since 0003),
+    // so the duplicate check must be global too — the old per-tenant check
+    // let a cross-tenant invite slip through to a raw 500 on the constraint.
+    const dup = await db.prepare("SELECT id, partner_id FROM partner_staff WHERE email = ?").bind(email).first<{ id: string; partner_id: string }>();
+    if (dup) throw new HttpError(409, "STAFF_EXISTS", dup.partner_id === pId ? "이미 등록된 직원 이메일입니다." : "다른 파트너에 등록된 이메일입니다.");
     const passHash = await hashPassword(pass, resolvePbkdf2Iterations(env));
 
     const id = newId("stf");
-    await db.prepare(
-      "INSERT INTO partner_staff (id, partner_id, email, password_hash, full_name, role, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)"
-    ).bind(id, pId, email, passHash, name, role).run();
+    try {
+      await db.prepare(
+        "INSERT INTO partner_staff (id, partner_id, email, password_hash, full_name, role, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)"
+      ).bind(id, pId, email, passHash, name, role).run();
+    } catch (e: any) {
+      // Check-then-insert race: the UNIQUE constraint is the backstop.
+      if (/UNIQUE/i.test(String(e?.message || e))) throw new HttpError(409, "STAFF_EXISTS", "이미 등록된 직원 이메일입니다.");
+      throw e;
+    }
 
     return json({ success: true, id }, 201);
   }

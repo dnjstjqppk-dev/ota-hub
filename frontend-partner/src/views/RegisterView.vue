@@ -224,7 +224,7 @@ const handleRegister = async () => {
           <div class="border-t border-line pt-2">
             <label class="flex cursor-pointer items-center gap-2 font-medium text-ink-muted">
               <input v-model="agreeTerms" type="checkbox" required class="h-4 w-4 rounded accent-primary" />
-              <span>getfortrip 파트너 공급 규정 및 정산 정책에 동의합니다. (필수)</span>
+              <span><router-link to="/terms" target="_blank" class="font-bold text-primary hover:underline" @click.stop>getfortrip 파트너 공급 규정 및 정산 정책</router-link>에 동의합니다. (필수)</span>
             </label>
           </div>
 

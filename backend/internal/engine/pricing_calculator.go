@@ -29,7 +29,10 @@ type PricingResult struct {
 	Symbol               string          `json:"symbol"`
 }
 
-// CalculateExactPrice performs precision calculations without floating drift (1 G-Coin = 1 KRW)
+// CalculateExactPrice performs precision calculations without floating drift (1 G-Coin = 1 KRW).
+// Legacy note (#67): the flat 10% tax + 3% fee defaults and float-KRW math do
+// not match the worker quote engine (integer minor units, tiered policy).
+// Served deprecated at the HTTP layer; do not use for real pricing.
 func CalculateExactPrice(input PricingInput) (*PricingResult, error) {
 	if input.BaseAmountKRW <= 0 {
 		return nil, errors.New("base amount must be greater than zero")

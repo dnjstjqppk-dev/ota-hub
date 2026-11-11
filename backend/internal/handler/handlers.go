@@ -67,15 +67,13 @@ func getVerifiedClaims(r *http.Request) (*JWTClaims, error) {
 }
 
 func checkPartnerAuth(r *http.Request) bool {
+	// #65: the static bearer-prefix bypass is gone -- any holder of that string impersonated every partner.
+	// JWT PARTNER claims only.
 	claims, err := getVerifiedClaims(r)
-	if err == nil && claims.Role == "PARTNER" {
-		return true
+	if err != nil {
+		return false
 	}
-	auth := r.Header.Get("Authorization")
-	if strings.HasPrefix(auth, "Bearer ptn_sec_tok_") {
-		return true
-	}
-	return false
+	return claims.Role == "PARTNER"
 }
 
 func matchFlightAirportOrCity(query, airportCode, city string) bool {
@@ -413,6 +411,11 @@ func (h *APIHandler) CreateMoment(w http.ResponseWriter, r *http.Request) {
 // --- PRICING & BOOKING HANDLERS ---
 
 func (h *APIHandler) CalculatePricing(w http.ResponseWriter, r *http.Request) {
+	// #67: legacy Go pricing (float KRW, flat 10% tax + 3% fee) disagrees with
+	// the worker quote engine (integer minor units, tiered policy) and must
+	// not price anything real. Deprecated: served with markers until removed.
+	w.Header().Set("Deprecation", "true")
+	w.Header().Set("Warning", `299 getfortrip "deprecated: worker POST /api/v1/quotes is the pricing authority"`)
 	var req engine.PricingInput
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
@@ -458,61 +461,12 @@ func (h *APIHandler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) PayBooking(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	booking, exists := h.store.Bookings[id]
-	if !exists {
-		writeError(w, http.StatusNotFound, "booking not found")
-		return
-	}
-
-	if booking.Status != domain.StatusDraft && booking.Status != domain.StatusPendingPayment {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("cannot pay booking in status %s", booking.Status))
-		return
-	}
-
-	if !booking.InventoryLockExpireAt.IsZero() && time.Now().After(booking.InventoryLockExpireAt) {
-		writeError(w, http.StatusConflict, "inventory lock expired")
-		return
-	}
-
-	var payReq struct {
-		PaymentMethod string `json:"payment_method"`
-		PaymentProof  string `json:"payment_proof"`
-	}
-	_ = json.NewDecoder(r.Body).Decode(&payReq)
-
-	proof := payReq.PaymentProof
-	if proof == "" {
-		proof = r.Header.Get("Authorization")
-	}
-
-	// Zero-Tolerance Rule: Explicitly reject arbitrary X-Payment-Proof header bypass
-	if r.Header.Get("X-Payment-Proof") != "" && payReq.PaymentProof == "" && r.Header.Get("Authorization") == "" {
-		writeError(w, http.StatusUnauthorized, "unauthorized payment proof header bypass rejected: cryptographic signature required")
-		return
-	}
-
-	if proof == "" {
-		writeError(w, http.StatusBadRequest, "verified payment proof or authorization token required for payment confirmation")
-		return
-	}
-
-	// Transition: DRAFT -> PENDING_PAYMENT -> PAID -> ISSUING -> CONFIRMED
-	_, err := h.store.TransitionBookingStatus(id, domain.StatusPendingPayment, "Payment initiated", "SYSTEM")
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	_, _ = h.store.TransitionBookingStatus(id, domain.StatusPaid, fmt.Sprintf("Payment verified via PG gateway (%s)", proof), "SYSTEM")
-	_, _ = h.store.TransitionBookingStatus(id, domain.StatusIssuing, "Supplier issuance started", "SYSTEM")
-	confirmed, err := h.store.TransitionBookingStatus(id, domain.StatusConfirmed, "Instant E-Ticket / Voucher generated", "SYSTEM")
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, confirmed)
+	// #66: this endpoint confirmed bookings on any Authorization header and
+	// logged Payment verified via PG gateway without ever contacting a PG --
+	// a fabricated CONFIRMED. There is no PG verification in this legacy
+	// stack, so the endpoint is retired: confirm payments through the worker
+	// API (POST /api/v1/payments/confirm), the single money authority.
+	writeError(w, http.StatusGone, "payment confirmation moved: use the worker payments API (POST /api/v1/payments/confirm)")
 }
 
 func (h *APIHandler) GetBookingDetail(w http.ResponseWriter, r *http.Request) {
@@ -707,6 +661,15 @@ func (h *APIHandler) PartnerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// #65: no credential lives in the repo (mirrors AdminLogin). The directory below
+	// is fixture identity only; the password comes from the environment and the
+	// session token is a signed JWT, never a static string.
+	partnerPass := os.Getenv("GO_PARTNER_PASSWORD")
+	if partnerPass == "" {
+		writeError(w, http.StatusServiceUnavailable, "partner login is not configured")
+		return
+	}
+
 	validPartners := map[string]struct {
 		ID             string
 		CompanyName    string
@@ -714,9 +677,7 @@ func (h *APIHandler) PartnerLogin(w http.ResponseWriter, r *http.Request) {
 		BusinessNumber string
 		ContactPhone   string
 		SettlementRate float64
-		Token          string
-		Password       string
-	}{
+	} {
 		"hotel_partner@getfortrip.com": {
 			ID:             "ptn_htl_01",
 			CompanyName:    "(주)하얏트 코리아 호스피탈리티",
@@ -724,8 +685,6 @@ func (h *APIHandler) PartnerLogin(w http.ResponseWriter, r *http.Request) {
 			BusinessNumber: "101-81-99201",
 			ContactPhone:   "02-797-1234",
 			SettlementRate: 0.90,
-			Token:          "ptn_sec_tok_live_8829",
-			Password:       "partner1234!",
 		},
 		"partner@getfortrip.com": {
 			ID:             "ptn_gen_01",
@@ -734,8 +693,6 @@ func (h *APIHandler) PartnerLogin(w http.ResponseWriter, r *http.Request) {
 			BusinessNumber: "120-88-12345",
 			ContactPhone:   "02-1588-0000",
 			SettlementRate: 0.90,
-			Token:          "ptn_sec_tok_live_1001",
-			Password:       "partner1234!",
 		},
 		"flight_partner@getfortrip.com": {
 			ID:             "ptn_flt_01",
@@ -744,26 +701,37 @@ func (h *APIHandler) PartnerLogin(w http.ResponseWriter, r *http.Request) {
 			BusinessNumber: "201-81-54321",
 			ContactPhone:   "02-755-1234",
 			SettlementRate: 0.95,
-			Token:          "ptn_sec_tok_live_3301",
-			Password:       "partner1234!",
 		},
 	}
 
-	partner, ok := validPartners[strings.ToLower(strings.TrimSpace(req.Email))]
-	if !ok || partner.Password != req.Password {
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	partner, ok := validPartners[email]
+	if !ok || req.Password != partnerPass {
 		writeError(w, http.StatusUnauthorized, "Invalid credentials")
+		return
+	}
+
+	token, err := GenerateJWT(JWTClaims{
+		ID:        partner.ID,
+		Email:     email,
+		Role:      "PARTNER",
+		PartnerID:  partner.ID,
+		Exp:       time.Now().Add(24 * time.Hour).Unix(),
+	}, getJWTSecret())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to issue partner token")
 		return
 	}
 
 	resp := map[string]any{
 		"id":              partner.ID,
 		"company_name":    partner.CompanyName,
-		"email":           strings.ToLower(strings.TrimSpace(req.Email)),
+		"email":           email,
 		"partner_type":    partner.PartnerType,
 		"business_number": partner.BusinessNumber,
 		"contact_phone":   partner.ContactPhone,
 		"settlement_rate": partner.SettlementRate,
-		"token":           partner.Token,
+		"token":           token,
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

@@ -2,6 +2,7 @@ import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { rateLimit, requireUser } from "../lib/auth.ts";
 import { decryptField, encryptField, maskName, maskPassport, newId } from "../lib/crypto.ts";
+import { isEmailConfigured } from "../services/email-service.ts";
 
 const NAME_EN = /^[A-Z][A-Z' -]{0,48}$/;
 
@@ -52,7 +53,13 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     await db.prepare(
       "INSERT INTO price_alerts (id, user_id, email, domain_type, item_id, route_or_hotel, current_price_krw, target_price, currency, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'KRW', 1)",
     ).bind(id, u.id, u.email, str(b.domainType || "HOTEL", 20).toUpperCase(), str(b.itemId || "general", 100), routeOrHotel, Number(b.currentPriceKrw || 0) || 0, target).run();
-    return json({ success: true, id, notice: "목표가에 도달하면 이메일로 알려드립니다." }, 201);
+    // #62: without a mail provider the alert would wait forever while the old
+    // notice promised email unconditionally. Same conditional shape as the
+    // password-reset endpoints (auth.ts / partner.ts).
+    if (!isEmailConfigured(env)) {
+      return json({ success: true, id, notice: "목표가를 저장했어요. 다만 지금은 메일 발송 서비스가 준비 중이라 도달 알림이 발송되지 않아요.", emailDelivery: "NOT_CONFIGURED" }, 201);
+    }
+    return json({ success: true, id, notice: "목표가에 도달하면 이메일로 알려드립니다.", emailDelivery: "QUEUED" }, 201);
   }
   if (path.startsWith("/api/v1/price-alerts/") && method === "DELETE") {
     const u = await requireUser(request, env);

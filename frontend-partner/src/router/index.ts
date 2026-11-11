@@ -11,6 +11,7 @@ import StaffView from '../views/StaffView.vue'
 import ApiKeysView from '../views/ApiKeysView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
+import PartnerTermsView from '../views/PartnerTermsView.vue'
 import ForgotPasswordView from '../views/ForgotPasswordView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
 
@@ -25,6 +26,12 @@ const routes: RouteRecordRaw[] = [
     path: '/register',
     name: 'Register',
     component: RegisterView,
+    meta: { public: true }
+  },
+  {
+    path: '/terms',
+    name: 'PartnerTerms',
+    component: PartnerTermsView,
     meta: { public: true }
   },
   {

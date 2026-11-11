@@ -94,10 +94,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 2
       }
     ],
-    reviews: [
-      { id: 'rev_s1', author: '강** 여행자', rating: 5.0, date: '2026-10-12', comment: '81층에서 내려다보는 한강 야경이 경이롭습니다. 라운지 살롱 드 시그니엘 샴페인 서비스도 최고였습니다.' },
-      { id: 'rev_s2', author: 'Kim J.W.', rating: 4.8, date: '2026-10-05', comment: '기념일 호캉스로 다녀왔는데 직원분들의 환대와 턴다운 서비스가 매우 인상적이었습니다.' }
-    ]
+    reviews: []
   },
   {
     id: 'htl_seoul_02',
@@ -132,9 +129,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 4
       }
     ],
-    reviews: [
-      { id: 'rev_s3', author: '이**', rating: 5.0, date: '2026-09-30', comment: '파크뷰 조식 뷔페와 어번 아일랜드는 국내 최고입니다.' }
-    ]
+    reviews: []
   },
   {
     id: 'htl_seoul_03',
@@ -169,9 +164,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 6
       }
     ],
-    reviews: [
-      { id: 'rev_s4', author: '정**', rating: 4.7, date: '2026-10-08', comment: '화강암으로 마감된 통창 욕실과 야경이 정말 매력적입니다.' }
-    ]
+    reviews: []
   },
 
   // ==========================================
@@ -222,10 +215,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 3
       }
     ],
-    reviews: [
-      { id: 'rev_t1', author: '이**', rating: 5.0, date: '2026-10-10', comment: '위치, 룸 컨디션, 서비스 모두 최고였습니다. 롯폰기 힐스와 직결되어 편리합니다.' },
-      { id: 'rev_t2', author: 'Sato K.', rating: 4.8, date: '2026-09-28', comment: '조식 뷔페 퀄리티가 대단히 높습니다. 도쿄 출장 시 늘 머무는 곳입니다.' }
-    ]
+    reviews: []
   },
   {
     id: 'htl_tokyo_02',
@@ -260,9 +250,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 4
       }
     ],
-    reviews: [
-      { id: 'rev_t3', author: '최**', rating: 5.0, date: '2026-10-02', comment: '영화 로스트 인 트랜스레이션의 감성을 온전히 느낄 수 있는 환상적인 뷰.' }
-    ]
+    reviews: []
   },
   {
     id: 'htl_tokyo_03',
@@ -297,9 +285,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 12
       }
     ],
-    reviews: [
-      { id: 'rev_t4', author: '박**', rating: 4.7, date: '2026-09-15', comment: '나리타/하네다 리무진 버스가 호텔 현관까지 와서 이동이 정말 편했습니다.' }
-    ]
+    reviews: []
   },
 
   // ==========================================
@@ -350,9 +336,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 4
       }
     ],
-    reviews: [
-      { id: 'rev_o1', author: '한**', rating: 5.0, date: '2026-10-14', comment: '공항 오갈 때 무거운 캐리어 끌 필요 없이 난바역 엘리베이터 타면 끝입니다. 도톤보리 도보 5분!' }
-    ]
+    reviews: []
   },
   {
     id: 'htl_osaka_02',
@@ -387,9 +371,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 5
       }
     ],
-    reviews: [
-      { id: 'rev_o2', author: 'Yamada T.', rating: 4.9, date: '2026-09-22', comment: '우메다 쇼핑과 교통 편의성 최고. 대욕장 시설이 훌륭하여 피로가 싹 풀렸습니다.' }
-    ]
+    reviews: []
   },
 
   // ==========================================
@@ -440,9 +422,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 3
       }
     ],
-    reviews: [
-      { id: 'rev_b1', author: '김**', rating: 5.0, date: '2026-10-11', comment: '발코니에서 바라보는 강변 노을이 예술입니다. 아이콘시암 보트도 바로 앞에서 탈 수 있어요.' }
-    ]
+    reviews: []
   },
   {
     id: 'htl_bangkok_02',
@@ -477,9 +457,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 6
       }
     ],
-    reviews: [
-      { id: 'rev_b2', author: 'Somchai P.', rating: 5.0, date: '2026-09-18', comment: '방콕 도심 한가운데에서 평화로운 오아시스를 만난 느낌입니다.' }
-    ]
+    reviews: []
   },
 
   // ==========================================
@@ -530,9 +508,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 4
       }
     ],
-    reviews: [
-      { id: 'rev_f1', author: '윤**', rating: 5.0, date: '2026-10-13', comment: '캐널시티 분수쇼가 바로 보이는 방이어서 아이들이 너무 좋아했습니다. 나카스 강변도 가까워요.' }
-    ]
+    reviews: []
   },
   {
     id: 'htl_fukuoka_02',
@@ -567,9 +543,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 11
       }
     ],
-    reviews: [
-      { id: 'rev_f2', author: '오**', rating: 4.8, date: '2026-09-29', comment: '텐진 쇼핑과 맛집 투어하기에 후쿠오카 최고의 입지입니다.' }
-    ]
+    reviews: []
   },
 
   // ==========================================
@@ -620,10 +594,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 2
       }
     ],
-    reviews: [
-      { id: 'rev_p1', author: '송**', rating: 5.0, date: '2026-10-09', comment: '밤마다 방 발코니에서 반짝이는 에펠탑을 와인 마시며 바라보는 경험은 평생 잊지 못합니다.' },
-      { id: 'rev_p2', author: 'Dupont M.', rating: 4.8, date: '2026-09-14', comment: '에펠탑 바로 옆 위치라 이동과 산책이 정말 최고였습니다.' }
-    ]
+    reviews: []
   },
   {
     id: 'htl_paris_02',
@@ -658,9 +629,7 @@ export const MASTER_HOTEL_CATALOG: HotelProperty[] = [
         available_inventory: 4
       }
     ],
-    reviews: [
-      { id: 'rev_p3', author: '남**', rating: 5.0, date: '2026-10-01', comment: '오페라 가르니에가 문을 열면 바로 앞에 펼쳐집니다. 카페 드 라 페의 밀푀유와 조식도 환상적입니다.' }
-    ]
+    reviews: []
   }
 ]
 

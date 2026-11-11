@@ -108,10 +108,31 @@ npx wrangler secret put PII_ENC_KEY
 
 확인: `/health` → `piiEncryptionKey: True`.
 
-## 4. 메일 발송 (Resend)
+## 4. 도메인 연결 (메일·PG보다 먼저)
+
+메일 링크(재설정·예약확정)는 `PUBLIC_SITE_URL`으로 나가고, Resend 발신
+도메인 인증도 DNS를 요구한다. 미연결 상태에서 메일·PG를 먼저 열면 링크가
+죽은 도메인을 가리킨다(#63). DNS부터 연결한다.
+
+```powershell
+# Cloudflare 대시보드 → 각 워커 → Settings → Domains & Routes → Add Custom Domain:
+#   ota-hub     → getfortrip.com (+ www)
+#   ota-admin   → admin.getfortrip.com
+#   ota-partner → partner.getfortrip.com
+```
+
+그 뒤 `wrangler.jsonc` vars가 실도메인을 가리키는지 확인하고 재배포
+(`PUBLIC_SITE_URL=https://getfortrip.com`,
+`PARTNER_SITE_URL=https://partner.getfortrip.com` — 현재 선언済,
+`ALLOWED_ORIGINS`에 실도메인 포함 확인).
+
+확인: 3개 실도메인 루트 200 + `/api/v1/health` 200.
+
+## 5. 메일 발송 (Resend)
 
 없으면 예약확정·비밀번호 메일이 outbox에 적재만 된다. 키 등록 후 크론(5분)이
-밀린 메일을 자동 발송한다.
+밀린 메일을 자동 발송한다. 4단계에서 연결한 도메인으로 Resend 발신 인증을
+먼저 마쳐야 수신이 스팸 처리되지 않는다.
 
 ```powershell
 npx wrangler secret put RESEND_API_KEY
@@ -120,7 +141,7 @@ npx wrangler secret put RESEND_API_KEY
 `EMAIL_FROM`은 `wrangler.jsonc` vars에 확정 발신자로 교체 후 재배포.
 확인: `/health` → `emailProvider: RESEND`.
 
-## 5. 오류 알림 (Sentry)
+## 6. 오류 알림 (Sentry)
 
 ```powershell
 # GitHub repo Secret: SENTRY_DSN (프론트 3종 빌드에 주입)
@@ -129,7 +150,7 @@ npx wrangler secret put SENTRY_DSN   # 워커 런타임용
 
 확인: `/health` → `errorReporting: SENTRY`.
 
-## 6. PG 연결 — 토스 테스트키로 먼저 검증 (계약 직후)
+## 7. PG 연결 — 토스 테스트키로 먼저 검증 (계약 직후)
 
 상점관리자에서 테스트키(`test_sk_`, `test_ck_`)를 발급받아 등록한다.
 테스트 결제는 DB에 `mode=SANDBOX`로 찍혀 실매출과 구분된다.
@@ -147,7 +168,7 @@ npx wrangler secret put TOSS_SECRET_KEY   # test_sk_... 입력
    바우처 발급 → 취소·환불까지 수행.
 3. 어드민 정산/원장에서 해당 건이 SANDBOX로 구분되는지 확인.
 
-## 7. PG 실키로 전환 (장사 시작)
+## 8. PG 실키로 전환 (장사 시작)
 
 상점관리자에서 라이브키(`live_sk_`, `live_ck_`) 발급 후 같은 자리에 교체.
 
@@ -155,7 +176,7 @@ npx wrangler secret put TOSS_SECRET_KEY   # test_sk_... 입력
 상품으로 결제→확정→취소·환불 풀루프를 돌리고, 토스 상점관리자 입금/취소 내역과
 대사한 뒤 정상 상품 판매를 연다.
 
-## 8. 토스 웹훅 등록 (선택이나 권장)
+## 9. 토스 웹훅 등록 (선택이나 권장)
 
 상점관리자 웹훅 URL에 등록:
 
@@ -165,14 +186,15 @@ npx wrangler secret put TOSS_WEBHOOK_SECRET  # 위 $secret 입력
 ```
 
 ```text
-https://ota-hub.dnjstjqppk.workers.dev/api/v1/webhooks/toss?key=$secret
+https://getfortrip.com/api/v1/webhooks/toss?key=$secret
 ```
+(4단계 도메인 연결 전 임시 검증이 필요할 때만 workers.dev URL을 쓴다.)
 
 웹훅은 힌트일 뿐 돈은 항상 PG 조회로 확정하므로(Dual-write 방지),
 등록 전에도 결제는 정상 동작한다. 등록 후에는 PG 응답 유실 건이 자동 화해되고,
 토스 대시보드 직접 취소·차지백도 내부 예약·재고·코인·정산에 동기화된다.
 
-## 9. 개통 후 상시 확인
+## 10. 개통 후 상시 확인
 
 - 어드민 대시보드: `MANUAL_REVIEW_REQUIRED` 건은 매일 처리
   (PG 응답 유실·환불 실패가 여기에 쌓인다).

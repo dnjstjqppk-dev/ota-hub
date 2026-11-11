@@ -586,9 +586,17 @@ test("#37: password change verifies current, kills sessions, forces re-login", a
   assert.equal(ch.data.requireRelogin, true);
   assert.equal((await api("GET", "/api/v1/auth/me", { token: u.token })).status, 401, "old session dead");
   assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: u.email, password: old } })).status, 401, "old password dead");
-  const nl = await api("POST", "/api/v1/auth/login", { body: { email: u.email, password: next } });
-  assert.equal(nl.status, 200, JSON.stringify(nl.data));
-  assert.equal((await api("GET", "/api/v1/auth/me", { token: nl.data.token })).status, 200, "new session works");
+  // Session reset uses a +1s boundary (auth.ts), so a login landing in the
+  // same second mints a stillborn token by design and must retry — the test
+  // encodes that contract instead of racing the clock.
+  let nl = null;
+  for (let i = 0; i < 4; i++) {
+    const attempt = await api("POST", "/api/v1/auth/login", { body: { email: u.email, password: next } });
+    assert.equal(attempt.status, 200, JSON.stringify(attempt.data));
+    if ((await api("GET", "/api/v1/auth/me", { token: attempt.data.token })).status === 200) { nl = attempt; break; }
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  assert.ok(nl, "new session works after the reset boundary clears");
 });
 
 test("#35: logins issue HttpOnly jars; cookie alone authenticates", async () => {
@@ -2657,4 +2665,54 @@ test("#133: postback rejects negative and non-numeric commission", async () => {
     sql("DELETE FROM affiliate_clicks WHERE partner_name = 'e2e-aff-133'");
     sql("DELETE FROM affiliate_partners_config WHERE partner_id = 'e2e-aff-133'");
   }
+});
+
+test("#62: price-alert notice is honest about mail delivery", async () => {
+  resetLimiter("register");
+  const G = await register("alert62");
+  const r = await api("POST", "/api/v1/price-alerts", { token: G.token, body: { routeOrHotel: "ICN-NRT", targetPrice: 200000 } });
+  assert.equal(r.status, 201);
+  // Local/staging has no mail provider: the notice must say so (no promise).
+  assert.equal(r.data.emailDelivery, "NOT_CONFIGURED");
+  assert.ok(!r.data.notice.includes("알려드립니다"), JSON.stringify(r.data));
+  await api("DELETE", `/api/v1/price-alerts/${r.data.id}`, { token: G.token });
+});
+
+test("#68: staff emails are globally unique; login resolves one tenant", async () => {
+  resetLimiter("partner_register", "partner_login");
+  const P = await approvedPartner("stf68a");
+  const Q = await approvedPartner("stf68b");
+  const email = `qa_staff68_${rnd()}@local.test`.toLowerCase();
+  const inv = await api("POST", "/api/v1/partner/staff", { token: P.token, body: { email, fullName: "스태프68", role: "STAFF", password: "Passw0rd-QA-1" } });
+  assert.equal(inv.status, 201, JSON.stringify(inv.data));
+  try {
+    // Same tenant again → 409.
+    assert.equal((await api("POST", "/api/v1/partner/staff", { token: P.token, body: { email, fullName: "중복", role: "STAFF", password: "Passw0rd-QA-1" } })).status, 409);
+    // Other tenant → 409, not a raw 500 (pre-#68 fell through to the constraint).
+    const cross = await api("POST", "/api/v1/partner/staff", { token: Q.token, body: { email, fullName: "탈취", role: "STAFF", password: "Passw0rd-QA-1" } });
+    assert.equal(cross.status, 409, JSON.stringify(cross.data));
+    assert.equal(cross.data.code, "STAFF_EXISTS");
+    // Login resolves the single global row → tenant A, never B.
+    const login = await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } });
+    assert.equal(login.status, 200, JSON.stringify(login.data));
+    assert.equal(login.data.partner.id, P.id);
+    assert.equal(login.data.partner.staffRole, "STAFF");
+  } finally {
+    sql(`DELETE FROM partner_staff WHERE email = '${email}'`);
+  }
+});
+
+test("#69: partner product create rejects bad price and free-form domain", async () => {
+  resetLimiter("partner_register", "partner_login");
+  const P = await approvedPartner("price69");
+  const post = (body) => api("POST", "/api/v1/partner/products", { token: P.token, body });
+  assert.equal((await post({ title: "음수가", domain: "ACTIVITY", city: "서울", price: -5 })).data.code, "INVALID_PRICE");
+  assert.equal((await post({ title: "문자열가", domain: "ACTIVITY", city: "서울", price: "abc" })).data.code, "INVALID_PRICE");
+  assert.equal((await post({ title: "소수가", domain: "ACTIVITY", city: "서울", price: 19.99 })).data.code, "INVALID_PRICE");
+  assert.equal((await post({ title: "무료", domain: "BOGUS", city: "서울", price: 1000 })).data.code, "INVALID_DOMAIN");
+  const ok = await post({ title: "E2E 정가 투어", domain: "ACTIVITY", city: "서울", price: 30000 });
+  assert.equal(ok.status, 201, JSON.stringify(ok.data));
+  const zero = await post({ title: "E2E 무료 투어", domain: "ACTIVITY", city: "서울", price: 0 });
+  assert.equal(zero.status, 201, "explicit 0 is a valid price, not the default");
+  assert.equal(sql(`SELECT price_krw FROM activities WHERE id = '${zero.data.id}'`)[0].price_krw, 0);
 });

@@ -99,17 +99,17 @@
 ### 약관·문구·Go
 
 [x] (`806b37c`) 58. `refund-policy.vue:32` — 카드3-5일/당일자동입금 보장. UNKNOWN→수동리뷰·계좌이체 수단없음 → PG의존 기간+수동경로 명시 [S]
-59. `terms.vue:26,39` — eSIM/보험을 제공서비스로 약관 기재(견적 409와 모순) → 허가 전까지 제외 [S]
-60. `hotelCatalog.ts:61-62` + 상세 — 실호텔에 날조 평점(4.9/3450건)·가짜리뷰 첫페인트 → 검증리뷰 집계만 표시 [M]
+[x] 59. 약관 eSIM/보험 제외 → 완료 (6g / terms 제2조에서 예약·결제 대상 제외+조회만 명시, refund-policy 해당 규정 "판매 개시 후 적용" 한정. 버전 유지(#58 선례: 한정 문구, 동의 고아 방지))
+[x] 60. 날조 평점·리뷰 제거 → 완료 (6g / 집계는 이미 null·0이었음 확인, 미렌더 사체 리뷰 17건 전삭제(14블록). 상세는 API 검증리뷰 섹션 사용中. catalog-truth 유닛 회귀)
 [x] (`806b37c`) 61. `brand.ts:23,25` — 최저가/실시간 문구. 미검증+목+수동환율 → 실피드 전까지 삭제 [S]
-62. `user.ts:55` — 목표가 이메일알림 무조건 약속. Resend없으면 영구대기 → 조건부 또는 비활성 [S]
-63. `auth.ts:110` — 메일 링크가 미연결 getfortrip.com. 체크리스트에 도메인 단계 없음 → 도메인 단계를 메일/PG 앞으로 [S]
-64. `partner/RegisterView.vue:226` — 공급규정·정산정책 동의 강제인데 링크·라우트 없음. 무효동의 → 약관발행+링크 [M]
-65. `backend/handlers.go:710-750,69-78` — 하드코딩 partner1234!+정적토큰. :8080 사칭 가능 → env+JWT 또는 제거 [M]
-66. `backend/handlers.go:484-515` — Authorization 헤더만으로 결제 CONFIRMED 날조 → 삭제 또는 실PG검증 [M]
-67. `pricing_calculator.go:46-54` — Go 세금10+수수료3 float·{code} vs 워커 0·{success}. 가격/형태 괴리 → 폐기표시 또는 정합 [M]
-68. `partner.ts:101` — 스태프 로그인 이메일이 파트너 미구분. 타테넌트 접근 → 전역유니크 또는 범위로그인 [M]
-69. `partner.ts:336` — 상품가격 Number 미검증(음수·NaN)·도메인 자유 → int>=0+allowlist [S]
+[x] 62. 알림 문구 조건부 → 완료 (6g / 미설정 시 정직 문구+emailDelivery:NOT_CONFIGURED, 설정 시 QUEUED. 재설정 엔드포인트와 동일 형태. E2E #62)
+[x] 63. 도메인 단계 선행 → 완료 (6g / 체크리스트 새 4단계(도메인 연결)+기존 4-9→5-10 renumber, 웹훅 URL 정식도메인 기준. OPEN_READINESS "1→8단계" 표기는 Phase 7 현행화 시 반영)
+[x] 64. 파트너 약관 발행+링크 → 완료 (6g / PartnerTermsView v1.0 신규(구현 기반 5조: 승인·판매·확정·정산·보안)+/terms 공개 라우트+체크박스 링크. 동의 저장은 미구현(잔여))
+[x] 65. Go 파트너 하드코딩 제거 → 완료 (6g / 정적 prefix 우회 삭제(JWT만), 비번 env화(미설정 503)+로그인 시 PARTNER JWT 발급. Go 테스트 전면 갱신. AdminLogin 선례 준용)
+[x] 66. Go 결제 날조 삭제 → 완료 (6g / PayBooking 410 스텁화(워커 API 안내). Go 테스트 3종 변형 410 검증)
+[x] 67. Go 가격 폐기표시 → 완료 (6g / CalculatePricing Deprecation+Warning 헤더(워커 quotes 지목)+엔진 주석. 동작 불변, Go 테스트 헤더 검증)
+[x] 68. 스태프 이메일 전역유니크 → 완료 (6g / UNIQUE는 0003부터 존재 확인, 초대 검사를 테넌트→전역 409로 정정+레이스 catch. E2E #68(타테넌트 409+로그인 귀속))
+[x] 69. 상품가격·도메인 검증 → 완료 (6g / POST에 PATCH와 동일 int>=0 + 3종 allowlist(HOTEL/CAR/ACTIVITY, UI와 일치). 0원 명시 허용(falsy 함정 제거). E2E #69)
 
 ## P2 — 하드닝 76건
 

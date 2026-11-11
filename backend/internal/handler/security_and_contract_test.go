@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"getfortrip/backend/internal/domain"
@@ -51,8 +52,10 @@ func TestSecurityAndContract(t *testing.T) {
 		}
 	})
 
-	t.Run("pay_without_proof_rejected", func(t *testing.T) {
-		// First create a valid booking
+	t.Run("pay_endpoint_retired_410", func(t *testing.T) {
+		// #66: the endpoint confirmed bookings on any Authorization header
+		// ("Payment verified via PG gateway") without contacting a PG. Every
+		// variant now 410s toward the worker payments API.
 		validBooking, err := store.CreateDraftBooking(domain.Booking{
 			BaseAmountKRW:  100000,
 			FinalAmountKRW: 100000,
@@ -61,33 +64,44 @@ func TestSecurityAndContract(t *testing.T) {
 			t.Fatalf("Failed to create draft booking: %v", err)
 		}
 
-		// Try to pay without proof or token
-		req := httptest.NewRequest("POST", "/api/v1/bookings/"+validBooking.ID+"/pay", bytes.NewReader([]byte(`{}`)))
-		req.SetPathValue("id", validBooking.ID)
+		cases := map[string]*http.Request{}
+		bare := httptest.NewRequest("POST", "/api/v1/bookings/"+validBooking.ID+"/pay", bytes.NewReader([]byte(`{}`)))
+		bare.SetPathValue("id", validBooking.ID)
+		cases["bare"] = bare
+		withProof := httptest.NewRequest("POST", "/api/v1/bookings/"+validBooking.ID+"/pay", bytes.NewReader([]byte(`{"payment_proof":"pg_proof_12345"}`)))
+		withProof.SetPathValue("id", validBooking.ID)
+		cases["with_proof"] = withProof
+		withAuth := httptest.NewRequest("POST", "/api/v1/bookings/"+validBooking.ID+"/pay", bytes.NewReader([]byte(`{}`)))
+		withAuth.SetPathValue("id", validBooking.ID)
+		withAuth.Header.Set("Authorization", "Bearer anything-at-all")
+		cases["with_auth_header"] = withAuth
+
+		for name, req := range cases {
+			w := httptest.NewRecorder()
+			h.PayBooking(w, req)
+			if w.Code != http.StatusGone {
+				t.Fatalf("Expected 410 Gone for pay case %s, got %d", name, w.Code)
+			}
+			if !bytes.Contains(w.Body.Bytes(), []byte("worker payments API")) {
+				t.Fatalf("Pay 410 for %s must point at the worker API, got: %s", name, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("pricing_endpoint_deprecated", func(t *testing.T) {
+		// #67: legacy Go pricing disagrees with the worker quote engine.
+		// Served with deprecation markers until removal.
+		req := httptest.NewRequest("POST", "/api/v1/bookings/calculate", bytes.NewReader([]byte(`{"base_amount_krw":100000,"target_currency":"KRW"}`)))
 		w := httptest.NewRecorder()
-		h.PayBooking(w, req)
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("Expected 400 Bad Request for payment without proof, got %d", w.Code)
+		h.CalculatePricing(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected 200 OK for deprecated pricing, got %d", w.Code)
 		}
-
-		// Pay with proof succeeds
-		reqWithProof := httptest.NewRequest("POST", "/api/v1/bookings/"+validBooking.ID+"/pay", bytes.NewReader([]byte(`{"payment_proof":"pg_proof_12345"}`)))
-		reqWithProof.SetPathValue("id", validBooking.ID)
-		wWithProof := httptest.NewRecorder()
-		h.PayBooking(wWithProof, reqWithProof)
-		if wWithProof.Code != http.StatusOK {
-			t.Fatalf("Expected 200 OK for payment with valid proof, got %d", wWithProof.Code)
+		if w.Header().Get("Deprecation") != "true" {
+			t.Fatalf("Expected Deprecation: true header, got %q", w.Header().Get("Deprecation"))
 		}
-
-		// Fake X-Payment-Proof header bypass is explicitly rejected with 401
-		fakeBooking, _ := store.CreateDraftBooking(domain.Booking{BaseAmountKRW: 50000, FinalAmountKRW: 50000})
-		fakeReq := httptest.NewRequest("POST", "/api/v1/bookings/"+fakeBooking.ID+"/pay", bytes.NewReader([]byte(`{}`)))
-		fakeReq.Header.Set("X-Payment-Proof", "evil_hacker_proof")
-		fakeReq.SetPathValue("id", fakeBooking.ID)
-		wFake := httptest.NewRecorder()
-		h.PayBooking(wFake, fakeReq)
-		if wFake.Code != http.StatusUnauthorized {
-			t.Fatalf("Expected 401 Unauthorized for fake X-Payment-Proof header, got %d", wFake.Code)
+		if !strings.Contains(w.Header().Get("Warning"), "/api/v1/quotes") {
+			t.Fatalf("Expected Warning to name the worker quotes API, got %q", w.Header().Get("Warning"))
 		}
 	})
 
