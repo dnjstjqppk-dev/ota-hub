@@ -20,11 +20,30 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     // sourcing internals (external_sku, source_url, registered_by) never leave
     // the server on the unauthenticated surface. Operator financials stay on
     // the authenticated admin summary/settlement endpoints.
+    // #50: the three channel switches were seeded but never consulted. A
+    // disabled channel is fail-closed on the public surface only — the admin
+    // summary/settlement endpoints below keep full books regardless.
+    const channelFlag: Record<string, string> = {
+      '1P': 'MARKETPLACE_1P_DIRECT',
+      '3P': 'MARKETPLACE_3P_PARTNER',
+      'CONSIGNMENT': 'CONSIGNMENT_SALES',
+    };
+    const modelUp = model ? model.toUpperCase() : null;
+    if (modelUp && channelFlag[modelUp] && !(await isFeatureEnabled(env, channelFlag[modelUp]))) {
+      throw new HttpError(503, 'FEATURE_DISABLED', `${modelUp} 판매 채널이 운영 정책에 따라 일시 중단되었습니다.`);
+    }
     let sql = 'SELECT id, domain_type, item_id, merchant_model, seller_id, seller_name, fulfillment_provider, retail_price_minor, refund_responsible_party, status, created_at, updated_at FROM marketplace_catalog_items WHERE status = "ACTIVE"';
     const params: unknown[] = [];
-    if (model) {
+    if (!modelUp) {
+      for (const [m, flag] of Object.entries(channelFlag)) {
+        if (!(await isFeatureEnabled(env, flag))) {
+          sql += ' AND merchant_model != ?';
+          params.push(m);
+        }
+      }
+    } else {
       sql += ' AND merchant_model = ?';
-      params.push(model.toUpperCase());
+      params.push(modelUp);
     }
     if (domain) {
       sql += ' AND domain_type = ?';

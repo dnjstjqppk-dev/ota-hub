@@ -19,6 +19,17 @@ const crypto = require('crypto');
 
 const BASE_URL = process.env.BASE_URL || 'https://ota-hub.dnjstjqppk.workers.dev';
 
+// #48/#53 (6f): this suite used to count skipped tests as passes (fake 41/41)
+// and mutated production (flag toggles, draft publishes, product rows).
+//   - Skips now FAIL the gate unless VERIFY_ALLOW_SKIP=1 names them accepted.
+//   - Mutating tests (T34/T36/T40) run read-only variants against production
+//     by default; full mutation runs on non-prod targets, or on production
+//     only with VERIFY_ALLOW_MUTATION=1. T41's live settle stays separately
+//     gated behind VERIFY_LIVE_SETTLE=1 (real money).
+const isProdTarget = ['ota-hub.dnjstjqppk.workers.dev'].some((h) => BASE_URL.includes(h));
+const ALLOW_MUTATION = process.env.VERIFY_ALLOW_MUTATION === '1' || (!isProdTarget && process.env.VERIFY_ALLOW_MUTATION !== '0');
+const ALLOW_SKIP = process.env.VERIFY_ALLOW_SKIP === '1';
+
 async function runVerificationSuite() {
   console.log('==============================================================================');
   console.log('🚀 Running Production Live Security & E2E Verification Suite against:');
@@ -28,6 +39,13 @@ async function runVerificationSuite() {
   let passed = 0;
   let total = 0;
   let skipped = 0;
+  const skipReasons = [];
+  // #48: a skip is recorded, never a silent pass (see the exit gate below).
+  function skip(reason) {
+    skipped++;
+    skipReasons.push(reason);
+    console.log(`(SKIPPED: ${reason})`);
+  }
 
   async function test(name, fn) {
     total++;
@@ -700,14 +718,15 @@ async function runVerificationSuite() {
   // ---------------------------------------------------------------------------
   // 32. FEATURE FLAGS CENTRAL REGISTRY & PUBLIC CLIENT ENDPOINT
   // ---------------------------------------------------------------------------
-  await test("Feature Flags: GET /api/v1/feature-flags returns 16 core flags and boolean map", async () => {
+  await test("Feature Flags: GET /api/v1/feature-flags returns enforced core flags and boolean map", async () => {
     const res = await fetch(`${BASE_URL}/api/v1/feature-flags`);
     if (!res.ok) throw new Error(`Failed to fetch feature flags: HTTP ${res.status}`);
     const json = await res.json();
     if (!json.success || !json.flags || typeof json.flags !== 'object') {
       throw new Error(`Invalid feature flag response: ${JSON.stringify(json)}`);
     }
-    const expected = ['FLIGHT_BOOKING', 'HOTEL_BOOKING', 'ACTIVITY_BOOKING', 'CAR_RENTAL', 'PACKAGE_TOUR', 'TRANSIT_TICKETS', 'TRAVEL_INSURANCE', 'ESIM', 'URL_PRODUCT_INGESTION', 'AI_TRANSLATION', 'AUTO_PRODUCT_PUBLISH', 'REALTIME_INVENTORY_SYNC', 'AUTO_BOOKING_CONFIRMATION', 'PARTNER_AUTO_DISPATCH', 'AUTO_CANCEL_REFUND', 'AUTO_SETTLEMENT'];
+    // #50 (0038): the 8 no-op core flags are deleted; only enforced keys remain.
+    const expected = ['FLIGHT_BOOKING', 'HOTEL_BOOKING', 'ACTIVITY_BOOKING', 'CAR_RENTAL', 'PACKAGE_TOUR', 'TRANSIT_TICKETS', 'URL_PRODUCT_INGESTION', 'AUTO_PRODUCT_PUBLISH'];
     for (const key of expected) {
       if (!(key in json.flags)) {
         throw new Error(`Missing expected feature flag key: ${key}`);
@@ -731,8 +750,15 @@ async function runVerificationSuite() {
     });
     if (!res.ok) throw new Error(`Admin feature flags failed: HTTP ${res.status}`);
     const json = await res.json();
-    if (!json.success || !Array.isArray(json.flags) || json.flags.length < 16) {
-      throw new Error(`Expected at least 16 flags in admin registry, got: ${json.flags?.length}`);
+    if (!json.success || !Array.isArray(json.flags)) {
+      throw new Error(`Invalid admin flags response: ${JSON.stringify(json)}`);
+    }
+    // #50 (0038): the registry must hold exactly the enforced set — no
+    // theater flags. Any future flag addition updates this list deliberately.
+    const enforced = ['ACTIVITY_BOOKING', 'AUTO_PRODUCT_PUBLISH', 'CAR_RENTAL', 'CONSIGNMENT_SALES', 'FLIGHT_BOOKING', 'HOTEL_BOOKING', 'MARKETPLACE_1P_DIRECT', 'MARKETPLACE_3P_PARTNER', 'PACKAGE_TOUR', 'PARTNER_SELF_PRODUCT_REGISTRATION', 'PARTNER_URL_INGESTION', 'TRANSIT_TICKETS', 'URL_PRODUCT_INGESTION'].sort();
+    const actual = json.flags.map((f) => f.key).sort();
+    if (JSON.stringify(actual) !== JSON.stringify(enforced)) {
+      throw new Error(`Admin registry is not the enforced set. Extra/missing: ${JSON.stringify(actual.filter((k) => !enforced.includes(k)).concat(enforced.filter((k) => !actual.includes(k))))}`);
     }
   });
 
@@ -740,6 +766,22 @@ async function runVerificationSuite() {
   // 34. FEATURE FLAGS TOGGLE & DEPENDENCY SAFETY GUARD
   // ---------------------------------------------------------------------------
   await test("Feature Flags Toggle: Dependency guard blocks invalid state & allows valid toggle", async () => {
+    // #53: flipping AUTO_PRODUCT_PUBLISH on production auto-publishes drafts
+    // mid-run. Production default is read-only (assert the safe default and
+    // the guard path); the ON/OFF cycle runs on staging or with
+    // VERIFY_ALLOW_MUTATION=1.
+    if (!ALLOW_MUTATION) {
+      const res = await fetch(`${BASE_URL}/api/v1/admin/feature-flags`, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      if (!res.ok) throw new Error(`Admin feature flags failed: HTTP ${res.status}`);
+      const flags = (await res.json()).flags;
+      const auto = flags.find((f) => f.key === 'AUTO_PRODUCT_PUBLISH');
+      if (!auto) throw new Error('AUTO_PRODUCT_PUBLISH missing from registry');
+      if (Number(auto.is_enabled) !== 0) throw new Error('AUTO_PRODUCT_PUBLISH must rest OFF on production (read-only check)');
+      console.log('(read-only: toggle cycle runs on staging)');
+      return;
+    }
     // Attempting to turn ON AUTO_PRODUCT_PUBLISH while URL_PRODUCT_INGESTION requirement is checked
     const res = await fetch(`${BASE_URL}/api/v1/admin/feature-flags/AUTO_PRODUCT_PUBLISH`, {
       method: 'PATCH',
@@ -822,13 +864,31 @@ async function runVerificationSuite() {
       throw new Error(`Invalid history response: ${JSON.stringify(hist)}`);
     }
 
+    // #53: publishing an arbitrary draft mutates the live catalog. Production
+    // default is read-only: history shape plus a 404 on a garbage publish id
+    // (no writes). Staging publishes for real when a draft is publishable.
+    if (!ALLOW_MUTATION) {
+      const ghost = await fetch(`${BASE_URL}/api/v1/admin/ingest/ing_no_such_draft_000/publish`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      if (ghost.status !== 404) throw new Error(`Expected 404 publishing an unknown draft, got HTTP ${ghost.status}`);
+      console.log('(read-only: live publish runs on staging)');
+      return;
+    }
     // Publish only a genuinely publishable draft (unpublished, not rejected).
-    // The full draft->PATCH->publish->once-only flow is covered by the local E2E
-    // suite; this live check exercises publish only when a draft happens to exist.
     const targetDraft = hist.items.find((i) => (i.status === 'DRAFT' || i.status === 'REVIEWED') && !i.published_item_id);
     if (!targetDraft) {
-      skipped++;
-      console.log('(no publishable draft in history; publish step skipped)');
+      // Publish is once-only by design, so a re-run finds nothing left to
+      // publish. Prove the invariant instead of skipping: re-publishing a
+      // published draft must 409. No silent skips (#48).
+      const published = hist.items.find((i) => i.status === 'PUBLISHED' || i.published_item_id);
+      if (!published) throw new Error('Staging has no drafts at all; cannot exercise publish (seed ing_sample_01 first)');
+      const again = await fetch(`${BASE_URL}/api/v1/admin/ingest/${published.id}/publish`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      if (again.status !== 409) throw new Error(`Re-publish must 409 (once-only), got HTTP ${again.status}`);
       return;
     }
     const pubRes = await fetch(`${BASE_URL}/api/v1/admin/ingest/${targetDraft.id}/publish`, {
@@ -939,6 +999,21 @@ async function runVerificationSuite() {
   // 40. 3P PARTNER PRODUCT REGISTRATION WITH SELLER ATTRIBUTION
   // ---------------------------------------------------------------------------
   await test("3P Partner Product Registration: POST /api/v1/partner/marketplace/products registers product with 3P seller attribution", async () => {
+    // #53: registering a product writes catalog + supplier rows. Production
+    // default is read-only: an invalid POST must 400 without writing anything.
+    if (!ALLOW_MUTATION) {
+      const bad = await fetch(`${BASE_URL}/api/v1/partner/marketplace/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${partnerToken}`
+        },
+        body: JSON.stringify({ title: '', domain: 'BOGUS', price: -1 })
+      });
+      if (bad.status !== 400) throw new Error(`Expected 400 for invalid registration (read-only), got HTTP ${bad.status}`);
+      console.log('(read-only: live registration runs on staging)');
+      return;
+    }
     const res = await fetch(`${BASE_URL}/api/v1/partner/marketplace/products`, {
       method: 'POST',
       headers: {
@@ -985,8 +1060,7 @@ async function runVerificationSuite() {
     const pending = admJson.settlements.find((s) => s.settlement_status === 'PENDING') || admJson.settlements[0];
     if (pending) {
       if (!process.env.VERIFY_LIVE_SETTLE) {
-        skipped++;
-        console.log(`(dry-run: live settle of ${pending.id} skipped; set VERIFY_LIVE_SETTLE=1 to exercise it)`);
+        skip(`dry-run: live settle of ${pending.id} not exercised (set VERIFY_LIVE_SETTLE=1)`);
       } else {
         const settleRes = await fetch(`${BASE_URL}/api/v1/admin/marketplace/settlements/${pending.id}/settle`, {
           method: 'PATCH',
@@ -1013,10 +1087,16 @@ async function runVerificationSuite() {
   // SUMMARY
   // ---------------------------------------------------------------------------
   console.log('\n==============================================================================');
-  console.log(`Live Security & E2E Verification Results: ${passed}/${total} PASS (${Math.round((passed / total) * 100)}%), ${skipped} SKIPPED (dry-run)`);
+  const failed = total - passed;
+  console.log(`Live Security & E2E Verification Results: ${passed}/${total} PASS, ${failed} FAILED, ${skipped} SKIPPED`);
+  for (const reason of skipReasons) console.log(`  skipped: ${reason}`);
+  console.log(`Mode: ${ALLOW_MUTATION ? 'MUTATING' : 'READ-ONLY'} mutations against ${isProdTarget ? 'PRODUCTION' : 'non-prod target'}`);
   console.log('==============================================================================\n');
 
-  if (passed !== total) {
+  // #48: skips fail the gate unless explicitly accepted — a skipped test is
+  // not a passing test.
+  if (failed > 0 || (skipped > 0 && !ALLOW_SKIP)) {
+    if (skipped > 0 && !ALLOW_SKIP) console.error('Skips present without VERIFY_ALLOW_SKIP=1; refusing a green verdict.');
     process.exit(1);
   }
 }

@@ -12,6 +12,7 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHmac } from "node:crypto";
+import { createServer } from "node:http";
 
 const BASE = process.env.BASE || "http://127.0.0.1:8799";
 const ADMIN_EMAIL = "admin@local.test";
@@ -2486,14 +2487,20 @@ test("#45: supplier-confirm timeout auto-refunds via maintenance", async () => {
   assert.equal(sql(`SELECT id FROM inventory_holds WHERE booking_id = '${b.id}' AND status != 'RELEASED'`).length, 0, "holds released");
 });
 
-test("#46: unbuilt automation flags are off + pending-contract", async () => {
-  const reg = (await api("GET", "/api/v1/feature-flags")).data.registry;
-  for (const k of ["ESIM", "REALTIME_INVENTORY_SYNC", "AUTO_BOOKING_CONFIRMATION", "SUPPLIER_API_INTEGRATION"]) {
-    const f = reg.find((x) => x.key === k);
-    assert.ok(f, k);
-    assert.equal(f.is_enabled, false, k);
-    assert.equal(f.external_contract_status, "PENDING_CONTRACT", k);
+test("#46/#50/#118: flag registry holds only enforced flags; dead prereqs gone", async () => {
+  // 6e parked the unbuilt-automation flags at OFF; 6f (#50) deletes them — a
+  // toggle that gates nothing is theater either way. Every surviving key is
+  // consulted by a money/catalog/ingest gate (see worker/src callers).
+  const admin = (await api("GET", "/api/v1/admin/feature-flags", { token: ADMIN })).data.flags;
+  const keys = admin.map((f) => f.key).sort();
+  const enforced = ["ACTIVITY_BOOKING", "AUTO_PRODUCT_PUBLISH", "CAR_RENTAL", "CONSIGNMENT_SALES", "FLIGHT_BOOKING", "HOTEL_BOOKING", "MARKETPLACE_1P_DIRECT", "MARKETPLACE_3P_PARTNER", "PACKAGE_TOUR", "PARTNER_SELF_PRODUCT_REGISTRATION", "PARTNER_URL_INGESTION", "TRANSIT_TICKETS", "URL_PRODUCT_INGESTION"].sort();
+  assert.deepEqual(keys, enforced);
+  for (const k of ["ESIM", "TRAVEL_INSURANCE", "AI_TRANSLATION", "REALTIME_INVENTORY_SYNC", "AUTO_BOOKING_CONFIRMATION", "PARTNER_AUTO_DISPATCH", "AUTO_BOOKING_DISPATCH", "AUTO_CANCEL_REFUND", "AUTO_SETTLEMENT", "AUTO_PARTNER_SETTLEMENT", "AUTO_SUPPLIER_SETTLEMENT", "SUPPLIER_API_INTEGRATION"]) {
+    assert.ok(!keys.includes(k), `${k} removed from registry`);
+    assert.equal((await api("PATCH", `/api/v1/admin/feature-flags/${k}`, { token: ADMIN, body: { is_enabled: true } })).status, 404, `${k} PATCH 404`);
   }
+  const flight = admin.find((f) => f.key === "FLIGHT_BOOKING");
+  assert.deepEqual(flight.requires_flags, [], "no dead REALTIME prereq (#118)");
 });
 
 test("#47: click rows carry real IP, allowlisted domain, resolved title", async () => {
@@ -2517,5 +2524,137 @@ test("#47: click rows carry real IP, allowlisted domain, resolved title", async 
   } finally {
     sql("DELETE FROM affiliate_clicks WHERE partner_name = 'e2e-aff-47'");
     sql("DELETE FROM affiliate_partners_config WHERE partner_id = 'e2e-aff-47'");
+  }
+});
+
+const flag6f = (key, on) => api("PATCH", `/api/v1/admin/feature-flags/${key}`, { token: ADMIN, body: { is_enabled: on } });
+
+test("#49: SELF_REG kill-switch gates partner registration (seeded, PATCH 200)", async () => {
+  const P = await approvedPartner("selfreg49");
+  const body = { title: "E2E 셀프등록 킬스위치", domain: "ACTIVITY", city: "서울", price: 50000, capacity: 10 };
+  assert.equal((await flag6f("PARTNER_SELF_PRODUCT_REGISTRATION", true)).status, 200, "seeded row: no 404");
+  assert.equal((await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body })).status, 201);
+  assert.equal((await flag6f("PARTNER_SELF_PRODUCT_REGISTRATION", false)).status, 200);
+  try {
+    const blocked = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body });
+    assert.equal(blocked.status, 503);
+    assert.equal(blocked.data.code, "FEATURE_DISABLED");
+  } finally {
+    assert.equal((await flag6f("PARTNER_SELF_PRODUCT_REGISTRATION", true)).status, 200);
+  }
+  assert.equal((await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body })).status, 201);
+});
+
+test("#50: marketplace channel flags fail closed on the public surface only", async () => {
+  sql(`INSERT INTO marketplace_catalog_items (id, domain_type, item_id, merchant_model, supplier_id, registered_by, seller_id, seller_name, fulfillment_provider, supply_cost_minor, retail_price_minor, commission_rate_bps, seller_payout_minor, platform_margin_minor, refund_responsible_party, status) VALUES ('mkt_e2e_50', 'ACTIVITY', 'act_e2e_50', 'CONSIGNMENT', 'sup_e2e_50', 'ADMIN', 'getfortrip', 'E2E 위탁', 'SUPPLIER', 10000, 15000, 0, 10000, 5000, 'GETFORTRIP', 'ACTIVE')`);
+  try {
+    const listed = (await api("GET", "/api/v1/marketplace/catalog?model=CONSIGNMENT")).data.items;
+    assert.ok(listed.some((i) => i.id === "mkt_e2e_50"), "fixture listed while channel on");
+    // A 3P row from an earlier test proves other channels stay visible (no
+    // ACTIVE 1P rows exist: all four 1P seeds are PAUSED by 0037).
+    const other = (await api("GET", "/api/v1/marketplace/catalog")).data.items.find((i) => i.merchant_model === "3P");
+    assert.ok(other, "a 3P row exists before the toggle");
+    assert.equal((await flag6f("CONSIGNMENT_SALES", false)).status, 200);
+    try {
+      const filtered = await api("GET", "/api/v1/marketplace/catalog?model=CONSIGNMENT");
+      assert.equal(filtered.status, 503);
+      assert.equal(filtered.data.code, "FEATURE_DISABLED");
+      const unfiltered = (await api("GET", "/api/v1/marketplace/catalog")).data.items;
+      assert.ok(!unfiltered.some((i) => i.id === "mkt_e2e_50"), "off channel hidden from unfiltered list");
+      assert.ok(unfiltered.some((i) => i.id === other.id), "other channels unaffected");
+      assert.equal((await api("GET", "/api/v1/admin/marketplace/summary", { token: ADMIN })).status, 200, "admin books unaffected");
+    } finally {
+      assert.equal((await flag6f("CONSIGNMENT_SALES", true)).status, 200);
+    }
+    assert.ok((await api("GET", "/api/v1/marketplace/catalog?model=CONSIGNMENT")).data.items.some((i) => i.id === "mkt_e2e_50"), "restored");
+  } finally {
+    sql("DELETE FROM marketplace_catalog_items WHERE id = 'mkt_e2e_50'");
+  }
+});
+
+test("#50: PARTNER_URL_INGESTION gates partner ingestion; admin pipeline independent", async () => {
+  const P = await approvedPartner("purl50");
+  assert.equal((await flag6f("PARTNER_URL_INGESTION", false)).status, 200);
+  try {
+    const r = await api("POST", "/api/v1/partner/ingest/url", { token: P.token, body: { url: "https://travel.example.com/x" } });
+    assert.equal(r.status, 503);
+    assert.equal(r.data.code, "FEATURE_DISABLED");
+    const admin = await api("POST", "/api/v1/admin/ingest/url", { token: ADMIN, body: { url: "http://169.254.169.254/x" } });
+    assert.equal(admin.data.code, "SSRF_BLOCKED", "admin path answers its own guard, not the partner switch");
+  } finally {
+    assert.equal((await flag6f("PARTNER_URL_INGESTION", true)).status, 200);
+  }
+});
+
+test("#56: maintenance heartbeats land in /health; staleness never fails health", async () => {
+  assert.equal((await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN })).status, 200);
+  const beat = sql("SELECT job, ok FROM cron_heartbeats WHERE job = 'maintenance'")[0];
+  assert.equal(beat.job, "maintenance");
+  assert.equal(beat.ok, 1);
+  const cron = (await api("GET", "/api/v1/health")).data.checks.cron;
+  assert.equal(cron.ok, true);
+  assert.equal(cron.stale, false);
+  assert.ok(cron.ageSec < 120, JSON.stringify(cron));
+  sql("UPDATE cron_heartbeats SET ran_at = '2020-01-01T00:00:00.000Z' WHERE job = 'maintenance'");
+  const stale = await api("GET", "/api/v1/health");
+  assert.equal(stale.status, 200, "stale cron is reported, not a 503");
+  assert.equal(stale.data.checks.cron.stale, true);
+  assert.equal((await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN })).status, 200);
+  assert.equal((await api("GET", "/api/v1/health")).data.checks.cron.stale, false);
+});
+
+test("#57: POST /admin/ingest/url scrapes a fixture page; SSRF stays 403", async () => {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>E2E 픽스처 투어</title>` +
+    `<meta property="og:title" content="E2E 픽스처 입장권"><meta property="og:description" content="픽스처 설명">` +
+    `<meta property="og:site_name" content="Fixture Travel"><meta property="og:image" content="/img.jpg">` +
+    `<meta property="og:price:amount" content="25000"><meta property="og:price:currency" content="KRW">` +
+    `<script type="application/ld+json">{"@type":"TouristAttraction","name":"E2E JSON-LD 명소",` +
+    `"address":{"streetAddress":"1 Fixture St","addressLocality":"오사카","addressCountry":"일본"},` +
+    `"geo":{"latitude":34.6,"longitude":135.5}}</script></head><body>fixture</body></html>`;
+  const server = createServer((req, res) => { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); res.end(html); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const port = server.address().port;
+    const r = await api("POST", "/api/v1/admin/ingest/url", { token: ADMIN, body: { url: `http://127.0.0.1:${port}/tour` } });
+    assert.equal(r.status, 201, JSON.stringify(r.data));
+    assert.equal(r.data.draft.title, "E2E 픽스처 입장권");
+    assert.equal(r.data.draft.price_minor, 25000);
+    assert.equal(r.data.draft.city, "오사카");
+    assert.equal(r.data.draft.country, "일본");
+    assert.ok(r.data.draft.source_url.includes(`127.0.0.1:${port}`));
+    sql(`DELETE FROM url_product_ingestions WHERE id = '${r.data.draft.id}'`);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  for (const u of ["http://169.254.169.254/latest/meta-data", "http://127.0.0.2/x", "http://10.1.2.3/x", "http://[::1]/x"]) {
+    const b = await api("POST", "/api/v1/admin/ingest/url", { token: ADMIN, body: { url: u } });
+    assert.equal(b.status, 403, u);
+    assert.equal(b.data.code, "SSRF_BLOCKED", u);
+  }
+  assert.equal((await api("POST", "/api/v1/admin/ingest/url", { token: ADMIN, body: { url: "ftp://example.com/x" } })).status, 400);
+  assert.equal((await api("POST", "/api/v1/admin/ingest/url", { token: ADMIN, body: {} })).status, 400);
+});
+
+test("#133: postback rejects negative and non-numeric commission", async () => {
+  const secret = `e2e-secret133-${rnd()}${rnd()}`;
+  sql(`INSERT OR REPLACE INTO affiliate_partners_config (partner_id, name, deep_link_template, affiliate_id, secret_key, is_active) VALUES ('e2e-aff-133', 'e2e-133', 'https://x.test/{item_id}?c={click_id}', 'E2E', '${secret}', 1)`);
+  try {
+    const click = await fetch(BASE + "/api/v1/out/e2e-aff-133/item9?domain=HOTEL", { redirect: "manual" });
+    assert.equal(click.status, 302);
+    const clickId = new URL(click.headers.get("location")).searchParams.get("c");
+    const post = async (payload) => {
+      const raw = JSON.stringify({ partner: "e2e-aff-133", ...payload });
+      const ts = String(Math.floor(Date.now() / 1000));
+      const sig = createHmac("sha256", secret).update(`${ts}.${raw}`).digest("hex");
+      const r = await fetch(BASE + "/api/v1/webhooks/postback", { method: "POST", headers: { "Content-Type": "application/json", "X-Signature": sig, "X-Timestamp": ts }, body: raw });
+      return { status: r.status, data: await r.json() };
+    };
+    assert.equal((await post({ click_id: clickId, order_id: `o_${rnd()}`, amount: 1000, commission: -1 })).status, 400);
+    assert.equal((await post({ click_id: clickId, order_id: `o_${rnd()}`, amount: 1000, commission: "abc" })).status, 400);
+    assert.equal((await post({ click_id: clickId, order_id: `o_${rnd()}`, amount: 1000, commission: 50 })).status, 200, "honest commission still books");
+  } finally {
+    sql("DELETE FROM affiliate_conversions WHERE partner_name = 'e2e-aff-133'");
+    sql("DELETE FROM affiliate_clicks WHERE partner_name = 'e2e-aff-133'");
+    sql("DELETE FROM affiliate_partners_config WHERE partner_id = 'e2e-aff-133'");
   }
 });

@@ -34,7 +34,7 @@ export interface IngestedDraft {
   created_at?: string;
 }
 
-export function validateUrlSafety(inputUrl: string): URL {
+export function validateUrlSafety(inputUrl: string, allowHosts: readonly string[] = []): URL {
   let parsed: URL;
   try {
     parsed = new URL(inputUrl);
@@ -67,9 +67,13 @@ export function validateUrlSafety(inputUrl: string): URL {
   const v4mapped = unmapV4(hostname);
   // IPv6-only checks (hostnames like "fcbayern.com" must not trip the fc00::/7 rule).
   const isV6 = hostname.includes(':');
+  // #57: 127/8 is all loopback — blocking only 127.0.0.1 left 127.0.0.2 etc.
+  // open. Quad-gated so "127.example.com" never trips the rule.
+  const isQuad = (h: string): boolean => /^\d{1,3}(\.\d{1,3}){3}$/.test(h);
+  const isLoopbackV4 = (h: string): boolean => isQuad(h) && h.startsWith('127.');
   const blocked =
     hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
+    isLoopbackV4(hostname) ||
     hostname === '0.0.0.0' ||
     hostname === '169.254.169.254' ||
     hostname.startsWith('10.') ||
@@ -86,18 +90,36 @@ export function validateUrlSafety(inputUrl: string): URL {
     )) ||
     // IPv4-mapped IPv6 forms of the blocked ranges above.
     v4mapped !== hostname && (
-      v4mapped === '127.0.0.1' ||
+      isLoopbackV4(v4mapped) ||
       v4mapped === '0.0.0.0' ||
       v4mapped === '169.254.169.254' ||
       v4mapped.startsWith('10.') ||
       v4mapped.startsWith('192.168.') ||
       /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(v4mapped)
     );
-  if (blocked) {
+  // #57: explicit test-only bypass for the E2E fixture origin. The route only
+  // passes entries in development/test (see ingestAllowHosts), so production
+  // always evaluates with an empty list. Entry format is a bare lowercase
+  // hostname; ports and IPv6 brackets never match.
+  const allowed = allowHosts.some((h) => h === hostname || h === v4mapped);
+  if (blocked && !allowed) {
     throw new HttpError(403, 'SSRF_BLOCKED', '보안 정책에 따라 내부망 또는 메타데이터 주소 접근이 금지되어 있습니다.');
   }
 
   return parsed;
+}
+
+/**
+ * Hostnames the ingestion fetcher may scrape despite looking private.
+ * Non-production only: production ignores INGEST_ALLOW_HOSTS entirely, so a
+ * stray var can never open the SSRF guard where it matters.
+ */
+export function ingestAllowHosts(env: { APP_ENV?: string; INGEST_ALLOW_HOSTS?: string }): string[] {
+  if (env.APP_ENV !== 'development' && env.APP_ENV !== 'test') return [];
+  return String(env.INGEST_ALLOW_HOSTS || '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase())
+    .filter((h) => /^[a-z0-9.-]+$/.test(h));
 }
 
 function extractMetaTag(html: string, propertyName: string): string {
@@ -150,10 +172,10 @@ function cleanImageUrl(raw: string, base: URL): string | null {
 const MAX_SCRAPE_BYTES = 3 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
 
-export async function scrapeTravelProductUrl(urlStr: string): Promise<IngestedDraft> {
+export async function scrapeTravelProductUrl(urlStr: string, allowHosts: readonly string[] = []): Promise<IngestedDraft> {
   // Redirects are followed manually so every hop is re-validated: an external page
   // must never bounce the fetcher onto an internal address.
-  let safeUrl = validateUrlSafety(urlStr);
+  let safeUrl = validateUrlSafety(urlStr, allowHosts);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 7000);
 
@@ -175,7 +197,7 @@ export async function scrapeTravelProductUrl(urlStr: string): Promise<IngestedDr
       }
       const next = response.headers.get('location');
       if (!next) break;
-      safeUrl = validateUrlSafety(new URL(next, safeUrl.toString()).toString());
+      safeUrl = validateUrlSafety(new URL(next, safeUrl.toString()).toString(), allowHosts);
     }
   } catch (err: any) {
     clearTimeout(timeoutId);

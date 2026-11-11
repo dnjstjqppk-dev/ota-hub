@@ -248,7 +248,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   }
 
   if (path === "/api/v1/admin/maintenance/run" && method === "POST") {
-    const stats = await S.runMaintenance(env);
+    const stats = await S.runMaintenanceWithHeartbeat(env);
     await audit(env, admin.id, "RUN_MAINTENANCE", "SYSTEM", "maintenance", stats);
     return json({ success: true, stats });
   }

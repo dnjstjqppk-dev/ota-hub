@@ -29,6 +29,7 @@
     "ALLOW_DRAFT_ENTITY": "true",
     "ALLOWED_ORIGINS": "http://localhost:3000,http://localhost:3001,http://localhost:8787",
     "PUBLIC_SITE_URL": "http://localhost:8787",
-    "PARTNER_SITE_URL": "http://localhost:3002"
+    "PARTNER_SITE_URL": "http://localhost:3002",
+    "INGEST_ALLOW_HOSTS": "127.0.0.1"
   }
 }

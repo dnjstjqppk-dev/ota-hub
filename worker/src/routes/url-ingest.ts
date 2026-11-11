@@ -6,6 +6,7 @@ import {
   saveIngestedDraft,
   publishIngestedProduct,
   missingForPublish,
+  ingestAllowHosts,
   PUBLISHABLE_DOMAINS
 } from '../services/url-ingest-service.ts';
 import { isFeatureEnabled } from '../services/feature-flag-service.ts';
@@ -32,7 +33,7 @@ export async function handleUrlIngest(request: Request, env: Env, url: URL): Pro
       throw new HttpError(400, 'URL_REQUIRED', '수집할 여행 상품 URL을 입력해주세요.');
     }
 
-    const draft = await scrapeTravelProductUrl(inputUrl);
+    const draft = await scrapeTravelProductUrl(inputUrl, ingestAllowHosts(env));
     const saved = await saveIngestedDraft(env, draft, admin.id);
 
     // AUTO_PRODUCT_PUBLISH only publishes a draft that already carries every required fact.
@@ -179,6 +180,12 @@ export async function handleUrlIngest(request: Request, env: Env, url: URL): Pro
   // 6. Partner Ingest URL: POST /api/v1/partner/ingest/url
   if (path === '/api/v1/partner/ingest/url' && method === 'POST') {
     const partner = await requirePartner(request, env);
+    // #50: the partner-facing switch was seeded but never consulted — the
+    // admin switch alone gated both surfaces. Operators can now kill partner
+    // ingestion without touching the admin pipeline.
+    if (!(await isFeatureEnabled(env, 'PARTNER_URL_INGESTION'))) {
+      throw new HttpError(503, 'FEATURE_DISABLED', '파트너 URL 상품 수집 기능이 관리자 설정에 의해 일시 중단되었습니다.');
+    }
     await rateLimit(request, env, 'ingest_scrape', 30, 60);
     const body = await readJson(request);
     const inputUrl = str(body.url, 2000);
@@ -186,7 +193,7 @@ export async function handleUrlIngest(request: Request, env: Env, url: URL): Pro
       throw new HttpError(400, 'URL_REQUIRED', '수집할 외부 상품 URL을 입력해주세요.');
     }
 
-    const draft = await scrapeTravelProductUrl(inputUrl);
+    const draft = await scrapeTravelProductUrl(inputUrl, ingestAllowHosts(env));
     draft.supplier_name = partner.companyName;
     const saved = await saveIngestedDraft(env, draft, `partner:${partner.id}`);
 

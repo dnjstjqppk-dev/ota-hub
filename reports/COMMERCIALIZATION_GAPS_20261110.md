@@ -85,16 +85,16 @@
 
 ### 운영·테스트·배포
 
-48. `verify-production.js:830,979,1011` — T36/T41 스킵을 통과로 카운트(exit 0). 가짜 41/41 → 스킵 시 실패 또는 스테이징 게이트 [S]
-49. `marketplace.ts:141` + `flag-service:41` — SELF_REG 플래그 미시드·기본 true·PATCH 404. 킬스위치 무용 → 시드 [S]
-50. `feature-flag-service.ts` — 7+2개만 강제, AUTO/ESIM 등은 no-op. 토글 연극 → 강제 또는 제거 [M]
-51. `build-and-deploy.js:21-31` — 배포에 D1 migrate 없음(0020 수동). 운영 드리프트 → 원격 적용+검증 단계 [M]
-52. `deploy.yml:71-105` — CI가 verify 미실행. 깨진 배포 미감지 → 배포후 스모크 [M]
-53. `verify-production.js:744,834,933` — T34/T36/T40이 운영 변경(자동발행 ON·임의발행·상품등록) → 스테이징/읽기전용/dry-run [M]
-54. `DEPLOYMENT_ROLLBACK_RUNBOOK.md:60` — 운영DB에 export 덮어쓰기 지시. 장애 시 추가파괴 → 신규DB 생성·임포트·리바인드 [S]
-55. `DEPLOYMENT_ROLLBACK_RUNBOOK.md:72,89` — 없는 --env maintenance·HMAC_SECRET 단계. 실행불가 → 삭제+실절차 문서화 [S]
-56. `index.ts:175` + `sentry.ts:150` — 크론 로그만·DSN없으면 no-op·하트비트 없음. 침묵 실패 → 하트비트행+/health/알림 [M]
-57. `api.e2e.mjs` — POST /admin/ingest/url E2E 0건. SSRF 인접면 미검증 → 픽스처 E2E+403 [M]
+[x] 48. verify 스킵 강성 → 완료 (6f / 스킵은 기록+사유 출력, `VERIFY_ALLOW_SKIP=1` 없으면 exit 1. T36 스킵 제거: 스테이징은 발행-or-409 once-only 입증, 운영은 읽기전용. summary에 PASS/FAILED/SKIPPED+모드 표기). 가짜 41/41 불가
+[x] 49. SELF_REG 킬스위치 → 완료 (6f / 0038 WHERE-NOT-EXISTS 백필(연산자 토글 보존) + E2E OFF→503→ON. 0005 시드済이나 행 유실 DB에선 fail-open+PATCH 404였음 — 백필로 전 DB 보장)
+[x] 50. 플래그 강제/제거 → 완료 (6f / 연극 12종 삭제(0038) + PARTNER_URL_INGESTION·채널 3종 강제 신설. 레지스트리는 강제 13종만, verify T32/T33·E2E #46이 집합 일치 검증)
+[x] 51. 배포 D1 단계 → 완료 (6f / `build-and-deploy.js` 0단계: 원격 마이그레이션+저널 5행 검증, 실패 시 배포 중단. `SKIP_D1_MIGRATE=1` 탈출구 + `DRY_RUN=1` 리허설. 체크리스트 0단계 자동화로 갱신)
+[x] 52. 배포후 스모크 → 완료 (6f / `scripts/smoke-production.js` 신규(무인증·읽기전용 11종) + 배포 파이프라인 4단계 편입 → CI deploy잡이 자동 실행. 전체 verify는 수동 유지(QA행 기입 때문))
+[x] 53. verify 운영변경 제거 → 완료 (6f / T34·T36·T40 운영 기본 읽기전용 변형(안전기본값·404·400 무쓰기 검증), 스테이징에선 live 수행. `VERIFY_ALLOW_MUTATION=1` 명시 opt-in)
+[x] 54. 런북 복구 절차 → 완료 (6f / 운영DB 덮어쓰기 삭제 → 신규DB 생성·임포트·행수 검증·리바인드·재배포 5단계로 교체)
+[x] 55. 런북 허위 단계 → 완료 (6f / `--env maintenance` 삭제 → 롤백+킬스위치 긴급정지 절차. `HMAC_SECRET` 삭제 → JWT/worker secret·파트너 웹훅 rotate·제휴 secretKey 실절차로 교체)
+[x] 56. 크론 하트비트 → 완료 (6f / 0038 `cron_heartbeats` + `runMaintenanceWithHeartbeat`(크론·어드민 공용) + `/health checks.cron`(lastRun/ok/ageSec/stale, 상태코드 불변). E2E #56 + stale 드릴)
+[x] 57. ingest E2E → 완료 (6f / `INGEST_ALLOW_HOSTS`(비운영 전용, prod 무시) 심 + 픽스처 서버 E2E(201 파싱 검증) + SSRF 403 4종 + 400 2종. 번외: 127/8 루프백 홀 차단(127.0.0.2 등) + 유닛)
 
 ### 약관·문구·Go
 
@@ -178,7 +178,7 @@
 115. `DATABASE_BACKUP_RECOVERY_REPORT.md:14` — 8테이블 주장 vs 50+·자동화없음 → 재작성+정기export+훈련 [M]
 116. `DEPLOYMENT_ROLLBACK_RUNBOOK.md:102` — 22/22 vs 실제 41 → 41/41 수정 [S]
 117. `flag-service.ts:41` — 미지정 키 true 반환(fail-open) → fail-closed+로그 [S]
-118. 0004 FLIGHT가 죽은 REALTIME 요구. 해제불가 → 선행조건 삭제 [S]
+[x] 118. FLIGHT 죽은 선행조건 → 완료 (6f에서 조기 해소 / 0038이 REALTIME 행 삭제 + `requires_flags='[]'` 정리. E2E #46이 빈 배열 검증)
 119. `index.ts:168,178` — 결제/환불/정산 실패 Sentry·구조로그 없음 → 캡처+로그 [M]
 120. `email-service.ts:26` — 환불/취소 템플릿 없음·5회후 침묵 FAILED → 템플릿+데드레터 알림 [M]
 121. admin/partner SPA 테스트 0건 → 핵심흐름 테스트 [M]
@@ -196,7 +196,7 @@
 130. `catalog.ts:99,145,175,223` — limit=abc→500, -5→무제한 → 클램프 [S]
 131. `catalog.ts:405` — 슬롯 정규식이 하이픈 제외 → 하이픈 허용 [S]
 132. `affiliate.ts:13` — /out/ 레이트리밋 없음. INSERT 플러드 → 제한+검증 [S]
-133. `affiliate.ts:53` — 커미션 음수 허용·미검증 → >=0+통화 검증 [S]
+[x] 133. 포스트백 커미션 검증 → 완료 (코드는 6e 이전부터 차단済(`affiliate.ts` INVALID_PAYLOAD) / 6f에서 E2E #133 3종 assert(음수·비수치 400 + 정상 200) 추가 입증)
 134. `user.ts:83` — 승객정보 미검증·무제한 → 형식검증+제한 [S]
 135. `admin.ts:963` — 공지 PATCH가 제목/본문 무시하고 성공 → 수락 또는 400 [S]
 136. `admin.ts:931` — 프로모 PATCH가 isActive 외 무시하고 성공 → 전체수정 또는 400 [S]

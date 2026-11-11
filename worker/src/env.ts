@@ -35,6 +35,13 @@ export interface Env {
   NTS_API_KEY?: string;
   /** Contract-test stub base URL for the NTS client. Honored in development/test only. */
   NTS_API_BASE?: string;
+  /**
+   * Comma-separated hostnames the URL-ingestion fetcher may scrape even when
+   * they look private (E2E fixture server on 127.0.0.1). Honored in
+   * development/test only; production ignores it entirely (fail-closed).
+   * Never set this in wrangler.jsonc.
+   */
+  INGEST_ALLOW_HOSTS?: string;
 }
 
 export function isNonProduction(env: Env): boolean {

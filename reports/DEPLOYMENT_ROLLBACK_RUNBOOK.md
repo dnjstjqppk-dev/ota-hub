@@ -56,40 +56,83 @@ npx wrangler d1 export ota_production --remote --output backup/d1_backup_$(date 
 # 1. Take a snapshot of the corrupted state for forensic analysis
 npx wrangler d1 export ota_production --remote --output backup/d1_corrupted_state.sql
 
-# 2. Restore from the last verified good backup snapshot
-npx wrangler d1 execute ota_production --remote --file=backup/d1_backup_LATEST_STABLE.sql
+# 2. Create a FRESH database and import the last verified good backup there.
+#    (#54: never execute a backup file against the live database — a partial
+#    import on top of corrupted state destroys the only copy of both.)
+STAMP=$(date +%Y%m%d_%H%M%S)
+npx wrangler d1 create ota_production_restore_${STAMP}
+npx wrangler d1 execute ota_production_restore_${STAMP} --remote --file=backup/d1_backup_LATEST_STABLE.sql
+
+# 3. Verify the restored copy BEFORE touching production bindings:
+npx wrangler d1 execute ota_production_restore_${STAMP} --remote --command "SELECT (SELECT COUNT(*) FROM users) AS users, (SELECT COUNT(*) FROM bookings) AS bookings, (SELECT COUNT(*) FROM marketplace_order_settlements) AS settlements;"
+# Compare against the incident-time counts from step 1's snapshot.
+
+# 4. Rebind production to the restored database: copy the new database_id
+#    from the `d1 create` output into wrangler.jsonc (d1_databases[0]),
+#    then redeploy all three portals:
+node scripts/build-and-deploy.js
+
+# 5. Confirm health, then keep the corrupted database for forensics.
+#    Delete it only after the postmortem window closes:
+#    npx wrangler d1 delete ota_production
+curl -s https://ota-hub.dnjstjqppk.workers.dev/api/v1/health
 ```
 
 ---
 
-## 4. Emergency Maintenance Mode Switch
+## 4. Emergency Stop (No Maintenance Env Exists)
 
-If a critical zero-day vulnerability is detected, activate Maintenance Mode immediately:
+(#55: there is no `maintenance` env in any wrangler config and no maintenance
+page in the codebase — the old `--env maintenance` command never ran. Until a
+real maintenance mode is built, the emergency stop is an instant rollback:)
 
 ```bash
-# In wrangler.jsonc or via Cloudflare Dashboard:
-# Route incoming traffic to static maintenance page:
-npx wrangler deploy --env maintenance
+# 1. Roll back to the last verified stable version (see §2 for version IDs):
+npx wrangler rollback [PREVIOUS_STABLE_VERSION_ID] --message "SRE Emergency Stop"
+
+# 2. If the bad version is a data-corruption source (not just bad code),
+#    freeze the kill-switches first via the admin console or API:
+#    - Partner product registration:  PATCH /api/v1/admin/feature-flags/PARTNER_SELF_PRODUCT_REGISTRATION {"is_enabled": false}
+#    - Affected sales channel:        PATCH /api/v1/admin/feature-flags/MARKETPLACE_3P_PARTNER {"is_enabled": false}
+#      (or MARKETPLACE_1P_DIRECT / CONSIGNMENT_SALES — see worker/src/routes/marketplace.ts)
+#    - Partner URL ingestion:         PATCH /api/v1/admin/feature-flags/PARTNER_URL_INGESTION {"is_enabled": false}
 ```
 
-Maintenance Mode returns HTTP 503 with a branded `getfortrip` scheduled maintenance banner.
+Then monitor `GET /api/v1/health` (note the `checks.cron` heartbeat age) and
+`GET /api/v1/admin/reconciliation` for ledger damage before re-deploying.
 
 ---
 
 ## 5. High-Entropy Secret & Key Rotation Procedure
 
-If JWT secret or partner HMAC webhook secret is suspected to be compromised:
-1. Generate new 64-character high-entropy secret:
+(#55: no `HMAC_SECRET` exists anywhere in code or config — webhook secrets are
+per-partner rows, not a worker secret. Rotate each real secret at its source:)
+
+1. JWT signing secret (all sessions/tokens):
    ```bash
-   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" | npx wrangler secret put JWT_SECRET
    ```
-2. Update Worker secret via Wrangler CLI:
+   All issued tokens invalidate on next deploy. Users re-log in; no DB change.
+2. Partner webhook secret (per partner, OWNER only):
    ```bash
-   echo "NEW_SECRET_VALUE" | npx wrangler secret put JWT_SECRET
-   echo "NEW_HMAC_SECRET" | npx wrangler secret put HMAC_SECRET
+   # As the partner OWNER (rotates webhook_secret server-side, 10/hour limit):
+   curl -s -X POST https://ota-hub.dnjstjqppk.workers.dev/api/v1/partner/webhook/rotate \
+     -H "Authorization: Bearer $PARTNER_OWNER_TOKEN"
    ```
-3. Update `affiliate_partners_config` in D1 with the rotated partner secret.
-4. Run `node scripts/verify-production.js` to ensure zero disruption.
+   Then update the partner's receiver to the new secret from the response.
+3. Affiliate postback secret (per partner, admin):
+   ```bash
+   # 24+ chars; write-only (never readable back):
+   curl -s -X PATCH https://ota-hub.dnjstjqppk.workers.dev/api/v1/admin/affiliate/partners/<partner_id> \
+     -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+     -d '{"secretKey": "<NEW_24PLUS_CHAR_SECRET>"}'
+   ```
+   Or rotate from the admin console Affiliate registry tab.
+4. Run the post-deploy smoke and the read-only verify to ensure zero disruption:
+   ```bash
+   node scripts/smoke-production.js
+   TEST_ADMIN_PASSWORD='...' VERIFY_ALLOW_SKIP=1 node scripts/verify-production.js
+   ```
 
 ---
 

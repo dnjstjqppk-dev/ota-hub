@@ -1,8 +1,11 @@
 # Go-Live Checklist — PG 계약 후 바로 장사하기
 
 > 전제: `main` 최신이 CI로 배포되어 있고, `node scripts/verify-production.js` 41/41이다.
-> (기본 dry-run: T41 실정산은 `VERIFY_LIVE_SETTLE=1`을 붙여야 수행. 어드민 비번은
-> `TEST_ADMIN_PASSWORD` 환경변수로 전달. CI는 유닛·E2E·타입체크·마이그레이션 검증을 통과해야 배포한다.)
+> (기본 엄격 모드: 스킵이 있으면 실패. T41 실정산 없이 통과하려면 `VERIFY_ALLOW_SKIP=1`,
+> 실정산까지 수행하려면 `VERIFY_LIVE_SETTLE=1`을 붙인다. 운영 기본값은 읽기전용 변형
+> (T34/T36/T40은 스테이징 또는 `VERIFY_ALLOW_MUTATION=1`에서만 실제 변경). 어드민 비번은
+> `TEST_ADMIN_PASSWORD` 환경변수로 전달. CI는 유닛·E2E·타입체크·마이그레이션 검증을 통과해야 배포하고,
+> 배포 직후 무인증 스모크(`scripts/smoke-production.js`)를 실행한다.)
 > 아래 순서는 의존성 순서다. 각 단계의 확인 명령을 통과해야 다음으로 간다.
 
 ## 0. 직영 공급사 준비 (코드 배포 후 1회)
@@ -12,8 +15,9 @@ Cloudflare Workers 유료 플랜이 필요하다. 비밀번호 해시(PBKDF2
 실패할 수 있다. 기본값을 낮추는 대신 유료 플랜을 전제로 한다
 (측정치·근거: `worker/src/lib/crypto.ts` C9 주석).
 
-마이그레이션 `0020_direct_sales_supplier.sql`은 배포 시 자동 적용되지 않는다.
-수동 적용 후 행 존재를 확인한다.
+배포 파이프라인(`scripts/build-and-deploy.js`)이 D1 마이그레이션을 코드보다 먼저
+원격 적용하고 저널 5행을 출력해 검증한다(#51). `SKIP_D1_MIGRATE=1`로 건너뛴 경우에만
+아래를 수동 실행한다.
 
 ```powershell
 npx wrangler d1 migrations apply ota_production --remote
@@ -31,14 +35,27 @@ npx wrangler d1 execute ota_production --remote --command "SELECT id, adapter, i
 > ```
 >
 > 0037(이행 정합) 주의: 판매 경로 없는 1P 4행(ESIM·보험·항공·철도)이 PAUSED로
-> 공개 카탈로그에서 내려간다(정산 귀속은 상태 무관이라 영향 없음). eSIM·실시간재고·
-> 즉시확정·공급사API 플래그 4종은 OFF+PENDING_CONTRACT가 된다. trains·packages에
+> 공개 카탈로그에서 내려간다(정산 귀속은 상태 무관이라 영향 없음). trains·packages에
 > partner_id가 생기지만 기존 행은 NULL(미배선)이라 견적이 409로 거부된다.
 > 철도·패키지 판매 개시 전 공급사 계약 후 행별 partner_id를 반드시 배선한다.
+> (0037이 OFF로 두었던 자동화 플래그 4종은 0038에서 레지스트리에서 삭제된다.
+> 아래 0038 확인 쿼리로 대체한다.)
 >
 > ```powershell
-> npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT COUNT(*) FROM marketplace_catalog_items WHERE id IN ('mkt_esim_jp_01','mkt_ins_standard','mkt_flt_ke723','mkt_trn_ktx_025') AND status = 'PAUSED') AS paused, (SELECT COUNT(*) FROM feature_flags WHERE key IN ('ESIM','REALTIME_INVENTORY_SYNC','AUTO_BOOKING_CONFIRMATION','SUPPLIER_API_INTEGRATION') AND is_enabled = 0) AS flags_off;"
-> # 기대: paused 4, flags_off 4
+> npx wrangler d1 execute ota_production --remote --command "SELECT COUNT(*) AS paused FROM marketplace_catalog_items WHERE id IN ('mkt_esim_jp_01','mkt_ins_standard','mkt_flt_ke723','mkt_trn_ktx_025') AND status = 'PAUSED';"
+> # 기대: paused 4
+> ```
+>
+> 0038(운영 정합) 주의: 강제되지 않던 플래그 12종(ESIM·보험·AI번역·실시간재고·
+> 즉시확정·자동발주 2종·자동취소환불·자동정산 3종·공급사API)이 레지스트리에서
+> 삭제된다. 토글이 아무 코드도 거치지 않았으므로 동작 변화는 없다.
+> FLIGHT_BOOKING의 죽은 선행조건도 함께 제거된다. PARTNER_SELF_PRODUCT_REGISTRATION
+> 행이 없을 때만 백필된다(운영자 토글은 보존). 크론 하트비트 테이블이 생기며
+> `/health`의 `checks.cron`으로 최근 실행·stale을 감시한다.
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT COUNT(*) FROM feature_flags) AS flags, (SELECT COUNT(*) FROM feature_flags WHERE key IN ('ESIM','TRAVEL_INSURANCE','AI_TRANSLATION','REALTIME_INVENTORY_SYNC','AUTO_BOOKING_CONFIRMATION','PARTNER_AUTO_DISPATCH','AUTO_BOOKING_DISPATCH','AUTO_CANCEL_REFUND','AUTO_SETTLEMENT','AUTO_PARTNER_SETTLEMENT','AUTO_SUPPLIER_SETTLEMENT','SUPPLIER_API_INTEGRATION')) AS theater, (SELECT COUNT(*) FROM feature_flags WHERE key = 'PARTNER_SELF_PRODUCT_REGISTRATION') AS selfreg, (SELECT name FROM sqlite_master WHERE name = 'cron_heartbeats') AS heartbeat;"
+> # 기대: flags 13, theater 0, selfreg 1, heartbeat cron_heartbeats
 > ```
 
 ## 1. 판매주체 ACTIVE (사업자 정보 필요)

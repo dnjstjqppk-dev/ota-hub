@@ -1557,6 +1557,37 @@ export async function runMaintenance(env: Env): Promise<Record<string, number>> 
   return stats;
 }
 
+/**
+ * #56: one row per job recording the last maintenance run. Never throws —
+ * observability must not break the run it observes, and databases that
+ * predate 0038 simply have no table yet.
+ */
+export async function recordHeartbeat(env: Env, job: string, ok: boolean, stats: Record<string, number>, error?: string): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO cron_heartbeats (job, ran_at, ok, stats_json, error, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (job) DO UPDATE SET ran_at = excluded.ran_at, ok = excluded.ok,
+         stats_json = excluded.stats_json, error = excluded.error, updated_at = excluded.updated_at`
+    ).bind(job, new Date().toISOString(), ok ? 1 : 0, JSON.stringify(stats).slice(0, 4000), (error || '').slice(0, 500) || null, new Date().toISOString()).run();
+  } catch {
+    // No heartbeat table (pre-0038 DB) or a transient write failure: the run
+    // itself already succeeded, so stay silent rather than fail serving.
+  }
+}
+
+/** #56: runMaintenance with a heartbeat on both outcomes; rethrows failures. */
+export async function runMaintenanceWithHeartbeat(env: Env, job = 'maintenance'): Promise<Record<string, number>> {
+  try {
+    const stats = await runMaintenance(env);
+    await recordHeartbeat(env, job, true, stats);
+    return stats;
+  } catch (e: any) {
+    await recordHeartbeat(env, job, false, {}, e?.message ? String(e.message) : String(e));
+    throw e;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 8. Operator actions (admin OMS)
 // ---------------------------------------------------------------------------

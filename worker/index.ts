@@ -25,7 +25,7 @@ import { handleUrlIngest } from "./src/routes/url-ingest.ts";
 import { handleMarketplace } from "./src/routes/marketplace.ts";
 import { handleUploads } from "./src/routes/uploads.ts";
 import { handleSupport } from "./src/routes/support.ts";
-import { runMaintenance } from "./src/services/booking-service.ts";
+import { runMaintenanceWithHeartbeat } from "./src/services/booking-service.ts";
 import { sitemap } from "./src/routes/seo.ts";
 
 export type { Env };
@@ -38,6 +38,23 @@ async function health(env: Env): Promise<Response> {
   const jwt = (env.JWT_SECRET || "").trim().length >= 32;
   const entity = db ? await env.DB.prepare("SELECT status FROM business_entities WHERE status = 'ACTIVE' LIMIT 1").first().catch(() => null) : null;
   const pay = getPaymentProvider(env);
+  // #56: last cron run. Observability only — never affects the status code.
+  // "UNKNOWN" on pre-0038 databases (no table yet), "NEVER_RAN" when the cron
+  // never fired. stale flips after 3 missed */5 runs for ops alerting.
+  let cron: unknown = "UNKNOWN";
+  if (db) {
+    try {
+      const beat = await env.DB.prepare("SELECT ran_at, ok, error FROM cron_heartbeats WHERE job = 'maintenance'").first<{ ran_at: string; ok: number; error: string | null }>();
+      if (beat) {
+        const ageSec = Math.max(0, Math.round((Date.now() - Date.parse(beat.ran_at)) / 1000));
+        cron = { lastRun: beat.ran_at, ok: Number(beat.ok) === 1, ageSec, stale: ageSec > 900, ...(beat.error ? { error: beat.error } : {}) };
+      } else {
+        cron = "NEVER_RAN";
+      }
+    } catch {
+      cron = "UNKNOWN";
+    }
+  }
   return json({
     status: db && jwt ? "ok" : "degraded",
     env: env.APP_ENV || "production",
@@ -49,6 +66,7 @@ async function health(env: Env): Promise<Response> {
       sellerEntityActive: Boolean(entity),
       emailProvider: (env.RESEND_API_KEY || "").trim() ? "RESEND" : "NOT_CONFIGURED",
       errorReporting: (env.SENTRY_DSN || "").trim() ? "SENTRY" : "NOT_CONFIGURED",
+      cron,
     },
     time: new Date().toISOString(),
   }, db && jwt ? 200 : 503);
@@ -174,7 +192,7 @@ export default {
 
   /** Cron: expire abandoned bookings, reconcile unknown payments, retry refunds. */
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    const run = runMaintenance(env).then(
+    const run = runMaintenanceWithHeartbeat(env).then(
       (s) => console.log("maintenance", JSON.stringify(s)),
       (e) => { captureException(env, ctx, e, { url: "cron:runMaintenance" }); throw e; },
     );
