@@ -1,7 +1,7 @@
 import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
-import { authCookie, clearAuthCookie, jwtSecret, rateLimit, requirePartner, requirePartnerOnboarding, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
-import { hashPassword, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
+import { authCookie, checkAccountLock, clearAuthCookie, clearLoginFailures, jwtSecret, rateLimit, recordLoginFailure, requirePartner, requirePartnerOnboarding, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
+import { decryptPiiField, encryptPiiField, hashPassword, isLegacyHash, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 import { EMAIL_RE, validatePasswordPolicy } from "./auth.ts";
 import * as S from "../services/booking-service.ts";
@@ -77,16 +77,20 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
     const partnerId = `ptn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     const passHash = await hashPassword(password, resolvePbkdf2Iterations(env));
+    // #98: bank/business numbers encrypt at rest when the PII key exists.
+    const encBusiness = await encryptPiiField(businessNumber, env);
+    const encAcct = await encryptPiiField(str(b.bankAccountNumber, 50) || null, env);
+    const encHolder = await encryptPiiField(str(b.bankAccountHolder, 100) || repName, env);
 
     await db.batch([
       db.prepare(
         `INSERT INTO partners (id, email, password_hash, company_name, partner_type, business_number, contact_phone, settlement_rate, is_active)
          VALUES (?, ?, ?, ?, ?, ?, ?, 0.90, 1)`
-      ).bind(partnerId, email, passHash, companyName, partnerType, businessNumber, contactPhone),
+      ).bind(partnerId, email, passHash, companyName, partnerType, encBusiness, contactPhone),
       db.prepare(
         `INSERT INTO partner_profiles (partner_id, status, representative_name, bank_name, bank_account_number, bank_account_holder, tax_invoice_email, settlement_rate_bps)
          VALUES (?, 'PENDING_APPROVAL', ?, ?, ?, ?, ?, 1000)`
-      ).bind(partnerId, repName || companyName, str(b.bankName, 50) || null, str(b.bankAccountNumber, 50) || null, str(b.bankAccountHolder, 100) || repName, email),
+      ).bind(partnerId, repName || companyName, str(b.bankName, 50) || null, encAcct, encHolder, email),
       db.prepare(
         `INSERT INTO partner_staff (id, partner_id, email, password_hash, full_name, role, is_active)
          VALUES (?, ?, ?, ?, ?, 'OWNER', 1)`
@@ -108,6 +112,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const b = await readJson(request);
     const email = str(b.email, 254).toLowerCase();
     const pass = String(b.password || "");
+    await checkAccountLock(env, "partner_login", email);
 
     const p = await db.prepare(
       `SELECT p.id, p.email, p.password_hash, p.company_name, p.partner_type, p.is_active,
@@ -127,9 +132,15 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
          LEFT JOIN partner_profiles pr ON pr.partner_id = p.id
          WHERE s.email = ?`
       ).bind(email).first<any>();
-      if (!s) throw new HttpError(401, "INVALID_CREDENTIALS", "파트너 이메일 또는 비밀번호가 일치하지 않습니다.");
+      if (!s) {
+        await recordLoginFailure(env, "partner_login", email);
+        throw new HttpError(401, "INVALID_CREDENTIALS", "파트너 이메일 또는 비밀번호가 일치하지 않습니다.");
+      }
       const sv = await verifyPasswordDetailed(pass, s.password_hash, resolvePbkdf2Iterations(env));
-      if (!sv.ok) throw new HttpError(401, "INVALID_CREDENTIALS", "파트너 이메일 또는 비밀번호가 일치하지 않습니다.");
+      if (!sv.ok) {
+        await recordLoginFailure(env, "partner_login", email);
+        throw new HttpError(401, "INVALID_CREDENTIALS", "파트너 이메일 또는 비밀번호가 일치하지 않습니다.");
+      }
       if (s.is_active !== 1) throw new HttpError(403, "STAFF_DEACTIVATED", "비활성화된 직원 계정입니다. 관리자에게 문의하세요.");
       const sProfile = String(s.profile_status || "").toUpperCase();
       if (sProfile === "PENDING_APPROVAL" || sProfile === "PENDING") {
@@ -138,6 +149,12 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       if (s.parent_active !== 1 || sProfile === "SUSPENDED" || sProfile === "REJECTED") {
         throw new HttpError(403, "PARTNER_SUSPENDED", "운영 정책에 따라 이용이 정지된 파트너 계정입니다.");
       }
+      await clearLoginFailures(env, "partner_login", email);
+      // #97: same legacy rule as user login (rotation was missing here entirely).
+      if (isLegacyHash(s.password_hash) && isEmailConfigured(env)) {
+        throw new HttpError(403, "LEGACY_PASSWORD_ROTATION_REQUIRED", "오래된 비밀번호 방식입니다. 비밀번호 찾기로 재설정 후 로그인해주세요.");
+      }
+      if (sv.needsRehash) await db.prepare("UPDATE partner_staff SET password_hash = ? WHERE id = ?").bind(await hashPassword(pass, resolvePbkdf2Iterations(env)), s.id).run();
       const staffToken = await signJwt(
         { id: s.partner_id, email: s.email, companyName: s.company_name, role: "PARTNER", staffId: s.id, staffRole: s.role, fullName: s.full_name },
         jwtSecret(env),
@@ -163,8 +180,15 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
     const v = await verifyPasswordDetailed(pass, p.password_hash, resolvePbkdf2Iterations(env));
     if (!v.ok) {
+      await recordLoginFailure(env, "partner_login", email);
       throw new HttpError(401, "INVALID_CREDENTIALS", "파트너 이메일 또는 비밀번호가 일치하지 않습니다.");
     }
+    await clearLoginFailures(env, "partner_login", email);
+    // #97: same legacy rule as user login (rotation was missing here entirely).
+    if (isLegacyHash(p.password_hash) && isEmailConfigured(env)) {
+      throw new HttpError(403, "LEGACY_PASSWORD_ROTATION_REQUIRED", "오래된 비밀번호 방식입니다. 비밀번호 찾기로 재설정 후 로그인해주세요.");
+    }
+    if (v.needsRehash) await db.prepare("UPDATE partners SET password_hash = ? WHERE id = ?").bind(await hashPassword(pass, resolvePbkdf2Iterations(env)), p.id).run();
 
     // C1: PENDING owners log in to complete onboarding (profile + docs).
     // Business endpoints stay ACTIVE-only via requirePartner.
@@ -329,6 +353,18 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     // Explicit allowlist: password_hash and legacy api_key must never reach the client (2026-11-09 audit [M]).
     const p = await db.prepare("SELECT id, email, company_name, partner_type, business_number, contact_phone, settlement_rate, webhook_url, is_active, created_at FROM partners WHERE id = ?").bind(pId).first<any>();
     const pr = await db.prepare("SELECT partner_id, status, representative_name, bank_name, bank_account_number, bank_account_holder, tax_invoice_email, business_cert_url, bank_cert_url, business_verified_at, business_verify_method, settlement_rate_bps, approved_by, approved_at, rejection_reason, created_at, updated_at FROM partner_profiles WHERE partner_id = ?").bind(pId).first<any>();
+    // #98: decrypt at the edge (plaintext legacy rows pass through); without
+    // the key, display degrades to masked instead of leaking ciphertext.
+    try {
+      if (p) p.business_number = await decryptPiiField(p.business_number, env);
+      if (pr) {
+        pr.bank_account_number = await decryptPiiField(pr.bank_account_number, env);
+        pr.bank_account_holder = await decryptPiiField(pr.bank_account_holder, env);
+      }
+    } catch {
+      if (p) p.business_number = "***";
+      if (pr) { pr.bank_account_number = "***"; pr.bank_account_holder = "***"; }
+    }
     // #33: staff see the settlement-style mask (**** + last 4); only the owner reads the full number.
     if (pr && !isOwner && pr.bank_account_number) {
       const acct = String(pr.bank_account_number);
@@ -338,6 +374,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   }
 
   if (path === "/api/v1/partner/profile" && method === "PATCH") {
+    await rateLimit(request, env, "partner_profile", 120, 60);
     const b = await readJson(request);
     if (b.bankName !== undefined || b.bankAccountNumber !== undefined || b.bankAccountHolder !== undefined || b.taxInvoiceEmail !== undefined) needOwner();
     const contactPhone = str(b.contactPhone, 50);
@@ -345,6 +382,9 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const bankAccountNumber = str(b.bankAccountNumber, 50);
     const bankAccountHolder = str(b.bankAccountHolder, 100);
     const taxInvoiceEmail = str(b.taxInvoiceEmail, 254);
+    // #98: account + holder encrypt at rest when the PII key exists.
+    const encAcct = bankAccountNumber ? await encryptPiiField(bankAccountNumber, env) : null;
+    const encHolder = bankAccountHolder ? await encryptPiiField(bankAccountHolder, env) : null;
 
     await db.batch([
       db.prepare("UPDATE partners SET contact_phone = COALESCE(?, contact_phone) WHERE id = ?").bind(contactPhone || null, pId),
@@ -356,7 +396,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
              tax_invoice_email = COALESCE(?, tax_invoice_email),
              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
          WHERE partner_id = ?`
-      ).bind(bankName || null, bankAccountNumber || null, bankAccountHolder || null, taxInvoiceEmail || null, pId),
+      ).bind(bankName || null, encAcct, encHolder, taxInvoiceEmail || null, pId),
     ]);
     return json({ success: true, message: "파트너 정보가 업데이트되었습니다." });
   }
@@ -371,6 +411,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   }
 
   if (path === "/api/v1/partner/products" && method === "POST") {
+    await rateLimit(request, env, "partner_products", 120, 60);
     const b = await readJson(request);
     const domain = str(b.domain || "HOTEL", 20).toUpperCase();
     const title = str(b.title, 200);
@@ -431,6 +472,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     throw new HttpError(404, "PRODUCT_NOT_FOUND", "본인의 상품에 대해서만 조회할 수 있습니다.");
   }
   if (prodMatch && method === "PATCH") {
+    await rateLimit(request, env, "partner_products", 120, 60);
     const b = await readJson(request);
     const title = b.title !== undefined ? str(b.title, 200) : null;
     const city = b.city !== undefined ? str(b.city, 100) : null;
@@ -495,6 +537,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   }
 
   if (path === "/api/v1/partner/inventory" && method === "PUT") {
+    await rateLimit(request, env, "partner_inventory", 120, 60);
     const b = await readJson(request);
     const domain = str(b.domain || "HOTEL", 20).toUpperCase();
     const itemId = str(b.itemId, 100);
@@ -541,6 +584,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   {
     const slotPut = path.match(/^\/api\/v1\/partner\/activities\/([A-Za-z0-9_-]+)\/slots$/);
     if (slotPut && method === "PUT") {
+      await rateLimit(request, env, "partner_inventory", 120, 60);
       const activityId = slotPut[1];
       const owned = await db.prepare("SELECT id FROM activities WHERE id = ? AND partner_id = ?").bind(activityId, pId).first();
       if (!owned) throw new HttpError(404, "PRODUCT_NOT_FOUND", "본인의 상품에 대해서만 시간을 관리할 수 있습니다.");
@@ -638,6 +682,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
   let m = path.match(/^\/api\/v1\/partner\/orders\/([A-Za-z0-9_-]+)\/(confirm|reject)$/);
   if (m && method === "POST") {
+    await rateLimit(request, env, "partner_orders", 120, 60);
     if (!canDecideOrders) throw new HttpError(403, "MANAGER_ONLY", "주문 확정·거절은 매니저 이상만 수행할 수 있습니다.");
     const orderId = m[1];
     const action = m[2];
@@ -673,7 +718,11 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     // Payouts run on the 20th of each month for the prior month's sales.
     const now = new Date();
     const payout = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 20));
-    const acct = String(profile?.bank_account_number || "");
+    // #98: decrypt first, then mask (a ciphertext must never be masked raw).
+    let acct = "";
+    try {
+      acct = String((await decryptPiiField(profile?.bank_account_number, env)) || "");
+    } catch { acct = ""; }
     const maskedAcct = acct.length > 4 ? `${"*".repeat(Math.max(0, acct.length - 4))}${acct.slice(-4)}` : (acct ? "****" : "");
     const bank = [profile?.bank_name, maskedAcct].filter(Boolean).join(" ") || null;
 
@@ -697,6 +746,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   }
 
   if (path === "/api/v1/partner/staff" && method === "POST") {
+    await rateLimit(request, env, "partner_staff", 120, 60);
     needOwner();
     const b = await readJson(request);
     const email = str(b.email, 254).toLowerCase();
@@ -731,6 +781,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   // 9b. Update staff role / active flag. OWNER rows are immutable (lockout guard).
   const staffMatch = path.match(/^\/api\/v1\/partner\/staff\/([A-Za-z0-9_-]+)$/);
   if (staffMatch && method === "PATCH") {
+    await rateLimit(request, env, "partner_staff", 120, 60);
     needOwner();
     const b = await readJson(request);
     const row = await db.prepare("SELECT id, role FROM partner_staff WHERE id = ? AND partner_id = ?").bind(staffMatch[1], pId).first<any>();
@@ -760,6 +811,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
   if (path === "/api/v1/partner/api-keys" && method === "POST") {
     needOwner(); // #32: key issuance mints a bearer credential — OWNER only.
+    await rateLimit(request, env, "partner_keys", 120, 60);
     const b = await readJson(request);
     const name = str(b.name, 80) || "Default";
     const count = await db.prepare("SELECT COUNT(*) AS c FROM partner_api_keys WHERE partner_id = ? AND is_active = 1").bind(pId).first<{ c: number }>();
@@ -776,6 +828,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   m = path.match(/^\/api\/v1\/partner\/api-keys\/([A-Za-z0-9_-]{4,64})$/);
   if (m && method === "DELETE") {
     needOwner(); // #32/#34: revocation kills integrations — OWNER only.
+    await rateLimit(request, env, "partner_keys", 120, 60);
     const r = await db.prepare("UPDATE partner_api_keys SET is_active = 0, revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND partner_id = ? AND is_active = 1")
       .bind(m[1], pId).run();
     if (!r.meta.changes) throw new HttpError(404, "KEY_NOT_FOUND", "API 키를 찾을 수 없습니다.");
@@ -791,6 +844,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
   if (path === "/api/v1/partner/webhook" && (method === "PUT" || method === "PATCH")) {
     needOwner(); // #34: redirecting order events — OWNER only.
+    await rateLimit(request, env, "partner_webhook", 120, 60);
     const b = await readJson(request);
     const webhookUrl = str(b.webhookUrl, 500);
     if (webhookUrl) {

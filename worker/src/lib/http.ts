@@ -5,6 +5,9 @@ export const SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "SAMEORIGIN",
   "Referrer-Policy": "strict-origin-when-cross-origin",
+  // #101: these headers ride API (JSON) responses only — pages are served as
+  // static assets elsewhere — so a locked-down default is safe.
+  "Content-Security-Policy": "default-src 'none'; base-uri 'none'; frame-ancestors 'self'",
 };
 
 export class HttpError extends Error {

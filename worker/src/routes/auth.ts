@@ -1,8 +1,8 @@
 import type { Env } from "../env.ts";
 import { isNonProduction } from "../env.ts";
 import { HttpError, clientIp, json, readJson, str } from "../lib/http.ts";
-import { hashPassword, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
-import { audit, authCookie, clearAuthCookie, getAuthUser, jwtSecret, rateLimit, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
+import { JWT_TTL_SECONDS, hashPassword, isLegacyHash, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed, verifyTotp } from "../lib/crypto.ts";
+import { audit, authCookie, checkAccountLock, clearAuthCookie, clearLoginFailures, getAuthUser, jwtSecret, rateLimit, recordLoginFailure, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
 import { consentStmts, currentVersions } from "../lib/consents.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 
@@ -66,18 +66,36 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     const email = str(body.email, 254).toLowerCase();
     const password = String(body.password || "");
     if (!email || !password) throw new HttpError(400, "CREDENTIALS_REQUIRED", "이메일과 비밀번호를 입력해주세요.");
+    await checkAccountLock(env, "user_login", email);
     const u = await env.DB.prepare("SELECT * FROM users WHERE email = ?").bind(email).first<any>();
     const v = await verifyPasswordDetailed(password, u?.password_hash, resolvePbkdf2Iterations(env));
     if (!u || !v.ok) {
+      await recordLoginFailure(env, "user_login", email);
       if (u?.role === "ADMIN") await audit(env, u.id, "LOGIN_FAILED", "AUTH", email, { ip: request.headers.get("CF-Connecting-IP") });
       throw new HttpError(401, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 일치하지 않습니다.");
     }
+    await clearLoginFailures(env, "user_login", email);
+    // #97: legacy hashes rotate on success while email is down; once mail can
+    // deliver resets, legacy logins are refused instead of accepted forever.
+    if (isLegacyHash(u.password_hash) && isEmailConfigured(env)) {
+      throw new HttpError(403, "LEGACY_PASSWORD_ROTATION_REQUIRED", "오래된 비밀번호 방식입니다. 비밀번호 찾기로 재설정 후 로그인해주세요.");
+    }
     if (v.needsRehash) await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(await hashPassword(password, resolvePbkdf2Iterations(env)), u.id).run();
     if (u.status && u.status !== "ACTIVE") throw new HttpError(403, "ACCOUNT_SUSPENDED", u.status === "DELETED" ? "탈퇴한 계정입니다." : "이용이 정지된 계정입니다. 고객센터에 문의해주세요.");
+    // #100: a confirmed TOTP secret gates ADMIN logins on either endpoint.
+    if (u.role === "ADMIN") {
+      const mfa = await env.DB.prepare("SELECT secret_b32 FROM admin_mfa_secrets WHERE user_id = ? AND confirmed_at IS NOT NULL").bind(u.id).first<{ secret_b32: string }>();
+      if (mfa) {
+        const code = String(body.totpCode || body.totp || "");
+        if (!code) throw new HttpError(401, "MFA_REQUIRED", "관리자 인증 코드를 입력해주세요.");
+        if (!(await verifyTotp(mfa.secret_b32, code))) throw new HttpError(403, "INVALID_TOTP_CODE", "인증 코드가 올바르지 않습니다.");
+      }
+    }
     if (u.role === "ADMIN") await audit(env, u.id, "ADMIN_LOGIN_SUCCESS", "AUTH", email, { ip: request.headers.get("CF-Connecting-IP") });
     // #35: the admin portal gets its own jar so it never clobbers a user session in the same browser.
     const jar = path === "/api/v1/admin/login" ? "getfortrip_admin_jwt" : "getfortrip_jwt";
-    const adminToken = await signJwt({ id: u.id, email: u.email, fullName: u.full_name, role: u.role || "USER", tier: u.tier }, jwtSecret(env));
+    // #100: admin tokens live 12h (one workday), not 7d — a stolen money-console token expires the same day.
+    const adminToken = await signJwt({ id: u.id, email: u.email, fullName: u.full_name, role: u.role || "USER", tier: u.tier }, jwtSecret(env), u.role === "ADMIN" ? 12 * 3600 : JWT_TTL_SECONDS);
     return json({ success: true, token: adminToken, user: publicUser(u) }, 200, { "Set-Cookie": authCookie(adminToken, env, jar as "getfortrip_jwt" | "getfortrip_admin_jwt") });
   }
 

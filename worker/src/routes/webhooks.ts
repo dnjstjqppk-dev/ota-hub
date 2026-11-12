@@ -37,7 +37,9 @@ export async function handleWebhooks(request: Request, env: Env, url: URL): Prom
   if (env.TOSS_WEBHOOK_SECRET && url.searchParams.get("key") !== env.TOSS_WEBHOOK_SECRET) {
     throw new HttpError(401, "INVALID_WEBHOOK_SECRET", "웹훅 인증에 실패했습니다.");
   }
-  await rateLimit(request, env, "toss_webhook", 600, 60);
+  // #99: PG callbacks are low-volume; 2/s sustained is plenty and a 5x
+  // tighter bound against quota-filling floods than the old 600/min.
+  await rateLimit(request, env, "toss_webhook", 120, 60);
   const body = await readJson(request);
   const eventType = str(body.eventType, 60);
   const data = (body.data && typeof body.data === "object" ? body.data : {}) as any;

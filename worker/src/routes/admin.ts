@@ -3,7 +3,7 @@ import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { audit, rateLimit, requireAdmin, resetSubjectSessions } from "../lib/auth.ts";
 import * as S from "../services/booking-service.ts";
 import { BOOKING_STATUSES } from "../domain/state-machine.ts";
-import { newId } from "../lib/crypto.ts";
+import { decryptPiiField, newId, newTotpSecret, verifyTotp } from "../lib/crypto.ts";
 import { invalidateSupplierCache } from "../services/catalog.ts";
 import { likeEscape } from "../services/suggest-service.ts";
 import { verifyBusinessNumber } from "../services/business-verify.ts";
@@ -157,6 +157,8 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const byStatus = await db.prepare("SELECT status, COUNT(*) AS c, COALESCE(SUM(total_minor), 0) AS total FROM bookings GROUP BY status").all();
     const recent = await db.prepare("SELECT id, booking_number, title, status, total_minor, currency, customer_name, created_at FROM bookings ORDER BY created_at DESC LIMIT 10").all();
     const ledger = await db.prepare("SELECT account, SUM(CASE WHEN direction = 'DEBIT' THEN amount_minor ELSE -amount_minor END) AS balance FROM ledger_entries GROUP BY account").all();
+    // #102: recent bookings carry customer names, so dashboard views are audited like list views.
+    await audit(env, admin.id, "ADMIN_VIEW_DASHBOARD", "SYSTEM", "dashboard", { recent: (recent.results || []).length });
     return json({
       success: true,
       metrics: {
@@ -860,6 +862,14 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const pg = pageParams(url);
     const total = ((await db.prepare(`SELECT COUNT(*) AS total FROM ${from} WHERE ${where}`).bind(...p).first<{ total: number }>())?.total || 0) as number;
     const rows = await db.prepare(`SELECT ${cols} FROM ${from} WHERE ${where} ORDER BY pr.created_at DESC LIMIT ? OFFSET ?`).bind(...p, pg.pageSize, pg.offset).all();
+    // #102: bank/business data listing — audited like the bookings list.
+    await audit(env, admin.id, "ADMIN_LIST_PARTNERS", "PARTNER", "*", { filtered: Boolean(q) || Boolean(status), count: (rows.results || []).length });
+    // #98: admin eyes see plaintext (fail loudly when the key is gone).
+    for (const r of (rows.results || []) as any[]) {
+      r.business_number = await decryptPiiField(r.business_number, env);
+      r.bank_account_number = await decryptPiiField(r.bank_account_number, env);
+      r.bank_account_holder = await decryptPiiField(r.bank_account_holder, env);
+    }
     return json({ success: true, partners: rows.results || [], ...pageMeta(total, pg.page, pg.pageSize) });
   }
 
@@ -875,7 +885,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     if (!p) throw new HttpError(404, "PARTNER_NOT_FOUND", "파트너를 찾을 수 없습니다.");
     let check: { valid: boolean; status: string; statusCode: string } | null = null;
     if (methodKind === "NTS_API") {
-      check = await verifyBusinessNumber(env, p.business_number);
+      check = await verifyBusinessNumber(env, (await decryptPiiField(p.business_number, env)) || "");
       if (!check.valid) {
         await audit(env, admin.id, "PARTNER_BUSINESS_CHECK_FAILED", "PARTNER", p.id, { method: methodKind, status: check.status, code: check.statusCode });
         throw new HttpError(409, "BUSINESS_INVALID", `사업자등록번호 상태가 정상이 아닙니다. (${check.status || check.statusCode})`);
@@ -962,6 +972,8 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const pg = pageParams(url);
     const total = ((await db.prepare(`SELECT COUNT(*) AS total FROM users WHERE ${where}`).bind(...p).first<{ total: number }>())?.total || 0) as number;
     const rows = await db.prepare(`SELECT ${cols} FROM users WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...p, pg.pageSize, pg.offset).all();
+    // #102: email/name/phone listing — audited like the bookings list.
+    await audit(env, admin.id, "ADMIN_LIST_USERS", "USER", "*", { filtered: Boolean(q) || Boolean(role), count: (rows.results || []).length });
     return json({ success: true, users: rows.results || [], ...pageMeta(total, pg.page, pg.pageSize) });
   }
 
@@ -1146,6 +1158,38 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     ));
     await audit(env, admin.id, "UPDATE_FX_RATES", "FX", "*", { count: rates.length });
     return json({ success: true, updated: rates.length });
+  }
+
+  // #100: TOTP second factor for admin logins. Enroll stores the secret
+  // unconfirmed (shown once); only a confirmed secret gates /admin/login.
+  if (path === "/api/v1/admin/mfa/status" && method === "GET") {
+    const row = await db.prepare("SELECT confirmed_at FROM admin_mfa_secrets WHERE user_id = ?").bind(admin.id).first<{ confirmed_at: string | null }>();
+    return json({ success: true, enrolled: !!row, confirmed: !!row?.confirmed_at });
+  }
+  if (path === "/api/v1/admin/mfa/enroll" && method === "POST") {
+    await rateLimit(request, env, "mfa_enroll", 5, 3600);
+    const secret = newTotpSecret();
+    await db.prepare("INSERT INTO admin_mfa_secrets (user_id, secret_b32, created_at, confirmed_at) VALUES (?, ?, CURRENT_TIMESTAMP, NULL) ON CONFLICT(user_id) DO UPDATE SET secret_b32 = excluded.secret_b32, created_at = excluded.created_at, confirmed_at = NULL")
+      .bind(admin.id, secret).run();
+    await audit(env, admin.id, "ADMIN_MFA_ENROLLED", "AUTH", admin.id, null);
+    const label = encodeURIComponent(`getfortrip:${admin.email || admin.id}`);
+    return json({ success: true, secret, otpauthUrl: `otpauth://totp/${label}?secret=${secret}&issuer=getfortrip` });
+  }
+  if (path === "/api/v1/admin/mfa/confirm" && method === "POST") {
+    await rateLimit(request, env, "mfa_confirm", 10, 300);
+    const b = await readJson(request);
+    const row = await db.prepare("SELECT secret_b32 FROM admin_mfa_secrets WHERE user_id = ?").bind(admin.id).first<{ secret_b32: string }>();
+    if (!row || !(await verifyTotp(row.secret_b32, String(b.code || "")))) {
+      throw new HttpError(403, "INVALID_TOTP_CODE", "인증 코드가 올바르지 않습니다.");
+    }
+    await db.prepare("UPDATE admin_mfa_secrets SET confirmed_at = CURRENT_TIMESTAMP WHERE user_id = ?").bind(admin.id).run();
+    await audit(env, admin.id, "ADMIN_MFA_CONFIRMED", "AUTH", admin.id, null);
+    return json({ success: true, confirmed: true });
+  }
+  if (path === "/api/v1/admin/mfa" && method === "DELETE") {
+    await db.prepare("DELETE FROM admin_mfa_secrets WHERE user_id = ?").bind(admin.id).run();
+    await audit(env, admin.id, "ADMIN_MFA_DISABLED", "AUTH", admin.id, null);
+    return json({ success: true, enrolled: false });
   }
 
   throw new HttpError(404, "NOT_FOUND", "요청하신 관리자 API를 찾을 수 없습니다.");

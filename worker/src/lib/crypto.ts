@@ -1,3 +1,5 @@
+import { HttpError } from "./http.ts";
+
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -112,6 +114,11 @@ export async function verifyPasswordDetailed(password: string, stored: string | 
   return { ok: false, needsRehash: false };
 }
 
+/** #97: legacy static-salt SHA-256 shape (64 lowercase hex, no pbkdf2 prefix). */
+export function isLegacyHash(stored: string | null | undefined): boolean {
+  return !!stored && !stored.startsWith("pbkdf2:sha256:") && /^[0-9a-f]{64}$/.test(stored);
+}
+
 export async function verifyPassword(password: string, stored: string | null | undefined): Promise<boolean> {
   if (!stored || !stored.startsWith("pbkdf2:sha256:")) return false;
   const parts = stored.split(":");
@@ -188,8 +195,107 @@ export async function decryptField(blob: string, keyB64: string): Promise<string
   return dec.decode(pt);
 }
 
+/**
+ * #98: field-level PII encryption (bank/business numbers). New writes encrypt
+ * when PII_ENC_KEY exists and stay plaintext otherwise (pre-existing posture
+ * where the key was never provisioned); reads accept both shapes, so legacy
+ * plaintext rows keep working with no backfill. Encrypted-but-keyless reads
+ * fail loudly — a bank-transfer statement must never print undecryptable
+ * bytes as an account number.
+ */
+export function isEncryptedField(v: string | null | undefined): boolean {
+  return !!v && v.startsWith("v1:");
+}
+
+export async function encryptPiiField(plain: string | null, env: { PII_ENC_KEY?: string }): Promise<string | null> {
+  if (!plain) return plain;
+  const key = (env.PII_ENC_KEY || "").trim();
+  if (!key) return plain;
+  return encryptField(plain, key);
+}
+
+export async function decryptPiiField(stored: string | null | undefined, env: { PII_ENC_KEY?: string }): Promise<string | null> {
+  if (!stored || !isEncryptedField(stored)) return stored ?? null;
+  const key = (env.PII_ENC_KEY || "").trim();
+  if (!key) throw new HttpError(503, "PII_KEY_MISSING", "암호화 키가 설정되지 않아 저장된 정보를 읽을 수 없습니다.");
+  return decryptField(stored, key);
+}
+
 export function maskPassport(p: string): string {
   return p.length <= 3 ? "***" : `${p.slice(0, 1)}${"*".repeat(Math.max(0, p.length - 3))}${p.slice(-2)}`;
+}
+
+/**
+ * #100: TOTP (RFC 6238, SHA-1, 30s step, 6 digits) for admin login MFA.
+ * Secrets are 20 random bytes, base32 without padding.
+ */
+const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+export function base32Encode(bytes: Uint8Array): string {
+  let out = "";
+  let bits = 0;
+  let value = 0;
+  for (const b of bytes) {
+    value = (value << 8) | b;
+    bits += 8;
+    while (bits >= 5) {
+      out += B32[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) out += B32[(value << (5 - bits)) & 31];
+  return out;
+}
+
+export function base32Decode(s: string): Uint8Array {
+  const t = s.trim().replace(/=+$/, "").toUpperCase();
+  if (!/^[A-Z2-7]*$/.test(t)) throw new Error("BAD_BASE32");
+  const out: number[] = [];
+  let bits = 0;
+  let value = 0;
+  for (const ch of t) {
+    value = (value << 5) | B32.indexOf(ch);
+    bits += 5;
+    if (bits >= 8) {
+      out.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  return new Uint8Array(out);
+}
+
+export function newTotpSecret(bytes = 20): string {
+  return base32Encode(crypto.getRandomValues(new Uint8Array(bytes)));
+}
+
+async function hotp(secret: Uint8Array, counter: number): Promise<string> {
+  const msg = new Uint8Array(8);
+  let c = counter;
+  for (let i = 7; i >= 0; i--) {
+    msg[i] = c & 255;
+    c = Math.floor(c / 256);
+  }
+  const k = await crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, msg));
+  const off = mac[mac.length - 1] & 15;
+  const code = ((mac[off] & 127) << 24) | (mac[off + 1] << 16) | (mac[off + 2] << 8) | mac[off + 3];
+  return String(code % 1_000_000).padStart(6, "0");
+}
+
+export async function verifyTotp(secretB32: string, code: string, nowSec = Math.floor(Date.now() / 1000), window = 1): Promise<boolean> {
+  if (!/^\d{6}$/.test(String(code || ""))) return false;
+  let secret: Uint8Array;
+  try {
+    secret = base32Decode(secretB32);
+  } catch {
+    return false;
+  }
+  if (!secret.length) return false;
+  const step = Math.floor(nowSec / 30);
+  for (let d = -window; d <= window; d++) {
+    if (code === (await hotp(secret, step + d))) return true;
+  }
+  return false;
 }
 
 /** Public display name: "김민지" -> "김*지", "Kim Minji" -> "K*******i", "이수" -> "이*". */

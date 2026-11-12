@@ -199,6 +199,37 @@ export async function rateLimit(request: Request, env: Env, bucket: string, limi
   }
 }
 
+/**
+ * #96: per-account failed-login lockout. IP buckets alone cannot stop
+ * distributed guessing against one account, so failures are also counted per
+ * normalized email: 10 misses inside 15 minutes lock the account until the
+ * window slides past. A success clears the count immediately, so a legit user
+ * who mistypes then remembers is never stuck. Recorded for unknown emails
+ * too, with an identical locked response, so the lock is not an oracle.
+ */
+const LOGIN_FAIL_WINDOW_SEC = 900;
+const LOGIN_FAIL_MAX = 10;
+
+const failKey = (scope: string, email: string) => `${scope}_fail:${email.trim().toLowerCase()}`;
+
+export async function checkAccountLock(env: Env, scope: string, email: string): Promise<void> {
+  const row = await env.DB.prepare("SELECT COUNT(*) AS c FROM login_attempts WHERE ip_address = ? AND attempted_at > ?")
+    .bind(failKey(scope, email), Math.floor(Date.now() / 1000) - LOGIN_FAIL_WINDOW_SEC)
+    .first<{ c: number }>();
+  if (Number(row?.c || 0) >= LOGIN_FAIL_MAX) {
+    throw new HttpError(429, "ACCOUNT_LOCKED", "로그인 실패가 반복되어 계정이 잠시 잠겼습니다. 15분 후 다시 시도해주세요.");
+  }
+}
+
+export async function recordLoginFailure(env: Env, scope: string, email: string): Promise<void> {
+  await env.DB.prepare("INSERT INTO login_attempts (ip_address, email, attempted_at) VALUES (?, ?, ?)")
+    .bind(failKey(scope, email), scope, Math.floor(Date.now() / 1000)).run();
+}
+
+export async function clearLoginFailures(env: Env, scope: string, email: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM login_attempts WHERE ip_address = ?").bind(failKey(scope, email)).run();
+}
+
 export type AuthJar = "getfortrip_jwt" | "getfortrip_admin_jwt" | "getfortrip_partner_jwt";
 
 /**

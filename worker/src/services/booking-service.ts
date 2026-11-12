@@ -1653,6 +1653,8 @@ export async function runMaintenance(env: Env): Promise<Record<string, number>> 
     env.DB.prepare("DELETE FROM inventory_holds WHERE status = 'RELEASED' AND created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')"),
     env.DB.prepare("DELETE FROM notification_outbox WHERE status = 'SENT' AND created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')"),
     env.DB.prepare("DELETE FROM affiliate_clicks WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-90 days') AND status != 'CONVERTED'"),
+    // #99: webhook dedupe rows older than any redelivery window.
+    env.DB.prepare("DELETE FROM payment_events WHERE received_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')"),
   ]);
   stats.rowsPruned = pruned.reduce((n, r) => n + (r.meta.changes || 0), 0);
   return stats;

@@ -6,6 +6,7 @@
 import type { Env } from "../env.ts";
 import { HttpError, SECURITY_HEADERS, json } from "../lib/http.ts";
 import { constantTimeEqual, hmacSha256Hex, newId } from "../lib/crypto.ts";
+import { rateLimit } from "../lib/auth.ts";
 
 const CLICK_DOMAINS = ["HOTEL", "FLIGHT", "ACTIVITY", "CAR", "TRAIN", "TRANSFER", "PACKAGE"] as const;
 // #44: conversion currencies mirror the fx_rates universe (0001 seed).
@@ -81,6 +82,9 @@ export async function handleAffiliate(request: Request, env: Env, url: URL): Pro
   }
 
   if (path === "/api/v1/webhooks/postback" && request.method === "POST") {
+    // #95: server-to-server postbacks are low-volume per sender; bound them
+    // before any parsing so floods die cheaply.
+    await rateLimit(request, env, "affiliate_postback", 60, 60);
     const raw = await request.text();
     const sig = request.headers.get("X-Signature") || "";
     const ts = Number(request.headers.get("X-Timestamp") || "");

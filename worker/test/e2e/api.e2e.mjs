@@ -11,7 +11,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { createServer } from "node:http";
 
 const BASE = process.env.BASE || "http://127.0.0.1:8799";
@@ -3044,4 +3044,165 @@ test("#79 finding: 1P rows (no seller payout) refuse payout recording", async ()
   assert.equal(s.merchant_model, "1P");
   assert.equal(s.seller_payout_minor, 0);
   assert.equal((await api("PATCH", `/api/v1/admin/marketplace/settlements/${s.id}/settle`, { token: ADMIN })).data.code, "SETTLEMENT_NOTHING_TO_PAY");
+});
+
+test("#95: affiliate postbacks are rate-bounded per sender", async () => {
+  resetLimiter("affiliate_postback");
+  const codes = [];
+  for (let i = 0; i < 61; i++) {
+    codes.push((await api("POST", "/api/v1/webhooks/postback", { body: {} })).status);
+  }
+  assert.ok(codes.slice(0, 60).every((s) => s === 400), "first 60 pass the limiter (400 = unsigned)");
+  assert.equal(codes[60], 429);
+});
+
+test("#96: accounts lock after repeated failures, recover when the window slides", async () => {
+  resetLimiter("register");
+  resetLimiter("login");
+  const U = await register("lock96");
+  for (let i = 0; i < 10; i++) {
+    assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: U.email, password: "Wrong-Pass-1" } })).status, 401);
+  }
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: U.email, password: "Passw0rd-QA-1" } })).data.code, "ACCOUNT_LOCKED");
+  // A different account is unaffected (per-account, not per-IP).
+  resetLimiter("login");
+  const V = await register("lock96b");
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: V.email, password: "Passw0rd-QA-1" } })).status, 200);
+  // Window slide (simulated by clearing) restores the locked account.
+  sql(`DELETE FROM login_attempts WHERE ip_address = 'user_login_fail:${U.email}'`);
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: U.email, password: "Passw0rd-QA-1" } })).status, 200);
+  // Success clears misses: 9 fails + success + 9 fails never locks.
+  resetLimiter("login");
+  const W = await register("lock96c");
+  for (let i = 0; i < 9; i++) await api("POST", "/api/v1/auth/login", { body: { email: W.email, password: "Wrong-Pass-1" } });
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: W.email, password: "Passw0rd-QA-1" } })).status, 200);
+  for (let i = 0; i < 9; i++) {
+    assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: W.email, password: "Wrong-Pass-1" } })).status, 401);
+  }
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: W.email, password: "Passw0rd-QA-1" } })).status, 200);
+});
+
+test("#96: partner accounts lock the same way", async () => {
+  resetLimiter("partner_login");
+  const P = await approvedPartner("lock96p");
+  const email = sql(`SELECT email AS v FROM partners WHERE id = '${P.id}'`)[0].v;
+  for (let i = 0; i < 10; i++) {
+    assert.equal((await api("POST", "/api/v1/partner/login", { body: { email, password: "Wrong-Pass-1" } })).status, 401);
+  }
+  assert.equal((await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } })).data.code, "ACCOUNT_LOCKED");
+  sql(`DELETE FROM login_attempts WHERE ip_address = 'partner_login_fail:${email}'`);
+  assert.equal((await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } })).status, 200);
+});
+
+test("#97: legacy hashes rotate to PBKDF2 on next success (refusal waits on mail)", async () => {
+  resetLimiter("register");
+  resetLimiter("login");
+  resetLimiter("partner_login");
+  const legacy = (pw) => createHash("sha256").update(pw + "_gft_salt_2026").digest("hex");
+  const U = await register("legacy97");
+  sql(`UPDATE users SET password_hash = '${legacy("LegacyPass-9")}' WHERE id = '${U.id}'`);
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: U.email, password: "LegacyPass-9" } })).status, 200);
+  assert.ok(sql(`SELECT password_hash AS v FROM users WHERE id = '${U.id}'`)[0].v.startsWith("pbkdf2:sha256:"));
+  const P = await approvedPartner("legacy97");
+  const email = sql(`SELECT email AS v FROM partners WHERE id = '${P.id}'`)[0].v;
+  sql(`UPDATE partners SET password_hash = '${legacy("LegacyPass-9")}' WHERE id = '${P.id}'`);
+  assert.equal((await api("POST", "/api/v1/partner/login", { body: { email, password: "LegacyPass-9" } })).status, 200);
+  assert.ok(sql(`SELECT password_hash AS v FROM partners WHERE id = '${P.id}'`)[0].v.startsWith("pbkdf2:sha256:"));
+});
+
+test("#98: bank and business numbers encrypt at rest, decrypt at the edge", async () => {
+  const email = `qa_pii98_${rnd()}@local.test`;
+  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: "QA PII", businessNumber: "111-22-33333", bankAccountNumber: "999-88-777777", bankAccountHolder: "QAPII" } });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
+  const pid = reg.data.partnerId;
+  assert.ok(sql(`SELECT business_number AS v FROM partners WHERE id = '${pid}'`)[0].v.startsWith("v1:"));
+  const prof = sql(`SELECT bank_account_number AS a, bank_account_holder AS h FROM partner_profiles WHERE partner_id = '${pid}'`)[0];
+  assert.ok(prof.a.startsWith("v1:") && prof.h.startsWith("v1:"));
+  const T = (await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } })).data.token;
+  const view = (await api("GET", "/api/v1/partner/profile", { token: T })).data.partner;
+  assert.equal(view.business_number, "111-22-33333");
+  assert.equal(view.profile.bank_account_number, "999-88-777777");
+  assert.equal((await api("PATCH", "/api/v1/partner/profile", { token: T, body: { bankAccountNumber: "111-00-222222" } })).status, 200);
+  assert.ok(sql(`SELECT bank_account_number AS v FROM partner_profiles WHERE partner_id = '${pid}'`)[0].v.startsWith("v1:"));
+  const adm = (await api("GET", `/api/v1/admin/partners?q=${encodeURIComponent(email)}`, { token: ADMIN })).data.partners[0];
+  assert.equal(adm.bank_account_number, "111-00-222222");
+  assert.equal(adm.business_number, "111-22-33333");
+});
+
+test("#99: webhook dedupe rows prune after 30 days", async () => {
+  sql(`INSERT INTO payment_events (id, provider, event_id, event_type, payload, outcome, received_at) VALUES ('pev_old99', 'toss', 'old-99', 'X', '{}', 'RECONCILED', '2020-01-01T00:00:00.000Z')`);
+  sql(`INSERT INTO payment_events (id, provider, event_id, event_type, payload, outcome, received_at) VALUES ('pev_fresh99', 'toss', 'fresh-99', 'X', '{}', 'RECONCILED', CURRENT_TIMESTAMP)`);
+  try {
+    assert.equal((await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN })).status, 200);
+    assert.equal(sql("SELECT COUNT(*) AS c FROM payment_events WHERE id = 'pev_old99'")[0].c, 0);
+    assert.equal(sql("SELECT COUNT(*) AS c FROM payment_events WHERE id = 'pev_fresh99'")[0].c, 1);
+  } finally {
+    sql("DELETE FROM payment_events WHERE id IN ('pev_old99', 'pev_fresh99')");
+  }
+});
+
+test("#101: API responses carry a locked-down CSP", async () => {
+  const res = await fetch(BASE + "/api/v1/health");
+  assert.ok(String(res.headers.get("content-security-policy") || "").includes("default-src 'none'"));
+});
+
+test("#102: PII list views are audited", async () => {
+  const count = (a) => sql(`SELECT COUNT(*) AS c FROM admin_audit_logs WHERE action = '${a}'`)[0].c;
+  const u0 = count("ADMIN_LIST_USERS"), p0 = count("ADMIN_LIST_PARTNERS"), d0 = count("ADMIN_VIEW_DASHBOARD");
+  assert.equal((await api("GET", "/api/v1/admin/users?pageSize=1", { token: ADMIN })).status, 200);
+  assert.equal((await api("GET", "/api/v1/admin/partners?pageSize=1", { token: ADMIN })).status, 200);
+  assert.equal((await api("GET", "/api/v1/admin/dashboard", { token: ADMIN })).status, 200);
+  assert.equal(count("ADMIN_LIST_USERS"), u0 + 1);
+  assert.equal(count("ADMIN_LIST_PARTNERS"), p0 + 1);
+  assert.equal(count("ADMIN_VIEW_DASHBOARD"), d0 + 1);
+});
+
+test("#103: partner writes are rate-bounded per path", async () => {
+  resetLimiter("partner_profile");
+  const P = await approvedPartner("rl103");
+  let last = 200;
+  for (let i = 0; i < 121 && last !== 429; i++) {
+    last = (await api("PATCH", "/api/v1/partner/profile", { token: P.token, body: { contactPhone: `02-1000-${String(i).padStart(4, "0")}` } })).status;
+  }
+  assert.equal(last, 429);
+});
+
+// #100 runs last: it enrolls MFA on the shared admin and must deregister it.
+function totpForTest(b32, t = Math.floor(Date.now() / 1000)) {
+  const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const bits = [...b32].map((c) => ABC.indexOf(c).toString(2).padStart(5, "0")).join("");
+  const key = Buffer.from(bits.match(/.{8}/g).map((x) => parseInt(x, 2)));
+  const msg = Buffer.alloc(8);
+  msg.writeBigUInt64BE(BigInt(Math.floor(t / 30)));
+  const mac = createHmac("sha1", key).update(msg).digest();
+  const off = mac[mac.length - 1] & 15;
+  return String(((mac[off] & 127) << 24 | mac[off + 1] << 16 | mac[off + 2] << 8 | mac[off + 3]) % 1000000).padStart(6, "0");
+}
+
+test("#100: admin TOTP gates login; admin tokens live 12h", async () => {
+  resetLimiter("login");
+  resetLimiter("register");
+  assert.equal((await api("GET", "/api/v1/admin/mfa/status", { token: ADMIN })).data.enrolled, false);
+  const en = await api("POST", "/api/v1/admin/mfa/enroll", { token: ADMIN });
+  assert.equal(en.status, 200, JSON.stringify(en.data));
+  assert.ok(en.data.otpauthUrl.includes("otpauth://totp/"));
+  assert.equal((await api("GET", "/api/v1/admin/mfa/status", { token: ADMIN })).data.confirmed, false);
+  // Unconfirmed: login still works.
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD } })).status, 200);
+  assert.equal((await api("POST", "/api/v1/admin/mfa/confirm", { token: ADMIN, body: { code: "000000" } })).status, 403);
+  assert.equal((await api("POST", "/api/v1/admin/mfa/confirm", { token: ADMIN, body: { code: totpForTest(en.data.secret) } })).status, 200);
+  try {
+    assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD } })).data.code, "MFA_REQUIRED");
+    assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, totpCode: "000000" } })).data.code, "INVALID_TOTP_CODE");
+    const ok = await api("POST", "/api/v1/auth/login", { body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, totpCode: totpForTest(en.data.secret) } });
+    assert.equal(ok.status, 200, JSON.stringify(ok.data));
+    const pay = JSON.parse(Buffer.from(ok.data.token.split(".")[1], "base64url").toString());
+    assert.equal(pay.exp - pay.iat, 12 * 3600);
+    const U = await register("mfa100");
+    const up = JSON.parse(Buffer.from(U.token.split(".")[1], "base64url").toString());
+    assert.equal(up.exp - up.iat, 7 * 86400, "non-admin TTL unchanged");
+  } finally {
+    assert.equal((await api("DELETE", "/api/v1/admin/mfa", { token: ADMIN })).status, 200);
+  }
+  assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD } })).status, 200);
 });

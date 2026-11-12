@@ -5,7 +5,7 @@ import { getMarketplaceFinancialSummary } from '../services/marketplace-service.
 import { isFeatureEnabled } from '../services/feature-flag-service.ts';
 import { settlementPayoutStmts } from '../services/booking-service.ts';
 import { parseRooms } from './partner.ts';
-import { newId } from '../lib/crypto.ts';
+import { decryptPiiField, newId } from '../lib/crypto.ts';
 
 interface RecoveryTake { claimId: string; take: number; left: number }
 
@@ -321,7 +321,9 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     // contracted); the statement carries the recipient address for that run.
     const prof = await env.DB.prepare('SELECT tax_invoice_email, bank_name, bank_account_number, bank_account_holder FROM partner_profiles WHERE partner_id = ?').bind(batch.partner_id).first<any>();
     const taxInvoiceEmail = prof?.tax_invoice_email || null;
-    const payoutAccount = prof ? { bank: prof.bank_name, account: prof.bank_account_number, holder: prof.bank_account_holder } : null;
+    // #98: the transfer file needs the true account — decrypt, and fail loudly
+    // when the key is gone rather than printing ciphertext as a destination.
+    const payoutAccount = prof ? { bank: prof.bank_name, account: await decryptPiiField(prof.bank_account_number, env), holder: await decryptPiiField(prof.bank_account_holder, env) } : null;
     if ((url.searchParams.get('format') || '').toLowerCase() === 'csv') {
       const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
       const csv = [`# batch ${batch.id} period ${batch.period_start}..${batch.period_end} tax_invoice_email ${taxInvoiceEmail || '-'} payout ${payoutAccount?.bank || '-'} ${payoutAccount?.account || ''}`,

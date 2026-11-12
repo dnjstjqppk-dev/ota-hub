@@ -148,16 +148,16 @@
 
 ### 보안 하드닝
 
-94. `webhooks.ts:57,66` — bookingId 유무로 주문 오라클(낮은 위험) → 동일형태 응답 [S]
-95. `affiliate.ts:29` — postback 레이트리밋 없음 → 버킷 추가 [S]
-96. `auth.ts:53` — IP기반 제한만, 계정별 잠금없음. 분산 대입 → 계정별 카운터+잠금 [M]
-97. `crypto.ts:89` — 레거시 단일SHA256 영구 수용 → 메일 개통 후 강제교체·거부 [M]
-98. `partner.ts:69,299` — 은행/사업자번호 평문 저장·제공 → encryptField [M]
-99. `booking-service.ts:1109` — payment_events 무정리(웹훅 600/분). 쿼터 DoS → 정리+제한하향 [S]
-100. `admin.ts:862-888` — 자금 어드민에 MFA 없음(7일 토큰) → TOTP+짧은 TTL [M]
-101. `http.ts:3` — CSP 없음 → 기본 CSP [S]
-102. `admin.ts:153,750,817` — PII 목록 3종 감사로그 없음 → 전부 감사 [S]
-103. `partner.ts` 쓰기 5종 — 레이트리밋 없음 → 경로별 제한 [S]
+[x] 94. `webhooks.ts:57,66` — bookingId 유무로 주문 오라클(낮은 위험) → 동일형태 응답 [S] 완료 (P2d / a690f7d에서 해소済(제네릭 응답+중복 동일규칙). E2E 웹훅 테스트가 매실행 검증)
+[x] 95. `affiliate.ts:29` — postback 레이트리밋 없음 → 버킷 추가 [S] 완료 (P2d / affiliate_postback 60/60 파싱 전 차단. E2E #95 61번째 429)
+[x] 96. `auth.ts:53` — IP기반 제한만, 계정별 잠금없음. 분산 대입 → 계정별 카운터+잠금 [M] 완료 (P2d / 이메일별 10회/15분 잠금(lib/auth 헬퍼, user+partner 로그인). 성공 시 즉시 해제, 미지정 이메일도 동일 응답(오라클 방지). E2E #96 2종)
+[x] 97. `crypto.ts:89` — 레거시 단일SHA256 영구 수용 → 메일 개통 후 강제교체·거부 [M] 완료 (P2d / 파트너 로그인에 누락된 rotation 추가 + 메일 개통 시 거부 게이트(LEGACY_PASSWORD_ROTATION_REQUIRED). 거부 분기는 Resend 없어 미검증이라 원장에 명시. E2E #97 rotation + 유닛 isLegacyHash)
+[x] 98. `partner.ts:69,299` — 은행/사업자번호 평문 저장·제공 → encryptField [M] 완료 (P2d / 사업자번호·계좌번호·예금주를 키 있으면 v1 암호화(없으면 평문 유지, 기존행 무백필 호환). 읽기는 복호 후 표시·마스킹, 키 없이 암호문이면 표시 마스킹/이체명세 503. E2E #98)
+[x] 99. `booking-service.ts:1109` — payment_events 무정리(웹훅 600/분). 쿼터 DoS → 정리+제한하향 [S] 완료 (P2d / 30일 경과행 maintenance 정리 + toss_webhook 600→120/분. E2E #99)
+[x] 100. `admin.ts:862-888` — 자금 어드민에 MFA 없음(7일 토큰) → TOTP+짧은 TTL [M] 완료 (P2d / 0041+TOTP 등록/확정/해제 API+ADMIN 로그인 게이트+어드민 토큰 12h(일반 7일 유지). 유닛 RFC벡터 + E2E #100 전주기. 콘솔 UI는 후속)
+[x] 101. `http.ts:3` — CSP 없음 → 기본 CSP [S] 완료 (P2d / SECURITY_HEADERS에 default-src 'none' 등(API 응답·302·사이트맵에만 적용, SPA는 애셋 서빙이라 영향 없음). E2E #101 헤더 단언)
+[x] 102. `admin.ts:153,750,817` — PII 목록 3종 감사로그 없음 → 전부 감사 [S] 완료 (P2d / dashboard·users·partners 목록 감사 추가(ADMIN_VIEW_DASHBOARD·ADMIN_LIST_USERS·ADMIN_LIST_PARTNERS). 클릭/전환은 PII 미반환이라 제외. E2E #102)
+[x] 103. `partner.ts` 쓰기 5종 — 레이트리밋 없음 → 경로별 제한 [S] 완료 (P2d / 리소스별 7버킷(profile·products·inventory·orders·staff·keys·webhook, 각 120/60). E2E #103)
 
 ### 이행 하드닝
 
