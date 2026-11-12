@@ -45,11 +45,21 @@ export interface Travelers {
   infants: number;
 }
 
+/** #104: a resolved activity time slot whose prices override the catalog. */
+export interface SlotPrice {
+  start: string;
+  end: string | null;
+  adultMinor: number;
+  childMinor: number;
+}
+
 export interface QuoteParams {
   /** Service start date YYYY-MM-DD (check-in, departure, pickup, activity date). */
   startDate: string;
   /** Service end date YYYY-MM-DD (check-out, drop-off). Required for HOTEL and CAR. */
   endDate?: string | null;
+  /** #104: ACTIVITY time-slot start "HH:MM" — priced from the slot row, capacity claimed at booking. */
+  slotStart?: string | null;
   rooms?: number;
   /** HOTEL only: catalog rate plan id; omitted means the room's first plan. */
   ratePlanId?: string | null;
@@ -235,7 +245,7 @@ function stayLines(code: string, uniformLabel: string, nightLabel: string, qty: 
   return perNight.map((n) => ({ code, label: `${n.d} ${nightLabel}`, quantity: qty, unitMinor: n.u, amountMinor: n.u * qty }));
 }
 
-function priceLines(product: CatalogProduct, rawParams: QuoteParams, now: Date, nightly?: NightlyRateFn | null): PricedLines {
+function priceLines(product: CatalogProduct, rawParams: QuoteParams, now: Date, nightly?: NightlyRateFn | null, slot?: SlotPrice | null): PricedLines {
   const travelers = normalizeTravelers(rawParams.travelers);
   const startMs = parseDate("이용 시작", rawParams.startDate);
   const todayMs = Date.parse(now.toISOString().slice(0, 10) + "T00:00:00Z");
@@ -289,11 +299,22 @@ function priceLines(product: CatalogProduct, rawParams: QuoteParams, now: Date, 
       break;
     }
     case "TRAIN":
-    case "ACTIVITY":
     case "PACKAGE": {
       pricedUnits = seatTravelers;
-      const label = product.domain === "TRAIN" ? "승차권" : product.domain === "ACTIVITY" ? "이용권" : "패키지(1인)";
+      const label = product.domain === "TRAIN" ? "승차권" : "패키지(1인)";
       lines.push({ code: "PER_PERSON", label: `${label} × ${seatTravelers}`, quantity: seatTravelers, unitMinor: singleMinor, amountMinor: singleMinor * seatTravelers });
+      break;
+    }
+    case "ACTIVITY": {
+      pricedUnits = seatTravelers;
+      if (slot) {
+        const au = assertMinor(slot.adultMinor, "slot adult price");
+        const cu = assertMinor(slot.childMinor, "slot child price");
+        lines.push({ code: "SLOT_ADULT", label: `시간대 ${slot.start} 성인 × ${travelers.adults}`, quantity: travelers.adults, unitMinor: au, amountMinor: au * travelers.adults });
+        if (travelers.children > 0) lines.push({ code: "SLOT_CHILD", label: `시간대 ${slot.start} 소인 × ${travelers.children}`, quantity: travelers.children, unitMinor: cu, amountMinor: cu * travelers.children });
+      } else {
+        lines.push({ code: "PER_PERSON", label: `이용권 × ${seatTravelers}`, quantity: seatTravelers, unitMinor: singleMinor, amountMinor: singleMinor * seatTravelers });
+      }
       break;
     }
     case "TRANSFER": {
@@ -338,8 +359,9 @@ export function computeQuote(
   promo: Promotion | null,
   now: Date,
   nightly?: NightlyRateFn | null,
+  slot?: SlotPrice | null,
 ): QuoteResult {
-  const p = priceLines(product, rawParams, now, nightly);
+  const p = priceLines(product, rawParams, now, nightly, slot);
   const lines = [...p.lines];
   const f = finalizeQuote(product.domain, lines, promo, now);
   return {

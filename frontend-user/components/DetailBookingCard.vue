@@ -114,7 +114,7 @@ defineExpose({ askDates })
               :class="['rounded-lg border px-3 py-1.5 text-xs font-semibold tabular', slotStart === s.start_time ? 'border-primary bg-primary-soft text-primary' : 'border-line text-ink hover:bg-surface-sunken', slotLeft(s) <= 0 ? 'cursor-not-allowed opacity-40' : '']"
               @click="slotStart = slotStart === s.start_time ? '' : s.start_time"
             >
-              {{ s.start_time }}{{ s.end_time ? `–${s.end_time}` : '' }} · {{ slotLeft(s) }}석
+              {{ s.start_time }}{{ s.end_time ? `–${s.end_time}` : '' }} · {{ slotLeft(s) }}석 · 성인 {{ formatKrw(s.price_adult_minor) }}
             </button>
           </div>
         </div>

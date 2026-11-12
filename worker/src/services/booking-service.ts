@@ -9,7 +9,7 @@
  */
 import type { Env } from "../env.ts";
 import { flag } from "../env.ts";
-import { computeQuote, computeRoundTripQuote, computeCancellation, isDomain, QuoteError, type CancellationPolicy, type Domain, type CatalogProduct, type LegResult, type NightlyRateFn, type Promotion, type QuoteParams, type QuoteResult } from "../domain/pricing.ts";
+import { computeQuote, computeRoundTripQuote, computeCancellation, isDomain, QuoteError, type CancellationPolicy, type Domain, type CatalogProduct, type LegResult, type NightlyRateFn, type Promotion, type QuoteParams, type QuoteResult, type SlotPrice } from "../domain/pricing.ts";
 import { assertTransition, CUSTOMER_CANCELLABLE, STATUS_LABEL_KO, type BookingStatus } from "../domain/state-machine.ts";
 import * as L from "../domain/ledger.ts";
 import { convertMinor } from "../domain/money.ts";
@@ -310,9 +310,9 @@ async function loadInbound(env: Env, domain: Domain, params: QuoteParams): Promi
   return loadProduct(env, "FLIGHT", params.returnItemId, null);
 }
 
-function priceOrder(product: CatalogProduct, inbound: CatalogProduct | null, params: QuoteParams, promo: Promotion | null, nightly?: NightlyRateFn | null): QuoteResult & { legs?: [LegResult, LegResult] } {
+function priceOrder(product: CatalogProduct, inbound: CatalogProduct | null, params: QuoteParams, promo: Promotion | null, nightly?: NightlyRateFn | null, slot?: SlotPrice | null): QuoteResult & { legs?: [LegResult, LegResult] } {
   try {
-    return inbound ? computeRoundTripQuote(product, inbound, params, promo, new Date(), nightly) : computeQuote(product, params, promo, new Date(), nightly);
+    return inbound ? computeRoundTripQuote(product, inbound, params, promo, new Date(), nightly) : computeQuote(product, params, promo, new Date(), nightly, slot);
   } catch (e) {
     quoteErr(e);
   }
@@ -370,6 +370,48 @@ async function availableUnits(env: Env, itemId: string, unitKey: string, date: s
   return capacity - used;
 }
 
+/**
+ * #104: resolve an activity time slot for pricing and claiming. Returns the
+ * slot row plus pricing, or throws when the slot is missing/closed/sold-out
+ * for the requested quantity. The QUOTE-TIME check is informational (another
+ * booking may take the last seat first); the BOOKING-TIME claim below is the
+ * atomic authority.
+ */
+async function resolveSlotPricing(env: Env, domain: string, itemId: string, date: string, slotStart: string | null | undefined, qty: number): Promise<{ slotId: string; slot: SlotPrice } | null> {
+  if (!slotStart) return null;
+  if (domain !== "ACTIVITY") throw new HttpError(400, "SLOT_UNSUPPORTED_DOMAIN", "시간대 지정은 투어·티켓 상품에만 적용됩니다.");
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(slotStart)) throw new HttpError(400, "INVALID_SLOT_TIME", "slotStart는 HH:MM 형식이어야 합니다.");
+  const row = await env.DB.prepare("SELECT id, end_time, max_capacity, booked_count, price_adult_minor, price_child_minor, is_closed FROM activity_time_slots WHERE activity_id = ? AND slot_date = ? AND start_time = ?").bind(itemId, date, slotStart).first<any>();
+  if (!row) throw new HttpError(404, "SLOT_NOT_FOUND", "해당 날짜·시간대 슬롯이 없습니다.");
+  if (Number(row.is_closed) === 1) throw new HttpError(409, "SLOT_CLOSED", "해당 시간대는 마감되었습니다.");
+  if (Number(row.max_capacity) - Number(row.booked_count) < qty) throw new HttpError(409, "SLOT_SOLD_OUT", "해당 시간대의 잔여석이 부족합니다.");
+  return { slotId: row.id, slot: { start: slotStart, end: row.end_time || null, adultMinor: Number(row.price_adult_minor), childMinor: Number(row.price_child_minor) } };
+}
+
+/** #104: atomic seat claim — exactly one concurrent booking wins each seat. */
+async function claimSlotSeats(db: D1Database, slotId: string, qty: number): Promise<void> {
+  const r = await db.prepare("UPDATE activity_time_slots SET booked_count = booked_count + ?, booked_count_updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_closed = 0 AND booked_count + ? <= max_capacity").bind(qty, slotId, qty).run();
+  if (!r.meta.changes) throw new HttpError(409, "SLOT_SOLD_OUT", "해당 시간대의 잔여석이 부족합니다. 다른 시간대를 선택해주세요.");
+}
+
+async function releaseSlotSeats(db: D1Database, slotId: string, qty: number): Promise<void> {
+  await db.prepare("UPDATE activity_time_slots SET booked_count = CASE WHEN booked_count - ? < 0 THEN 0 ELSE booked_count - ? END, booked_count_updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(qty, qty, slotId).run();
+}
+
+/**
+ * #104: release a booking's slot claim exactly once (marker-guarded, so every
+ * terminal path calls it safely). Async (reads first) like its callers.
+ */
+async function releaseSlotStmts(db: D1Database, bookingId: string): Promise<Stmt[]> {
+  const rows = await db.prepare("SELECT slot_id, COALESCE(SUM(quantity), 0) AS qty FROM booking_items WHERE booking_id = ? AND slot_id IS NOT NULL AND slot_released_at IS NULL GROUP BY slot_id").bind(bookingId).all<any>();
+  if (!(rows.results || []).length) return [];
+  return [
+    ...(rows.results || []).map((r: any) =>
+      db.prepare("UPDATE activity_time_slots SET booked_count = CASE WHEN booked_count - ? < 0 THEN 0 ELSE booked_count - ? END, booked_count_updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(Number(r.qty) || 0, Number(r.qty) || 0, r.slot_id)),
+    db.prepare("UPDATE booking_items SET slot_released_at = CURRENT_TIMESTAMP WHERE booking_id = ? AND slot_id IS NOT NULL AND slot_released_at IS NULL").bind(bookingId),
+  ];
+}
+
 async function activeEntity(env: Env): Promise<{ id: string; status: string } | null> {
   const now = nowIso();
   const active = await env.DB.prepare(
@@ -406,6 +448,7 @@ function parseParams(body: any): QuoteParams {
   return {
     startDate: str(body.startDate, 10),
     endDate: body.endDate ? str(body.endDate, 10) : null,
+    slotStart: body.slotStart ? str(body.slotStart, 5) : null,
     rooms: body.rooms === undefined ? undefined : Number(body.rooms),
     ratePlanId: body.ratePlanId ? str(body.ratePlanId, 60) : null,
     returnItemId: body.returnItemId ? str(body.returnItemId, 100) : null,
@@ -470,7 +513,11 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
   const nightly = nightlyResolver(ovDates.length
     ? await loadNightlyOverrides(env, inbound ? [product.itemId, inbound.itemId] : [product.itemId], product.unitId || "default", ovDates[0], ovDates[ovDates.length - 1])
     : new Map());
-  const q = priceOrder(product, inbound, params, promo, nightly);
+  // #104: a requested slot prices the quote (adult/child slot prices); the
+  // seats themselves are claimed atomically at booking, not here.
+  const slotQty = Number(params.travelers?.adults || 0) + Number(params.travelers?.children || 0);
+  const slot = await resolveSlotPricing(env, domain, itemId, params.startDate, params.slotStart, slotQty);
+  const q = priceOrder(product, inbound, params, promo, nightly, slot?.slot || null);
   const coinRaw = body.coinAmount === undefined || body.coinAmount === null || body.coinAmount === "" ? 0 : Number(body.coinAmount);
   if (!Number.isSafeInteger(coinRaw) || coinRaw < 0) throw new HttpError(400, "INVALID_COIN_AMOUNT", "코인 사용 금액이 올바르지 않습니다.");
   let coinsMinor = 0;
@@ -532,6 +579,7 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
     display: fxRate ? { currency: displayCurrency, totalMinor: displayTotal, fxRateToKrw: fxRate, note: "표시용 환산 금액이며 실제 결제는 KRW로 청구됩니다." } : null,
     serviceStart: q.serviceStart, serviceEnd: q.serviceEnd, cancellationPolicy: q.cancellationPolicy,
     travelers: params.travelers, rooms: params.rooms ?? null,
+    slot: slot ? { start: slot.slot.start, end: slot.slot.end } : null,
     requiresPassport: domain === "FLIGHT",
     fulfilmentMode: b.mode,
   };
@@ -686,7 +734,11 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   const freshNightly = nightlyResolver(freshDates.length
     ? await loadNightlyOverrides(env, inbound ? [product.itemId, inbound.itemId] : [product.itemId], product.unitId || "default", freshDates[0], freshDates[freshDates.length - 1])
     : new Map());
-  const fresh = priceOrder(product, inbound, params, await loadPromotion(env, quote.promotion_code, user.id), freshNightly);
+  // #104: re-resolve the quoted slot (a reprice/edit since quoting surfaces
+  // as PRICE_CHANGED below, exactly like catalog drift).
+  const slotQty = Number(params.travelers?.adults || 0) + Number(params.travelers?.children || 0);
+  const freshSlot = await resolveSlotPricing(env, quote.domain_type, quote.item_id, quote.service_start, params.slotStart, slotQty);
+  const fresh = priceOrder(product, inbound, params, await loadPromotion(env, quote.promotion_code, user.id), freshNightly, freshSlot?.slot || null);
   const coinsMinor = Number(quote.coins_minor || 0);
   const freshCashDue = fresh.totalMinor - coinsMinor;
   await assertAboveFloor(env, quote.domain_type, quote.item_id, freshCashDue);
@@ -765,6 +817,14 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   // the unassigned_* markers, and platform/direct sales stay NULL instead of
   // colliding into the extranet by id equality.
   const bookingPartnerId = await resolveBookingPartnerId(db, quote.domain_type, quote.item_id);
+  // #104: claim the slot seats atomically (conditional UPDATE — exactly one
+  // concurrent booking wins each seat). Compensated below if the batch fails,
+  // like coins and promos.
+  let slotClaim: { slotId: string; qty: number } | null = null;
+  if (freshSlot) {
+    await claimSlotSeats(db, freshSlot.slotId, slotQty);
+    slotClaim = { slotId: freshSlot.slotId, qty: slotQty };
+  }
   const stmts: Stmt[] = [
     db.prepare(
       `INSERT INTO bookings (id, user_id, partner_id, booking_number, domain_type, item_id, title, base_amount_krw, tax_amount_krw, service_fee_krw, discount_amount_krw,
@@ -785,6 +845,7 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(newId("bki"), id, quote.domain_type, it.itemId, it.unitId, supplier.id, it.title, it.start, it.end, quote.priced_units, it.totalMinor, quote.params_json),
     ),
+    ...(slotClaim ? [db.prepare("UPDATE booking_items SET slot_id = ? WHERE booking_id = ?").bind(slotClaim.slotId, id)] : []),
     db.prepare("UPDATE quotes SET status = 'CONSUMED' WHERE id = ?").bind(quote.id),
     db.prepare("INSERT INTO booking_status_history (id, booking_id, from_status, to_status, actor_type, actor_id, reason) VALUES (?, ?, NULL, 'AWAITING_PAYMENT', 'CUSTOMER', ?, 'BOOKING_CREATED')")
       .bind(newId("bsh"), id, user.id),
@@ -824,6 +885,7 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   } catch (e) {
     // A concurrent request with the same Idempotency-Key may have won the race.
     const winner = await env.DB.prepare("SELECT id FROM bookings WHERE user_id = ? AND idempotency_key = ?").bind(user.id, idemKey).first<{ id: string }>();
+    if (slotClaim) await releaseSlotSeats(db, slotClaim.slotId, slotClaim.qty);
     if (winner) {
       if (coinsMinor > 0) {
         // The winner already spent its own coins: return this attempt's deduct.
@@ -911,6 +973,7 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
       ...transition(db, cur, "FAILED", { type: "PAYMENT_PROVIDER", id: provider.name }, "PG_AMOUNT_MISMATCH_REFUNDED", { payment_status: "FAILED" }),
       db.prepare("UPDATE payments SET status = 'FAILED', failure_code = 'AMOUNT_MISMATCH', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(paymentId),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ? AND status = 'HELD'").bind(b.id),
+      ...(await releaseSlotStmts(db, b.id)),
       ...coinRestoreStmts(db, cur),
       ...couponRestoreStmts(db, cur.user_id, cur.quote_id),
     ]);
@@ -987,13 +1050,27 @@ export async function fulfil(env: Env, b: BookingRow): Promise<BookingRow> {
     return issue(env, await mustGet(env, b.id));
   }
   if (r.outcome === "PENDING") {
-    if (r.reference) await db.prepare("UPDATE bookings SET supplier_reference = ? WHERE id = ?").bind(r.reference, b.id).run();
+    // #106: the reference rides the version guard — a concurrent fulfil that
+    // already advanced the booking aborts instead of clobbering it, and we
+    // return that fresher state.
+    if (r.reference) {
+      try {
+        await runBatch(db, [
+          guard(db, cur, "fulfil-pending-ref"),
+          db.prepare("UPDATE bookings SET supplier_reference = ? WHERE id = ?").bind(r.reference, b.id),
+        ]);
+      } catch (e) {
+        if (e instanceof HttpError && (e as any).code === "CONCURRENT_MODIFICATION") return mustGet(env, b.id);
+        throw e;
+      }
+    }
     return mustGet(env, b.id); // awaits operator/partner confirmation
   }
   if (r.outcome === "FAILED") {
     await runBatch(db, [
       ...transition(db, cur, "REFUND_PENDING", { type: "SUPPLIER", id: b.supplier_id }, `SUPPLIER_FAILED:${r.code}`, { supplier_status: "FAILED" }),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+      ...(await releaseSlotStmts(db, b.id)),
       outboxInsert(db, "EMAIL", b.customer_email, "SUPPLIER_REJECTED", { bookingId: b.id, bookingNumber: b.booking_number }),
     ]);
     cur = await mustGet(env, b.id);
@@ -1004,8 +1081,10 @@ export async function fulfil(env: Env, b: BookingRow): Promise<BookingRow> {
   return mustGet(env, b.id);
 }
 
-function voucherCode(): string {
-  return `GFV-${randomToken(5).toUpperCase()}`;
+export function voucherCode(): string {
+  // #105: 16 hex chars (64 bits) — collisions are not expected in practice,
+  // and issue() retries on the unique index instead of 500ing a paid booking.
+  return `GFV-${randomToken(8).toUpperCase()}`;
 }
 
 /** Ticket (flights) or voucher (others) issuance after supplier confirmation. */
@@ -1047,6 +1126,7 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
       await runBatch(db, [
         ...transition(db, cur, "REFUND_PENDING", { type: "SUPPLIER", id: b.supplier_id }, `TICKETING_FAILED:${r.code}`, { supplier_status: "CANCELLED" }),
         db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+        ...(await releaseSlotStmts(db, b.id)),
       ]);
       cur = await mustGet(env, b.id);
       await startRefund(env, cur, cur.paid_minor, "발권 실패로 인한 전액 환불");
@@ -1056,14 +1136,26 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
     return mustGet(env, b.id);
   }
 
-  const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, grossMinor);
-  await runBatch(db, [
-    ...transition(db, b, "VOUCHER_ISSUED", { type: "SYSTEM", id: null }, null, { voucher_code: voucherCode() }),
-    db.prepare("UPDATE booking_items SET voucher_code = (SELECT voucher_code FROM bookings WHERE id = ?), updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(b.id, b.id),
-    ...journalStmts(db, L.fulfilmentRecognized(b.id, b.paid_minor, split), b),
-    notify("BOOKING_CONFIRMED"),
-    settlement.stmt(db),
-  ]);
+  // #105: on a voucher collision (unique index), mint a fresh code and retry
+  // instead of failing a paid booking. Re-planned per attempt so a retried
+  // batch never reuses spent journal/settlement ids.
+  for (let attempt = 0; ; attempt++) {
+    const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, grossMinor);
+    try {
+      await runBatch(db, [
+        ...transition(db, b, "VOUCHER_ISSUED", { type: "SYSTEM", id: null }, null, { voucher_code: voucherCode() }),
+        db.prepare("UPDATE booking_items SET voucher_code = (SELECT voucher_code FROM bookings WHERE id = ?), updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(b.id, b.id),
+        ...journalStmts(db, L.fulfilmentRecognized(b.id, b.paid_minor, split), b),
+        notify("BOOKING_CONFIRMED"),
+        settlement.stmt(db),
+      ]);
+      break;
+    } catch (e) {
+      const m = String((e as any)?.message || e);
+      if (attempt < 2 && (m.includes("idx_booking_items_voucher") || m.includes("booking_items.voucher_code"))) continue;
+      throw e;
+    }
+  }
   return mustGet(env, b.id);
 }
 
@@ -1229,6 +1321,7 @@ export async function cancelByCustomer(env: Env, user: AuthUser, bookingId: stri
     await runBatch(db, [
       ...transition(db, b, "CANCELLED", actor, "CANCELLED_BEFORE_PAYMENT"),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+      ...(await releaseSlotStmts(db, b.id)),
       ...coinRestoreStmts(db, b),
       ...couponRestoreStmts(db, b.user_id, b.quote_id),
       ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "CANCELLED")),
@@ -1269,6 +1362,7 @@ export async function cancelByCustomer(env: Env, user: AuthUser, bookingId: stri
     ...reversal,
     ...journalStmts(db, L.cancellationFeeRetained(b.id, feeMinor), cur),
     db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+    ...(await releaseSlotStmts(db, b.id)),
     db.prepare("UPDATE booking_items SET supplier_status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(b.id),
     // The coin portion is always restored in full on cancel; any fee comes from cash.
     ...coinRestoreStmts(db, b),
@@ -1296,6 +1390,7 @@ export async function expireBooking(env: Env, b: BookingRow, reason: string): Pr
     await runBatch(env.DB, [
       ...transition(env.DB, b, "EXPIRED", { type: "SYSTEM", id: null }, reason),
       env.DB.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ? AND status = 'HELD'").bind(b.id),
+      ...(await releaseSlotStmts(env.DB, b.id)),
       ...coinRestoreStmts(env.DB, b),
       ...couponRestoreStmts(env.DB, b.user_id, b.quote_id),
     ]);
@@ -1336,6 +1431,7 @@ export async function reconcilePaymentByLookup(env: Env, paymentId: string): Pro
       ...transition(env.DB, b, "FAILED", { type: "PAYMENT_PROVIDER", id: provider.name }, "RECONCILED_NOT_CAPTURED", { payment_status: "FAILED" }),
       env.DB.prepare("UPDATE payments SET status = 'FAILED', failure_code = 'NOT_CAPTURED', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(p.id),
       env.DB.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+      ...(await releaseSlotStmts(env.DB, b.id)),
       ...coinRestoreStmts(env.DB, b),
       ...couponRestoreStmts(env.DB, b.user_id, b.quote_id),
     ]);
@@ -1467,6 +1563,7 @@ export async function applyExternalCancel(env: Env, bookingId: string, ext: Exte
   if (fullyRefunded) {
     money.push(
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+      ...(await releaseSlotStmts(db, b.id)),
       db.prepare("UPDATE marketplace_order_settlements SET settlement_status = 'REFUNDED', fulfillment_status = 'FAILED' WHERE booking_id = ? AND settlement_status IN ('PENDING', 'HELD')").bind(b.id),
       ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "REFUNDED", { refunded_minor: newRefunded, refund_id: rfId, external: true })),
       ...(await coinRestoreStmtsOnce(db, b)),
@@ -1596,6 +1693,7 @@ export async function sweepSupplierTimeouts(env: Env): Promise<number> {
       await runBatch(env.DB, [
         ...transition(env.DB, b, "REFUND_PENDING", { type: "SYSTEM", id: null }, "SUPPLIER_CONFIRM_TIMEOUT", { supplier_status: "TIMEOUT" }),
         env.DB.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+        ...(await releaseSlotStmts(env.DB, b.id)),
         outboxInsert(env.DB, "EMAIL", b.customer_email, "SUPPLIER_REJECTED", { bookingId: b.id, bookingNumber: b.booking_number }),
       ]);
       const cur = await mustGet(env, b.id);
@@ -1655,6 +1753,11 @@ export async function runMaintenance(env: Env): Promise<Record<string, number>> 
     env.DB.prepare("DELETE FROM affiliate_clicks WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-90 days') AND status != 'CONVERTED'"),
     // #99: webhook dedupe rows older than any redelivery window.
     env.DB.prepare("DELETE FROM payment_events WHERE received_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')"),
+    // #104: reconcile drifted slot counts back to live claims (crash ghosts).
+    // Only slots untouched for 10+ minutes, so an in-flight claim is never rewound.
+    env.DB.prepare(`UPDATE activity_time_slots SET booked_count = (SELECT COALESCE(SUM(bi.quantity), 0) FROM booking_items bi WHERE bi.slot_id = activity_time_slots.id AND bi.slot_released_at IS NULL), booked_count_updated_at = CURRENT_TIMESTAMP
+      WHERE (booked_count_updated_at IS NULL OR booked_count_updated_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-10 minutes'))
+      AND booked_count != (SELECT COALESCE(SUM(bi.quantity), 0) FROM booking_items bi WHERE bi.slot_id = activity_time_slots.id AND bi.slot_released_at IS NULL)`),
   ]);
   stats.rowsPruned = pruned.reduce((n, r) => n + (r.meta.changes || 0), 0);
   return stats;
@@ -1717,6 +1820,7 @@ export async function adminSupplierDecision(env: Env, decider: AuthUser, booking
       await runBatch(db, [
         ...transition(db, b, "FAILED", actor, note || "OPERATOR_REJECTED_UNPAID"),
         db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+        ...(await releaseSlotStmts(db, b.id)),
         ...coinRestoreStmts(db, b),
         ...couponRestoreStmts(db, b.user_id, b.quote_id),
         outboxInsert(db, "EMAIL", b.customer_email, "SUPPLIER_REJECTED", { bookingId: b.id, bookingNumber: b.booking_number }),
@@ -1726,6 +1830,7 @@ export async function adminSupplierDecision(env: Env, decider: AuthUser, booking
     await runBatch(db, [
       ...transition(db, b, "REFUND_PENDING", actor, note || "OPERATOR_REJECTED", { supplier_status: "FAILED" }),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+      ...(await releaseSlotStmts(db, b.id)),
       outboxInsert(db, "EMAIL", b.customer_email, "SUPPLIER_REJECTED", { bookingId: b.id, bookingNumber: b.booking_number }),
     ]);
     const cur = await mustGet(env, b.id);
@@ -1767,6 +1872,7 @@ async function walkToRefundPending(env: Env, b: BookingRow, actor: Actor, note: 
     await runBatch(db, [
       ...transition(db, cur, "REFUND_PENDING", actor, note),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+      ...(await releaseSlotStmts(db, b.id)),
     ]);
     cur = await mustGet(env, b.id);
   }
@@ -1796,6 +1902,7 @@ export async function adminForceCancel(env: Env, admin: AuthUser, bookingId: str
     await runBatch(db, [
       ...transition(db, b, "CANCELLED", actor, "ADMIN_FORCE_CANCEL_UNPAID"),
       db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+      ...(await releaseSlotStmts(db, b.id)),
       ...coinRestoreStmts(db, b),
       ...couponRestoreStmts(db, b.user_id, b.quote_id),
       ...hookEnqueueStmts(db, hook, "booking.cancelled", hookSnapshot(b, "CANCELLED")),

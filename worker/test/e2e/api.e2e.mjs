@@ -3206,3 +3206,140 @@ test("#100: admin TOTP gates login; admin tokens live 12h", async () => {
   }
   assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD } })).status, 200);
 });
+
+test("#104: slot bookings price from the slot and claim exactly once", async () => {
+  resetLimiter("register");
+  const P = await approvedPartner("slot104");
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 슬롯공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 9000)`);
+  const created = await api("POST", "/api/v1/partner/products", { token: P.token, body: { title: "E2E 슬롯 투어", domain: "ACTIVITY", city: "서울", price: 30000 } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  const aid = created.data.id;
+  sql(`UPDATE activities SET daily_capacity = 10 WHERE id = '${aid}'`);
+  const date = day(121);
+  const put = await api("PUT", `/api/v1/partner/activities/${aid}/slots`, { token: P.token, body: { date, slots: [
+    { startTime: "09:00", endTime: "11:00", capacity: 2, priceAdult: 40000, priceChild: 20000 },
+    { startTime: "14:00", capacity: 1, priceAdult: 30000, priceChild: 15000 },
+  ] } });
+  assert.equal(put.status, 200, JSON.stringify(put.data));
+  // Slot pricing honored: 1 adult + 1 child on 09:00.
+  const U = await register("slot104");
+  const q = (await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "ACTIVITY", itemId: aid, startDate: date, travelers: { adults: 1, children: 1 }, slotStart: "09:00" } })).data.quote;
+  assert.ok(q.lines.some((l) => l.code === "SLOT_ADULT" && l.amountMinor === 40000), JSON.stringify(q.lines));
+  assert.ok(q.lines.some((l) => l.code === "SLOT_CHILD" && l.amountMinor === 20000), JSON.stringify(q.lines));
+  assert.equal(q.slot.start, "09:00");
+  const b = (await book(U.token, q)).data.booking;
+  assert.equal(sql(`SELECT booked_count AS c FROM activity_time_slots WHERE activity_id = '${aid}' AND slot_date = '${date}' AND start_time = '09:00'`)[0].c, 2);
+  assert.ok(sql(`SELECT slot_id AS s FROM booking_items WHERE booking_id = '${b.id}'`)[0].s, "slot recorded on the item");
+  // Race for the last seat of 14:00: exactly one booking wins.
+  const U2 = await register("slot104b");
+  const U3 = await register("slot104c");
+  const qbody = { domain: "ACTIVITY", itemId: aid, startDate: date, travelers: { adults: 1 }, slotStart: "14:00" };
+  const q2 = (await api("POST", "/api/v1/quotes", { token: U2.token, body: qbody })).data.quote;
+  const q3 = (await api("POST", "/api/v1/quotes", { token: U3.token, body: qbody })).data.quote;
+  const [r2, r3] = await Promise.all([book(U2.token, q2), book(U3.token, q3)]);
+  assert.deepEqual([r2.status, r3.status].sort(), [201, 409], JSON.stringify([r2.data, r3.data]));
+  const loser = [r2, r3].find((r) => r.status === 409);
+  assert.equal(loser.data.code, "SLOT_SOLD_OUT");
+  assert.equal(sql(`SELECT booked_count AS c FROM activity_time_slots WHERE activity_id = '${aid}' AND slot_date = '${date}' AND start_time = '14:00'`)[0].c, 1);
+  // Cancel releases the winner's seat exactly once.
+  const won = [{ u: U2, r: r2 }, { u: U3, r: r3 }].find((x) => x.r.status === 201);
+  const wb = won.r.data.booking;
+  assert.equal((await api("POST", `/api/v1/bookings/${wb.id}/cancel`, { token: won.u.token })).data.booking.status, "CANCELLED");
+  assert.equal(sql(`SELECT booked_count AS c FROM activity_time_slots WHERE activity_id = '${aid}' AND slot_date = '${date}' AND start_time = '14:00'`)[0].c, 0);
+  assert.ok(sql(`SELECT slot_released_at AS r FROM booking_items WHERE booking_id = '${wb.id}'`)[0].r, "release marker set");
+  // Reprice between quote and booking surfaces as PRICE_CHANGED, not a silent overcharge.
+  const put2 = await api("PUT", `/api/v1/partner/activities/${aid}/slots`, { token: P.token, body: { date, slots: [{ startTime: "16:00", capacity: 5, priceAdult: 30000 }] } });
+  assert.equal(put2.status, 200);
+  const U4 = await register("slot104d");
+  const q4 = (await api("POST", "/api/v1/quotes", { token: U4.token, body: { domain: "ACTIVITY", itemId: aid, startDate: date, travelers: { adults: 1 }, slotStart: "16:00" } })).data.quote;
+  assert.equal((await api("PUT", `/api/v1/partner/activities/${aid}/slots`, { token: P.token, body: { date, slots: [{ startTime: "16:00", capacity: 5, priceAdult: 31000 }] } })).status, 200);
+  assert.equal((await book(U4.token, q4)).data.code, "PRICE_CHANGED");
+  // Rejected shapes: unknown slot, bad clock, wrong domain.
+  assert.equal((await api("POST", "/api/v1/quotes", { token: U4.token, body: { domain: "ACTIVITY", itemId: aid, startDate: date, travelers: { adults: 1 }, slotStart: "23:00" } })).data.code, "SLOT_NOT_FOUND");
+  assert.equal((await api("POST", "/api/v1/quotes", { token: U4.token, body: { domain: "ACTIVITY", itemId: aid, startDate: date, travelers: { adults: 1 }, slotStart: "25:00" } })).status, 400);
+  assert.equal((await api("POST", "/api/v1/quotes", { token: U4.token, body: { domain: "HOTEL", itemId: "htl_seoul_01", unitId: "rm_seoul_01_dlx", startDate: day(40), endDate: day(41), travelers: { adults: 2 }, slotStart: "09:00" } })).data.code, "SLOT_UNSUPPORTED_DOMAIN");
+});
+
+test("#105: voucher codes are unique across all issued bookings", async () => {
+  assert.equal(sql("SELECT COUNT(*) AS c FROM (SELECT voucher_code FROM booking_items WHERE voucher_code IS NOT NULL GROUP BY voucher_code HAVING COUNT(*) > 1)")[0].c, 0);
+  const one = sql("SELECT voucher_code AS v FROM booking_items WHERE voucher_code IS NOT NULL LIMIT 1")[0];
+  assert.ok(one && /^GFV-[0-9A-F]{16}$/.test(one.v), one?.v);
+});
+
+test("#106: supplier PENDING references land under the version guard", async () => {
+  resetLimiter("register");
+  const U = await register("pend106");
+  const { b } = await fullHotelBooking(U.token, { supplier: "pending" });
+  const row = sql(`SELECT status, supplier_reference AS r FROM bookings WHERE id = '${b.id}'`)[0];
+  assert.equal(row.status, "SUPPLIER_BOOKING_PENDING");
+  assert.ok(row.r && row.r.startsWith("SIM"), row.r);
+});
+
+test("#107: admin booking detail masks secrets, shows the ledger, and audits the view", async () => {
+  resetLimiter("register");
+  const U = await register("det107");
+  const { b } = await fullHotelBooking(U.token, {});
+  const payId = sql(`SELECT id FROM payments WHERE booking_id = '${b.id}'`)[0].id;
+  sql(`INSERT INTO booking_travelers (id, booking_id, traveler_type, last_name_en, first_name_en, passport_enc, is_lead) VALUES ('btr_det107', '${b.id}', 'ADULT', 'ZZPROBE', 'DET', 'v1:ciphertext', 0)`);
+  sql(`INSERT INTO refunds (id, booking_id, payment_id, amount_minor, currency, reason, status, source, offline_detail_json, attempts) VALUES ('rfd_det107', '${b.id}', '${payId}', 100, 'KRW', 'probe', 'FAILED', 'ADMIN_MANUAL', '{"bank":"QABank","account":"1234567890","adminId":"a1","at":"2026-01-01"}', 1)`);
+  try {
+    const r = await api("GET", `/api/v1/admin/bookings/${b.id}`, { token: ADMIN });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data.booking.id, b.id);
+    assert.ok(Array.isArray(r.data.ledger) && r.data.ledger.length > 0, "journal lines included");
+    assert.ok(Array.isArray(r.data.supplierCalls));
+    const t = r.data.booking.travelers.find((x) => x.lastNameEn === "ZZPROBE");
+    assert.equal(t.passport, "등록됨 (암호화 저장)", "ciphertext never leaves the API");
+    const adminOff = r.data.booking.refunds.find((x) => x.id === "rfd_det107").offline;
+    assert.equal(adminOff.account, "1234567890", "admin sees the full transfer record");
+    const custOff = (await api("GET", `/api/v1/bookings/${b.id}`, { token: U.token })).data.booking.refunds.find((x) => x.id === "rfd_det107").offline;
+    assert.equal(custOff.account, "12****90", "customer sees a masked account");
+    assert.equal(sql(`SELECT COUNT(*) AS c FROM admin_audit_logs WHERE action = 'ADMIN_VIEW_BOOKING' AND target_id = '${b.id}'`)[0].c, 1);
+  } finally {
+    sql("DELETE FROM booking_travelers WHERE id = 'btr_det107'");
+    sql("DELETE FROM refunds WHERE id = 'rfd_det107'");
+  }
+});
+
+test("#108: partners ingest and read back only their own drafts; SSRF stays 403", async () => {
+  const P = await approvedPartner("ing108");
+  const Q = await approvedPartner("ing108b");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Partner Fixture</title>` +
+    `<meta property="og:title" content="E2E 파트너 픽스처"><meta property="og:price:amount" content="12000">` +
+    `<meta property="og:price:currency" content="KRW"></head><body>fixture</body></html>`;
+  const server = createServer((req, res) => { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); res.end(html); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const port = server.address().port;
+    const r = await api("POST", "/api/v1/partner/ingest/url", { token: P.token, body: { url: `http://127.0.0.1:${port}/p` } });
+    assert.equal(r.status, 201, JSON.stringify(r.data));
+    const id = r.data.draft.id;
+    assert.ok((await api("GET", "/api/v1/partner/ingest/drafts", { token: P.token })).data.drafts.some((d) => d.id === id));
+    assert.ok(!(await api("GET", "/api/v1/partner/ingest/drafts", { token: Q.token })).data.drafts.some((d) => d.id === id));
+    assert.equal((await api("GET", `/api/v1/partner/ingest/${id}`, { token: P.token })).status, 200);
+    assert.equal((await api("GET", `/api/v1/partner/ingest/${id}`, { token: Q.token })).status, 404);
+    sql(`DELETE FROM url_product_ingestions WHERE id = '${id}'`);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  const blocked = await api("POST", "/api/v1/partner/ingest/url", { token: P.token, body: { url: "http://169.254.169.254/latest" } });
+  assert.equal(blocked.status, 403);
+  assert.equal(blocked.data.code, "SSRF_BLOCKED");
+});
+
+test("#111: moment moderation round-trips through blind and approve", async () => {
+  resetLimiter("register");
+  const U = await register("mmt111");
+  const id = (await api("POST", "/api/v1/moments", { token: U.token, body: { title: "E2E 모먼트", content: "본문", city: "서울" } })).data.id;
+  assert.ok((await api("GET", "/api/v1/moments")).data.moments.some((m) => m.id === id), "posted moment is public");
+  assert.equal((await api("POST", `/api/v1/admin/moments/${id}/blind`, { token: ADMIN })).status, 200);
+  assert.ok(!(await api("GET", "/api/v1/moments")).data.moments.some((m) => m.id === id), "blinded moment leaves the feed");
+  assert.ok((await api("GET", "/api/v1/admin/moments?filter=blinded", { token: ADMIN })).data.moments.some((m) => m.id === id));
+  assert.equal((await api("POST", `/api/v1/admin/moments/${id}/approve`, { token: ADMIN })).status, 200);
+  const back = (await api("GET", "/api/v1/moments")).data.moments.find((m) => m.id === id);
+  assert.ok(back && back.is_featured === 1, "approved moment returns featured");
+  assert.equal((await api("POST", `/api/v1/admin/moments/${id}/blind`, { token: ADMIN })).status, 200);
+  assert.equal((await api("POST", `/api/v1/admin/moments/${id}/restore`, { token: ADMIN })).status, 200);
+  const plain = (await api("GET", "/api/v1/moments")).data.moments.find((m) => m.id === id);
+  assert.ok(plain && plain.is_featured === 0, "restore unblinds without featuring");
+});

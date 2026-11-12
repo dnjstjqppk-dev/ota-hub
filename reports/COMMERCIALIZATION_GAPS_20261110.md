@@ -161,17 +161,17 @@
 
 ### 이행 하드닝
 
-104. `catalog.ts:405-416` — booked_count SELECT 전용(행은 없음). 슬롯 확정경합 대비 → slot id+원자증가 [M]
-105. `booking-service.ts:773-775` — 5자리 바우처 충돌 시 결제후 500 → 긴 코드+재시도 [S]
-106. `booking-service.ts:757` — PENDING 참조번호가 CAS 밖 → 배치 편입 [S]
+[x] 104. `catalog.ts:405-416` — booked_count SELECT 전용(행은 없음). 슬롯 확정경합 대비 → slot id+원자증가 [M] 완료 (P2e / 슬롯 예약 정식 지원: 견적 slotStart→슬롯가(SLOT_ADULT/CHILD 라인)+예약 시 원자 청구+booking_items.slot_id 기록+13개 종료경로 해제+10분 스위프. 0042. E2E #104 5종(가격·경합·해제·PRICE_CHANGED·거부형태)+유닛)
+[x] 105. `booking-service.ts:773-775` — 5자리 바우처 충돌 시 결제후 500 → 긴 코드+재시도 [S] 완료 (P2e / 16hex+충돌 시 재발급 3회 재시도(저널·정산 재생성). 유닛 형식+유일성, E2E #105 전수 유일 sweeping)
+[x] 106. `booking-service.ts:757` — PENDING 참조번호가 CAS 밖 → 배치 편입 [S] 완료 (P2e / 버전가드 배치 편입+충돌 시 최신상태 반환. E2E #106 pending 참조 적재)
 
 ### 테스트·CI·관측
 
-107. E2E 0: GET /admin/bookings/:id (PII+원장+감사) → 마스킹+감사 E2E [M]
-108. E2E 0: 파트너 ingest+draft 조회(SSRF 인접) → E2E+403 [M]
-109. E2E 0: PATCH flags/:key → 로컬 E2E+유닛 [M]
-110. 유닛 0: flag/idempotency/auth-rateLimit/RBAC/crypto/pagination → 집중 유닛 [M]
-111. E2E: moments 승인경로·/admin/login 별칭 미검증 → E2E 또는 별칭삭제 [S]
+[x] 107. E2E 0: GET /admin/bookings/:id (PII+원장+감사) → 마스킹+감사 E2E [M] 완료 (P2e / E2E #107: 여권 플레이스홀더·어드민 전체/고객 마스킹 오프라인·원장 포함·ADMIN_VIEW_BOOKING 감사)
+[x] 108. E2E 0: 파트너 ingest+draft 조회(SSRF 인접) → E2E+403 [M] 완료 (P2e / 파트너 자사 드래프트 목록+단건 신설(타사 404)+E2E #108(픽스처 수집·소유격리·SSRF 403))
+[x] 109. E2E 0: PATCH flags/:key → 로컬 E2E+유닛 [M] 완료 (P2e / E2E는 #49/#50에서 이미 수행, 유닛 flags.test.mjs 신규(의존성 양방향·감사·무변경))
+[x] 110. 유닛 0: flag/idempotency/auth-rateLimit/RBAC/crypto/pagination → 집중 유닛 [M] 완료 (P2e / pagination·idempotency·rate-limit·rbac·flags 5종 신규+crypto 기존. _fakedb 공용)
+[x] 111. E2E: moments 승인경로·/admin/login 별칭 미검증 → E2E 또는 별칭삭제 [S] 완료 (P2e / 별칭은 기존 검증됨. E2E #111: 게시→차단→승인(featured)→차단→복원 전주기)
 112. `deploy.yml:53-54` — 게이트가 user만 빌드. 콘솔은 배포에서 실패 → 3포털 빌드 [S]
 113. `deploy.yml` — 프론트 타입체크/린트/감사/E2E 없음 → 포털별 게이트 [M]
 114. `verify-production.js:20,47,556` — 기본이 운영+확인없음+정리없음 → 스테이징+확인+정리 [S]

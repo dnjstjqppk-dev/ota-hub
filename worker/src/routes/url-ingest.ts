@@ -177,6 +177,43 @@ export async function handleUrlIngest(request: Request, env: Env, url: URL): Pro
     });
   }
 
+  // 5b. Partner drafts: partners read their OWN drafts only (#108). Admins
+  // keep the full history/publish surface; cross-partner reads 404 (no oracle).
+  if (path === '/api/v1/partner/ingest/drafts' && method === 'GET') {
+    const partner = await requirePartner(request, env);
+    const rows = await env.DB.prepare('SELECT * FROM url_product_ingestions WHERE created_by = ? ORDER BY created_at DESC LIMIT 50')
+      .bind(`partner:${partner.id}`).all();
+    return json({
+      success: true,
+      drafts: (rows.results || []).map((r: any) => ({
+        ...r,
+        image_urls: JSON.parse(r.image_urls || '[]'),
+        options: JSON.parse(r.options_json || '[]'),
+        inclusions: JSON.parse(r.inclusions_json || '[]'),
+        exclusions: JSON.parse(r.exclusions_json || '[]'),
+        terms: JSON.parse(r.terms_json || '[]')
+      }))
+    });
+  }
+  const partnerDraftMatch = path.match(/^\/api\/v1\/partner\/ingest\/([A-Za-z0-9_]+)$/);
+  if (partnerDraftMatch && method === 'GET') {
+    const partner = await requirePartner(request, env);
+    const r = await env.DB.prepare('SELECT * FROM url_product_ingestions WHERE id = ? AND created_by = ?')
+      .bind(partnerDraftMatch[1], `partner:${partner.id}`).first<any>();
+    if (!r) throw new HttpError(404, 'DRAFT_NOT_FOUND', '수집 내역을 찾을 수 없습니다.');
+    return json({
+      success: true,
+      draft: {
+        ...r,
+        image_urls: JSON.parse(r.image_urls || '[]'),
+        options: JSON.parse(r.options_json || '[]'),
+        inclusions: JSON.parse(r.inclusions_json || '[]'),
+        exclusions: JSON.parse(r.exclusions_json || '[]'),
+        terms: JSON.parse(r.terms_json || '[]')
+      }
+    });
+  }
+
   // 6. Partner Ingest URL: POST /api/v1/partner/ingest/url
   if (path === '/api/v1/partner/ingest/url' && method === 'POST') {
     const partner = await requirePartner(request, env);

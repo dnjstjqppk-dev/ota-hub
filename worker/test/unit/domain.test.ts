@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { toMinor, percentOf, convertMinor } from "../../src/domain/money.ts";
 import { canTransition, assertTransition, BOOKING_STATUSES, TERMINAL_STATUSES, allowedNext } from "../../src/domain/state-machine.ts";
 import { computeQuote, computeCancellation, QuoteError, type CatalogProduct, type Promotion } from "../../src/domain/pricing.ts";
+import { voucherCode } from "../../src/services/booking-service.ts";
 
 const NOW = new Date("2026-11-05T03:00:00Z");
 
@@ -72,6 +73,29 @@ test("quote: partner nightly overrides reprice per night; uniform stays aggregat
   const act = { ...hotel, domain: "ACTIVITY" as const, unitId: null, unitPriceMajor: 30000 };
   const single = computeQuote(act, { startDate: "2026-12-01", travelers: { adults: 2, children: 0, infants: 0 } }, null, NOW, () => 45000);
   assert.equal(single.totalMinor, 90000);
+});
+
+test("#104: slot pricing overrides the catalog with adult/child lines", () => {
+  const act: CatalogProduct = { ...hotel, domain: "ACTIVITY", itemId: "act_x", unitId: null, unitPriceMajor: 30000 };
+  const params = { startDate: "2026-12-01", travelers: { adults: 2, children: 1, infants: 0 } };
+  const slot = { start: "14:00", end: "16:00", adultMinor: 40000, childMinor: 20000 };
+  const q = computeQuote(act, params, null, NOW, null, slot);
+  assert.equal(q.lines.filter((l) => l.code === "SLOT_ADULT")[0].amountMinor, 80000);
+  assert.equal(q.lines.filter((l) => l.code === "SLOT_CHILD")[0].amountMinor, 20000);
+  assert.equal(q.baseMinor, 100000);
+  const plain = computeQuote(act, params, null, NOW);
+  assert.ok(plain.lines.some((l) => l.code === "PER_PERSON"));
+  assert.equal(plain.baseMinor, 90000);
+});
+
+test("#105: voucher codes are long, prefixed, and unique", () => {
+  const seen = new Set<string>();
+  for (let i = 0; i < 200; i++) {
+    const c = voucherCode();
+    assert.match(c, /^GFV-[0-9A-F]{16}$/);
+    seen.add(c);
+  }
+  assert.equal(seen.size, 200);
 });
 
 test("quote: rejects past dates, impossible dates, zero nights, occupancy overflow", () => {
