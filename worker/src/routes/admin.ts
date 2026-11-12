@@ -247,6 +247,19 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     return json({ success: true, booking: await S.serializeBooking(env, after, admin) });
   }
 
+  // #74: refund ops queue — UNKNOWN-lookup notes land in last_error, so stuck
+  // refunds are diagnosable without DB access. No customer PII in projection.
+  if (path === "/api/v1/admin/refunds" && method === "GET") {
+    const status = (url.searchParams.get("status") || "").toUpperCase();
+    if (status && !["PENDING", "SUCCEEDED", "FAILED"].includes(status)) {
+      throw new HttpError(400, "INVALID_REFUND_STATUS", "status는 PENDING | SUCCEEDED | FAILED 중 하나여야 합니다.");
+    }
+    const rows = await db.prepare(
+      `SELECT id, booking_id, payment_id, amount_minor, currency, reason, status, source, provider_refund_id, attempts, last_error, created_at, updated_at FROM refunds ${status ? "WHERE status = ?" : ""} ORDER BY created_at DESC LIMIT 200`,
+    ).bind(...(status ? [status] : [])).all();
+    return json({ success: true, refunds: rows.results || [] });
+  }
+
   if (path === "/api/v1/admin/maintenance/run" && method === "POST") {
     const stats = await S.runMaintenanceWithHeartbeat(env);
     await audit(env, admin.id, "RUN_MAINTENANCE", "SYSTEM", "maintenance", stats);

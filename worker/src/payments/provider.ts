@@ -50,32 +50,56 @@ export interface PaymentProvider {
 //   lost        -> provider response lost and nothing captured (lookup reveals NOT_CAPTURED)
 //   extcancel   -> captured, then canceled OUTSIDE our API (dashboard/chargeback)
 //   extpartial  -> captured, then HALF canceled outside our API
+//   refundghost -> captured; every refund answers UNKNOWN, but the PG did take
+//                  it (lookup reveals CANCELED) — exercises the #74 lookup path
+//   refundlost  -> captured; every refund answers UNKNOWN and the PG did NOT
+//                  take it (lookup reveals CAPTURED) — notes + retries, no blind pay
 // ---------------------------------------------------------------------------
+// #70: the sandbox honors confirm idempotency keys like Toss does — same
+// key replays the first outcome, same key with different params rejects.
+// Module-level so it survives across provider instances in one isolate.
+// Test-only (the sandbox never runs in production); capped for dev.
+const seenConfirmKeys = new Map<string, { paymentKey: string; amountMinor: number; outcome: any }>();
+
 export function sandboxProvider(): PaymentProvider {
   const scenario = (key: string) => key.split("_")[1] || "ok";
   return {
     name: "sandbox",
     mode: "SANDBOX",
-    publicConfig: () => ({ provider: "sandbox", mode: "SANDBOX", scenarios: ["ok", "declined", "timeout", "refundfail", "mismatch", "lost"] }),
-    async confirm({ paymentKey, amountMinor }) {
+    publicConfig: () => ({ provider: "sandbox", mode: "SANDBOX", scenarios: ["ok", "declined", "timeout", "refundfail", "mismatch", "lost", "refundghost", "refundlost"] }),
+    async confirm({ paymentKey, amountMinor, idempotencyKey }) {
       if (!/^sbx_[a-z]+_[A-Za-z0-9]{6,}$/.test(paymentKey)) {
         return { outcome: "FAILED", code: "INVALID_PAYMENT_KEY", message: "유효하지 않은 결제 키입니다.", raw: null };
       }
+      const seen = seenConfirmKeys.get(idempotencyKey);
+      if (seen) {
+        if (seen.paymentKey !== paymentKey || seen.amountMinor !== amountMinor) {
+          return { outcome: "FAILED", code: "DUPLICATE_IDEMPOTENCY_KEY", message: "이미 사용된 멱등 키와 다른 결제 요청입니다. (테스트)", raw: { idempotencyKey } };
+        }
+        return seen.outcome;
+      }
+      const record = (outcome: any) => {
+        if (seenConfirmKeys.size >= 500) seenConfirmKeys.clear();
+        seenConfirmKeys.set(idempotencyKey, { paymentKey, amountMinor, outcome });
+        return outcome;
+      };
       const s = scenario(paymentKey);
-      if (s === "declined") return { outcome: "FAILED", code: "REJECT_CARD_PAYMENT", message: "카드사에서 결제를 거절했습니다. (테스트)", raw: { scenario: s } };
-      if (s === "timeout") return { outcome: "UNKNOWN", message: "PG 응답 시간 초과 (테스트)" };
-      if (s === "lost") return { outcome: "UNKNOWN", message: "PG 응답 분실, 미결제 확인됨 (테스트)" };
-      if (s === "mismatch") return { outcome: "CAPTURED", paymentKey, amountMinor: amountMinor + 1, method: "CARD(SANDBOX)", approvedAt: new Date().toISOString(), raw: { scenario: s } };
-      return { outcome: "CAPTURED", paymentKey, amountMinor, method: "CARD(SANDBOX)", approvedAt: new Date().toISOString(), raw: { scenario: s } };
+      if (s === "declined") return record({ outcome: "FAILED", code: "REJECT_CARD_PAYMENT", message: "카드사에서 결제를 거절했습니다. (테스트)", raw: { scenario: s } });
+      if (s === "timeout") return record({ outcome: "UNKNOWN", message: "PG 응답 시간 초과 (테스트)" });
+      if (s === "lost") return record({ outcome: "UNKNOWN", message: "PG 응답 분실, 미결제 확인됨 (테스트)" });
+      if (s === "mismatch") return record({ outcome: "CAPTURED", paymentKey, amountMinor: amountMinor + 1, method: "CARD(SANDBOX)", approvedAt: new Date().toISOString(), raw: { scenario: s } });
+      return record({ outcome: "CAPTURED", paymentKey, amountMinor, method: "CARD(SANDBOX)", approvedAt: new Date().toISOString(), raw: { scenario: s } });
     },
     async refund({ paymentKey, idempotencyKey }) {
       if (scenario(paymentKey) === "refundfail") return { outcome: "FAILED", code: "REFUND_REJECTED", message: "PG 환불 실패 (테스트)" };
+      if (scenario(paymentKey) === "refundghost" || scenario(paymentKey) === "refundlost") return { outcome: "UNKNOWN", message: "PG 환불 응답 분실 (테스트)" };
       return { outcome: "SUCCEEDED", refundId: `sbx_rf_${idempotencyKey}`, raw: null };
     },
     async lookup({ paymentKey, amountMinor }) {
       if (!paymentKey) return { outcome: "NOT_CAPTURED" };
       const s = scenario(paymentKey);
       if (s === "declined" || s === "lost") return { outcome: "NOT_CAPTURED" };
+      if (s === "refundghost") return { outcome: "CANCELED", paymentKey, canceledMinor: amountMinor, cancelReason: "환불 접수 확인됨 (테스트)", transactionKey: `sbx_tx_${paymentKey}` };
       if (s === "extcancel") return { outcome: "CANCELED", paymentKey, canceledMinor: amountMinor, cancelReason: "외부 취소 (테스트)", transactionKey: `sbx_tx_${paymentKey}` };
       if (s === "extpartial") {
         const half = Math.floor(amountMinor / 2);

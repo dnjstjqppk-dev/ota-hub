@@ -182,7 +182,7 @@ test("security: IDOR on booking read / cancel / pay is blocked", async () => {
   assert.equal((await api("POST", `/api/v1/bookings/${b.id}/pay`, { token: A.token, headers: { "X-Payment-Proof": "fake" } })).status, 410);
 });
 
-test("payment: amount mismatch rejected before PG; decline returns to AWAITING_PAYMENT; success issues voucher", async () => {
+test("payment: amount mismatch rejected before PG; decline returns to AWAITING_PAYMENT; success issues voucher (#70 retry uses a fresh PG key)", async () => {
   const q = (await quote(A.token)).data.quote;
   const b = (await book(A.token, q)).data.booking;
   const mm = await api("POST", "/api/v1/payments/confirm", { token: A.token, body: { bookingId: b.id, orderId: b.id, amount: b.totalMinor - 1, paymentKey: `sbx_ok_${rnd()}` } });
@@ -190,6 +190,9 @@ test("payment: amount mismatch rejected before PG; decline returns to AWAITING_P
   const dec = await pay(A.token, b, "declined");
   assert.equal(dec.status, 402);
   assert.equal((await api("GET", `/api/v1/bookings/${b.id}`, { token: A.token })).data.booking.status, "AWAITING_PAYMENT");
+  // #70: the retry carries a new paymentKey under a NEW PG idempotency key —
+  // the sandbox rejects a reused key exactly like Toss, so a fixed
+  // confirm_{booking} key would 402 here instead of issuing the voucher.
   const ok = await pay(A.token, b, "ok");
   assert.equal(ok.status, 200, JSON.stringify(ok.data));
   const bk = ok.data.booking;
@@ -2715,4 +2718,166 @@ test("#69: partner product create rejects bad price and free-form domain", async
   const zero = await post({ title: "E2E 무료 투어", domain: "ACTIVITY", city: "서울", price: 0 });
   assert.equal(zero.status, 201, "explicit 0 is a valid price, not the default");
   assert.equal(sql(`SELECT price_krw FROM activities WHERE id = '${zero.data.id}'`)[0].price_krw, 0);
+});
+
+test("#71: settlement splits on gross (paid + platform discount), like the ledger", async () => {
+  resetLimiter("register");
+  const U = await register("gross71");
+  assert.equal((await api("POST", "/api/v1/user/coupons/claim", { token: U.token, body: { code: "TEST10" } })).status, 200);
+  const q = (await quote(U.token, { promotionCode: "TEST10" })).data.quote;
+  assert.ok(q.discountMinor > 0, "coupon discount present");
+  const b = (await book(U.token, q)).data.booking;
+  const p = await pay(U.token, b);
+  assert.equal(p.data.booking.status, "VOUCHER_ISSUED");
+  const row = sql(`SELECT paid_minor, discount_amount_krw FROM bookings WHERE id = '${b.id}'`)[0];
+  const s = sql(`SELECT gross_amount_minor, commission_amount_minor, seller_payout_minor, merchant_model FROM marketplace_order_settlements WHERE booking_id = '${b.id}'`)[0];
+  const gross = Number(row.paid_minor) + Number(row.discount_amount_krw);
+  assert.ok(gross > Number(row.paid_minor), "discounted order");
+  assert.equal(Number(s.gross_amount_minor), gross, "settlement basis is gross, not net-paid");
+  if (s.merchant_model === "3P") {
+    assert.equal(Number(s.seller_payout_minor) + Number(s.commission_amount_minor), gross, "3P split adds up on gross");
+  }
+});
+
+test("#73: concurrent refund starts single-flight — one parks PENDING, the other 409s, never twice", async () => {
+  resetLimiter("register");
+  const U = await register("rf73");
+  // refundfail: PG captures the payment but every refund attempt fails, so the
+  // winner's row stays PENDING and any ordering converges on one row + 409s.
+  const { b } = await fullHotelBooking(U.token, {}, "refundfail");
+  assert.equal((await api("GET", `/api/v1/bookings/${b.id}`, { token: U.token })).data.booking.status, "VOUCHER_ISSUED");
+  const fire = () => api("POST", `/api/v1/admin/bookings/${b.id}/refund`, { token: ADMIN, body: { amountMinor: b.totalMinor, reason: "E2E #73 race" } });
+  const [ra, rb] = await Promise.all([fire(), fire()]);
+  const sts = [ra.status, rb.status].sort();
+  assert.deepEqual(sts, [200, 409], JSON.stringify([ra.data, rb.data]));
+  // The loser may have lost the status walk instead of the refund INSERT
+  // (both are 409s); settle it — a PENDING row now exists either way.
+  let loser = [ra, rb].find((r) => r.status === 409);
+  for (let i = 0; i < 5 && loser.data.code !== "REFUND_IN_PROGRESS"; i++) {
+    loser = await fire();
+    assert.equal(loser.status, 409, JSON.stringify(loser.data));
+  }
+  assert.equal(loser.data.code, "REFUND_IN_PROGRESS", JSON.stringify(loser.data));
+  // And a third sequential start is refused deterministically.
+  assert.equal((await fire()).data.code, "REFUND_IN_PROGRESS");
+  const rows = sql(`SELECT id, status, attempts FROM refunds WHERE booking_id = '${b.id}'`);
+  assert.equal(rows.length, 1, "exactly one refund row — no double pay");
+  assert.equal(rows[0].status, "PENDING");
+  assert.ok(rows[0].attempts >= 1, "winner's failed PG attempt recorded");
+});
+
+test("#72: crash-orphaned settlement is repaired; partial recovery takes are traced", async () => {
+  resetLimiter("register");
+  const P = await approvedPartner("stl72");
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 72 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
+  const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E #72 투어", domain: "ACTIVITY", city: "서울", price: 50000, capacity: 10 } });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
+  const itemId = reg.data.product.item_id;
+  const mkCompleted = async (tag) => {
+    const U = await register(tag);
+    const q = (await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "ACTIVITY", itemId, startDate: day(95), travelers: { adults: 1 } } })).data.quote;
+    const b = (await book(U.token, q)).data.booking;
+    assert.equal((await pay(U.token, b)).data.booking.status, "VOUCHER_ISSUED");
+    sql(`UPDATE bookings SET status = 'COMPLETED', service_end = '2020-01-02' WHERE id = '${b.id}'`);
+    return b;
+  };
+  // Act 1: a post-payout full refund raises an OPEN claim larger than the next
+  // payout, so the next settle takes partially — and traces the partial take.
+  const b1 = await mkCompleted("s72a");
+  const s1 = sql(`SELECT * FROM marketplace_order_settlements WHERE booking_id = '${b1.id}'`)[0];
+  assert.equal(s1.seller_id, P.id);
+  const st1 = await api("PATCH", `/api/v1/admin/marketplace/settlements/${s1.id}/settle`, { token: ADMIN });
+  assert.equal(st1.status, 200, JSON.stringify(st1.data));
+  assert.equal(st1.data.repaired, false);
+  const rf = await api("POST", `/api/v1/admin/bookings/${b1.id}/refund`, { token: ADMIN, body: { amountMinor: b1.totalMinor, reason: "E2E #72 claim" } });
+  assert.equal(rf.data.booking.status, "REFUNDED", JSON.stringify(rf.data));
+  const claim = sql(`SELECT * FROM settlement_recoveries WHERE booking_id = '${b1.id}'`)[0];
+  assert.equal(claim.status, "OPEN");
+  const b2 = await mkCompleted("s72b");
+  const s2 = sql(`SELECT * FROM marketplace_order_settlements WHERE booking_id = '${b2.id}'`)[0];
+  assert.ok(Number(s2.seller_payout_minor) < Number(claim.amount_minor), "partial take is deterministic: payout < claim");
+  const st2 = await api("PATCH", `/api/v1/admin/marketplace/settlements/${s2.id}/settle`, { token: ADMIN });
+  assert.equal(st2.status, 200, JSON.stringify(st2.data));
+  assert.equal(st2.data.payout.recoveryDeductedMinor, Number(s2.seller_payout_minor));
+  assert.equal(st2.data.payout.netMinor, 0);
+  const after = sql(`SELECT * FROM settlement_recoveries WHERE id = '${claim.id}'`)[0];
+  assert.equal(after.status, "OPEN");
+  assert.equal(Number(after.amount_minor), Number(claim.amount_minor) - Number(s2.seller_payout_minor));
+  assert.equal(after.applied_settlement_id, s2.id, "partial take traced to its settlement");
+  // Act 2: orphan the third settlement (gate UPDATE landed, completion never
+  // ran) and repair it through the same endpoint.
+  const b3 = await mkCompleted("s72c");
+  const s3 = sql(`SELECT * FROM marketplace_order_settlements WHERE booking_id = '${b3.id}'`)[0];
+  sql(`UPDATE marketplace_order_settlements SET settlement_status = 'SETTLED', settled_at = '2020-02-15T10:00:00.000Z', payout_method = 'MANUAL_TRANSFER', payout_reference = 'E2E-ORPHAN-72', recovery_deducted_minor = 0 WHERE id = '${s3.id}'`);
+  assert.equal(sql(`SELECT COUNT(*) AS c FROM ledger_entries WHERE reference_id = '${s3.id}' AND event_type = 'SETTLEMENT_PAID_OUT'`)[0].c, 0);
+  const rep = await api("PATCH", `/api/v1/admin/marketplace/settlements/${s3.id}/settle`, { token: ADMIN });
+  assert.equal(rep.status, 200, JSON.stringify(rep.data));
+  assert.equal(rep.data.repaired, true);
+  assert.equal(rep.data.settled_at, "2020-02-15T10:00:00.000Z");
+  assert.equal(rep.data.payout.recoveryDeductedMinor, 0);
+  // Zero-deduct payout: payable relieved to operating cash (the zero
+  // SELLER_CLAIM_RECEIVABLE leg is dropped by journal(), like every
+  // no-deduct settle — exact lines, not just a count).
+  const jl = sql(`SELECT account, direction, amount_minor AS amt FROM ledger_entries WHERE reference_id = '${s3.id}' AND event_type = 'SETTLEMENT_PAID_OUT' ORDER BY account`);
+  assert.deepEqual(jl.map((l) => [l.account, l.direction, l.amt]), [
+    ["OPERATING_CASH", "CREDIT", s3.seller_payout_minor],
+    ["SUPPLIER_PAYABLE", "DEBIT", s3.seller_payout_minor],
+  ]);
+  const linked = sql(`SELECT payout_batch_id FROM marketplace_order_settlements WHERE id = '${s3.id}'`)[0];
+  assert.equal(linked.payout_batch_id, `psb_${P.id}_2020-02`, "batch link follows the settled month, not the repair month");
+  const batch = sql(`SELECT * FROM partner_settlement_batches WHERE id = '${linked.payout_batch_id}'`)[0];
+  const sums = sql(`SELECT COALESCE(SUM(gross_amount_minor),0) g, COALESCE(SUM(commission_amount_minor),0) cm, COALESCE(SUM(seller_payout_minor - COALESCE(recovery_deducted_minor,0)),0) po FROM marketplace_order_settlements WHERE payout_batch_id = '${linked.payout_batch_id}'`)[0];
+  assert.equal(batch.gross_minor, sums.g, "recompute-SET rollup matches linked rows");
+  assert.equal(batch.commission_minor, sums.cm);
+  assert.equal(batch.payout_minor, sums.po);
+  // A zero-deduct repair never touches foreign claims.
+  const claimAfter = sql(`SELECT amount_minor, applied_settlement_id FROM settlement_recoveries WHERE id = '${claim.id}'`)[0];
+  assert.equal(Number(claimAfter.amount_minor), Number(after.amount_minor));
+  assert.equal(claimAfter.applied_settlement_id, s2.id);
+  // Repaired means complete: the next call 409s exactly as before.
+  const again = await api("PATCH", `/api/v1/admin/marketplace/settlements/${s3.id}/settle`, { token: ADMIN });
+  assert.equal(again.status, 409);
+  assert.equal(again.data.code, "SETTLEMENT_NOT_PAYABLE");
+});
+
+test("#74: refund UNKNOWN consults the PG — ghost refunds complete, lost ones stay visible", async () => {
+  resetLimiter("register");
+  // Ghost: the PG lost the response but took the refund — lookup CANCELED
+  // covers our amount, so the refund completes instead of blind-retrying.
+  const G = await register("rf74g");
+  const { b: bg } = await fullHotelBooking(G.token, {}, "refundghost");
+  const cg = await api("POST", `/api/v1/bookings/${bg.id}/cancel`, { token: G.token });
+  assert.equal(cg.data.booking.status, "REFUNDED", JSON.stringify(cg.data));
+  const rg = sql(`SELECT status, provider_refund_id FROM refunds WHERE booking_id = '${bg.id}'`)[0];
+  assert.equal(rg.status, "SUCCEEDED");
+  assert.ok(rg.provider_refund_id && rg.provider_refund_id.startsWith("sbx_tx_"), rg.provider_refund_id);
+  // Lost: the PG never took it — attempts+1 with a lookup note, stays
+  // PENDING, and shows up in the admin ops queue.
+  const L = await register("rf74l");
+  const { b: bl } = await fullHotelBooking(L.token, {}, "refundlost");
+  const cl = await api("POST", `/api/v1/bookings/${bl.id}/cancel`, { token: L.token });
+  assert.equal(cl.data.booking.status, "REFUND_PENDING", JSON.stringify(cl.data));
+  const rl = sql(`SELECT status, attempts, last_error FROM refunds WHERE booking_id = '${bl.id}'`)[0];
+  assert.equal(rl.status, "PENDING");
+  assert.equal(rl.attempts, 1);
+  assert.ok(rl.last_error.includes("PG_LOOKUP:CAPTURED"), rl.last_error);
+  const pend = await api("GET", "/api/v1/admin/refunds?status=PENDING", { token: ADMIN });
+  assert.equal(pend.status, 200, JSON.stringify(pend.data));
+  const row = pend.data.refunds.find((r) => r.booking_id === bl.id);
+  assert.ok(row, "lost refund visible in the admin queue");
+  assert.ok(row.last_error.includes("PG_LOOKUP"), row.last_error);
+  assert.equal((await api("GET", "/api/v1/admin/refunds?status=BOGUS", { token: ADMIN })).status, 400);
+});
+
+test("#75: coin grants land via admin adjust with a ledger row (no phantom accrual)", async () => {
+  resetLimiter("register");
+  const U = await register("coin75");
+  const before = Number(sql(`SELECT trip_coins FROM users WHERE id = '${U.id}'`)[0].trip_coins);
+  const up = await api("PATCH", `/api/v1/admin/users/${U.id}`, { token: ADMIN, headers: { "Idempotency-Key": idem() }, body: { coinAdjustment: 500, note: "E2E #75 event grant" } });
+  assert.equal(up.status, 200, JSON.stringify(up.data));
+  assert.equal(up.data.coinBalance, before + 500);
+  const rows = sql(`SELECT delta, reason FROM coin_ledger WHERE user_id = '${U.id}' ORDER BY created_at, rowid`);
+  assert.equal(rows.length, 1);
+  assert.equal(Number(rows[0].delta), 500);
+  assert.ok(rows[0].reason.startsWith("ADMIN_ADJUSTMENT"), rows[0].reason);
 });

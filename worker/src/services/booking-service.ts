@@ -216,6 +216,15 @@ async function runBatch(db: D1Database, stmts: Stmt[]): Promise<D1Result[]> {
   }
 }
 
+/** #73: the single-flight PENDING index (0039) turns a racing second refund into a 409, never a 500. */
+export function throwOnRefundConflict(e: unknown): never {
+  const m = String((e as any)?.message || e);
+  if (m.includes("idx_refunds_one_pending") || m.includes("UNIQUE constraint failed: refunds")) {
+    throw new HttpError(409, "REFUND_IN_PROGRESS", "이미 진행 중인 환불이 있습니다. 완료 후 다시 시도해주세요.");
+  }
+  throw e;
+}
+
 export async function getBooking(env: Env, id: string): Promise<BookingRow | null> {
   return env.DB.prepare("SELECT * FROM bookings WHERE id = ? OR booking_number = ?").bind(id, id).first<BookingRow>();
 }
@@ -864,7 +873,11 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
   ]);
   let cur = await mustGet(env, b.id);
 
-  const r = await provider.confirm({ orderId: b.id, paymentKey, amountMinor: b.total_minor, currency: b.currency, idempotencyKey: `confirm_${b.id}` });
+  // #70: the PG idempotency key must be per attempt, not per booking — a
+  // retry with a fresh paymentKey under `confirm_${b.id}` is rejected by the
+  // PG as a duplicate. paymentId is minted per attempt above (same convention
+  // as the mismatch_* refund key below).
+  const r = await provider.confirm({ orderId: b.id, paymentKey, amountMinor: b.total_minor, currency: b.currency, idempotencyKey: `confirm_${paymentId}` });
 
   if (r.outcome === "CAPTURED" && r.amountMinor !== b.total_minor) {
     // Provider captured a different amount: never accept; refund immediately.
@@ -975,6 +988,10 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
   const db = env.DB;
   const supplier = await loadSupplier(env, b.supplier_id);
   const split = L.recognitionSplit(b.paid_minor, Math.round(Number(b.discount_amount_krw || 0)), supplier?.settlement_rate_bps ?? 9000);
+  // #71: the ledger recognizes on gross (paid + platform-borne discount, with
+  // a PROMOTION_EXPENSE leg), so the settlement basis must be gross too —
+  // paying the seller on net-paid shorted every discounted order.
+  const grossMinor = Number(b.paid_minor || 0) + Math.round(Number(b.discount_amount_krw || 0));
   const notify = (template: string) =>
     db.prepare("INSERT INTO notification_outbox (id, channel, recipient, template, payload_json, status) VALUES (?, 'EMAIL', ?, ?, ?, 'PENDING')")
       .bind(newId("ntf"), b.customer_email, template, JSON.stringify({ bookingId: b.id, bookingNumber: b.booking_number }));
@@ -989,7 +1006,7 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
     if (r.outcome === "ISSUED") {
       // Planned first (reads only), written in the same batch: a ticketed
       // booking can never lack its settlement row (2026-11-09 audit [M]).
-      const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, b.paid_minor);
+      const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, grossMinor);
       await runBatch(db, [
         ...transition(db, cur, "TICKETED", { type: "SUPPLIER", id: b.supplier_id }, null, { supplier_status: "TICKETED" }),
         db.prepare("UPDATE booking_items SET ticket_numbers_json = ?, supplier_status = 'TICKETED', updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(JSON.stringify(r.ticketNumbers), b.id),
@@ -1014,7 +1031,7 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
     return mustGet(env, b.id);
   }
 
-  const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, b.paid_minor);
+  const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, grossMinor);
   await runBatch(db, [
     ...transition(db, b, "VOUCHER_ISSUED", { type: "SYSTEM", id: null }, null, { voucher_code: voucherCode() }),
     db.prepare("UPDATE booking_items SET voucher_code = (SELECT voucher_code FROM bookings WHERE id = ?), updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(b.id, b.id),
@@ -1053,8 +1070,10 @@ export async function startRefund(env: Env, b: BookingRow, amountMinor: number, 
     return;
   }
   const rid = newId("rfd");
-  await env.DB.prepare("INSERT INTO refunds (id, booking_id, payment_id, amount_minor, currency, reason, status) VALUES (?, ?, ?, ?, ?, ?, 'PENDING')")
-    .bind(rid, b.id, pay.id, amt, b.currency, reason.slice(0, 300)).run();
+  try {
+    await env.DB.prepare("INSERT INTO refunds (id, booking_id, payment_id, amount_minor, currency, reason, status) VALUES (?, ?, ?, ?, ?, ?, 'PENDING')")
+      .bind(rid, b.id, pay.id, amt, b.currency, reason.slice(0, 300)).run();
+  } catch (e) { throwOnRefundConflict(e); }
   await processRefund(env, rid);
 }
 
@@ -1073,6 +1092,26 @@ export async function processRefund(env: Env, refundId: string): Promise<void> {
   const r = await provider.refund({ paymentKey: pay.provider_payment_key, amountMinor: rf.amount_minor, reason: rf.reason, idempotencyKey: rf.id });
   if (r.outcome === "SUCCEEDED") {
     await applyRefundSucceeded(env, b, pay, rf, { type: "PAYMENT_PROVIDER", id: provider.name }, r.refundId);
+    return;
+  }
+  if (r.outcome === "UNKNOWN") {
+    // #74: never blind-retry a lost refund response — ask the PG what
+    // actually happened. A confirmed cancel covering our amount completes
+    // the refund; anything else is recorded on the row for the ops queue.
+    const lk = await provider.lookup({ orderId: b.id, paymentKey: pay.provider_payment_key, amountMinor: pay.amount_minor });
+    const canceled = (lk.outcome === "CANCELED" || lk.outcome === "PARTIAL_CANCELED") ? lk : null;
+    if (canceled && canceled.canceledMinor - pay.refunded_minor >= rf.amount_minor) {
+      await applyRefundSucceeded(env, b, pay, rf, { type: "PAYMENT_PROVIDER", id: provider.name }, canceled.transactionKey);
+      return;
+    }
+    const note = canceled
+      ? `PG_LOOKUP:${canceled.outcome}(ext=${canceled.canceledMinor},need=${rf.amount_minor})`
+      : `PG_LOOKUP:${lk.outcome}`;
+    const attempts = rf.attempts + 1;
+    await db.prepare("UPDATE refunds SET attempts = ?, last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(attempts, `${r.message} | ${note}`.slice(0, 300), rf.id).run();
+    if (attempts >= MAX_REFUND_ATTEMPTS && b.status === "REFUND_PENDING") {
+      await runBatch(db, transition(db, b, "MANUAL_REVIEW_REQUIRED", { type: "SYSTEM", id: null }, `REFUND_FAILED_AFTER_${attempts}_ATTEMPTS`));
+    }
     return;
   }
   const attempts = rf.attempts + 1;
@@ -1107,14 +1146,23 @@ export async function applyRefundSucceeded(env: Env, b: BookingRow, pay: any, rf
   const reversal = settledRow ? [] : await recognitionReversalStmts(env, db, b, Number(b.paid_minor || 0), rf.id);
   const feeDue = await unrecordedFeeMinor(db, b.id, Number(b.paid_minor || 0), Number(b.refunded_minor || 0) + Number(rf.amount_minor || 0));
   await runBatch(db, [
+    // #73: our own row must still be PENDING (an external sync may have
+    // superseded it after our PG call) — the guard aborts the batch first.
+    db.prepare("INSERT INTO txn_guards (ok, label) SELECT COUNT(*), ? FROM refunds WHERE id = ? AND status = 'PENDING'").bind(`refund-apply:${rf.id}`, rf.id),
     ...transition(db, b, "REFUNDED", actor, rf.source && rf.source !== "INTERNAL" ? `REFUND_${rf.source}` : null, {
-      refunded_minor: b.refunded_minor + rf.amount_minor,
-      refund_amount_krw: b.refunded_minor + rf.amount_minor,
       payment_status: fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED",
     }),
+    // #73: relative, like payments below — a concurrent external sync adds
+    // its own slice instead of clobbering ours (or vice versa).
+    db.prepare("UPDATE bookings SET refunded_minor = refunded_minor + ?, refund_amount_krw = refund_amount_krw + ? WHERE id = ?")
+      .bind(rf.amount_minor, rf.amount_minor, b.id),
     db.prepare("UPDATE refunds SET status = 'SUCCEEDED', provider_refund_id = COALESCE(?, provider_refund_id), attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'PENDING'").bind(providerRefundId, rf.id),
-    db.prepare("UPDATE payments SET refunded_minor = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-      .bind(newRefunded, fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED", pay.id),
+    // #73: relative increment, never a stale-read absolute — concurrent
+    // applies cannot lose-update each other's slice.
+    db.prepare(`UPDATE payments SET refunded_minor = refunded_minor + ?,
+      status = CASE WHEN refunded_minor + ? >= amount_minor THEN 'REFUNDED' ELSE 'PARTIALLY_REFUNDED' END,
+      updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .bind(rf.amount_minor, rf.amount_minor, pay.id),
     ...reversal,
     ...journalStmts(db, L.cancellationFeeRetained(b.id, feeDue), b),
     ...journalStmts(db, L.refundPaid(rf.id, rf.amount_minor), b),
@@ -1126,6 +1174,11 @@ export async function applyRefundSucceeded(env: Env, b: BookingRow, pay: any, rf
     ...(await coinRestoreStmtsOnce(db, b)),
     ...couponRestoreStmts(db, b.user_id, b.quote_id),
   ]);
+  if (fullyRefunded || supplierGone) {
+    // #73: post-batch void re-check — a payout row armed after our batch's
+    // void (or missed by it) must still never stay payable on a dead order.
+    await db.prepare("UPDATE marketplace_order_settlements SET settlement_status = 'REFUNDED', fulfillment_status = 'FAILED' WHERE booking_id = ? AND settlement_status IN ('PENDING', 'HELD')").bind(b.id).run();
+  }
   // B3: a payout already made becomes a recovery claim against the seller.
   await recordRecoveryIfSettled(db, b, Number(rf.amount_minor || 0) + (settledRow ? feeDue : 0), `지급 후 환불 환수 (refund ${rf.id})`);
 }
@@ -1372,8 +1425,12 @@ export async function applyExternalCancel(env: Env, bookingId: string, ext: Exte
   const money: Stmt[] = [
     db.prepare("INSERT INTO refunds (id, booking_id, payment_id, amount_minor, currency, reason, status, source, provider_refund_id, attempts) VALUES (?, ?, ?, ?, ?, ?, 'SUCCEEDED', 'EXTERNAL', ?, 1)")
       .bind(rfId, b.id, pay.id, delta, b.currency, reason.slice(0, 300), ext.transactionKey),
-    db.prepare("UPDATE payments SET refunded_minor = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-      .bind(newRefunded, fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED", pay.id),
+    // #73: relative increment, never the stale-read absolute — concurrent
+    // applies cannot lose-update each other's slice.
+    db.prepare(`UPDATE payments SET refunded_minor = refunded_minor + ?,
+      status = CASE WHEN refunded_minor + ? >= amount_minor THEN 'REFUNDED' ELSE 'PARTIALLY_REFUNDED' END,
+      updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .bind(delta, delta, pay.id),
     // Our own in-flight refunds are superseded: the PG already returned the money.
     db.prepare("UPDATE refunds SET status = 'FAILED', last_error = 'EXTERNAL_CANCEL_SUPERSEDED', updated_at = CURRENT_TIMESTAMP WHERE payment_id = ? AND status = 'PENDING'").bind(pay.id),
     // Full external cancel unwinds the whole recognition; a partial one unwinds
@@ -1394,23 +1451,42 @@ export async function applyExternalCancel(env: Env, bookingId: string, ext: Exte
     if (supplierCancelled) money.push(db.prepare("UPDATE booking_items SET supplier_status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(b.id));
   }
 
+  // #73: optimistic lock on the payment we read up front — a concurrent
+  // apply moves refunded_minor first, so our delta is exact at commit or the
+  // batch aborts (409 CONCURRENT_MODIFICATION, converted below when covered).
+  const payGuard = (label: string) => db.prepare("INSERT INTO txn_guards (ok, label) SELECT COUNT(*), ? FROM payments WHERE id = ? AND refunded_minor = ?")
+    .bind(label, pay.id, pay.refunded_minor);
+  const bookingMinors = db.prepare("UPDATE bookings SET refunded_minor = refunded_minor + ?, refund_amount_krw = refund_amount_krw + ? WHERE id = ?")
+    .bind(delta, delta, b.id);
+  const statusMinors: Record<string, string | number | null> = { payment_status: minors.payment_status as string };
+  if (supplierCancelled) statusMinors.supplier_status = "CANCELLED";
   const path = fullyRefunded ? refundPathToRefunded(b.status) : null;
-  if (!path) {
-    // Partial cancel, or a full one on a terminal/COMPLETED order: money only.
-    await runBatch(db, [
-      db.prepare(`UPDATE bookings SET refunded_minor = ?, refund_amount_krw = ?, payment_status = ?, status_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-        .bind(minors.refunded_minor, minors.refund_amount_krw, minors.payment_status as string, "EXTERNAL_CANCEL_SYNCED", b.id),
-      ...money,
-    ]);
-  } else {
-    for (const [i, next] of path.entries()) {
-      const cur = await mustGet(env, b.id);
-      const last = i === path.length - 1;
+  try {
+    if (!path) {
+      // Partial cancel, or a full one on a terminal/COMPLETED order: money only.
       await runBatch(db, [
-        ...transition(db, cur, next, actor, "EXTERNAL_CANCEL_SYNCED", last ? minors : {}),
-        ...(last ? money : []),
+        payGuard(`ext-cancel:${pay.id}`),
+        db.prepare("UPDATE bookings SET payment_status = ?, status_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+          .bind(minors.payment_status as string, "EXTERNAL_CANCEL_SYNCED", b.id),
+        bookingMinors,
+        ...money,
       ]);
+    } else {
+      for (const [i, next] of path.entries()) {
+        const cur = await mustGet(env, b.id);
+        const last = i === path.length - 1;
+        await runBatch(db, [
+          ...transition(db, cur, next, actor, "EXTERNAL_CANCEL_SYNCED", last ? statusMinors : {}),
+          ...(last ? [payGuard(`ext-cancel:${pay.id}`), bookingMinors, ...money] : []),
+        ]);
+      }
     }
+  } catch (e) {
+    if (e instanceof HttpError && (e as any).code === "CONCURRENT_MODIFICATION") {
+      const fresh = await db.prepare("SELECT refunded_minor FROM payments WHERE id = ?").bind(pay.id).first<any>();
+      if (ext.canceledMinor - Number(fresh?.refunded_minor ?? 0) <= 0) return "ALREADY_APPLIED";
+    }
+    throw e;
   }
   await recordRecoveryIfSettled(db, b, delta, `외부 취소 환수: ${reason}`.slice(0, 300));
   return "APPLIED";
@@ -1716,8 +1792,10 @@ export async function adminForceCancel(env: Env, admin: AuthUser, bookingId: str
   }
   const { amt } = await adminRefundable(env, cur, cur.paid_minor - cur.refunded_minor);
   const rid = newId("rfd");
-  await db.prepare("INSERT INTO refunds (id, booking_id, payment_id, amount_minor, currency, reason, status, source) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 'ADMIN_MANUAL')")
-    .bind(rid, b.id, (await capturedPayment(env, b.id)).id, amt, b.currency, `직권 취소: ${why}`.slice(0, 300)).run();
+  try {
+    await db.prepare("INSERT INTO refunds (id, booking_id, payment_id, amount_minor, currency, reason, status, source) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 'ADMIN_MANUAL')")
+      .bind(rid, b.id, (await capturedPayment(env, b.id)).id, amt, b.currency, `직권 취소: ${why}`.slice(0, 300)).run();
+  } catch (e) { throwOnRefundConflict(e); }
   await processRefund(env, rid);
   return mustGet(env, b.id);
 }
@@ -1731,8 +1809,10 @@ export async function adminRefund(env: Env, admin: AuthUser, bookingId: string, 
   const cur = await walkToRefundPending(env, b, actor, "ADMIN_REFUND");
   const { amt } = await adminRefundable(env, cur, amountMinor);
   const rid = newId("rfd");
-  await env.DB.prepare("INSERT INTO refunds (id, booking_id, payment_id, amount_minor, currency, reason, status, source) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 'ADMIN_MANUAL')")
-    .bind(rid, b.id, (await capturedPayment(env, b.id)).id, amt, b.currency, `관리자 환불: ${why}`.slice(0, 300)).run();
+  try {
+    await env.DB.prepare("INSERT INTO refunds (id, booking_id, payment_id, amount_minor, currency, reason, status, source) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 'ADMIN_MANUAL')")
+      .bind(rid, b.id, (await capturedPayment(env, b.id)).id, amt, b.currency, `관리자 환불: ${why}`.slice(0, 300)).run();
+  } catch (e) { throwOnRefundConflict(e); }
   await processRefund(env, rid);
   // The retained remainder is the effective cancellation fee — record it honestly.
   const after = await mustGet(env, b.id);
@@ -1757,8 +1837,10 @@ export async function adminOfflineRefund(env: Env, admin: AuthUser, bookingId: s
   const { pay, amt } = await adminRefundable(env, cur, Number(body.amountMinor));
   const rid = newId("rfd");
   const detail = JSON.stringify({ bank, account, adminId: admin.id, at: new Date().toISOString() });
-  await db.prepare("INSERT INTO refunds (id, booking_id, payment_id, amount_minor, currency, reason, status, source, offline_detail_json, attempts) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 'OFFLINE', ?, 1)")
-    .bind(rid, b.id, pay.id, amt, b.currency, `수기 환불(${bank}): ${why}`.slice(0, 300), detail).run();
+  try {
+    await db.prepare("INSERT INTO refunds (id, booking_id, payment_id, amount_minor, currency, reason, status, source, offline_detail_json, attempts) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 'OFFLINE', ?, 1)")
+      .bind(rid, b.id, pay.id, amt, b.currency, `수기 환불(${bank}): ${why}`.slice(0, 300), detail).run();
+  } catch (e) { throwOnRefundConflict(e); }
   const rf = await db.prepare("SELECT * FROM refunds WHERE id = ?").bind(rid).first<any>();
   await applyRefundSucceeded(env, cur, pay, rf, actor, null);
   return mustGet(env, b.id);

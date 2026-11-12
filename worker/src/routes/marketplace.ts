@@ -7,6 +7,120 @@ import { settlementPayoutStmts } from '../services/booking-service.ts';
 import { parseRooms } from './partner.ts';
 import { newId } from '../lib/crypto.ts';
 
+interface RecoveryTake { claimId: string; take: number; left: number }
+
+/**
+ * #72: FIFO recovery takes over OPEN claims, capped at `budget`. Claims
+ * already consumed (fully or partially) by this settlement are excluded, so
+ * a repair re-plan never double-takes its own earlier bite.
+ */
+async function planRecoveryTakes(db: D1Database, sellerId: string, settlementId: string, budget: number): Promise<RecoveryTake[]> {
+  const open = await db.prepare(
+    "SELECT id, amount_minor FROM settlement_recoveries WHERE seller_id = ? AND status = 'OPEN' AND (applied_settlement_id IS NULL OR applied_settlement_id != ?) ORDER BY created_at",
+  ).bind(sellerId, settlementId).all<any>();
+  const takes: RecoveryTake[] = [];
+  let remaining = budget;
+  for (const c of open.results || []) {
+    if (remaining <= 0) break;
+    const take = Math.min(Number(c.amount_minor) || 0, remaining);
+    if (take <= 0) continue;
+    remaining -= take;
+    takes.push({ claimId: c.id, take, left: (Number(c.amount_minor) || 0) - take });
+  }
+  return takes;
+}
+
+/**
+ * #72: idempotent payout completion — journals, recovery takes, batch link
+ * and rollup. Every step is safe to re-run: journals pre-check, recovery
+ * updates are conditional (and partial takes now also trace
+ * applied_settlement_id), the link is a plain SET, and the rollup recomputes
+ * from linked rows instead of incrementing.
+ *
+ * Repair mode re-derives takes only when the recovery batch provably never
+ * landed (no claim traces to this settlement — the batch is atomic, so a
+ * trace means it completed). Money math always reuses the recorded deducted
+ * total, never a recomputation. Corner accepted: takes re-planned after an
+ * interleaved foreign settlement capped at the recorded total may attribute
+ * to a different claim than the lost original plan; totals stay exact.
+ */
+async function completeSettlement(
+  env: Env,
+  row: any,
+  o: { deducted: number; remaining: number; takes?: RecoveryTake[]; repair: boolean },
+): Promise<void> {
+  const db = env.DB;
+  const id = row.id as string;
+  const settledAt = String(row.settled_at || new Date().toISOString());
+
+  let takes = o.takes;
+  if (o.repair) {
+    const traced = await db.prepare('SELECT 1 AS x FROM settlement_recoveries WHERE applied_settlement_id = ? LIMIT 1').bind(id).first();
+    takes = traced ? [] : await planRecoveryTakes(db, row.seller_id, id, o.deducted);
+  }
+  // #17: journal the payout (Dr SUPPLIER_PAYABLE / Cr OPERATING_CASH +
+  // recovery offset) exactly once — the pre-check makes re-runs no-ops.
+  const gross = Number(row.seller_payout_minor) || 0;
+  if (gross > 0) {
+    const journaled = await db.prepare("SELECT 1 AS x FROM ledger_entries WHERE reference_id = ? AND event_type = 'SETTLEMENT_PAID_OUT' LIMIT 1").bind(id).first();
+    if (!journaled) {
+      const bctx = await db.prepare('SELECT id, entity_id, supplier_id, currency FROM bookings WHERE id = ?').bind(row.booking_id).first<any>();
+      if (bctx) await db.batch(settlementPayoutStmts(db, bctx, id, gross, o.remaining));
+    }
+  }
+  const recoveryStmts = (takes || []).map((t) => t.left <= 0
+    ? db.prepare("UPDATE settlement_recoveries SET status = 'APPLIED', amount_minor = 0, applied_at = ?, applied_settlement_id = ? WHERE id = ? AND status = 'OPEN'").bind(settledAt, id, t.claimId)
+    : db.prepare("UPDATE settlement_recoveries SET amount_minor = amount_minor - ?, applied_settlement_id = ? WHERE id = ? AND status = 'OPEN' AND (applied_settlement_id IS NULL OR applied_settlement_id != ?) AND amount_minor >= ?").bind(t.take, id, t.claimId, id, t.take));
+  if (recoveryStmts.length) await db.batch(recoveryStmts);
+  // Roll partner-seller payouts into their monthly batch so the partner
+  // settlements endpoint (partner_settlement_batches) reflects reality. The
+  // batch follows the SETTLED month (deterministic across repairs), and the
+  // rollup recomputes from linked rows so re-runs converge instead of
+  // double-counting.
+  const seller = await db.prepare('SELECT id FROM partners WHERE id = ?').bind(row.seller_id).first<any>();
+  if (seller) {
+    const ymMatch = settledAt.slice(0, 7).match(/^\d{4}-\d{2}$/);
+    const ym = ymMatch ? ymMatch[0] : new Date().toISOString().slice(0, 7);
+    const y = Number(ym.slice(0, 4));
+    const m = Number(ym.slice(5, 7));
+    const batchId = `psb_${seller.id}_${ym}`;
+    const periodEnd = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    await db.batch([
+      db.prepare('INSERT OR IGNORE INTO partner_settlement_batches (id, partner_id, period_start, period_end, status) VALUES (?, ?, ?, ?, \'CONFIRMED\')')
+        .bind(batchId, seller.id, `${ym}-01`, periodEnd),
+      db.prepare('UPDATE marketplace_order_settlements SET payout_batch_id = ? WHERE id = ?').bind(batchId, id),
+      db.prepare(`UPDATE partner_settlement_batches SET
+        gross_minor = (SELECT COALESCE(SUM(gross_amount_minor), 0) FROM marketplace_order_settlements WHERE payout_batch_id = ?),
+        commission_minor = (SELECT COALESCE(SUM(commission_amount_minor), 0) FROM marketplace_order_settlements WHERE payout_batch_id = ?),
+        payout_minor = (SELECT COALESCE(SUM(seller_payout_minor - COALESCE(recovery_deducted_minor, 0)), 0) FROM marketplace_order_settlements WHERE payout_batch_id = ?)
+        WHERE id = ?`).bind(batchId, batchId, batchId, batchId),
+    ]);
+  }
+}
+
+/**
+ * #72: repair a crash-orphaned SETTLED row (gate UPDATE landed, completion
+ * batches did not). Returns the recorded payout on repair, null when the row
+ * is already complete. Skips the tour/refund gates on purpose: the money
+ * already moved, repair only completes the books and never pays again.
+ */
+async function repairSettlementIfIncomplete(env: Env, before: any): Promise<{ payout: Record<string, unknown> } | null> {
+  const db = env.DB;
+  const gross = Number(before.seller_payout_minor) || 0;
+  const deducted = Math.min(gross, Math.max(0, Number(before.recovery_deducted_minor) || 0));
+  const remaining = gross - deducted;
+  const journaled = gross <= 0 || await db.prepare("SELECT 1 AS x FROM ledger_entries WHERE reference_id = ? AND event_type = 'SETTLEMENT_PAID_OUT' LIMIT 1").bind(before.id).first();
+  const seller = await db.prepare('SELECT id FROM partners WHERE id = ?').bind(before.seller_id).first<any>();
+  const batchOk = !seller || !!before.payout_batch_id;
+  let recoveryOk = true;
+  if (deducted > 0) {
+    recoveryOk = !!(await db.prepare('SELECT 1 AS x FROM settlement_recoveries WHERE applied_settlement_id = ? LIMIT 1').bind(before.id).first());
+  }
+  if (journaled && batchOk && recoveryOk) return null;
+  await completeSettlement(env, before, { deducted, remaining, repair: true });
+  return { payout: { grossMinor: gross, recoveryDeductedMinor: deducted, netMinor: remaining, method: before.payout_method || 'MANUAL_TRANSFER', reference: before.payout_reference || null } };
+}
+
 export async function handleMarketplace(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
   const method = request.method;
@@ -102,6 +216,23 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
 
     const before = await env.DB.prepare('SELECT * FROM marketplace_order_settlements WHERE id = ?').bind(id).first<any>();
     if (!before) throw new HttpError(404, 'SETTLEMENT_NOT_FOUND', '정산 내역을 찾을 수 없습니다.');
+    // #72: a SETTLED row with incomplete books (crash between the payout
+    // batches) is repaired here instead of 409ing forever; a complete one
+    // keeps the 409 exactly as before.
+    if (before.settlement_status === 'SETTLED') {
+      const repaired = await repairSettlementIfIncomplete(env, before);
+      if (!repaired) {
+        throw new HttpError(409, 'SETTLEMENT_NOT_PAYABLE', `지급할 수 없는 정산 상태입니다. (${before.settlement_status})`);
+      }
+      await audit(env, admin.id, 'MARKETPLACE_SETTLEMENT_REPAIR', 'SETTLEMENT', id, { settled_at: before.settled_at, payout: repaired.payout });
+      return json({
+        success: true,
+        repaired: true,
+        message: '누락된 정산 기록(장부·배치·환수 차감)을 보정했습니다.',
+        settled_at: before.settled_at,
+        payout: repaired.payout,
+      });
+    }
     if (!['PENDING', 'HELD'].includes(before.settlement_status)) {
       throw new HttpError(409, 'SETTLEMENT_NOT_PAYABLE', `지급할 수 없는 정산 상태입니다. (${before.settlement_status})`);
     }
@@ -118,22 +249,12 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     if (pendingRefund) {
       throw new HttpError(409, 'SETTLEMENT_REFUND_PENDING', '환불 처리 중인 예약의 정산금은 지급할 수 없습니다.');
     }
-    // B3: auto-deduct OPEN recovery claims (FIFO) from this payout.
-    const openClaims = await env.DB.prepare("SELECT id, amount_minor FROM settlement_recoveries WHERE seller_id = ? AND status = 'OPEN' ORDER BY created_at").bind(before.seller_id).all<any>();
-    let remaining = Number(before.seller_payout_minor) || 0;
-    let deducted = 0;
-    const recoveryStmts = [];
-    for (const c of openClaims.results || []) {
-      if (remaining <= 0) break;
-      const take = Math.min(Number(c.amount_minor) || 0, remaining);
-      if (take <= 0) continue;
-      remaining -= take;
-      deducted += take;
-      const left = (Number(c.amount_minor) || 0) - take;
-      recoveryStmts.push(left <= 0
-        ? env.DB.prepare("UPDATE settlement_recoveries SET status = 'APPLIED', amount_minor = 0, applied_at = ?, applied_settlement_id = ? WHERE id = ?").bind(now, id, c.id)
-        : env.DB.prepare("UPDATE settlement_recoveries SET amount_minor = ? WHERE id = ?").bind(left, c.id));
-    }
+    // B3: auto-deduct OPEN recovery claims (FIFO) from this payout. Takes are
+    // planned up front because the gate UPDATE records the deducted total.
+    const payout = Number(before.seller_payout_minor) || 0;
+    const takes = await planRecoveryTakes(env.DB, before.seller_id, id, payout);
+    const deducted = takes.reduce((n, t) => n + t.take, 0);
+    const remaining = payout - deducted;
     // B4: payout evidence. SETTLED is a RECORDED bank transfer performed by
     // ops — there is no automatic transfer rail, and the response says so.
     const sbody = await readJson(request).catch(() => ({}));
@@ -148,35 +269,12 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     if (!r.meta.changes) {
       throw new HttpError(409, 'SETTLEMENT_NOT_PAYABLE', `지급할 수 없는 정산 상태입니다. (${before.settlement_status})`);
     }
-    // #17: journal the payout (Dr SUPPLIER_PAYABLE / Cr OPERATING_CASH +
-    // recovery offset) exactly once, right after the single-writer update.
-    const gross = Number(before.seller_payout_minor) || 0;
-    if (gross > 0) {
-      const bctx = await env.DB.prepare('SELECT id, entity_id, supplier_id, currency FROM bookings WHERE id = ?').bind(before.booking_id).first<any>();
-      if (bctx) await env.DB.batch(settlementPayoutStmts(env.DB, bctx, id, gross, remaining));
-    }
-    if (recoveryStmts.length) await env.DB.batch(recoveryStmts);
-    // Roll partner-seller payouts into their open monthly batch so the partner
-    // settlements endpoint (partner_settlement_batches) reflects reality (audit [M]).
-    const seller = await env.DB.prepare('SELECT id FROM partners WHERE id = ?').bind(before.seller_id).first<any>();
-    if (seller) {
-      const ym = now.slice(0, 7);
-      const y = Number(ym.slice(0, 4));
-      const m = Number(ym.slice(5, 7));
-      const batchId = `psb_${seller.id}_${ym}`;
-      const periodEnd = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
-      await env.DB.batch([
-        env.DB.prepare(`INSERT OR IGNORE INTO partner_settlement_batches (id, partner_id, period_start, period_end, status) VALUES (?, ?, ?, ?, 'CONFIRMED')`)
-          .bind(batchId, seller.id, `${ym}-01`, periodEnd),
-        env.DB.prepare(`UPDATE partner_settlement_batches SET gross_minor = gross_minor + ?, commission_minor = commission_minor + ?, payout_minor = payout_minor + ? WHERE id = ?`)
-          .bind(Number(before.gross_amount_minor) || 0, Number(before.commission_amount_minor) || 0, remaining, batchId),
-        env.DB.prepare(`UPDATE marketplace_order_settlements SET payout_batch_id = ? WHERE id = ?`).bind(batchId, id),
-      ]);
-    }
+    await completeSettlement(env, { ...before, settled_at: now, payout_method: payoutMethod, payout_reference: payoutReference, recovery_deducted_minor: deducted }, { deducted, remaining, takes, repair: false });
     await audit(env, admin.id, 'MARKETPLACE_SETTLEMENT_PAYOUT', 'SETTLEMENT', id, { from: before.settlement_status, to: 'SETTLED', settled_at: now, payoutMethod, payoutReference, grossMinor: before.seller_payout_minor, recoveryDeductedMinor: deducted, netMinor: remaining });
 
     return json({
       success: true,
+      repaired: false,
       message: deducted > 0
         ? `정산 지급이 확정 기록되었습니다. 미환수금 ${deducted.toLocaleString('ko-KR')}원이 차감되어 실지급액은 ${remaining.toLocaleString('ko-KR')}원입니다. 실제 이체는 은행에서 별도로 진행해 주세요.`
         : '정산 지급이 확정 기록되었습니다. 실제 이체는 은행에서 별도로 진행해 주세요.',

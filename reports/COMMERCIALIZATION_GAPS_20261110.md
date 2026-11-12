@@ -115,12 +115,12 @@
 
 ### 돈 정합·경합
 
-70. `booking-service.ts:675` — Toss confirm 키가 confirm_{bookingId} 고정. paymentKey 변경 재시도 거부 → 시도별 키 [S]
-71. `booking-service.ts:796` — 정산은 paid_minor(할인후) vs 원장은 총액기준. 할인주문마다 불일치 → 단일기준(총액) [S]
-72. `marketplace.ts:81,98` — SETTLED 기록과 배치롤업이 분리. 사이 크래시 시 복구불가(재시도 409) → 단일배치/보정잡 [M]
-73. `booking-service.ts:840,872` — PENDING 환불 가드 없이 INSERT, 절대값 기록 → 중복/오기 위험 → 가드+상대증감 [M]
-74. `booking-service.ts:858` — 환불 UNKNOWN은 attempts만 증가, PG 조회 없음. 블라인드 재시도 → 환불조회+어드민 표시 [M]
-75. 코인 적립경로 전무(복원/보상/수동만) → 적립규칙 구현 또는 문구 삭제 [M]
+[x] 70. `booking-service.ts:675` — Toss confirm 키가 confirm_{bookingId} 고정. paymentKey 변경 재시도 거부 → 시도별 키 [S] 완료 (P2a / confirm_{paymentId} 시도별 키 + 샌드박스 멱등키 강제(Toss 동형). 기존 decline→재시도 테스트가 입증. 레드드릴: 구 키 복원 시 402 실패 확인 후 복원·녹색)
+[x] 71. `booking-service.ts:796` — 정산은 paid_minor(할인후) vs 원장은 총액기준. 할인주문마다 불일치 → 단일기준(총액) [S] 완료 (P2a / issue 양 경로 정산 기준을 gross(paid+할인)로 통일. 원장 PROMOTION_EXPENSE 다리와 일치. E2E #71 쿠폰→gross 분할 assert)
+[x] 72. `marketplace.ts:81,98` — SETTLED 기록과 배치롤업이 분리. 사이 크래시 시 복구불가(재시도 409) → 단일배치/보정잡 [M] 완료 (P2a / completeSettlement 멱등 추출(장부 사전확인·조건부 환수적용·결정적 배치링크·재계산 롤업) + SETTLED 미완성 시 {repaired:true} 보정 분기(완성은 기존 409 유지). 부분차감도 applied_settlement_id 추적. E2E #72 고아보정+부분추적)
+[x] 73. `booking-service.ts:840,872` — PENDING 환불 가드 없이 INSERT, 절대값 기록 → 중복/오기 위험 → 가드+상대증감 [M] 완료 (P2a / 0039 예약당 PENDING 1건 유니크(409 REFUND_IN_PROGRESS) + 적용 배치 PENDING 가드 + payments/bookings 상대증감 + 외부동기화 낙관락(충돌 시 covered면 ALREADY_APPLIED) + 배치 후 void 재확인. E2E #73 동시시작 단일화)
+[x] 74. `booking-service.ts:858` — 환불 UNKNOWN은 attempts만 증가, PG 조회 없음. 블라인드 재시도 → 환불조회+어드민 표시 [M] 완료 (P2a / UNKNOWN 시 provider.lookup → CANCELED 커버 시 즉시 완료(transactionKey 기록), 아니면 attempts+1 + PG_LOOKUP 노트. 샌드박스 refundghost/refundlost. GET /api/v1/admin/refunds 목록(status 필터·last_error). E2E #74 양 시나리오)
+[x] 75. 코인 적립경로 전무(복원/보상/수동만) → 적립규칙 구현 또는 문구 삭제 [M] 완료 (P2a / 문구 정직 확인(faq 준비 중·help/rewards 이벤트·고객지원=어드민 수동) 후 자동적립 없이 정책 확정. E2E #75 어드민 지급→잔액+ADMIN_ADJUSTMENT 원장행)
 
 ### 인덱스·무결성
 

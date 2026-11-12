@@ -57,6 +57,16 @@ npx wrangler d1 execute ota_production --remote --command "SELECT id, adapter, i
 > npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT COUNT(*) FROM feature_flags) AS flags, (SELECT COUNT(*) FROM feature_flags WHERE key IN ('ESIM','TRAVEL_INSURANCE','AI_TRANSLATION','REALTIME_INVENTORY_SYNC','AUTO_BOOKING_CONFIRMATION','PARTNER_AUTO_DISPATCH','AUTO_BOOKING_DISPATCH','AUTO_CANCEL_REFUND','AUTO_SETTLEMENT','AUTO_PARTNER_SETTLEMENT','AUTO_SUPPLIER_SETTLEMENT','SUPPLIER_API_INTEGRATION')) AS theater, (SELECT COUNT(*) FROM feature_flags WHERE key = 'PARTNER_SELF_PRODUCT_REGISTRATION') AS selfreg, (SELECT name FROM sqlite_master WHERE name = 'cron_heartbeats') AS heartbeat;"
 > # 기대: flags 13, theater 0, selfreg 1, heartbeat cron_heartbeats
 > ```
+>
+> 0039(환불 단일화) 주의: 예약당 PENDING 환불 1건 강제 유니크 인덱스가
+> 생긴다. 적용 전 중복 PENDING이 있으면 인덱스 생성 자체가 실패하므로
+> 반드시 먼저 해소한다(한 건이 끝날 때까지 기다리거나 중복분을 만료).
+> 이후 동시 환불 시도는 409 REFUND_IN_PROGRESS로 거부된다.
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT booking_id, COUNT(*) c FROM refunds WHERE status = 'PENDING' GROUP BY booking_id HAVING c > 1;"
+> # 기대: 0행
+> ```
 
 ## 1. 판매주체 ACTIVE (사업자 정보 필요)
 
