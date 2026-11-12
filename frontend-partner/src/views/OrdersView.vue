@@ -21,11 +21,15 @@ const STATUS_GROUPS = [
   { id: 'ALL', label: '전체 주문', statuses: [] as string[] },
   { id: 'AWAITING', label: '결제 대기', statuses: ['AWAITING_PAYMENT'] },
   { id: 'ACTIONABLE', label: '확정 대기', statuses: ['SUPPLIER_BOOKING_PENDING', 'PAYMENT_AUTHORIZED'] },
+  { id: 'MANUAL', label: '검토 필요', statuses: ['MANUAL_REVIEW_REQUIRED'] },
   { id: 'DONE', label: '확정 완료', statuses: ['SUPPLIER_CONFIRMED', 'VOUCHER_ISSUED', 'TICKETED'] },
   { id: 'DEAD', label: '취소·환불', statuses: ['CANCELLED', 'REFUNDED', 'FAILED', 'EXPIRED', 'REFUND_PENDING', 'CANCELLATION_REQUESTED'] }
 ]
 
 const TERMINAL = new Set(['SUPPLIER_CONFIRMED', 'VOUCHER_ISSUED', 'TICKETED', 'CANCELLED', 'REFUNDED', 'FAILED', 'EXPIRED', 'REFUND_PENDING', 'CANCELLATION_REQUESTED'])
+// #86: confirm only runs from SUPPLIER_BOOKING_PENDING (paid + legal edge).
+// Anything else 409s server-side, so the button stays hidden instead of failing.
+const CONFIRMABLE = new Set(['SUPPLIER_BOOKING_PENDING'])
 
 const orders = ref<OrderRow[]>([])
 const loading = ref(false)
@@ -61,6 +65,10 @@ function go(p: number) {
 }
 
 const actionable = (o: OrderRow) => !TERMINAL.has(o.status)
+const confirmable = (o: OrderRow) => CONFIRMABLE.has(o.status)
+// Reject on an unpaid order has no legal edge (AWAITING -> FAILED does not
+// exist), so it would 409 like confirm did — unpaid orders simply expire.
+const rejectable = (o: OrderRow) => o.status !== 'AWAITING_PAYMENT'
 
 function badge(status: string) {
   if (['SUPPLIER_CONFIRMED', 'VOUCHER_ISSUED', 'TICKETED'].includes(status)) return 'bg-success-soft text-success'
@@ -246,8 +254,10 @@ onMounted(() => {
               </td>
               <td class="!text-right">
                 <span v-if="!actionable(o)" class="text-[11px] text-ink-subtle">처리 완료</span>
+                <span v-else-if="!confirmable(o) && !rejectable(o)" class="text-[11px] text-ink-subtle">결제 대기 중</span>
                 <span v-else class="space-x-1.5">
                   <button
+                    v-if="confirmable(o)"
                     type="button"
                     :disabled="actionLoading === o.id"
                     class="rounded-lg bg-success px-2.5 py-1 text-[11px] font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
@@ -256,6 +266,7 @@ onMounted(() => {
                     {{ actionLoading === o.id ? '처리 중...' : '예약 확정' }}
                   </button>
                   <button
+                    v-if="rejectable(o)"
                     type="button"
                     :disabled="actionLoading === o.id"
                     class="rounded-lg border border-danger/30 bg-danger-soft px-2.5 py-1 text-[11px] font-bold text-danger transition hover:opacity-80 disabled:opacity-50"

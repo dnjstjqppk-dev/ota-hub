@@ -5,7 +5,7 @@
  * 2) traveler & contact info -> booking (idempotent)
  * 3) payment via the configured PG -> real booking status page
  */
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '~/stores/auth'
 import { useCurrencyStore } from '~/stores/currency'
@@ -52,6 +52,34 @@ let timer: any
 const contact = ref({ name: auth.user?.fullName || '', email: auth.user?.email || '', phone: auth.user?.phoneNumber || '' })
 const travelers = ref<any[]>([])
 const specialRequests = ref('')
+// #88: requested slot carried from the activity detail (?slotStart=HH:MM).
+// A labelled request, never a reservation — atomic slot booking is #104.
+const slotStart = ref(domain === 'ACTIVITY' && /^([01]\d|2[0-3]):[0-5]\d$/.test(String(q.slotStart || '')) ? String(q.slotStart) : '')
+if (slotStart.value && !specialRequests.value) specialRequests.value = `[요청 시간대: ${slotStart.value} — 확정 아님] `
+// #92: saved travelers fill a row (passport number stays manual: the API
+// only ever returns it masked).
+const savedTravelers = ref<any[]>([])
+let savedLoaded = false
+async function loadSavedTravelers() {
+  if (savedLoaded) return
+  savedLoaded = true
+  try {
+    const r = await apiFetch('/user/passengers')
+    if (r.ok && Array.isArray((r.data as any).passengers)) savedTravelers.value = (r.data as any).passengers
+  } catch { savedTravelers.value = [] }
+}
+watch(step, (s) => { if (s === 'travelers') loadSavedTravelers() })
+function applySaved(i: number, id: string) {
+  const p = savedTravelers.value.find((x: any) => x.id === id)
+  const t = travelers.value[i]
+  if (!p || !t) return
+  t.lastNameEn = p.last_name_en || ''
+  t.firstNameEn = p.first_name_en || ''
+  t.birthDate = p.birth_date || ''
+  t.gender = p.gender || t.gender
+  t.nationality = p.nationality || t.nationality
+  t.passportExpiry = p.passport_expiry || ''
+}
 // A3: three mandatory transaction consents, each pinned to the current legal version from /legal.
 const agreeRefund = ref(false)
 const agreePrivacyTx = ref(false)
@@ -312,8 +340,21 @@ onBeforeUnmount(() => clearInterval(timer))
 
           <h2 class="mt-7 text-lg font-bold text-ink">{{ perPersonTravelers ? '탑승객·여행자 정보' : '대표 이용자' }}</h2>
           <p class="mt-1 text-sm text-ink-muted">영문 성과 이름은 {{ isFlight ? '여권과 똑같이' : '신분증과 똑같이' }} 입력해 주세요.</p>
+          <p v-if="slotStart" class="mt-2 inline-block rounded-lg bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary">요청 시간대 {{ slotStart }} · 확정 아님</p>
           <div v-for="(t, i) in travelers" :key="i" class="mt-3 rounded-2xl bg-surface-sunken p-4">
-            <p class="mb-3 text-sm font-semibold text-ink">{{ i + 1 }}. {{ t.type === 'ADULT' ? '성인' : t.type === 'CHILD' ? '아동' : '유아' }}</p>
+            <div class="mb-3 flex items-center justify-between gap-2">
+              <p class="text-sm font-semibold text-ink">{{ i + 1 }}. {{ t.type === 'ADULT' ? '성인' : t.type === 'CHILD' ? '아동' : '유아' }}</p>
+              <select
+                v-if="savedTravelers.length && step === 'travelers'"
+                class="max-w-44 truncate rounded-lg border border-line bg-surface px-2 py-1.5 text-xs text-ink"
+                aria-label="저장한 여행자 불러오기"
+                @change="applySaved(i, ($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = ''"
+              >
+                <option value="">불러오기…</option>
+                <option v-for="p in savedTravelers" :key="p.id" :value="p.id">{{ p.name_ko }} · {{ p.last_name_en }} {{ p.first_name_en }}</option>
+              </select>
+            </div>
+            <p v-if="savedTravelers.length && step === 'travelers'" class="-mt-1 mb-2 text-2xs text-ink-subtle">여권번호는 보안상 직접 입력해 주세요.</p>
             <div class="grid gap-3 sm:grid-cols-2">
               <label><span class="field-label">영문 성</span><input v-model="t.lastNameEn" :disabled="step === 'payment'" placeholder="예: KIM" autocomplete="family-name" :class="[FIELD, 'uppercase']" :data-testid="`t${i}-last`" /></label>
               <label><span class="field-label">영문 이름</span><input v-model="t.firstNameEn" :disabled="step === 'payment'" placeholder="예: MINJI" autocomplete="given-name" :class="[FIELD, 'uppercase']" :data-testid="`t${i}-first`" /></label>

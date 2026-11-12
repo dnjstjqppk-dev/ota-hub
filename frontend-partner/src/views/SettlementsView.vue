@@ -39,7 +39,6 @@ const summary = ref({
   totalGrossKrw: 0,
   totalCommissionKrw: 0,
   totalNetPayoutKrw: 0,
-  pendingPayoutKrw: 0,
   nextPayoutDate: '' as string | null,
   payoutBank: null as string | null
 })
@@ -63,35 +62,17 @@ const fetchSettlements = async () => {
     if (!batchRes.ok) throw new Error('정산 내역을 불러오지 못했습니다.')
     const json = await batchRes.json()
     batches.value = json.batches || []
+    // #93: one basis, always — the server's own-bookings totals. The old code
+    // swapped to a marketplace-rows-only sum whenever any existed, so the same
+    // cards meant different populations depending on the data.
     if (json.summary) {
       summary.value = {
         totalGrossKrw: json.summary.totalGrossKrw || 0,
         totalCommissionKrw: json.summary.totalCommissionKrw || 0,
         totalNetPayoutKrw: json.summary.totalNetPayoutKrw || 0,
-        pendingPayoutKrw: summary.value.pendingPayoutKrw,
         nextPayoutDate: json.summary.nextPayoutDate || null,
         payoutBank: json.summary.payoutBank || null
       }
-    }
-
-    // Recalculate summary if live order settlements exist
-    if (orderSettlements.value.length > 0) {
-      let g = 0
-      let c = 0
-      let p = 0
-      let pending = 0
-      for (const s of orderSettlements.value) {
-        g += Number(s.gross_amount_minor || 0)
-        c += Number(s.commission_amount_minor || 0)
-        p += Number(s.seller_payout_minor || 0)
-        if (s.settlement_status === 'PENDING') {
-          pending += Number(s.seller_payout_minor || 0)
-        }
-      }
-      summary.value.totalGrossKrw = g
-      summary.value.totalCommissionKrw = c
-      summary.value.totalNetPayoutKrw = p
-      summary.value.pendingPayoutKrw = pending
     }
   } catch (e: any) {
     error.value = e.message || '정산 내역을 불러오지 못했습니다.'

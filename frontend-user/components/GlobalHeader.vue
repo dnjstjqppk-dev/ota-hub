@@ -87,7 +87,7 @@ onBeforeUnmount(() => {
           :to="c.to"
           :class="['relative rounded-lg px-3 py-2 text-sm font-semibold transition-colors', isActive(c.to) ? 'text-primary' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink']"
         >
-          {{ c.label }}
+          {{ locale.t(c.key) }}
           <span v-if="isActive(c.to)" class="absolute inset-x-3 -bottom-[13px] h-0.5 rounded-full bg-primary" />
         </NuxtLink>
         <div class="relative">
@@ -102,7 +102,7 @@ onBeforeUnmount(() => {
           </button>
           <div v-if="pop === 'more'" role="menu" class="absolute left-0 top-full mt-2 w-64 animate-pop-in rounded-card border border-line bg-surface-raised p-2 shadow-pop">
             <NuxtLink v-for="c in secondary" :key="c.key" :to="c.to" role="menuitem" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-ink hover:bg-surface-sunken">
-              <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-soft text-primary"><AppIcon :name="c.icon" :size="18" /></span>{{ c.label }}
+              <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-soft text-primary"><AppIcon :name="c.icon" :size="18" /></span>{{ locale.t(c.key) }}
             </NuxtLink>
             <div class="my-2 h-px bg-line" />
             <NuxtLink v-for="l in DISCOVER_LINKS" :key="l.to" :to="l.to" role="menuitem" class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink-muted hover:bg-surface-sunken hover:text-ink">
@@ -197,7 +197,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <NuxtLink v-else :to="`/login?redirect=${encodeURIComponent(route.fullPath)}`" class="hidden h-10 items-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-ink transition-colors hover:bg-primary-hover md:flex">
-          로그인
+          {{ locale.t('login') }}
         </NuxtLink>
 
         <button type="button" class="flex h-10 w-10 items-center justify-center rounded-xl text-ink transition-colors hover:bg-surface-sunken lg:hidden" aria-label="전체 메뉴" :aria-expanded="drawer" @click="drawer = true">
@@ -231,13 +231,13 @@ onBeforeUnmount(() => {
             </div>
             <div v-else class="flex items-center justify-between rounded-card bg-primary-soft p-4">
               <p class="text-sm font-medium text-ink">로그인하고 예약을 관리하세요</p>
-              <NuxtLink :to="`/login?redirect=${encodeURIComponent(route.fullPath)}`" class="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-ink">로그인</NuxtLink>
+              <NuxtLink :to="`/login?redirect=${encodeURIComponent(route.fullPath)}`" class="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-ink">{{ locale.t('login') }}</NuxtLink>
             </div>
 
             <p class="mb-3 mt-6 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">여행 상품</p>
             <div class="grid grid-cols-3 gap-2">
               <NuxtLink v-for="c in CATEGORIES" :key="c.key" :to="c.to" :class="['flex flex-col items-center gap-1.5 rounded-xl border px-1 py-3 text-xs font-semibold transition-colors', isActive(c.to) ? 'border-primary bg-primary-soft text-primary' : 'border-line text-ink hover:bg-surface-sunken']">
-                <AppIcon :name="c.icon" :size="22" />{{ c.label }}
+                <AppIcon :name="c.icon" :size="22" />{{ locale.t(c.key) }}
               </NuxtLink>
             </div>
 

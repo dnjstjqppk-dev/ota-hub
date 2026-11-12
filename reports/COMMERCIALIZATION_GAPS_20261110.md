@@ -136,15 +136,15 @@
 
 ### 프론트·어드민
 
-85. `admin/PricingView.vue:46` — FX 수정불가 표시 vs PUT 존재 → 수정폼 [S]
-86. `partner/OrdersView.vue:23-28` — AWAITING에 확정버튼(항상 409)+MANUAL 필터없음 → 버튼게이트+필터 [S]
-87. `partner/ProfileView.vue:54-60` — 항상 bank* 전송, STAFF 저장불가 → 변경분만 전송 [S]
-88. 슬롯 API 있는데 선택 UI 없음. 시간없는 판매 → 선택기 또는 API 제거 [M]
-89. `GlobalHeader.vue:145-155` — t() 호출 0인데 로케일 전환기. 가짜 i18n → 구현/제거 [S]
-90. `deals.vue:81-92` — 혜택값 숨김·"최대 W0" 표시 → 혜택 렌더·0 숨김 [S]
-91. `careers.vue:4-42` — 가짜 채용공고 4건+mailto → 삭제/실ATS [S]
-92. `checkout/index.vue:71-76` — 저장승객 미조회. 재입력 강제 → 선택기 [M]
-93. `partner/SettlementsView.vue:78-95` — 합계 기준이 조건부 전환. 불일치 금액 → 단일기준 [S]
+[x] 85. `admin/PricingView.vue:46` — FX 수정불가 표시 vs PUT 존재 → 수정폼 [S] 완료 (P2c / 행별 수정 입력+변경분 일괄 PUT 저장, 토스트. 자동갱신 미지원 문구는 유지)
+[x] 86. `partner/OrdersView.vue:23-28` — AWAITING에 확정버튼(항상 409)+MANUAL 필터없음 → 버튼게이트+필터 [S] 완료 (P2c / 확정은 SUPPLIER_BOOKING_PENDING에만(유일 합법 엣지), 거절은 미결제 제외(AWAITING→FAILED 엣지 없음), 미결제행 '결제 대기 중' 표시, MANUAL_REVIEW_REQUIRED 필터 추가)
+[x] 87. `partner/ProfileView.vue:54-60` — 항상 bank* 전송, STAFF 저장불가 → 변경분만 전송 [S] 완료 (P2c / 스냅샷 diff 전송+마스킹값 역쓰기 방지+미변경 안내. E2E #32-34에 스태프 연락처 단독 저장 200·bank키 403 보강)
+[x] 88. 슬롯 API 있는데 선택 UI 없음. 시간없는 판매 → 선택기 또는 API 제거 [M] 완료 (P2c / 선택기 채택: 상세 카드에 일자별 슬롯 칩(잔여석·매진 비활성)+선택을 checkout ?slotStart로 전달, 체크아웃에 '요청 시간대·확정 아님' 표시+요청사항 프리필. 원자적 슬롯확정은 #104 범위)
+[x] 89. `GlobalHeader.vue:145-155` — t() 호출 0인데 로케일 전환기. 가짜 i18n → 구현/제거 [S] 완료 (P2c / 구현: 기존 4개원어 사전을 네비·로그인 버튼에 연결(t(c.key)), things-to-do 키 4개원어 추가. 유닛 locale.test.mjs(키 전수 해석·폴백))
+[x] 90. `deals.vue:81-92` — 혜택값 숨김·"최대 W0" 표시 → 혜택 렌더·0 숨김 [S] 완료 (P2c / 혜택 본문(%/원)+0인 min/max 구간 숨김. 유닛 deals.test.mjs)
+[x] 91. `careers.vue:4-42` — 가짜 채용공고 4건+mailto → 삭제/실ATS [S] 완료 (P2c / 가짜 4건·mailto 삭제, 정직한 빈 상태+1:1 문의 링크로 교체(ATS 없음, 라우트 유지))
+[x] 92. `checkout/index.vue:71-76` — 저장승객 미조회. 재입력 강제 → 선택기 [M] 완료 (P2c / 행별 저장승객 불러오기(이름·생년월일·성별·국적·여권만료 채움, 여권번호는 마스킹이라 직접입력 안내). 유닛 checkout-travelers.test.mjs)
+[x] 93. `partner/SettlementsView.vue:78-95` — 합계 기준이 조건부 전환. 불일치 금액 → 단일기준 [S] 완료 (P2c / 조건부 재계산 삭제, 서버 own-bookings 합계 단일 기준(라벨과 일치). 미사용 pendingPayoutKrw 제거)
 
 ### 보안 하드닝
 

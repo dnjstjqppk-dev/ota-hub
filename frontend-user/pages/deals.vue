@@ -27,6 +27,17 @@ const DISCOUNT_TYPE_LABEL: Record<string, string> = {
   FIXED_AMOUNT: '정액 할인'
 }
 const discountTypeLabel = (t: string) => DISCOUNT_TYPE_LABEL[t] || t
+// #90: the actual benefit (percent or KRW) plus only the bounds that apply —
+// a zero min/max bound is hidden instead of printed as ₩0.
+const benefitText = (p: Promotion) => p.discount_type === 'PERCENTAGE'
+  ? `${Number(p.discount_value).toLocaleString()}% 할인`
+  : `${Number(p.discount_value).toLocaleString()}원 할인`
+const boundText = (p: Promotion) => {
+  const parts: string[] = []
+  if (Number(p.min_order_amount_krw || 0) > 0) parts.push(`최소 주문금액 ₩${Number(p.min_order_amount_krw).toLocaleString()}`)
+  if (Number(p.max_discount_krw || 0) > 0) parts.push(`최대 ₩${Number(p.max_discount_krw).toLocaleString()} 할인`)
+  return parts.join(' · ')
+}
 
 const copyCouponCode = async (code: string) => {
   try {
@@ -84,9 +95,8 @@ onMounted(() => {
               {{ discountTypeLabel(p.discount_type) }}
             </span>
             <h3 class="font-black text-slate-900 text-lg">{{ p.title }}</h3>
-            <p class="text-xs text-slate-500">
-              최소 주문금액 ₩{{ Number(p.min_order_amount_krw || 0).toLocaleString() }} · 최대 ₩{{ Number(p.max_discount_krw || 0).toLocaleString() }} 할인
-            </p>
+            <p class="text-sm font-black text-orange-600">{{ benefitText(p) }}</p>
+            <p v-if="boundText(p)" class="text-xs text-slate-500">{{ boundText(p) }}</p>
             <div class="text-[11px] font-mono text-slate-400">
               유효기간: ~ {{ p.valid_until ? new Date(p.valid_until).toLocaleDateString() : '-' }}
             </div>

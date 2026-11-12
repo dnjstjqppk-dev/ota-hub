@@ -16,11 +16,16 @@ const bankName = ref('')
 const bankAccountNumber = ref('')
 const bankAccountHolder = ref('')
 const taxInvoiceEmail = ref('')
+// #87: snapshot at load so save sends only changed fields. Staff see a
+// masked account number, and any bank* key in the payload forces an
+// OWNER_ONLY 403 — always sending everything locked staff out of saving.
+const initial = ref<Record<string, string>>({})
 const loading = ref(false)
 const error = ref('')
 const saveLoading = ref(false)
 const saveSuccess = ref(false)
 const saveError = ref('')
+const saveInfo = ref('')
 
 const uploadState = ref<Record<string, string>>({})
 const uploadFile = async (purpose: 'BUSINESS_CERT' | 'BANK_CERT', ev: Event) => {
@@ -70,6 +75,13 @@ const fetchProfile = async () => {
       bankAccountHolder.value = json.partner.profile.bank_account_holder || ''
       taxInvoiceEmail.value = json.partner.profile.tax_invoice_email || ''
     }
+    initial.value = {
+      contactPhone: contactPhone.value,
+      bankName: bankName.value,
+      bankAccountNumber: bankAccountNumber.value,
+      bankAccountHolder: bankAccountHolder.value,
+      taxInvoiceEmail: taxInvoiceEmail.value
+    }
   } catch (e: any) {
     error.value = e.message || '회사 정보를 불러오지 못했습니다.'
   } finally {
@@ -81,6 +93,27 @@ const handleSaveProfile = async () => {
   saveLoading.value = true
   saveSuccess.value = false
   saveError.value = ''
+  saveInfo.value = ''
+  const current: Record<string, string> = {
+    contactPhone: contactPhone.value,
+    bankName: bankName.value,
+    bankAccountNumber: bankAccountNumber.value,
+    bankAccountHolder: bankAccountHolder.value,
+    taxInvoiceEmail: taxInvoiceEmail.value
+  }
+  const body: Record<string, string> = {}
+  for (const [k, v] of Object.entries(current)) {
+    if (v === (initial.value[k] ?? '')) continue
+    // Never write a masked value back: staff see ****+last4, which must not
+    // overwrite the real account number.
+    if (k === 'bankAccountNumber' && v.includes('*')) continue
+    body[k] = v
+  }
+  if (!Object.keys(body).length) {
+    saveLoading.value = false
+    saveInfo.value = '바뀐 내용이 없어요.'
+    return
+  }
   try {
     const token = partnerToken()
     const res = await fetch(apiUrl('/partner/profile'), {
@@ -90,13 +123,7 @@ const handleSaveProfile = async () => {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({
-        contactPhone: contactPhone.value,
-        bankName: bankName.value,
-        bankAccountNumber: bankAccountNumber.value,
-        bankAccountHolder: bankAccountHolder.value,
-        taxInvoiceEmail: taxInvoiceEmail.value
-      })
+      body: JSON.stringify(body)
     })
 
     if (res.ok) {
@@ -147,6 +174,7 @@ onMounted(() => {
     </div>
 
     <div v-if="saveError" class="rounded-2xl bg-danger-soft px-4 py-3 text-xs font-medium text-danger" role="alert">{{ saveError }}</div>
+    <div v-if="saveInfo" class="rounded-2xl bg-surface-sunken px-4 py-3 text-xs font-medium text-ink-muted" role="status">{{ saveInfo }}</div>
 
     <form v-if="!loading" class="card space-y-6 p-6 text-xs sm:p-8" @submit.prevent="handleSaveProfile">
       <div class="space-y-4">

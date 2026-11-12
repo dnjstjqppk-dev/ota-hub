@@ -553,6 +553,11 @@ test("#32/#33/#34: staff blocked from keys/webhook/bank; owner allowed", async (
   assert.ok(!staffView.includes("987-65"), `staff view masked: ${staffView}`);
   assert.ok(staffView.endsWith("4321"), `mask keeps last 4: ${staffView}`);
   assert.equal((await api("GET", "/api/v1/partner/profile", { token: O })).data.partner.profile.bank_account_number, acct);
+  // #87: the profile form sends only changed fields, so staff can save contact
+  // info (no bank keys, no owner gate); a bank key still forces OWNER_ONLY.
+  assert.equal((await api("PATCH", "/api/v1/partner/profile", { token: S, body: { contactPhone: "02-9999-0000" } })).status, 200);
+  assert.equal(sql(`SELECT contact_phone AS v FROM partners WHERE id = '${P.id}'`)[0].v, "02-9999-0000");
+  assert.equal((await api("PATCH", "/api/v1/partner/profile", { token: S, body: { contactPhone: "02-9999-0001", bankName: "X" } })).data.code, "OWNER_ONLY");
 });
 
 test("#36: public marketplace catalog hides cost/margin/sourcing fields", async () => {
