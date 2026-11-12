@@ -8,6 +8,7 @@
  */
 import type { Env } from "../env.ts";
 import { newId } from "../lib/crypto.ts";
+import { audit } from "../lib/auth.ts";
 
 export function isEmailConfigured(env: Env): boolean {
   return (env.RESEND_API_KEY || "").trim().length > 0;
@@ -140,6 +141,9 @@ export async function flushOutbox(env: Env, limit?: number): Promise<{ sent: num
     const rendered = renderOutboxEmail(r.template, r.payload_json, site);
     if (!rendered) {
       await env.DB.prepare("UPDATE notification_outbox SET status = 'FAILED', attempts = attempts + 1 WHERE id = ?").bind(r.id).run();
+      // #120: dead letters audit instead of dying silently — an unrenderable
+      // template is an ops bug, not a retryable send.
+      await audit(env, "system", "EMAIL_DEAD_LETTER", "OUTBOX", r.id, { template: r.template, reason: "UNRENDERABLE" });
       failed++;
       continue;
     }
@@ -148,8 +152,11 @@ export async function flushOutbox(env: Env, limit?: number): Promise<{ sent: num
       sent++;
     } else {
       const attempts = Number(r.attempts || 0) + 1;
+      const terminal = attempts >= MAX_ATTEMPTS;
       await env.DB.prepare("UPDATE notification_outbox SET status = ?, attempts = ? WHERE id = ?")
-        .bind(attempts >= MAX_ATTEMPTS ? "FAILED" : "PENDING", attempts, r.id).run();
+        .bind(terminal ? "FAILED" : "PENDING", attempts, r.id).run();
+      // #120: retried sends die loudly on the final attempt.
+      if (terminal) await audit(env, "system", "EMAIL_DEAD_LETTER", "OUTBOX", r.id, { template: r.template, reason: "RETRIES_EXHAUSTED", attempts });
       failed++;
     }
   }

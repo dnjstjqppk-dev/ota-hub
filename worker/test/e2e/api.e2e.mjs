@@ -3144,6 +3144,10 @@ test("#99: webhook dedupe rows prune after 30 days", async () => {
 test("#101: API responses carry a locked-down CSP", async () => {
   const res = await fetch(BASE + "/api/v1/health");
   assert.ok(String(res.headers.get("content-security-policy") || "").includes("default-src 'none'"));
+  // The locked-down policy must never coat the asset shell path (P2f
+  // correction) — whatever status the local assets return.
+  const shell = await fetch(BASE + "/");
+  assert.ok(!String(shell.headers.get("content-security-policy") || "").includes("default-src 'none'"), "portal shells stay loadable");
 });
 
 test("#102: PII list views are audited", async () => {

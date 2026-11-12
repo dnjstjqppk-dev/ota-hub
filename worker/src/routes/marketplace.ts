@@ -3,7 +3,7 @@ import { HttpError, json, readJson, str } from '../lib/http.ts';
 import { audit, requireAdmin, requirePartner } from '../lib/auth.ts';
 import { getMarketplaceFinancialSummary } from '../services/marketplace-service.ts';
 import { isFeatureEnabled } from '../services/feature-flag-service.ts';
-import { settlementPayoutStmts } from '../services/booking-service.ts';
+import { moneyLog, settlementPayoutStmts } from '../services/booking-service.ts';
 import { parseRooms } from './partner.ts';
 import { decryptPiiField, newId } from '../lib/crypto.ts';
 
@@ -225,6 +225,7 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
         throw new HttpError(409, 'SETTLEMENT_NOT_PAYABLE', `지급할 수 없는 정산 상태입니다. (${before.settlement_status})`);
       }
       await audit(env, admin.id, 'MARKETPLACE_SETTLEMENT_REPAIR', 'SETTLEMENT', id, { settled_at: before.settled_at, payout: repaired.payout });
+      moneyLog('settlement.repaired', { settlementId: id, bookingId: before.booking_id, ...repaired.payout });
       return json({
         success: true,
         repaired: true,
@@ -277,6 +278,7 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
       throw new HttpError(409, 'SETTLEMENT_NOT_PAYABLE', `지급할 수 없는 정산 상태입니다. (${before.settlement_status})`);
     }
     await completeSettlement(env, { ...before, settled_at: now, payout_method: payoutMethod, payout_reference: payoutReference, recovery_deducted_minor: deducted }, { deducted, remaining, takes, repair: false });
+    moneyLog('settlement.paid', { settlementId: id, bookingId: before.booking_id, grossMinor: Number(before.seller_payout_minor) || 0, recoveryDeductedMinor: deducted, netMinor: remaining, method: payoutMethod });
     await audit(env, admin.id, 'MARKETPLACE_SETTLEMENT_PAYOUT', 'SETTLEMENT', id, { from: before.settlement_status, to: 'SETTLED', settled_at: now, payoutMethod, payoutReference, grossMinor: before.seller_payout_minor, recoveryDeductedMinor: deducted, netMinor: remaining });
 
     return json({

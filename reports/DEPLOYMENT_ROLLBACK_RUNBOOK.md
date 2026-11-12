@@ -131,7 +131,7 @@ per-partner rows, not a worker secret. Rotate each real secret at its source:)
 4. Run the post-deploy smoke and the read-only verify to ensure zero disruption:
    ```bash
    node scripts/smoke-production.js
-   TEST_ADMIN_PASSWORD='...' VERIFY_ALLOW_SKIP=1 node scripts/verify-production.js
+   BASE_URL=https://ota-hub.dnjstjqppk.workers.dev VERIFY_ACK_PROD=1 TEST_ADMIN_PASSWORD='...' VERIFY_ALLOW_SKIP=1 node scripts/verify-production.js
    ```
 
 ---
@@ -142,6 +142,7 @@ per-partner rows, not a worker secret. Rotate each real secret at its source:)
 - [ ] Admin RBAC verified: Non-admin users cannot access `/api/v1/admin/*`.
 - [ ] IDOR check: Users cannot view bookings belonging to others.
 - [ ] Webhook HMAC verification active: Invalid signatures return `401/403`.
-- [ ] Run full automated test suite: `node scripts/verify-production.js` (Must be 22/22 PASS).
+- [ ] Run full automated test suite against production with explicit ack (Must be 41/41 PASS):
+  `BASE_URL=https://ota-hub.dnjstjqppk.workers.dev VERIFY_ACK_PROD=1 TEST_ADMIN_PASSWORD='...' node scripts/verify-production.js`.
 - [ ] SRE incident postmortem filed within 24 hours.
 

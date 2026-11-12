@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { toMinor, percentOf, convertMinor } from "../../src/domain/money.ts";
 import { canTransition, assertTransition, BOOKING_STATUSES, TERMINAL_STATUSES, allowedNext } from "../../src/domain/state-machine.ts";
 import { computeQuote, computeCancellation, QuoteError, type CatalogProduct, type Promotion } from "../../src/domain/pricing.ts";
-import { voucherCode } from "../../src/services/booking-service.ts";
+import { moneyLog, voucherCode } from "../../src/services/booking-service.ts";
 
 const NOW = new Date("2026-11-05T03:00:00Z");
 
@@ -86,6 +86,24 @@ test("#104: slot pricing overrides the catalog with adult/child lines", () => {
   const plain = computeQuote(act, params, null, NOW);
   assert.ok(plain.lines.some((l) => l.code === "PER_PERSON"));
   assert.equal(plain.baseMinor, 90000);
+});
+
+test("#119: money events log one JSON line with service and event", () => {
+  const lines: string[] = [];
+  const orig = console.log;
+  console.log = ((...a: any[]) => { lines.push(a.join(" ")); }) as any;
+  try {
+    moneyLog("refund.succeeded", { bookingId: "b1", amountMinor: 100 });
+  } finally {
+    console.log = orig;
+  }
+  assert.equal(lines.length, 1);
+  const row = JSON.parse(lines[0]);
+  assert.equal(row.svc, "money");
+  assert.equal(row.event, "refund.succeeded");
+  assert.equal(row.bookingId, "b1");
+  assert.equal(row.amountMinor, 100);
+  assert.ok(typeof row.ts === "string");
 });
 
 test("#105: voucher codes are long, prefixed, and unique", () => {

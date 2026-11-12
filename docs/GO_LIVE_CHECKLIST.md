@@ -1,11 +1,13 @@
 # Go-Live Checklist — PG 계약 후 바로 장사하기
 
-> 전제: `main` 최신이 CI로 배포되어 있고, `node scripts/verify-production.js` 41/41이다.
+> 전제: `main` 최신이 CI로 배포되어 있고, 운영 verify 41/41이다:
+> `BASE_URL=https://ota-hub.dnjstjqppk.workers.dev VERIFY_ACK_PROD=1 TEST_ADMIN_PASSWORD='...' node scripts/verify-production.js`.
 > (기본 엄격 모드: 스킵이 있으면 실패. T41 실정산 없이 통과하려면 `VERIFY_ALLOW_SKIP=1`,
 > 실정산까지 수행하려면 `VERIFY_LIVE_SETTLE=1`을 붙인다. 운영 기본값은 읽기전용 변형
-> (T34/T36/T40은 스테이징 또는 `VERIFY_ALLOW_MUTATION=1`에서만 실제 변경). 어드민 비번은
-> `TEST_ADMIN_PASSWORD` 환경변수로 전달. CI는 유닛·E2E·타입체크·마이그레이션 검증을 통과해야 배포하고,
-> 배포 직후 무인증 스모크(`scripts/smoke-production.js`)를 실행한다.)
+> (T34/T36/T40은 스테이징 또는 `VERIFY_ALLOW_MUTATION=1`에서만 실제 변경). 스크립트 기본
+> 타깃은 로컬 개발 서버라 운영 실행은 반드시 BASE_URL+VERIFY_ACK_PROD 명시(미확인 시 거부).
+> 실행 후 생성된 탐색 계정은 자동 정리(탈퇴 불가분은 리포트로 보고). CI는 유닛·E2E·타입체크·
+> 마이그레이션 검증을 통과해야 배포하고, 배포 직후 무인증 스모크(`scripts/smoke-production.js`)를 실행한다.)
 > 아래 순서는 의존성 순서다. 각 단계의 확인 명령을 통과해야 다음으로 간다.
 
 ## 0. 직영 공급사 준비 (코드 배포 후 1회)

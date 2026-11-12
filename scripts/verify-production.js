@@ -17,7 +17,11 @@
 
 const crypto = require('crypto');
 
-const BASE_URL = process.env.BASE_URL || 'https://ota-hub.dnjstjqppk.workers.dev';
+const PROD_HOST = 'ota-hub.dnjstjqppk.workers.dev';
+// #114: the suite used to default to PRODUCTION with no confirmation. There
+// is no staging worker, so the safe default is the local dev server; reaching
+// production requires naming it AND acknowledging it (env or TTY prompt).
+const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:8799';
 
 // #48/#53 (6f): this suite used to count skipped tests as passes (fake 41/41)
 // and mutated production (flag toggles, draft publishes, product rows).
@@ -26,11 +30,33 @@ const BASE_URL = process.env.BASE_URL || 'https://ota-hub.dnjstjqppk.workers.dev
 //     by default; full mutation runs on non-prod targets, or on production
 //     only with VERIFY_ALLOW_MUTATION=1. T41's live settle stays separately
 //     gated behind VERIFY_LIVE_SETTLE=1 (real money).
-const isProdTarget = ['ota-hub.dnjstjqppk.workers.dev'].some((h) => BASE_URL.includes(h));
+const isProdTarget = [PROD_HOST].some((h) => BASE_URL.includes(h));
 const ALLOW_MUTATION = process.env.VERIFY_ALLOW_MUTATION === '1' || (!isProdTarget && process.env.VERIFY_ALLOW_MUTATION !== '0');
 const ALLOW_SKIP = process.env.VERIFY_ALLOW_SKIP === '1';
 
+async function confirmProdTarget() {
+  if (!isProdTarget) return;
+  if (process.env.VERIFY_ACK_PROD === '1') {
+    console.log('Production target explicitly acknowledged via VERIFY_ACK_PROD=1.\n');
+    return;
+  }
+  if (!process.stdin.isTTY) {
+    console.error(`Refusing to run against PRODUCTION (${BASE_URL}) without acknowledgement.`);
+    console.error('Re-run with VERIFY_ACK_PROD=1, or point BASE_URL at a dev server.');
+    process.exit(2);
+  }
+  const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise((resolve) => rl.question(`Type PROCEED to run 41 live tests against PRODUCTION (${BASE_URL}): `, resolve));
+  rl.close();
+  if (String(answer).trim() !== 'PROCEED') {
+    console.error('Aborted: production run not confirmed.');
+    process.exit(2);
+  }
+  console.log('');
+}
+
 async function runVerificationSuite() {
+  await confirmProdTarget();
   console.log('==============================================================================');
   console.log('🚀 Running Production Live Security & E2E Verification Suite against:');
   console.log(`   ${BASE_URL}`);
@@ -1082,6 +1108,33 @@ async function runVerificationSuite() {
       throw new Error(`Invalid partner settlements response: ${JSON.stringify(ptnJson)}`);
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // CLEANUP (#114): withdraw the explorer users created above. Best effort —
+  // users with live bookings cannot withdraw (409) and are reported, never
+  // force-deleted. (Partner fixtures have no self-delete endpoint; the suite
+  // uses pre-seeded partners, so none are created.)
+  // ---------------------------------------------------------------------------
+  const leftovers = [];
+  for (const [email, token] of [[userAEmail, userAToken], [userBEmail, userBToken]]) {
+    if (!token) continue;
+    try {
+      const w = await fetch(`${BASE_URL}/api/v1/auth/me/withdraw`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'verify-production cleanup' }),
+      });
+      if (!w.ok) leftovers.push(`${email} (withdraw HTTP ${w.status})`);
+    } catch (e) {
+      leftovers.push(`${email} (${e.message})`);
+    }
+  }
+  if (leftovers.length) {
+    console.log('Cleanup leftovers (manual review):');
+    for (const l of leftovers) console.log(`  leftover: ${l}`);
+  } else {
+    console.log('Cleanup: explorer users withdrawn.');
+  }
 
   // ---------------------------------------------------------------------------
   // SUMMARY

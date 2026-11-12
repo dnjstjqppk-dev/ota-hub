@@ -172,16 +172,16 @@
 [x] 109. E2E 0: PATCH flags/:key → 로컬 E2E+유닛 [M] 완료 (P2e / E2E는 #49/#50에서 이미 수행, 유닛 flags.test.mjs 신규(의존성 양방향·감사·무변경))
 [x] 110. 유닛 0: flag/idempotency/auth-rateLimit/RBAC/crypto/pagination → 집중 유닛 [M] 완료 (P2e / pagination·idempotency·rate-limit·rbac·flags 5종 신규+crypto 기존. _fakedb 공용)
 [x] 111. E2E: moments 승인경로·/admin/login 별칭 미검증 → E2E 또는 별칭삭제 [S] 완료 (P2e / 별칭은 기존 검증됨. E2E #111: 게시→차단→승인(featured)→차단→복원 전주기)
-112. `deploy.yml:53-54` — 게이트가 user만 빌드. 콘솔은 배포에서 실패 → 3포털 빌드 [S]
-113. `deploy.yml` — 프론트 타입체크/린트/감사/E2E 없음 → 포털별 게이트 [M]
-114. `verify-production.js:20,47,556` — 기본이 운영+확인없음+정리없음 → 스테이징+확인+정리 [S]
-115. `DATABASE_BACKUP_RECOVERY_REPORT.md:14` — 8테이블 주장 vs 50+·자동화없음 → 재작성+정기export+훈련 [M]
-116. `DEPLOYMENT_ROLLBACK_RUNBOOK.md:102` — 22/22 vs 실제 41 → 41/41 수정 [S]
-117. `flag-service.ts:41` — 미지정 키 true 반환(fail-open) → fail-closed+로그 [S]
+[x] 112. `deploy.yml:53-54` — 게이트가 user만 빌드. 콘솔은 배포에서 실패 → 3포털 빌드 [S] 완료 (P2f / 게이트를 `node scripts/build-all.js`로 교체. build-all 0)
+[x] 113. `deploy.yml` — 프론트 타입체크/린트/감사/E2E 없음 → 포털별 게이트 [M] 완료 (P2f / `npm audit --omit=dev --audit-level=critical` 4곳(root+3포털) 게이트 + 포털별 `test` 스크립트 + root `test`에 admin/partner 편입. unit 114/114)
+[x] 114. `verify-production.js:20,47,556` — 기본이 운영+확인없음+정리없음 → 스테이징+확인+정리 [S] 완료 (P2f / 기본 타깃을 로컬(:8799)로, 운영은 BASE_URL+VERIFY_ACK_PROD(또는 TTY PROCEED) 명시 시에만 + 탐색 계정 자동 정리(탈퇴 불가분은 리포트). 체크리스트·런북 호출식 갱신)
+[x] 115. `DATABASE_BACKUP_RECOVERY_REPORT.md:14` — 8테이블 주장 vs 50+·자동화없음 → 재작성+정기export+훈련 [M] 완료 (P2f / 보고서 재작성(70 실측) + `scripts/backup-d1.js`(export+테이블 대조+머니 테이블 행 확인) + `db-backup.yml` 주간 스케줄 + 로컬 드릴 실행(70/70 OK))
+[x] 116. `DEPLOYMENT_ROLLBACK_RUNBOOK.md:102` — 22/22 vs 실제 41 → 41/41 수정 [S] 완료 (P2f / 22/22→41/41 + 운영 호출식에 BASE_URL+VERIFY_ACK_PROD 반영)
+[x] 117. `flag-service.ts:41` — 미지정 키 true 반환(fail-open) → fail-closed+로그 [S] 완료 (P2f / 미지정 키 fail-closed + `UNKNOWN_FLAG:` warn + 유닛 뒤집음(기대 false). E2E 151/151 녹색으로 회귀 없음)
 [x] 118. FLIGHT 죽은 선행조건 → 완료 (6f에서 조기 해소 / 0038이 REALTIME 행 삭제 + `requires_flags='[]'` 정리. E2E #46이 빈 배열 검증)
-119. `index.ts:168,178` — 결제/환불/정산 실패 Sentry·구조로그 없음 → 캡처+로그 [M]
-120. `email-service.ts:26` — 환불/취소 템플릿 없음·5회후 침묵 FAILED → 템플릿+데드레터 알림 [M]
-121. admin/partner SPA 테스트 0건 → 핵심흐름 테스트 [M]
+[x] 119. `index.ts:168,178` — 결제/환불/정산 실패 Sentry·구조로그 없음 → 캡처+로그 [M] 완료 (P2f / `moneyLog` 구조 로그 8곳(결제 3·환불 3·정산 2) + 유닛(JSON 1행·svc/event). 예외는 기존 Sentry 전역 캐치)
+[x] 120. `email-service.ts:26` — 환불/취소 템플릿 없음·5회후 침묵 FAILED → 템플릿+데드레터 알림 [M] 완료 (P2f / 환불/취소 템플릿은 기존(C3) 확인·유닛 핀 + 데드레터 감사 신설(UNRENDERABLE·RETRIES_EXHAUSTED) + 유닛 2종)
+[x] 121. admin/partner SPA 테스트 0건 → 핵심흐름 테스트 [M] 완료 (P2f / SFC 3종(admin Pricing + partner Orders/Profile, 컴파일+행위) + 포털 test 스크립트 + root test 편입. unit 114/114)
 
 ### Go·문구·API 표면
 

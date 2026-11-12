@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isEmailConfigured, renderOutboxEmail } from "../../src/services/email-service.ts";
+import { flushOutbox, isEmailConfigured, renderOutboxEmail } from "../../src/services/email-service.ts";
+import { fakeDb } from "./_fakedb.ts";
 
 test("isEmailConfigured: only a non-empty RESEND_API_KEY counts", () => {
   assert.equal(isEmailConfigured({} as any), false);
@@ -26,6 +27,57 @@ test("booking templates: include the booking number and escape HTML", () => {
 
 test("unknown templates are never rendered", () => {
   assert.equal(renderOutboxEmail("MARKETING_BLAST", JSON.stringify({}), "https://getfortrip.com"), null);
+});
+
+test("#120: refund/cancel templates render with number and amount", () => {
+  const r = renderOutboxEmail("REFUND_COMPLETED", JSON.stringify({ bookingNumber: "GFT-1", amountMinor: 5000 }), "https://getfortrip.com");
+  assert.ok(r && r.subject.includes("5,000원") && r.html.includes("GFT-1"));
+  assert.equal(renderOutboxEmail("REFUND_COMPLETED", JSON.stringify({ bookingNumber: "GFT-1" }), "https://getfortrip.com"), null);
+  const c = renderOutboxEmail("BOOKING_CANCELLED", JSON.stringify({ bookingId: "b1" }), "https://getfortrip.com/");
+  assert.ok(c && c.subject.includes("취소"));
+});
+
+test("#120: dead letters audit instead of dying silently", async () => {
+  const rows = new Map<string, any>([
+    ["bad", { id: "bad", recipient: "u@t.t", template: "NOPE", payload_json: "{}", attempts: 0 }],
+    ["tired", { id: "tired", recipient: "u@t.t", template: "BOOKING_CANCELLED", payload_json: JSON.stringify({ bookingNumber: "GFT-9" }), attempts: 4 }],
+    ["fresh", { id: "fresh", recipient: "u@t.t", template: "BOOKING_CANCELLED", payload_json: JSON.stringify({ bookingNumber: "GFT-9" }), attempts: 0 }],
+  ]);
+  const audits: unknown[] = [];
+  const env = {
+    RESEND_API_KEY: "re_test_dead_letter",
+    PUBLIC_SITE_URL: "https://getfortrip.com",
+    DB: fakeDb({
+      all: () => [...rows.values()],
+      run: (sql, params) => {
+        if (sql.startsWith("UPDATE notification_outbox SET status = 'FAILED', attempts")) {
+          rows.get(params[0] as string).status = "FAILED";
+          return { meta: { changes: 1 } };
+        }
+        if (sql.startsWith("UPDATE notification_outbox SET status = ?")) {
+          const r = rows.get(params[2] as string);
+          r.status = params[0];
+          r.attempts = params[1];
+          return { meta: { changes: 1 } };
+        }
+        if (sql.includes("admin_audit_logs")) {
+          audits.push(params);
+          return { meta: { changes: 1 } };
+        }
+        return { meta: { changes: 0 } };
+      },
+    }),
+  } as any;
+  // Sends fail (bogus key, real Resend rejects) — the point is the audit trail.
+  const r = await flushOutbox(env);
+  assert.equal(r.failed, 3);
+  assert.equal(rows.get("bad").status, "FAILED");
+  assert.equal(rows.get("tired").status, "FAILED");
+  assert.equal(rows.get("fresh").status, "PENDING");
+  const dead = audits.filter((a: any) => a[2] === "EMAIL_DEAD_LETTER");
+  assert.equal(dead.length, 2, "unrenderable + exhausted audit; the retryable one stays quiet");
+  assert.ok(dead.some((a: any) => String(a[5]).includes("UNRENDERABLE")));
+  assert.ok(dead.some((a: any) => String(a[5]).includes("RETRIES_EXHAUSTED")));
 });
 
 test("C3: payment/cancel/refund/reject templates render with amounts and escape HTML", () => {

@@ -1,0 +1,37 @@
+name: Weekly D1 Backup
+
+# P2f #115: scheduled off-site SQL export of ota_production.
+on:
+  schedule:
+    # Sundays 03:00 KST == Saturdays 18:00 UTC.
+    - cron: "0 18 * * 6"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Export and verify ota_production
+        run: node scripts/backup-d1.js --out backups
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Upload dump artifact (30 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-production-sql
+          path: backups/*.sql
+          retention-days: 30

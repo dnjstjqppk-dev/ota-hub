@@ -5,10 +5,12 @@ export const SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "SAMEORIGIN",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  // #101: these headers ride API (JSON) responses only — pages are served as
-  // static assets elsewhere — so a locked-down default is safe.
-  "Content-Security-Policy": "default-src 'none'; base-uri 'none'; frame-ancestors 'self'",
 };
+
+// #101 (P2f correction): the locked-down CSP rides JSON API responses ONLY.
+// SECURITY_HEADERS also coat the SPA shells in serveAssets, where
+// default-src 'none' would break every portal — so it lives here, not there.
+const API_CSP = "default-src 'none'; base-uri 'none'; frame-ancestors 'self'";
 
 export class HttpError extends Error {
   status: number;
@@ -25,7 +27,7 @@ export class HttpError extends Error {
 export function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...SECURITY_HEADERS, ...headers },
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...SECURITY_HEADERS, "Content-Security-Policy": API_CSP, ...headers },
   });
 }
 

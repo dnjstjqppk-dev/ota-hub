@@ -43,12 +43,12 @@ const envFor = (flags: Record<string, ReturnType<typeof row>>, audits: unknown[]
   }),
 }) as any;
 
-// #110: flag reads map rows; missing keys fail OPEN (current contract — #117 flips this).
-test("flags: reads map rows; unknown keys default enabled", async () => {
+// #110 reads plus #117: unknown keys fail CLOSED (kill-switches never read "go" unseeded).
+test("flags: reads map rows; unknown keys default disabled", async () => {
   const env = envFor({ A: row("A", 1), B: row("B", 0) });
   assert.equal(await isFeatureEnabled(env, "A"), true);
   assert.equal(await isFeatureEnabled(env, "B"), false);
-  assert.equal(await isFeatureEnabled(env, "NOPE"), true);
+  assert.equal(await isFeatureEnabled(env, "NOPE"), false);
   const all = await getAllFeatureFlags(env);
   assert.equal(all.length, 2);
   assert.deepEqual(all[0].requires_flags, []);

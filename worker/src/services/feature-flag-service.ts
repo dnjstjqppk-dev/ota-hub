@@ -38,7 +38,12 @@ export async function isFeatureEnabled(env: Env, flagKey: string): Promise<boole
   const row = await env.DB.prepare('SELECT is_enabled FROM feature_flags WHERE key = ?')
     .bind(flagKey)
     .first<{ is_enabled: number }>();
-  if (!row) return true; // Default to enabled if flag is unmanaged
+  // #117: unknown flags fail CLOSED (an unseeded kill-switch must never read
+  // as "go"). Callers that need fail-open for legacy rows must say so.
+  if (!row) {
+    console.warn(`UNKNOWN_FLAG:${flagKey}`);
+    return false;
+  }
   return Number(row.is_enabled) === 1;
 }
 

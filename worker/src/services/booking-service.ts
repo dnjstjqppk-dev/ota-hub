@@ -86,6 +86,15 @@ export interface BookingRow {
 
 const nowIso = () => new Date().toISOString();
 
+/**
+ * #119: structured money-event log (one JSON line per outcome). Sentry already
+ * captures money-path EXCEPTIONS via the global catch; these lines cover the
+ * business outcomes (captures, declines, refunds, payouts) that never throw.
+ */
+export function moneyLog(event: string, fields: Record<string, unknown> = {}): void {
+  console.log(JSON.stringify({ ts: nowIso(), svc: "money", event, ...fields }));
+}
+
 // ---------------------------------------------------------------------------
 // Low-level helpers
 // ---------------------------------------------------------------------------
@@ -992,6 +1001,7 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
       outboxInsert(db, "EMAIL", b.customer_email, "PAYMENT_COMPLETED", { bookingId: b.id, bookingNumber: b.booking_number, amountMinor: r.amountMinor }),
     ]);
     cur = await fulfil(env, await mustGet(env, b.id));
+    moneyLog("payment.captured", { bookingId: b.id, paymentId, amountMinor: r.amountMinor, provider: provider.name });
     return { alreadyProcessed: false, booking: await serializeBooking(env, cur, user) };
   }
 
@@ -1000,6 +1010,7 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
       ...transition(db, cur, "AWAITING_PAYMENT", { type: "PAYMENT_PROVIDER", id: provider.name }, `PAYMENT_FAILED:${r.code}`),
       db.prepare("UPDATE payments SET status = 'FAILED', failure_code = ?, failure_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(r.code, r.message.slice(0, 300), paymentId),
     ]);
+    moneyLog("payment.failed", { bookingId: b.id, paymentId, providerCode: r.code, provider: provider.name });
     throw new HttpError(402, "PAYMENT_FAILED", r.message, { providerCode: r.code });
   }
 
@@ -1008,6 +1019,7 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
     ...transition(db, cur, "MANUAL_REVIEW_REQUIRED", { type: "PAYMENT_PROVIDER", id: provider.name }, "PAYMENT_STATUS_UNKNOWN"),
     db.prepare("UPDATE payments SET status = 'UNKNOWN', failure_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(r.message, paymentId),
   ]);
+  moneyLog("payment.unknown", { bookingId: b.id, paymentId, provider: provider.name });
   return { alreadyProcessed: false, booking: await serializeBooking(env, await mustGet(env, b.id), user) };
 }
 
@@ -1209,6 +1221,7 @@ export async function processRefund(env: Env, refundId: string): Promise<void> {
   const r = await provider.refund({ paymentKey: pay.provider_payment_key, amountMinor: rf.amount_minor, reason: rf.reason, idempotencyKey: rf.id });
   if (r.outcome === "SUCCEEDED") {
     await applyRefundSucceeded(env, b, pay, rf, { type: "PAYMENT_PROVIDER", id: provider.name }, r.refundId);
+    moneyLog("refund.succeeded", { bookingId: b.id, refundId: rf.id, amountMinor: rf.amount_minor, provider: provider.name });
     return;
   }
   if (r.outcome === "UNKNOWN") {
@@ -1229,6 +1242,7 @@ export async function processRefund(env: Env, refundId: string): Promise<void> {
     if (attempts >= MAX_REFUND_ATTEMPTS && b.status === "REFUND_PENDING") {
       await runBatch(db, transition(db, b, "MANUAL_REVIEW_REQUIRED", { type: "SYSTEM", id: null }, `REFUND_FAILED_AFTER_${attempts}_ATTEMPTS`));
     }
+    moneyLog("refund.unknown", { bookingId: b.id, refundId: rf.id, attempts, note });
     return;
   }
   const attempts = rf.attempts + 1;
@@ -1236,6 +1250,7 @@ export async function processRefund(env: Env, refundId: string): Promise<void> {
   if (attempts >= MAX_REFUND_ATTEMPTS && b.status === "REFUND_PENDING") {
     await runBatch(db, transition(db, b, "MANUAL_REVIEW_REQUIRED", { type: "SYSTEM", id: null }, `REFUND_FAILED_AFTER_${attempts}_ATTEMPTS`));
   }
+  moneyLog("refund.failed", { bookingId: b.id, refundId: rf.id, attempts, providerCode: (r as any).code || null });
 }
 
 /**
