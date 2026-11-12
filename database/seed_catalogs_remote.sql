@@ -618,7 +618,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke703',
-    'ptn_flt_01',
+    NULL,
     'KE703',
     '대한항공',
     'KE',
@@ -655,7 +655,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_oz102',
-    'ptn_flt_01',
+    NULL,
     'OZ102',
     '아시아나항공',
     'OZ',
@@ -692,7 +692,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_7c1102',
-    'ptn_flt_01',
+    NULL,
     '7C1102',
     '제주항공',
     '7C',
@@ -729,7 +729,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke705',
-    'ptn_flt_01',
+    NULL,
     'KE705',
     '대한항공',
     'KE',
@@ -766,7 +766,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke704_ret',
-    'ptn_flt_01',
+    NULL,
     'KE704',
     '대한항공',
     'KE',
@@ -803,7 +803,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_oz101_ret',
-    'ptn_flt_01',
+    NULL,
     'OZ101',
     '아시아나항공',
     'OZ',
@@ -840,7 +840,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_7c1101_ret',
-    'ptn_flt_01',
+    NULL,
     '7C1101',
     '제주항공',
     '7C',
@@ -877,7 +877,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke723',
-    'ptn_flt_01',
+    NULL,
     'KE723',
     '대한항공',
     'KE',
@@ -914,7 +914,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_7c1302',
-    'ptn_flt_01',
+    NULL,
     '7C1302',
     '제주항공',
     '7C',
@@ -951,7 +951,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke724_ret',
-    'ptn_flt_01',
+    NULL,
     'KE724',
     '대한항공',
     'KE',
@@ -988,7 +988,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke657',
-    'ptn_flt_01',
+    NULL,
     'KE657',
     '대한항공',
     'KE',
@@ -1025,7 +1025,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_tg659',
-    'ptn_flt_01',
+    NULL,
     'TG659',
     '타이항공',
     'TG',
@@ -1062,7 +1062,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke658_ret',
-    'ptn_flt_01',
+    NULL,
     'KE658',
     '대한항공',
     'KE',
@@ -1099,7 +1099,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke901',
-    'ptn_flt_01',
+    NULL,
     'KE901',
     '대한항공',
     'KE',
@@ -1136,7 +1136,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_af267',
-    'ptn_flt_01',
+    NULL,
     'AF267',
     '에어프랑스',
     'AF',
@@ -1173,7 +1173,7 @@ INSERT INTO flights (
     id, partner_id, flight_number, airline_name, airline_code, departure_airport, arrival_airport, departure_city, arrival_city, departure_time, arrival_time, duration_minutes, stops, departure_time_slot, cabin_class, base_price_krw, free_baggage_kg, available_seats
   ) VALUES (
     'flt_ke902_ret',
-    'ptn_flt_01',
+    NULL,
     'KE902',
     '대한항공',
     'KE',

@@ -124,15 +124,15 @@
 
 ### 인덱스·무결성
 
-76. `booking-service.ts:233` — partner_inventory 조회 인덱스 무용 → INDEX(item,date,unit) [S]
-77. `booking-service.ts:1177` — payments booking_id 부분인덱스만 → INDEX(booking_id) [S]
-78. `booking-service.ts:1028` — price_alerts 조건 인덱스 없음 → INDEX(active,item) [S]
-79. REFERENCES 다수인데 FK pragma 미활성 → 활성화 또는 고아감사 [S]
-80. `booking-service.ts:570` — partner_id=supplier.id 충돌 의존. 직판 매출이 엑스트라넷에 안보임 → 명시 귀속 [M]
-81. 16개 항공이 partners에 없는 ptn_flt_01 참조 → 시드/재배정 [S]
-82. `0004:88` — activity_time_slots 쓰기 0건. 슬롯 UX 상시 빈칸 → 쓰기 추가 또는 제거 [M]
-83. `0005:83-85` — consignment가 activities 아닌 ingestion 참조. 유령 리스팅 → 발행흐름 수정 [M]
-84. `0004:56-85` — esim/보험에 공급사 연결 없음. 영구 예약불가 vs 시드 모순 → 연결 또는 리스팅 제외 [M]
+[x] 76. `booking-service.ts:233` — partner_inventory 조회 인덱스 무용 → INDEX(item,date,unit) [S] 완료 (P2b / 0040 idx_partner_inventory_item_date_unit. E2E EXPLAIN 플랜 단언)
+[x] 77. `booking-service.ts:1177` — payments booking_id 부분인덱스만 → INDEX(booking_id) [S] 완료 (P2b / 0040 idx_payments_booking(SCAN 확인 후 추가). E2E 플랜 단언)
+[x] 78. `booking-service.ts:1028` — price_alerts 조건 인덱스 없음 → INDEX(active,item) [S] 완료 (P2b / 0040 idx_price_alerts_active_item. E2E 플랜 단언)
+[x] 79. REFERENCES 다수인데 FK pragma 미활성 → 활성화 또는 고아감사 [S] 완료 (P2b / reconciliation에 pragma_foreign_key_check 고아감사+ok 편입. 로컬은 강제됨(고아 INSERT 거부 핀)이라 감사는 타 런타임 방벽. E2E #79. 덤으로 실버그 2종 발견·수정: 정산폴백 요율 뒤집힘(공급사몫→수수료 여집합, marketplace-service:145) + 1P 무지급 정산 거부(SETTLEMENT_NOTHING_TO_PAY). B3 2종 3P 전환으로 실차감 입증)
+[x] 80. `booking-service.ts:570` — partner_id=supplier.id 충돌 의존. 직판 매출이 엑스트라넷에 안보임 → 명시 귀속 [M] 완료 (P2b / 예약 생성 시 상품 소유 파트너 검증 후 저장(실파트너 아니면 NULL). 0040 기존행 백필. E2E #80 + 1P NULL 단언)
+[x] 81. 16개 항공이 partners에 없는 ptn_flt_01 참조 → 시드/재배정 [S] 완료 (P2b / 항공 16행 NULL(공급사 폴백 유지라 판매·정산 동일). dev 시드+프로덕션 시드+0040+어드민 생성/벌크 NULL 스탬프. E2E #81. transfers unassigned 표식은 의도라 유지)
+[x] 82. `0004:88` — activity_time_slots 쓰기 0건. 슬롯 UX 상시 빈칸 → 쓰기 추가 또는 제거 [M] 완료 (P2b / PUT /partner/activities/:id/slots 추가(본인상품·검증·booked 보존·정원가드). UNIQUE는 0004 기존 선언 활용. 유닛 2종 + E2E #82)
+[x] 83. `0005:83-85` — consignment가 activities 아닌 ingestion 참조. 유령 리스팅 → 발행흐름 수정 [M] 완료 (P2b / 해소 확인: 시드 유령행은 6b 정리済, 현 발행흐름은 실 카탈로그행만 생성(CONSIGNMENT 생성경로 없음). E2E #83 핀(0행 단언))
+[x] 84. `0004:56-85` — esim/보험에 공급사 연결 없음. 영구 예약불가 vs 시드 모순 → 연결 또는 리스팅 제외 [M] 완료 (P2b / 6e에서 리스팅 제외로 해소済(PAUSE, E2E #39/#40 매실행 검증). 카탈로그 플랜 표시 정직성은 #145에서 처리)
 
 ### 프론트·어드민
 

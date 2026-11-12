@@ -236,6 +236,13 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     if (!['PENDING', 'HELD'].includes(before.settlement_status)) {
       throw new HttpError(409, 'SETTLEMENT_NOT_PAYABLE', `지급할 수 없는 정산 상태입니다. (${before.settlement_status})`);
     }
+    // #79 finding: this endpoint records a bank transfer TO A SELLER. A 1P
+    // row has no seller payout (the platform already holds the cash as the
+    // merchant of record), so settling it would fabricate a transfer that can
+    // never happen — and strand the never-relieved payable. Refuse honestly.
+    if ((Number(before.seller_payout_minor) || 0) <= 0) {
+      throw new HttpError(409, 'SETTLEMENT_NOTHING_TO_PAY', '판매자 지급액이 없는 정산(1P 자사 매출)은 지급 기록 대상이 아닙니다.');
+    }
     // B2: no payout before the tour is over. The booking must be COMPLETED
     // with its service window fully past, and no refund may be in flight.
     const bk = await env.DB.prepare('SELECT status, service_end FROM bookings WHERE id = ?').bind(before.booking_id).first<any>();

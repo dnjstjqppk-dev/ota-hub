@@ -291,8 +291,13 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
         + (SELECT COUNT(*) FROM partners WHERE LENGTH(password_hash) = 64 AND password_hash GLOB '[0-9a-f]*')
         + (SELECT COUNT(*) FROM partner_staff WHERE LENGTH(password_hash) = 64 AND password_hash GLOB '[0-9a-f]*') AS c`,
     ).first<{ c: number }>();
-    const ok = !unbalanced.results.length && !paidMismatch.results.length && !refundMismatch.results.length && !strandedDeposits.results.length && !payableStranded.results.length;
-    return json({ success: true, ok, unbalancedJournals: unbalanced.results, paidMismatch: paidMismatch.results, refundMismatch: refundMismatch.results, strandedDeposits: strandedDeposits.results, payableStranded: payableStranded.results, legacyPasswordHashes: Number(legacy?.c || 0) });
+    // #79: orphan audit over the declared REFERENCES. Local D1 enforces them
+    // (an orphan insert fails), but enforcement posture differs by runtime, so
+    // violations are audited here instead of assumed away. foreign_key_check
+    // needs no enforcement to report.
+    const orphans = await db.prepare("SELECT * FROM pragma_foreign_key_check LIMIT 50").all();
+    const ok = !unbalanced.results.length && !paidMismatch.results.length && !refundMismatch.results.length && !strandedDeposits.results.length && !payableStranded.results.length && !orphans.results.length;
+    return json({ success: true, ok, unbalancedJournals: unbalanced.results, paidMismatch: paidMismatch.results, refundMismatch: refundMismatch.results, strandedDeposits: strandedDeposits.results, payableStranded: payableStranded.results, orphanViolations: orphans.results, legacyPasswordHashes: Number(legacy?.c || 0) });
   }
 
   if (path === "/api/v1/admin/suppliers" && method === "GET") {
@@ -518,6 +523,12 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     for (const f of spec.fields) {
       if (b[f.col] === undefined) {
         if (f.required) throw new HttpError(400, "FIELD_REQUIRED", `${f.col}은(는) 필수 항목입니다.`, { field: f.col });
+        // #81: stamp an absent partner explicitly NULL instead of inheriting
+        // the legacy ptn_* column DEFAULT (which dangles for flights).
+        if (f.col === "partner_id") {
+          cols.push(f.col);
+          vals.push(null);
+        }
         continue; // DB default applies
       }
       cols.push(f.col);
@@ -620,6 +631,12 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
             if (f.required && row[f.col] === undefined) {
               throw new HttpError(400, "FIELD_REQUIRED", `${f.col}은(는) 신규 등록 시 필수 항목입니다.`, { field: f.col });
             }
+          }
+          // #81: like single-create, stamp an absent partner NULL instead of
+          // inheriting the legacy ptn_* column DEFAULT.
+          if (byCol.has("partner_id") && row["partner_id"] === undefined) {
+            cols.push("partner_id");
+            vals.push(null);
           }
         }
         valid.push({ id, cols, vals, isNew });

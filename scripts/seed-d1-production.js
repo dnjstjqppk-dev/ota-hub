@@ -119,7 +119,7 @@ flights.forEach(f => {
      'arrival_airport', 'departure_city', 'arrival_city', 'departure_time', 'arrival_time',
      'duration_minutes', 'stops', 'departure_time_slot', 'cabin_class', 'free_baggage_kg'],
     [escapeSql(f.id),
-    "'ptn_flt_01'",
+    "NULL", // #81: no airline partner exists; supplier resolves via the ptn_flt_01 fallback
     escapeSql(f.flight_number),
     escapeSql(f.airline_name),
     escapeSql(f.airline_code),

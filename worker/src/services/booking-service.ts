@@ -93,6 +93,26 @@ function guard(db: D1Database, b: Pick<BookingRow, "id" | "version" | "status">,
   return db.prepare("INSERT INTO txn_guards (ok, label) SELECT COUNT(*), ? FROM bookings WHERE id = ? AND version = ? AND status = ?").bind(label, b.id, b.version, b.status);
 }
 
+/** #80: the product row's owning partner, or null when it names no real partners row. */
+const PARTNER_OWNER_TABLES: Record<string, string> = {
+  HOTEL: "hotels",
+  FLIGHT: "flights",
+  CAR: "cars",
+  ACTIVITY: "activities",
+  TRANSFER: "transfers",
+  TRAIN: "trains",
+  PACKAGE: "packages",
+};
+
+async function resolveBookingPartnerId(db: D1Database, domain: string, itemId: string): Promise<string | null> {
+  const table = PARTNER_OWNER_TABLES[domain];
+  if (!table) return null;
+  const row = await db.prepare(`SELECT partner_id AS pid FROM ${table} WHERE id = ?`).bind(itemId).first<{ pid: string | null }>();
+  if (!row?.pid) return null;
+  const real = await db.prepare("SELECT id FROM partners WHERE id = ?").bind(row.pid).first();
+  return real ? row.pid : null;
+}
+
 function transition(
   db: D1Database,
   b: Pick<BookingRow, "id" | "version" | "status">,
@@ -740,6 +760,11 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
     promoCounted = null;
   };
   const lockExpires = new Date(Date.now() + PAYMENT_WINDOW_MS).toISOString();
+  // #80: explicit partner attribution — the booking carries the product's
+  // owning partner only when it names a real partners row. Supplier codes,
+  // the unassigned_* markers, and platform/direct sales stay NULL instead of
+  // colliding into the extranet by id equality.
+  const bookingPartnerId = await resolveBookingPartnerId(db, quote.domain_type, quote.item_id);
   const stmts: Stmt[] = [
     db.prepare(
       `INSERT INTO bookings (id, user_id, partner_id, booking_number, domain_type, item_id, title, base_amount_krw, tax_amount_krw, service_fee_krw, discount_amount_krw,
@@ -748,7 +773,7 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
         cancellation_policy_json, payment_mode, transaction_model, trip_coins_used)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'KRW', 'AWAITING_PAYMENT', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNPAID', 'NOT_REQUESTED', ?, 0, ?, ?, ?, ?, ?, ?)`,
     ).bind(
-      id, user.id, supplier.id, number, quote.domain_type, quote.item_id, quote.title, quote.base_minor, quote.tax_minor, quote.fee_minor, quote.discount_minor,
+      id, user.id, bookingPartnerId, number, quote.domain_type, quote.item_id, quote.title, quote.base_minor, quote.tax_minor, quote.fee_minor, quote.discount_minor,
       quote.total_minor, contactName, contactEmail, contactPhone,
       JSON.stringify({ travelers: params.travelers, rooms: params.rooms ?? null, simulation, specialRequests: str(body.specialRequests, 500) }),
       lockExpires, quote.id, entity.id, supplier.id, quote.total_minor, idemKey, quote.service_start, quote.service_end,

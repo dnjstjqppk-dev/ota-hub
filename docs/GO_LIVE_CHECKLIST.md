@@ -67,6 +67,17 @@ npx wrangler d1 execute ota_production --remote --command "SELECT id, adapter, i
 > npx wrangler d1 execute ota_production --remote --command "SELECT booking_id, COUNT(*) c FROM refunds WHERE status = 'PENDING' GROUP BY booking_id HAVING c > 1;"
 > # 기대: 0행
 > ```
+>
+> 0040(인덱스·귀속) 주의: 조회 인덱스 3종 추가와 함께 실존 파트너가
+> 아닌 bookings.partner_id·flights.partner_id가 NULL로 정리된다(편도).
+> 항공 공급사 해석은 폴백(ptn_flt_01)으로 동일하게 유지되므로 판매·정산
+> 귀속은 변하지 않는다. transfers의 'unassigned_transfer' 표식은 의도된
+> 미배정 표시라 유지된다.
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT COUNT(*) FROM flights WHERE partner_id IS NOT NULL AND partner_id NOT IN (SELECT id FROM partners)) AS dangling_flights, (SELECT COUNT(*) FROM bookings WHERE partner_id IS NOT NULL AND partner_id NOT IN (SELECT id FROM partners)) AS dangling_bookings;"
+> # 기대: 둘 다 0
+> ```
 
 ## 1. 판매주체 ACTIVE (사업자 정보 필요)
 

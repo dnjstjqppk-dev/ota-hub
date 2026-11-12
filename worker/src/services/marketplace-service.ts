@@ -104,8 +104,10 @@ function splitForModel(
  * Terms come from the marketplace catalog row when one exists. Otherwise they
  * are derived from the booking's supplier of record — a real commercial
  * relationship with a real rate (MERCHANT_OF_RECORD -> 1P, anything else ->
- * 3P at the supplier's settlement_rate_bps). Sellers are never invented
- * (2026-11-09 audit [M]); the source is recorded on the row.
+ * 3P). suppliers.settlement_rate_bps is the SELLER's share (as stored by
+ * partner registration and read by recognition); the commission here is its
+ * complement. Sellers are never invented (2026-11-09 audit [M]); the source
+ * is recorded on the row.
  */
 export async function planOrderSettlement(
   env: Env,
@@ -142,7 +144,11 @@ export async function planOrderSettlement(
     sellerName = sup?.name || sellerId;
     supplierId = sup?.id || b?.supplier_id || 'UNKNOWN_SUPPLIER';
     supplyCostMinor = 0;
-    commissionRateBps = Number(sup?.settlement_rate_bps) || 1000;
+    // #79 finding: the supplier column holds the SELLER's share (9000 = the
+    // seller keeps 90%), so the commission is its complement. Reading it raw
+    // paid sellers 100%-share and stranded the ledger the other way.
+    const share = Number(sup?.settlement_rate_bps);
+    commissionRateBps = Number.isSafeInteger(share) ? Math.min(10000, Math.max(0, 10000 - share)) : 1000;
   }
   const split = splitForModel(model, grossAmountMinor, supplyCostMinor, commissionRateBps);
 

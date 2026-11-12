@@ -1616,6 +1616,8 @@ test("1P direct sales: register on ptn_direct_01, go LIVE, sell, operator-confir
   assert.equal(q.fulfilmentMode, "LIVE");
   const b = (await book(A.token, q)).data.booking;
   assert.equal(b.paymentMode, "LIVE");
+  // #80: a direct sale names a supplier code, not a partner — attribution stays NULL.
+  assert.equal(sql(`SELECT partner_id AS p FROM bookings WHERE id = '${b.id}'`)[0].p, null);
   const p = await pay(A.token, b, "ok");
   assert.equal(p.data.booking.status, "SUPPLIER_BOOKING_PENDING", JSON.stringify(p.data.booking));
   assert.equal(p.data.booking.items[0].voucher_code, null);
@@ -1743,7 +1745,7 @@ test("floor price: quotes under the product floor are refused at quote and booki
 
 test("settlement batches: settling a partner-seller row rolls into the monthly batch", async () => {
   const P = await approvedPartner("batch");
-  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 배치 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 배치 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 9000)`);
   const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 배치 투어", domain: "ACTIVITY", city: "서울", price: 50000, capacity: 10 } });
   assert.equal(reg.status, 201, JSON.stringify(reg.data));
   const itemId = reg.data.product.item_id;
@@ -1821,7 +1823,7 @@ test("revived surfaces: is_active enforced, slots honest, partner rooms/inventor
   assert.equal(slots.length, sql(`SELECT COUNT(*) AS c FROM activity_time_slots WHERE activity_id = 'act_disney_tokyo' AND slot_date = '${date}' AND is_closed = 0`)[0].c);
   // Partner hotel without rooms is unquotable; PATCHing rooms makes it sellable.
   const P = await approvedPartner("rooms");
-  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 객실 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 객실 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 9000)`);
   const created = await api("POST", "/api/v1/partner/products", { token: P.token, body: { title: "E2E 객실 호텔", domain: "HOTEL", city: "서울", price: 80000 } });
   assert.equal(created.status, 201, JSON.stringify(created.data));
   const hid = created.data.id;
@@ -2065,7 +2067,7 @@ test("p0 money: platform-failure refunds restore coins; fee-cancel voids settlem
 
 test("p0 inventory: unconfigured products refuse sale; capacity caps oversell", async () => {
   const P = await approvedPartner("cap");
-  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 수용량 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 수용량 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 9000)`);
   const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 수용량 투어", domain: "ACTIVITY", city: "서울", price: 30000 } });
   assert.equal(reg.status, 201, JSON.stringify(reg.data));
   const itemId = reg.data.product.item_id;
@@ -2085,7 +2087,7 @@ test("p0 inventory: unconfigured products refuse sale; capacity caps oversell", 
 
 test("p0 calendar: default-unit closure blocks sale; overrides reprice dates", async () => {
   const P = await approvedPartner("cal");
-  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 캘린더 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 캘린더 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 9000)`);
   const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 캘린더 투어", domain: "ACTIVITY", city: "서울", price: 30000, capacity: 5 } });
   const itemId = reg.data.product.item_id;
   const D = day(170 + (Date.now() % 20));
@@ -2234,9 +2236,18 @@ test("B1: external partial cancel records the delta and keeps the live order", a
 });
 
 test("B3: post-payout refund becomes a recovery claim auto-deducted from the next payout", async () => {
+  // #79 finding: 1P rows carry no seller payout, so the payout endpoint
+  // refuses them — recovery mechanics run on 3P rails, where money moves.
+  const P = await approvedPartner("recov");
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E B3 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 9000)`);
+  const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E B3 투어", domain: "ACTIVITY", city: "서울", price: 50000, capacity: 10 } });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
+  const itemId = reg.data.product.item_id;
   const R = await register("recov");
   const mk = async () => {
-    const { b, p } = await fullHotelBooking(R.token, {});
+    const q = (await api("POST", "/api/v1/quotes", { token: R.token, body: { domain: "ACTIVITY", itemId, startDate: day(95), travelers: { adults: 1 } } })).data.quote;
+    const b = (await book(R.token, q)).data.booking;
+    const p = await pay(R.token, b);
     assert.equal(p.data.booking.status, "VOUCHER_ISSUED");
     sql(`UPDATE bookings SET status = 'COMPLETED', service_end = '2020-01-02' WHERE id = '${b.id}'`);
     return b;
@@ -2271,9 +2282,14 @@ test("B3: post-payout refund becomes a recovery claim auto-deducted from the nex
 });
 
 test("B3: auto-refund on a settled order parks for approval instead of paying twice", async () => {
+  const P = await approvedPartner("guard");
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E B3가드 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 9000)`);
+  const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E B3가드 투어", domain: "ACTIVITY", city: "서울", price: 50000, capacity: 10 } });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
   const G = await register("guard");
-  const { b, p } = await fullHotelBooking(G.token, {});
-  assert.equal(p.data.booking.status, "VOUCHER_ISSUED");
+  const q = (await api("POST", "/api/v1/quotes", { token: G.token, body: { domain: "ACTIVITY", itemId: reg.data.product.item_id, startDate: day(95), travelers: { adults: 1 } } })).data.quote;
+  const b = (await book(G.token, q)).data.booking;
+  assert.equal((await pay(G.token, b)).data.booking.status, "VOUCHER_ISSUED");
   sql(`UPDATE bookings SET status = 'COMPLETED', service_end = '2020-01-02' WHERE id = '${b.id}'`);
   const s = sql(`SELECT id FROM marketplace_order_settlements WHERE booking_id = '${b.id}'`)[0];
   assert.equal((await api("PATCH", `/api/v1/admin/marketplace/settlements/${s.id}/settle`, { token: ADMIN })).status, 200);
@@ -2312,7 +2328,7 @@ test("B7: force-cancel, manual partial refund, and offline refund with masked cu
 
 test("B4/B5: payout statement JSON + CSV carry settled lines, tax email, and payout account", async () => {
   const P = await approvedPartner("stmt");
-  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 명세 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 명세 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 9000)`);
   const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 명세 투어", domain: "ACTIVITY", city: "서울", price: 50000, capacity: 10 } });
   const itemId = reg.data.product.item_id;
   const q = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "ACTIVITY", itemId, startDate: day(96), travelers: { adults: 1 } } })).data.quote;
@@ -2769,7 +2785,7 @@ test("#73: concurrent refund starts single-flight — one parks PENDING, the oth
 test("#72: crash-orphaned settlement is repaired; partial recovery takes are traced", async () => {
   resetLimiter("register");
   const P = await approvedPartner("stl72");
-  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 72 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 1000)`);
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 72 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 9000)`);
   const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E #72 투어", domain: "ACTIVITY", city: "서울", price: 50000, capacity: 10 } });
   assert.equal(reg.status, 201, JSON.stringify(reg.data));
   const itemId = reg.data.product.item_id;
@@ -2880,4 +2896,147 @@ test("#75: coin grants land via admin adjust with a ledger row (no phantom accru
   assert.equal(rows.length, 1);
   assert.equal(Number(rows[0].delta), 500);
   assert.ok(rows[0].reason.startsWith("ADMIN_ADJUSTMENT"), rows[0].reason);
+});
+
+test("#76-78: hot money/calendar reads use indexes, never table scans", async () => {
+  for (const name of ["idx_partner_inventory_item_date_unit", "idx_payments_booking", "idx_price_alerts_active_item"]) {
+    assert.equal(sql(`SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'index' AND name = '${name}'`)[0].c, 1, name);
+  }
+  const plan = (q) => sql(`EXPLAIN QUERY PLAN ${q}`).map((r) => r.detail ?? r.Detail).join(" | ");
+  const inv = plan("SELECT allocated_units, is_closed FROM partner_inventory WHERE item_id = 'x' AND service_date = '2026-01-01' AND (unit_id = 'y' OR unit_id = 'default') ORDER BY CASE WHEN unit_id = 'y' THEN 0 ELSE 1 END LIMIT 1");
+  assert.ok(inv.includes("USING INDEX idx_partner_inventory_item_date_unit"), inv);
+  const pay = plan("SELECT * FROM payments WHERE booking_id = 'x' AND status IN ('CAPTURED', 'PARTIALLY_REFUNDED') ORDER BY created_at DESC LIMIT 1");
+  assert.ok(pay.includes("USING INDEX idx_payments_booking"), pay);
+  const al = plan("SELECT id FROM price_alerts WHERE is_active = 1 AND item_id IS NOT NULL AND item_id != 'general' LIMIT 100");
+  assert.ok(al.includes("USING INDEX idx_price_alerts_active_item"), al);
+  for (const p of [inv, pay, al]) assert.ok(!p.includes("SCAN "), p);
+});
+
+test("#79: orphan references are audited and refused — reconciliation clean, orphans rejected", async () => {
+  const clean = await api("GET", "/api/v1/admin/reconciliation", { token: ADMIN });
+  assert.equal(clean.data.ok, true, JSON.stringify({ orphans: clean.data.orphanViolations, payable: clean.data.payableStranded }));
+  assert.deepEqual(clean.data.orphanViolations, []);
+  // The declared REFERENCES hold: a direct orphan insert is refused, so the
+  // audit above stays clean by enforcement, and would flag any violation that
+  // slipped through on a runtime with different enforcement posture.
+  let refused = null;
+  try {
+    sql(`INSERT INTO booking_items (id, booking_id, domain_type, item_id, supplier_id, title, service_start, service_end, quantity, total_minor, params_json) VALUES ('bki_orphan79', 'bkg_does_not_exist_79', 'HOTEL', 'htl_seoul_01', 'ptn_htl_01', 'orphan probe', '2026-01-01', '2026-01-02', 1, 100, '{}')`);
+  } catch (e) {
+    refused = String((e).stdout || e.message || e);
+  }
+  assert.ok(refused && refused.includes("FOREIGN KEY"), `orphan insert refused, got: ${refused}`);
+  assert.equal(sql("SELECT COUNT(*) AS c FROM booking_items WHERE id = 'bki_orphan79'")[0].c, 0);
+});
+
+test("#80: bookings attribute to the product's real partner — supplier codes never leak in", async () => {
+  resetLimiter("register");
+  const P = await approvedPartner("attr80");
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 80 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 9000)`);
+  const reg = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E #80 투어", domain: "ACTIVITY", city: "서울", price: 50000, capacity: 10 } });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
+  const U = await register("attr80");
+  const q = (await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "ACTIVITY", itemId: reg.data.product.item_id, startDate: day(96), travelers: { adults: 1 } } })).data.quote;
+  const b = (await book(U.token, q)).data.booking;
+  assert.equal(sql(`SELECT partner_id AS p FROM bookings WHERE id = '${b.id}'`)[0].p, P.id);
+  assert.equal((await pay(U.token, b)).data.booking.status, "VOUCHER_ISSUED");
+  const orders = await api("GET", "/api/v1/partner/orders", { token: P.token });
+  assert.ok(orders.data.orders.some((o) => o.id === b.id), "own booking visible in the extranet");
+  // Catalog sale: attributed to the seed partner that owns the catalog row —
+  // a real partners row either way, never a bare supplier code.
+  const U2 = await register("attr80b");
+  const { b: bc } = await fullHotelBooking(U2.token, {});
+  const got = sql(`SELECT partner_id AS p FROM bookings WHERE id = '${bc.id}'`)[0].p;
+  assert.ok(got && sql(`SELECT COUNT(*) AS c FROM partners WHERE id = '${got}'`)[0].c === 1, `real partner, got ${got}`);
+});
+
+test("#81: product partner refs resolve (partner or supplier); admin create stamps NULL", async () => {
+  // The column is dual-purpose by design (1P products name their supplier
+  // code); only codes resolving nowhere are dangling.
+  for (const t of ["hotels", "flights", "cars", "activities", "transfers", "trains", "packages"]) {
+    const d = sql(`SELECT COUNT(*) AS c FROM ${t} WHERE partner_id IS NOT NULL AND partner_id NOT LIKE 'unassigned%' AND partner_id NOT IN (SELECT id FROM partners) AND partner_id NOT IN (SELECT id FROM suppliers)`)[0].c;
+    assert.equal(d, 0, `${t} unresolvable partner refs`);
+  }
+  assert.equal(sql("SELECT COUNT(*) AS c FROM flights WHERE partner_id IS NULL")[0].c, 16, "seed flights unattributed");
+  const c = await api("POST", "/api/v1/admin/catalog/FLIGHT", { token: ADMIN, body: {
+    flight_number: "E281X", airline_name: "E2E Air", airline_code: "E2", departure_airport: "ICN", arrival_airport: "NRT",
+    departure_city: "서울", arrival_city: "도쿄", departure_time: "10:00", arrival_time: "13:00",
+    duration_minutes: 180, base_price_krw: 200000,
+  } });
+  assert.equal(c.status, 201, JSON.stringify(c.data));
+  try {
+    assert.equal(sql(`SELECT partner_id AS p FROM flights WHERE id = '${c.data.id}'`)[0].p, null, "no legacy default leak");
+  } finally {
+    sql(`DELETE FROM flights WHERE id = '${c.data.id}'`);
+  }
+});
+
+test("#82: partners manage activity time slots; the public read shows them", async () => {
+  const P = await approvedPartner("slot82");
+  const created = await api("POST", "/api/v1/partner/products", { token: P.token, body: { title: "E2E 슬롯 액티비티", domain: "ACTIVITY", city: "서울", price: 30000 } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  const aid = created.data.id;
+  const date = day(120);
+  const put = await api("PUT", `/api/v1/partner/activities/${aid}/slots`, { token: P.token, body: { date, slots: [
+    { startTime: "09:00", endTime: "11:00", capacity: 20, priceAdult: 30000, priceChild: 15000 },
+    { startTime: "14:00", capacity: 10, priceAdult: 35000 },
+  ] } });
+  assert.equal(put.status, 200, JSON.stringify(put.data));
+  assert.equal(put.data.upserted, 2);
+  const pub = (await api("GET", `/api/v1/activities/${aid}/slots?date=${date}`)).data.slots;
+  assert.equal(pub.length, 2);
+  assert.equal(pub[0].start_time, "09:00");
+  assert.equal(pub[1].price_adult_minor, 35000);
+  // Re-price keeps booked_count; closing hides the slot from the public read.
+  sql(`UPDATE activity_time_slots SET booked_count = 5 WHERE activity_id = '${aid}' AND slot_date = '${date}' AND start_time = '09:00'`);
+  const put2 = await api("PUT", `/api/v1/partner/activities/${aid}/slots`, { token: P.token, body: { date, slots: [
+    { startTime: "09:00", capacity: 20, priceAdult: 31000 },
+    { startTime: "14:00", capacity: 10, priceAdult: 35000, closed: true },
+  ] } });
+  assert.equal(put2.status, 200, JSON.stringify(put2.data));
+  assert.equal(sql(`SELECT booked_count AS b, price_adult_minor AS p FROM activity_time_slots WHERE activity_id = '${aid}' AND slot_date = '${date}' AND start_time = '09:00'`)[0].b, 5);
+  assert.equal((await api("GET", `/api/v1/activities/${aid}/slots?date=${date}`)).data.slots.length, 1);
+  // Guards: overbook, bad time, dup start, foreign product.
+  assert.equal((await api("PUT", `/api/v1/partner/activities/${aid}/slots`, { token: P.token, body: { date, slots: [{ startTime: "09:00", capacity: 4, priceAdult: 1 }] } })).data.code, "SLOT_OVERBOOKED");
+  assert.equal((await api("PUT", `/api/v1/partner/activities/${aid}/slots`, { token: P.token, body: { date, slots: [{ startTime: "25:00", capacity: 1, priceAdult: 1 }] } })).status, 400);
+  assert.equal((await api("PUT", `/api/v1/partner/activities/${aid}/slots`, { token: P.token, body: { date, slots: [{ startTime: "10:00", capacity: 1, priceAdult: 1 }, { startTime: "10:00", capacity: 1, priceAdult: 1 }] } })).data.code, "DUPLICATE_SLOT");
+  const Q = await approvedPartner("slot82b");
+  assert.equal((await api("PUT", `/api/v1/partner/activities/${aid}/slots`, { token: Q.token, body: { date, slots: [{ startTime: "10:00", capacity: 1, priceAdult: 1 }] } })).status, 404);
+});
+
+test("#83: consignment ghost listings stay gone", async () => {
+  assert.equal(sql("SELECT COUNT(*) AS c FROM marketplace_catalog_items WHERE merchant_model = 'CONSIGNMENT'")[0].c, 0);
+});
+
+test("#79 finding: fallback-3P splits match recognition (seller share, not commission)", async () => {
+  resetLimiter("register");
+  const P = await approvedPartner("fb79");
+  sql(`INSERT INTO suppliers (id, name, product_domain, adapter, integration_status, transaction_model, settlement_rate_bps) VALUES ('${P.id}', 'E2E 폴백 공급사', 'ALL', 'simulator', 'SANDBOX_VERIFIED', 'AGENCY', 9000)`);
+  // /partner/products writes no marketplace row: the SUPPLIER_FALLBACK path prices this.
+  const created = await api("POST", "/api/v1/partner/products", { token: P.token, body: { title: "E2E 폴백 투어", domain: "ACTIVITY", city: "서울", price: 40000 } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  sql(`UPDATE activities SET daily_capacity = 10 WHERE id = '${created.data.id}'`);
+  const U = await register("fb79");
+  const q = (await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "ACTIVITY", itemId: created.data.id, startDate: day(97), travelers: { adults: 1 } } })).data.quote;
+  const b = (await book(U.token, q)).data.booking;
+  assert.equal((await pay(U.token, b)).data.booking.status, "VOUCHER_ISSUED");
+  const s = sql(`SELECT * FROM marketplace_order_settlements WHERE booking_id = '${b.id}'`)[0];
+  assert.equal(s.attribution_source, "SUPPLIER_FALLBACK");
+  assert.equal(s.merchant_model, "3P");
+  assert.equal(Number(s.seller_payout_minor), Math.round(Number(s.gross_amount_minor) * 0.9), "90% seller share, not 10%");
+  sql(`UPDATE bookings SET status = 'COMPLETED', service_end = '2020-01-02' WHERE id = '${b.id}'`);
+  assert.equal((await api("PATCH", `/api/v1/admin/marketplace/settlements/${s.id}/settle`, { token: ADMIN })).status, 200);
+  const net = sql(`SELECT COALESCE(SUM(CASE WHEN direction='CREDIT' THEN amount_minor ELSE -amount_minor END),0) AS n FROM ledger_entries WHERE booking_id = '${b.id}' AND account = 'SUPPLIER_PAYABLE'`)[0].n;
+  assert.equal(net, 0, "payout relieves exactly what recognition booked");
+});
+
+test("#79 finding: 1P rows (no seller payout) refuse payout recording", async () => {
+  resetLimiter("register");
+  const U = await register("nopay79");
+  const { b } = await fullHotelBooking(U.token, {});
+  sql(`UPDATE bookings SET status = 'COMPLETED', service_end = '2020-01-02' WHERE id = '${b.id}'`);
+  const s = sql(`SELECT id, merchant_model, seller_payout_minor FROM marketplace_order_settlements WHERE booking_id = '${b.id}'`)[0];
+  assert.equal(s.merchant_model, "1P");
+  assert.equal(s.seller_payout_minor, 0);
+  assert.equal((await api("PATCH", `/api/v1/admin/marketplace/settlements/${s.id}/settle`, { token: ADMIN })).data.code, "SETTLEMENT_NOTHING_TO_PAY");
 });

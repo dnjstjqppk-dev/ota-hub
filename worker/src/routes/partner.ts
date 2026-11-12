@@ -25,6 +25,26 @@ export function parseRooms(input: unknown): Array<{ id: string; name_ko: string;
   });
 }
 
+/** #82: validate one activity time slot for upsert. Pure — unit-tested. */
+export function parseSlotUpsert(input: unknown): { startTime: string; endTime: string | null; capacity: number; priceAdult: number; priceChild: number; closed: boolean } {
+  const s = (input && typeof input === "object" ? input : {}) as any;
+  const startTime = str(s.startTime, 5);
+  const endTime = s.endTime === undefined || s.endTime === null || s.endTime === "" ? null : str(s.endTime, 5);
+  const capacity = Number(s.capacity);
+  const priceAdult = Number(s.priceAdult);
+  const priceChild = s.priceChild === undefined || s.priceChild === null ? priceAdult : Number(s.priceChild);
+  const clock = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if (!clock.test(startTime)) throw new HttpError(400, "INVALID_SLOT_TIME", "시작 시간은 HH:MM(00:00~23:59) 형식이어야 합니다.");
+  if (endTime !== null) {
+    if (!clock.test(endTime)) throw new HttpError(400, "INVALID_SLOT_TIME", "종료 시간은 HH:MM(00:00~23:59) 형식이어야 합니다.");
+    if (endTime <= startTime) throw new HttpError(400, "INVALID_SLOT_TIME", "종료 시간은 시작 시간보다 늦어야 합니다.");
+  }
+  if (!Number.isInteger(capacity) || capacity < 0 || capacity > 100000) throw new HttpError(400, "INVALID_SLOT_CAPACITY", "정원은 0~100000 사이의 정수여야 합니다.");
+  if (!Number.isInteger(priceAdult) || priceAdult < 0) throw new HttpError(400, "INVALID_SLOT_PRICE", "성인 요금은 0 이상의 정수(원)여야 합니다.");
+  if (!Number.isInteger(priceChild) || priceChild < 0) throw new HttpError(400, "INVALID_SLOT_PRICE", "소인 요금은 0 이상의 정수(원)여야 합니다.");
+  return { startTime, endTime, capacity, priceAdult, priceChild, closed: s.closed === true || s.closed === 1 };
+}
+
 export async function handlePartner(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
   if (!path.startsWith("/api/v1/partner")) return null;
@@ -512,6 +532,47 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     ).bind(newId("inv"), pId, domain, itemId, unitId, serviceDate, allocatedUnits, priceOverride, isClosed).run();
 
     return json({ success: true, message: "재고 및 요금이 반영되었습니다." });
+  }
+
+  // 6b. Partner Activity Time Slots (#82): the read API had zero writers, so
+  // every activity reported no slots forever. Partners upsert their own
+  // activity's slots per date; booked_count is never clobbered and capacity
+  // can never drop below it.
+  {
+    const slotPut = path.match(/^\/api\/v1\/partner\/activities\/([A-Za-z0-9_-]+)\/slots$/);
+    if (slotPut && method === "PUT") {
+      const activityId = slotPut[1];
+      const owned = await db.prepare("SELECT id FROM activities WHERE id = ? AND partner_id = ?").bind(activityId, pId).first();
+      if (!owned) throw new HttpError(404, "PRODUCT_NOT_FOUND", "본인의 상품에 대해서만 시간을 관리할 수 있습니다.");
+      const b = await readJson(request);
+      const date = str(b.date, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(new Date(`${date}T00:00:00Z`).getTime())) {
+        throw new HttpError(400, "INVALID_DATE", "날짜 형식이 올바르지 않습니다 (YYYY-MM-DD).");
+      }
+      if (!Array.isArray(b.slots) || !b.slots.length || b.slots.length > 24) {
+        throw new HttpError(400, "INVALID_SLOTS", "slots는 1~24개의 배열이어야 합니다.");
+      }
+      const parsed = b.slots.map((s: unknown) => parseSlotUpsert(s));
+      const starts = new Set(parsed.map((s: { startTime: string }) => s.startTime));
+      if (starts.size !== parsed.length) throw new HttpError(400, "DUPLICATE_SLOT", "같은 날짜에 시작 시간이 중복된 슬롯이 있습니다.");
+      const booked = await db.prepare("SELECT start_time, booked_count FROM activity_time_slots WHERE activity_id = ? AND slot_date = ?").bind(activityId, date).all<any>();
+      const bookedByStart = new Map((booked.results || []).map((r: any) => [r.start_time, Number(r.booked_count) || 0]));
+      for (const s of parsed) {
+        if (s.capacity < (bookedByStart.get(s.startTime) || 0)) {
+          throw new HttpError(409, "SLOT_OVERBOOKED", `${s.startTime} 슬롯의 정원이 이미 확정된 예약 수보다 작습니다.`);
+        }
+      }
+      await db.batch(parsed.map((s: { startTime: string; endTime: string | null; capacity: number; priceAdult: number; priceChild: number; closed: boolean }) =>
+        db.prepare(`INSERT INTO activity_time_slots (id, activity_id, slot_date, start_time, end_time, max_capacity, price_adult_minor, price_child_minor, is_closed)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(activity_id, slot_date, start_time) DO UPDATE SET
+            end_time = excluded.end_time, max_capacity = excluded.max_capacity,
+            price_adult_minor = excluded.price_adult_minor, price_child_minor = excluded.price_child_minor,
+            is_closed = excluded.is_closed`)
+          .bind(newId("slt"), activityId, date, s.startTime, s.endTime, s.capacity, s.priceAdult, s.priceChild, s.closed ? 1 : 0),
+      ));
+      return json({ success: true, activity_id: activityId, date, upserted: parsed.length });
+    }
   }
 
   // 7. Partner Orders & Booking Fulfillment
