@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"getfortrip/backend/internal/domain"
 	"getfortrip/backend/internal/repository"
@@ -34,6 +33,20 @@ func authedP2GRequest(method, target, token string) *http.Request {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	return req
+}
+
+func TestBookingIDUnique_Phase7(t *testing.T) {
+	store := repository.NewStore()
+	store.Bookings = make(map[string]domain.Booking)
+	// Fifty back-to-back mints with no pause: every ID sticks.
+	for i := 0; i < 50; i++ {
+		if _, err := store.CreateDraftBooking(domain.Booking{UserID: "u7", BaseAmountKRW: 1000, FinalAmountKRW: 1000}); err != nil {
+			t.Fatalf("mint %d failed: %v", i, err)
+		}
+	}
+	if len(store.Bookings) != 50 {
+		t.Fatalf("Expected 50 distinct bookings, got %d (ID collision)", len(store.Bookings))
+	}
 }
 
 func TestJWT122_NoFallbackSecret(t *testing.T) {
@@ -122,10 +135,6 @@ func TestSSE122_RequiresAuth(t *testing.T) {
 
 func seedBooking122(t *testing.T, store *repository.InMemoryStore, userID string, final float64) *domain.Booking {
 	t.Helper()
-	// IDs are UnixNano-based, and the Windows clock is too coarse for two
-	// back-to-back mints — without the pause the second seed overwrites the
-	// first under the same ID. (Store finding, reported with P2g.)
-	time.Sleep(5 * time.Millisecond)
 	b, err := store.CreateDraftBooking(domain.Booking{
 		UserID:         userID,
 		BaseAmountKRW:  final,

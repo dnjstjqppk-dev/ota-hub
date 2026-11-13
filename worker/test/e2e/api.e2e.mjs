@@ -3790,6 +3790,13 @@ test("#180: partner profile PATCH validates formats", async () => {
   assert.equal(ok.status, 200, JSON.stringify(ok.data));
 });
 
+test("phase7: mfa status reflects enrollment", async () => {
+  const s = await api("GET", "/api/v1/admin/mfa/status", { token: ADMIN });
+  assert.equal(s.status, 200);
+  assert.equal(s.data.enrolled, false);
+  assert.equal((await api("GET", "/api/v1/admin/mfa/status")).status, 401);
+});
+
 test("#182: wishlist validates domain and price", async () => {
   resetLimiter("user_write");
   const U = await register("wsh182");

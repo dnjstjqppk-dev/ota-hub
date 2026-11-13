@@ -6,8 +6,18 @@ import (
 	"getfortrip/backend/internal/engine"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+// idSeq disambiguates IDs minted within the same clock tick. UnixNano alone
+// collides on coarse clocks (notably Windows) and under concurrency — the
+// second mint used to overwrite the first under one map key.
+var idSeq atomic.Uint64
+
+func nextUniqueID(prefix string) string {
+	return fmt.Sprintf("%s-%d-%d", prefix, time.Now().UnixNano(), idSeq.Add(1))
+}
 
 type InMemoryStore struct {
 	mu                sync.RWMutex
@@ -845,7 +855,7 @@ func (s *InMemoryStore) CreateDraftBooking(b domain.Booking) (*domain.Booking, e
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	b.ID = fmt.Sprintf("b-%d", time.Now().UnixNano())
+	b.ID = nextUniqueID("b")
 	b.BookingCode = fmt.Sprintf("GFT-%s-%04d", time.Now().Format("20060102"), time.Now().Unix()%10000)
 	b.Status = domain.StatusDraft
 	b.InventoryLockExpireAt = time.Now().Add(15 * time.Minute)
@@ -1050,7 +1060,7 @@ func (s *InMemoryStore) SaveRawScrape(req domain.IngestRawRequest) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	id := fmt.Sprintf("raw-%s-%s-%d", req.Platform, req.SourceProductID, time.Now().UnixNano())
+	id := fmt.Sprintf("raw-%s-%s-%d-%d", req.Platform, req.SourceProductID, time.Now().UnixNano(), idSeq.Add(1))
 	s.RawScrapes[id] = req
 	return id
 }

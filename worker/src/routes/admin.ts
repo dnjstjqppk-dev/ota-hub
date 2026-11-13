@@ -1189,6 +1189,10 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const row = await db.prepare("SELECT confirmed_at FROM admin_mfa_secrets WHERE user_id = ?").bind(admin.id).first<{ confirmed_at: string | null }>();
     return json({ success: true, enrolled: !!row, confirmed: !!row?.confirmed_at });
   }
+  if (path === "/api/v1/admin/mfa/status" && method === "GET") {
+    const row = await db.prepare("SELECT confirmed_at FROM admin_mfa_secrets WHERE user_id = ?").bind(admin.id).first<{ confirmed_at: string | null }>();
+    return json({ success: true, enrolled: Boolean(row?.confirmed_at), pending: Boolean(row && !row.confirmed_at) });
+  }
   if (path === "/api/v1/admin/mfa/enroll" && method === "POST") {
     await rateLimit(request, env, "mfa_enroll", 5, 3600);
     const secret = newTotpSecret();

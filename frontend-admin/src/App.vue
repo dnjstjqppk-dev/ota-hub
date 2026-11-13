@@ -35,7 +35,8 @@ const NAV = [
     { path: '/pricing', label: '환율', icon: 'exchange' },
     { path: '/feature-flags', label: '기능 플래그', icon: 'flag' },
     { path: '/entities', label: '사업자·계약', icon: 'briefcase' },
-    { path: '/legal', label: '약관 버전', icon: 'shield' }
+    { path: '/legal', label: '약관 버전', icon: 'shield' },
+    { path: '/security', label: '내 보안', icon: 'lock' }
   ] }
 ]
 const flat = NAV.flatMap((g) => g.items)

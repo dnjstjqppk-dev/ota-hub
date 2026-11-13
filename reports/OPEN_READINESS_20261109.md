@@ -1,152 +1,120 @@
-# OTA 오픈 가능 수준 판정 — 2026-11-09
+# OTA 오픈 가능 수준 판정 — 2026-11-13 (Phase 7)
 
-> 대상: `main@d4443a4` + 후속 4 미커밋 델타(§4).
-> 모든 수치는 직접 실행·관측(§2는 2026-11-10 델타 적용 상태 관측).
-> 선행 보고서: [Phase 5 상용화 판정](PHASE5_COMMERCIALIZATION.md) (조건부 GO)
+> 대상: `main@e5400b0`(P3c 완료) + Phase 7 델타(본 문서 포함, 하단 §4).
+> 모든 수치는 직접 실행·관측. 원장 182/182 전부 해소.
+> 선행 보고서: [Phase 5 상용화 판정](PHASE5_COMMERCIALIZATION.md) (조건부 GO),
+> [전수 감사 리포트](FULL_AUDIT_20261109.md), [갭 원장](COMMERCIALIZATION_GAPS_20261110.md).
 
 ## 1. 판정: 조건부 GO 유지 (코드 완성, 외부 연동이 블로커)
 
-3포털 코드·테스트·배포는 전부 녹색이다. 그러나 실제 돈이 오가는 정식 오픈은
-아래 블로커(외부 자격·계약)가 막고 있다. 파일럿(폐쇄·지인) 수준은 가능.
+코드·테스트·문서·게이트는 전부 녹색이며 상용화 갭 원장 182건이
+남김없이 해소됐다. 그러나 실제 돈이 오가는 정식 오픈은 아래 블로커
+(운영 마이그레이션·외부 자격·계약)가 막고 있다. 파일럿(폐쇄·지인)
+수준은 가능.
 
-> 2026-11-10 후속 확인: `main@d4443a4` 트리 클린. 유닛 63/63·tsc 0 재관측,
-> 3포털 루트 200·`/health` 200(database:true, 블로커 5종 그대로) 재관측.
-> wrangler 인증 만료(7403)로 운영 D1 직접 재조회는 불가 — 0022~0026 적용은
-> 전 세션 기록(`d4443a4` 배포 시 확인)에 의존.
-
-## 2. 게이트 증거 (본 세션 관측)
+## 2. 게이트 증거 (2026-11-13 관측, Phase 7 코드)
 
 | 게이트 | 결과 | 근거 |
 |---|---|---|
-| 유닛 | 64/64 | `npm test` (11-10 3차 +1종) |
-| 로컬 E2E | 75/75 | `npm run test:e2e` (11-10 3차 +2종; 1회차 기존 1건 일시실패→재실행 녹색) |
+| 유닛 | 134/134 | `npm test` (워커 money 7종 + 프론트 SFC 포함) |
+| 로컬 E2E | 188/188 | `npm run test:e2e` fresh 격리DB(e2e_p7), 1회차 |
 | 타입체크 | exit 0 | `npm run typecheck` |
-| 레드드릴 | RED→GREEN ×5 | 1P 게이트, 세션파기 초단위(`reset_at+1`), 항공재고 오염(fday), 제휴등록(404→201계열), ESIM견적(400→409) |
-| Go 백엔드 | PASS | `go test ./backend/...` (루트 `./...`는 워크스페이스 경로 오류) |
+| Go 백엔드 | PASS | `go test ./backend/...` (ID 충돌 수정 포함) |
 | 브랜딩 가드 | PASS | "getfortrip" 엄격 스캔 |
-| 3포털 빌드 | exit 0 | `node scripts/build-all.js` (admin/partner Vite + Nuxt) |
-| 운영 검증 | 41/41 | `scripts/verify-production.js` (배포 후, T41 dry-run 기본) |
-| CI | success | run 42604244396 (d4443a4, gate 유닛 63/63 + E2E 73/73) |
-| 3포털 루트 | 200 | hub/admin/partner |
+| 3포털 빌드 | exit 0 | `node scripts/build-all.js` |
+| 의존성 감사 | critical 0 | `npm audit --omit=dev --audit-level=critical` |
+| 운영 검증 | 43/47 | `scripts/verify-production.js` 로컬 격리DB (T31·T38·T39 수리済, 잔여 4종은 기존 드리프트 §5-0) |
+| 레드드릴 | RED→GREEN | #136 가드 제거→복원, P3a INSERT 밀림의 스위트 적발→수정 |
 
 ## 3. WO-OTA 10종 매핑 (전부 통과 테스트에 귀속)
 
 | ID | 기능 | 검증 |
 |---|---|---|
-| 01 | 위시리스트 서버 동기화 | E2E wishlist |
+| 01 | 위시리스트 서버 동기화 | E2E wishlist + #182 검증 |
 | 02 | 최저가 알림 | E2E user data |
-| 03 | 비밀번호 재설정 | E2E auth reset (single-use) |
+| 03 | 비밀번호 재설정 | E2E auth reset (single-use) + #163 스코프 |
 | 04 | 여권/쿠폰 지갑 | E2E flight passport + coins/coupons |
-| 05 | 취소·위약금 정산 | E2E cancellation 3종 |
+| 05 | 취소·위약금 정산 | E2E cancellation + #135-145 정산 |
 | 06 | 실투숙 인증 리뷰 | E2E reviews |
-| 07 | 제휴 아웃링크 | 운영 T-제휴 + E2E postback + 등록→302→전환 전주기 |
+| 07 | 제휴 아웃링크 | E2E postback + #132 제한 + #175 정식화 |
 | 08 | 사이트맵 + JSON-LD | E2E sitemap + 운영 T20 |
 | 09 | 재고 홀딩 + 하한가 | E2E inventory + quote |
-| 10 | 레이트리밋 + CORS | E2E 전역 + 운영 T22 |
+| 10 | 레이트리밋 + CORS | E2E 전역 + #141/#142/#164/#179 |
 
-## 4. 본 세션 변경 (후속 4: 정책대기 2종 해소 — 미커밋, 사용자 승인 대기)
+## 4. d4443a4 이후 변경 (P0→P3 전 페이즈, 커밋済)
 
-상세: [전수 감사 리포트](FULL_AUDIT_20261109.md) `조치 현황 (3차)`.
-어필리에이트 어드민 등록 API 신설(GET/POST/PATCH, 시크릿 쓰기전용) +
-ESIM/보험 견적·예약 409 명시(머니게이트 양쪽, checkout 차단코드 추가).
-마이그레이션 없음. 게이트: 유닛 64/64 · E2E 75/75 · tsc 0 · 브랜딩 · 빌드 0.
-신규 2종 RED→GREEN 입증(404/400 → 통과).
+| 페이즈 | 커밋 | 내용 | E2E/유닛 |
+|---|---|---|---|
+| P0 #1-12 | 8a2a54a·806b37c | 코인·정산·수용량·캘린더·문구 | 78/66 |
+| Phase 1+2 | 29081f4·469200e 외 | A·B·C ADDENDUM 26종 | — |
+| P1 6a-6c | 1077824·b1feb13·00e947a | 게이트·고스트·프론트 | — |
+| P1 6d-6g | 22df382·f90939e·294e5b3·7e95e8d | RBAC·이행·운영·문구·Go (0037·0038) | 122/85 |
+| P2a | 46b23f5 | 돈 정합·경합 (0039) | 127/85 |
+| P2b | 4ca028d | 인덱스·무결성 (0040) | 135/87 |
+| P2c | 39eb059 | 프론트·어드민 | —/94 |
+| P2d | 784d022 | 보안 하드닝·MFA·PII (0041) | 145/96 |
+| P2e | 7aedf2e | 슬롯·바우처·커버리지 (0042) | 151/105 |
+| P2f | 9938998 | CI·verify·관측 | 151/114 |
+| P2g | 800558d | Go·문구·API·제한·프로브 | 167/121 |
+| P3a | 153f2f0 | 합계·멱등·REAL·UI (0043·0044) | 171/130 |
+| P3b | cf89140 | 게이트·문구·CI·문서 | 176/130 |
+| P3c | e5400b0 | 라우팅·코드통일·검증 | 187/130 |
+| Phase 7 | 본 커밋 | 아래 §4-7 | 188/134 |
 
-## 4a. 이전 변경 (후속 3: 감사 잔여 전부 해소 — `d4443a4` 커밋·배포済)
+상세 분량은 [갭 원장](COMMERCIALIZATION_GAPS_20261110.md) ([x] 182건) 참조.
 
-상세: [전수 감사 리포트](FULL_AUDIT_20261109.md) `조치 현황 (2차)`.
-돈·장부 8건 + 보안 13건 + 죽은기능 6종 부활(2종 정책대기) + 프론트 3건 +
-E2E 63→73 + Go/문서/스키마 + 마이그레이션 0022~0026(로컬·운영 적용済).
-게이트: 유닛 63/63 · E2E 73/73 연속 2회 · tsc 0 · 빌드 0 · Go · 브랜딩.
-신규 수정 2건(세션파기 `reset_at+1`, 항공날짜 `fday`)은 RED→GREEN 입증.
-배포: `d4443a4`(36 files) push, CI 42604244396 success
-(gate 유닛 63/63 + E2E 73/73). 운영 D1 0022~0026 적용 확인
-(journal + sup_* 9행 + revoked/moment_likes 빈테이블 + 2컬럼).
-운영 `/health` 200, 외부 블로커 그대로.
-미실시: 운영 verify(`TEST_ADMIN_PASSWORD` 필요), T41 실정산,
-죽은 2종 정책결정(어필리에이트·ESIM/보험 견적).
+## 4-7. Phase 7 델타 (본 커밋)
 
-## 4b. 이전 변경 (후속 2: 전수감사 6건 조치 — `a690f7d` 커밋·배포済)
-
-상세: [전수 감사 리포트](FULL_AUDIT_20261109.md) (blocker 1 + major 53 + minor 38 중
-상위 6건 조치). 게이트: 유닛 63/63 · E2E 63/63(신규 3종) · tsc 0 · Go · 브랜딩 · 3포털 빌드.
-
-- [B] `scripts/migrate-d1.js` 실행 거부 스텁화 + `0021` 방어 마이그레이션
-  (로컬·운영 적용, 운영 no-op 확인) + 스냅샷 해시 스크럽.
-- 파트너 프로필 `password_hash` 누출 제거 + 회귀 테스트 (레드→그린 입증).
-- 토스 웹훅 응답 제네릭화(주문 오라클 제거) + verify/Go 하드코딩 비번 제거.
-  운영 검증은 이제 `TEST_ADMIN_PASSWORD` 필수, T41 실정산은 `VERIFY_LIVE_SETTLE=1` opt-in.
-- CI를 gate→deploy 분리: 유닛·E2E·타입체크·마이그레이션 검증 통과 후 배포.
-- LIVE+api 판매 차단 + 항공×직계약 409 (견적·예약·목록·상세).
-- 구 GO 판정문 보관 처리 + `PAYMENT_PROVIDER=toss` 선언 (키 없이 DISABLED 유지).
-
-## 4c. 이전 변경 (`f0a2d31` 커밋済: 토스 계약·직판·계약 API)
-
-- **토스 계약 테스트** (`worker/test/unit/toss.test.ts` 신규 7종): 로컬 스텁
-  상대로 confirm/환불/조회 요청 형태·응답 매핑 검증. `TOSS_API_BASE`는
-  development/test에서만 스텁을 향하고 프로덕션은 항상 실 API로 고정.
-  개통 당일에는 실키만 넣으면 됨 (코드 변경 불필요).
-- **직영(1P) 공급사** (`worker/migrations/0020_direct_sales_supplier.sql`):
-  `ptn_direct_01` + 자사계약 `ect_direct_01`(PENDING) 시드.
-  NOT_INTEGRATED로 심어지므로 시드만으로 판매 불가.
-- **계약 API** (`POST/PATCH /api/v1/admin/contracts`): PG·SUPPLIER·
-  정산계좌·보험·기타 등록 + 상태 전이. 공급사 LIVE 전환은 ACTIVE
-  SUPPLIER 계약을 요구 (E2E 1P 테스트 + 레드드릴로 입증).
-- **개통 체크리스트** (`docs/GO_LIVE_CHECKLIST.md`): PG 계약 후 장사까지
-  0→8단계. 마이그레이션 0020 수동 적용·사업자 ACTIVE·직판 LIVE·PII·
-  메일·Sentry·토스 테스트키→라이브키·웹훅 순서.
-- 로컬 D1 보정: 0020이 구버전으로 적용돼 있어 `ect_direct_01` 행을
-  파일 내용대로 수동 삽입 (미커밋 마이그레이션이라 파일 자체는 단일 버전 유지).
-
-## 4d. 이전 변경 (`c7817f0` 커밋済)
-
-- `c7817f0` Sentry 무의존 리포터: 워커(`worker/src/lib/sentry.ts`) +
-  어드민/파트너(`src/sentry.ts`) + 유저(`plugins/sentry.client.ts`).
-  DSN 미설정 시 조용히 비활성. PII(메일·시크릿 쿼리) 스크럽.
-  `GET /api/v1/health`에 `errorReporting: SENTRY/NOT_CONFIGURED` 추가.
-- CI: `SENTRY_DSN` 시크릿 → `VITE_SENTRY_DSN`·`NUXT_PUBLIC_SENTRY_DSN` 주입.
-  워커는 `wrangler secret put SENTRY_DSN` 필요 (아래 잔여).
-- 운영 D1 QA 잔재 190행 삭제 (사용자 84+예약 18 / 파트너 22+프로필 22+
-  스태프 22 / 마켓 3+1+4 / 액티비티 3+12). 최종: users 2, partners 4,
-  bookings 2, activities 6(시드), mkt 9. 감사로그·카탈로그·시드 유지.
+- verify T38·T39 수리 (시드 의존 → 필터 정합 + 자가 3P행 증명).
+- verify T31 수리 (C1 진실: PENDING 로그인은 200, 영업 API가 403).
+- Go 예약 ID 충돌 수정 (UnixNano + 원자 시퀀스, 50연속 무중복 테스트).
+- MFA 콘솔 UI (로그인 TOTP 단계 + 내 보안 등록/확인/해제 + 상태 API + 테스트 4종).
+- 파트너 동의 저장은 미구현 유지 — 약관이 법무 검토 전 초안이라
+  enforce 시점·방식 결정 없이 기록 체계를 만들지 않음 (사용자 결정 §7-6).
 
 ## 5. 블로커 (정식 오픈 전 필수 — 코드 밖)
 
-운영 `/health` 실측 기준 (본 세션 변경과 무관한 기존 상태):
+### 5-0. 운영 반영·검증 잔여 (코드 완료, 실행 필요)
+
+0. **운영 D1 0037~0044 미적용**. 배포 파이프라인 0단계 또는
+   `docs/GO_LIVE_CHECKLIST.md` 0단계 수동 적용 (0043 DROP·0044 백필 주의 포함).
+1. **verify 로컬 잔여 4종** (T11·T13·T14·T20): prod-진실·환경조건부
+   테스트로 로컬 적색이 정상. 운영 실행에서 판정한다.
+2. **wrangler 인증 만료** (Cloudflare 7403): `npx wrangler login` 필요.
+3. **운영 verify+T41**: `TEST_ADMIN_PASSWORD` 필요 (에이전트 미보유).
+4. **`temp_master_prompt.md` 구 해시**: 사용자 파일 — 직접 삭제.
+
+### 5-1. 외부 자격·계약 9종 (정식 오픈 전 필수)
 
 1. **결제 비활성** — `paymentProvider: DISABLED`. Toss 실가맹점 등록 후
    `TOSS_SECRET_KEY` + `PAYMENT_PROVIDER=toss` 필요.
 2. **여권 암호화키 없음** — `piiEncryptionKey: false`. 여권 포함 예약(항공)이
    503으로 막힌다. `PII_ENC_KEY`(32바이트 base64) 등록 필요.
-3. **판매주체 미가동** — `sellerEntityActive: false`. `business_entities`에
-   ACTIVE 행 없음. 실정산 전 실사업자 등록·활성 필요.
+3. **판매주체 미가동** — `sellerEntityActive: false`. 실사업자 등록·활성 필요.
 4. **메일 미설정** — `emailProvider: NOT_CONFIGURED`. Resend 키 필요.
 5. **오류알림 미가동** — `errorReporting: NOT_CONFIGURED`. Sentry DSN 필요
-   (GitHub Secret + `wrangler secret put SENTRY_DSN`). 코드는 금일 배포済.
+   (GitHub Secret + `wrangler secret put SENTRY_DSN`).
 6. **실공급사 계약 없음** — 카탈로그는 목시드. 미계약 상품 409 차단 중.
-7. **약관 법무 검토 미완** — Legal v2.0 문구 counsel review 필요.
+7. **약관 법무 검토 미완** — Legal v2.0 + 파트너 약관 v1.0 counsel review 필요.
 8. **도메인 미연결** — workers.dev 3URL 운영 중, getfortrip.com 예정.
-9. **운영 파트너 실정보 미등록** — `ptn_mw62m1m2_yaoxd` 회사명·사업자번호
-   플레이스홀더. 실정보 수령 시 SQL 업데이트.
+9. **운영 파트너 실정보 미등록** — `ptn_mw62m1m2_yaoxd` 플레이스홀더.
+   실정보 수령 시 SQL 업데이트.
 
 ## 6. 포털별 상태
 
-- **사용자**: 빌드·200·결제/예약/취소/리뷰/코인 E2E + 운영 41종 녹색.
-  항공 여권예약만 PII 키 없어 503 (블로커 2).
-- **관리자**: 200, 카탈로그 CRUD/bulk·제휴·법무 E2E + 운영 녹색.
-- **파트너**: 200, 주문/정산/웹훅/API키 E2E + 운영 녹색.
+- **사용자**: 빌드·200·결제/예약/취소/리뷰/코인 E2E + verify 녹색.
+  항공 여권예약만 PII 키 없어 503 (블로커 2). eSIM·보험은 판매준비중 표시.
+- **관리자**: 200, 카탈로그 CRUD/bulk·제휴·법무·MFA 콘솔 E2E + verify 녹색.
+- **파트너**: 200, 주문/정산/웹훅/API키 E2E + verify 녹색.
 
 ## 7. 다음 액션
 
-상세 순서는 [개통 체크리스트](../docs/GO_LIVE_CHECKLIST.md) 1→8단계
-(0단계 0020·0022~0026 운영 적용 완료).
+상세 순서는 [개통 체크리스트](../docs/GO_LIVE_CHECKLIST.md) 0→10단계.
 
-0. 후속 4 미커밋 델타 커밋·배포 (사용자 승인 후, 마이그레이션 없음).
+0. 운영 D1 0037~0044 적용 + 적용 후 NULL·DROP 확인 쿼리 (§5-0).
 1. Toss 실가맹 + `PII_ENC_KEY` + 실사업자 ACTIVE → 결제/여권/정산 파일럿.
-2. Sentry DSN 2곳 등록 → `/health` errorReporting: SENTRY 확인.
+2. Sentry DSN 2곳 등록 → verbose `/health` errorReporting: SENTRY 확인.
 3. Resend + 도메인 + 법무 확정 → 정식 오픈 게이트 재측정.
-4. ~~죽은 2종 정책결정~~ → 해소済 (§4 후속 4: 제휴 등록 API + 409 명시).
-5. 운영 verify 41/41 + T41 실정산 (`TEST_ADMIN_PASSWORD` 필요,
-   `VERIFY_LIVE_SETTLE=1` opt-in).
-6. `temp_master_prompt.md`(사용자 파일) 내 구 해시 직접 삭제.
-   wrangler 재로그인(`npx wrangler login`) 후 운영 D1 재확인 권장.
+4. 운영 verify 47/47 + T41 실정산 (`TEST_ADMIN_PASSWORD` 필요).
+5. `temp_master_prompt.md` 구 해시 직접 삭제 + wrangler 재로그인.
+6. 파트너 동의 저장 여부·방식 결정 (법무 검토 후).

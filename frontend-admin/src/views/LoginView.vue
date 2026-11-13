@@ -12,19 +12,25 @@ const password = ref('')
 const show = ref(false)
 const busy = ref(false)
 const error = ref('')
+// Phase 7: enrolled admins must answer the TOTP step-up (#100 made the API,
+// the console never learned it — enrolled logins died at MFA_REQUIRED).
+const needCode = ref(false)
+const totpCode = ref('')
 
 async function submit() {
   error.value = ''
   if (!email.value.trim() || !password.value) { error.value = '이메일과 비밀번호를 입력해 주세요.'; return }
+  if (needCode.value && !totpCode.value.trim()) { error.value = '인증 코드를 입력해 주세요.'; return }
   busy.value = true
   try {
     const res = await fetch(apiUrl('/admin/login'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.value.trim(), password: password.value })
+      body: JSON.stringify({ email: email.value.trim(), password: password.value, ...(needCode.value ? { totpCode: totpCode.value.trim() } : {}) })
     })
     const data = await res.json().catch(() => ({}))
+    if (data.code === 'MFA_REQUIRED') { needCode.value = true; return }
     if (!res.ok || !data.token || !data.user) { error.value = data.error || '이메일 또는 비밀번호가 올바르지 않아요.'; return }
     if (data.user.role !== 'ADMIN') { error.value = '관리자 권한이 없는 계정이에요.'; return }
     saveSession(data.token, { id: data.user.id, name: data.user.fullName || '', email: data.user.email, role: data.user.role })
@@ -59,8 +65,12 @@ async function submit() {
             <button type="button" class="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-ink-subtle hover:text-ink" :aria-label="show ? '비밀번호 숨기기' : '비밀번호 보기'" @click="show = !show"><AppIcon :name="show ? 'eye-off' : 'eye'" :size="16" /></button>
           </div>
         </div>
+        <div v-if="needCode">
+          <label for="login-totp" class="label">인증 코드 (OTP 6자리)</label>
+          <input id="login-totp" v-model="totpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" class="input" placeholder="123456" />
+        </div>
         <p v-if="error" class="rounded-field bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">{{ error }}</p>
-        <button type="submit" class="btn-primary w-full" :disabled="busy">{{ busy ? '확인 중…' : '로그인' }}</button>
+        <button type="submit" class="btn-primary w-full" :disabled="busy">{{ busy ? '확인 중…' : needCode ? '인증하고 로그인' : '로그인' }}</button>
         <p class="text-center text-2xs text-ink-subtle">관리자 계정만 접속할 수 있어요. 모든 변경 작업은 감사 로그에 기록돼요.</p>
       </form>
     </div>

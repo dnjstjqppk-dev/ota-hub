@@ -17,6 +17,7 @@ import TicketsView from '../views/TicketsView.vue'
 import AffiliateView from '../views/AffiliateView.vue'
 import LegalView from '../views/LegalView.vue'
 import EntitiesView from '../views/EntitiesView.vue'
+import SecurityView from '../views/SecurityView.vue'
 import { restoreSession, session } from '../composables/session'
 
 const routes: RouteRecordRaw[] = [
@@ -130,6 +131,12 @@ const routes: RouteRecordRaw[] = [
     path: '/entities',
     name: 'Entities',
     component: EntitiesView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/security',
+    name: 'Security',
+    component: SecurityView,
     meta: { requiresAuth: true }
   },
   {

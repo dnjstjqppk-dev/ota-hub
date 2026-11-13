@@ -749,7 +749,7 @@ async function runVerificationSuite() {
   // ---------------------------------------------------------------------------
   // 31. PARTNER ONBOARDING & PENDING APPROVAL SECURITY ENFORCEMENT
   // ---------------------------------------------------------------------------
-  await test("Partner Onboarding: Registration requires admin approval before login", async () => {
+  await test("Partner Onboarding: approval gates business endpoints while applicants onboard", async () => {
     const applicantEmail = `applicant_${rand}@partner.getfortrip.com`;
     const regRes = await fetch(`${BASE_URL}/api/v1/partner/register`, {
       method: 'POST',
@@ -768,7 +768,8 @@ async function runVerificationSuite() {
     const regJson = await regRes.json();
     if (!regJson.success) throw new Error(`Registration rejected: ${JSON.stringify(regJson)}`);
 
-    // Verify login is blocked with 403 PENDING_APPROVAL
+    // Repaired (Phase 7): since C1, PENDING owners log in (200) to complete
+    // onboarding — approval gates the business endpoints, not the login.
     const loginRes = await fetch(`${BASE_URL}/api/v1/partner/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -777,8 +778,16 @@ async function runVerificationSuite() {
         password: 'PartnerAppPass2026!',
       }),
     });
-    if (loginRes.status !== 403) {
-      throw new Error(`Expected HTTP 403 PENDING_APPROVAL, got HTTP ${loginRes.status}`);
+    if (!loginRes.ok) throw new Error(`Applicant login failed: HTTP ${loginRes.status}`);
+    const loginJson = await loginRes.json();
+    if (loginJson.partner.profileStatus !== 'PENDING_APPROVAL') {
+      throw new Error(`Applicant should be PENDING_APPROVAL: ${JSON.stringify(loginJson.partner)}`);
+    }
+    const gated = await fetch(`${BASE_URL}/api/v1/partner/dashboard`, {
+      headers: { Authorization: `Bearer ${loginJson.token}` },
+    });
+    if (gated.status !== 403) {
+      throw new Error(`Expected 403 on business endpoints before approval, got HTTP ${gated.status}`);
     }
   });
 
@@ -1011,35 +1020,51 @@ async function runVerificationSuite() {
   // 38. MARKETPLACE CATALOG MODEL ATTRIBUTION (1P, 3P, CONSIGNMENT)
   // ---------------------------------------------------------------------------
   await test("Marketplace Catalog: GET /api/v1/marketplace/catalog?model=1P/3P/CONSIGNMENT returns filtered attribution", async () => {
-    // 1. 1P Direct Sales Filter
-    const p1Res = await fetch(`${BASE_URL}/api/v1/marketplace/catalog?model=1P`);
-    if (!p1Res.ok) throw new Error(`Marketplace 1P query failed: HTTP ${p1Res.status}`);
-    const p1Json = await p1Res.json();
-    if (!p1Json.success || !Array.isArray(p1Json.items) || p1Json.items.length === 0) {
-      throw new Error(`Expected seeded 1P items in catalog: ${JSON.stringify(p1Json)}`);
+    // Repaired (Phase 7): the old test demanded seeded rows per model, but
+    // 0035 deleted the ghost rows and 0037 PAUSED the 1P rows — emptiness is
+    // a business state, not a bug. The contract is filter-correctness plus a
+    // live self-seeded 3P row on mutating targets.
+    for (const model of ['1P', '3P', 'CONSIGNMENT']) {
+      const r = await fetch(`${BASE_URL}/api/v1/marketplace/catalog?model=${model}`);
+      if (!r.ok) throw new Error(`Marketplace ${model} query failed: HTTP ${r.status}`);
+      const j = await r.json();
+      if (!j.success || !Array.isArray(j.items)) {
+        throw new Error(`Invalid ${model} catalog shape: ${JSON.stringify(j)}`);
+      }
+      if (!j.items.every((i) => i.merchant_model === model)) {
+        throw new Error(`Non-${model} item returned in ${model} catalog filter`);
+      }
+      if (!j.items.every((i) => i.status === 'ACTIVE')) {
+        throw new Error(`Non-ACTIVE item leaked to the public ${model} catalog`);
+      }
+      for (const i of j.items) {
+        for (const f of ['supply_cost_minor', 'commission_rate_bps', 'seller_payout_minor', 'platform_margin_minor', 'external_sku', 'source_url', 'registered_by']) {
+          if (f in i) throw new Error(`Public ${model} catalog leaks ${f}`);
+        }
+      }
     }
-    const all1P = p1Json.items.every((i) => i.merchant_model === '1P');
-    if (!all1P) throw new Error(`Non-1P item returned in 1P catalog filter`);
-
-    // 2. 3P Partner Sales Filter
-    const p3Res = await fetch(`${BASE_URL}/api/v1/marketplace/catalog?model=3P`);
-    if (!p3Res.ok) throw new Error(`Marketplace 3P query failed: HTTP ${p3Res.status}`);
-    const p3Json = await p3Res.json();
-    if (!p3Json.success || !Array.isArray(p3Json.items) || p3Json.items.length === 0) {
-      throw new Error(`Expected seeded 3P items in catalog: ${JSON.stringify(p3Json)}`);
+    if (!ALLOW_MUTATION) {
+      console.log('(read-only: live-row proof runs on mutating targets)');
+      return;
     }
-    const all3P = p3Json.items.every((i) => i.merchant_model === '3P');
-    if (!all3P) throw new Error(`Non-3P item returned in 3P catalog filter`);
-
-    // 3. Consignment Sales Filter
-    const conRes = await fetch(`${BASE_URL}/api/v1/marketplace/catalog?model=CONSIGNMENT`);
-    if (!conRes.ok) throw new Error(`Marketplace CONSIGNMENT query failed: HTTP ${conRes.status}`);
-    const conJson = await conRes.json();
-    if (!conJson.success || !Array.isArray(conJson.items) || conJson.items.length === 0) {
-      throw new Error(`Expected seeded CONSIGNMENT items in catalog: ${JSON.stringify(conJson)}`);
+    const reg = await fetch(`${BASE_URL}/api/v1/partner/marketplace/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken}` },
+      body: JSON.stringify({ title: `verify t38 ${rand}`, domain: 'ACTIVITY', city: '서울', price: 10000, capacity: 5 }),
+    });
+    if (reg.status === 503) {
+      const regErr = await reg.json().catch(() => ({}));
+      if (regErr.code === 'FEATURE_DISABLED') {
+        skip('3P self-registration disabled on this target');
+        return;
+      }
     }
-    const allCon = conJson.items.every((i) => i.merchant_model === 'CONSIGNMENT');
-    if (!allCon) throw new Error(`Non-CONSIGNMENT item returned in CONSIGNMENT catalog filter`);
+    if (!reg.ok) throw new Error(`3P self-seed failed: HTTP ${reg.status}: ${await reg.text()}`);
+    const itemId = (await reg.json()).product.item_id;
+    const listed = await (await fetch(`${BASE_URL}/api/v1/marketplace/catalog?model=3P`)).json();
+    if (!listed.items.some((i) => i.item_id === itemId)) {
+      throw new Error('Self-seeded 3P product missing from the catalog');
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -1055,11 +1080,18 @@ async function runVerificationSuite() {
       throw new Error(`Invalid marketplace summary format: ${JSON.stringify(json)}`);
     }
     const { model_breakdown, catalog_item_counts } = json.summary;
-    if (!('1P' in model_breakdown) || !('3P' in model_breakdown) || !('CONSIGNMENT' in model_breakdown)) {
-      throw new Error(`Missing 3-tier models in breakdown: ${JSON.stringify(model_breakdown)}`);
-    }
-    if (catalog_item_counts['1P'] < 1 || catalog_item_counts['3P'] < 1 || catalog_item_counts['CONSIGNMENT'] < 1) {
-      throw new Error(`Catalog counts per model must be positive: ${JSON.stringify(catalog_item_counts)}`);
+    for (const model of ['1P', '3P', 'CONSIGNMENT']) {
+      if (!(model in model_breakdown)) {
+        throw new Error(`Missing ${model} in breakdown: ${JSON.stringify(model_breakdown)}`);
+      }
+      // Repaired (Phase 7): counts are zero-filled, never absent — but zero
+      // is lawful now (see T38), so only the shape is asserted.
+      if (typeof catalog_item_counts[model] !== 'number' || catalog_item_counts[model] < 0) {
+        throw new Error(`Bad ${model} catalog count: ${JSON.stringify(catalog_item_counts)}`);
+      }
+      if (typeof model_breakdown[model].order_count !== 'number') {
+        throw new Error(`Bad ${model} breakdown entry: ${JSON.stringify(model_breakdown[model])}`);
+      }
     }
   });
 
