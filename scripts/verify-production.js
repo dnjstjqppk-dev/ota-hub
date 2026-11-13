@@ -457,9 +457,17 @@ async function runVerificationSuite() {
   // 18. OUTLINK ACCESS CONTROL (UNCONFIGURED PARTNER DEFENSE)
   // ---------------------------------------------------------------------------
   await test('Affiliate: Inactive / Unregistered Partner Link Rejected (404)', async () => {
-    const res = await fetch(`${BASE_URL}/out/nonexistent_partner/item-123`, { redirect: 'manual' });
+    const res = await fetch(`${BASE_URL}/api/v1/out/nonexistent_partner/item-123`, { redirect: 'manual' });
     if (res.status !== 404) {
       throw new Error(`Expected 404 for unconfigured affiliate link, got HTTP ${res.status}`);
+    }
+    // #175: the bare legacy form redirects to the canonical path (click counts on arrival).
+    const legacy = await fetch(`${BASE_URL}/out/nonexistent_partner/item-123`, { redirect: 'manual' });
+    if (legacy.status !== 308) {
+      throw new Error(`Expected 308 for the legacy outlink form, got HTTP ${legacy.status}`);
+    }
+    if (!String(legacy.headers.get('location') || '').includes('/api/v1/out/nonexistent_partner/item-123')) {
+      throw new Error(`Legacy outlink redirects to the wrong place: ${legacy.headers.get('location')}`);
     }
   });
 

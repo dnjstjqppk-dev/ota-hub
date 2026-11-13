@@ -436,7 +436,7 @@ async function activeEntity(env: Env): Promise<{ id: string; status: string } | 
 async function loadPromotion(env: Env, code: string | null, userId?: string | null): Promise<Promotion | null> {
   if (!code) return null;
   const p = await env.DB.prepare("SELECT * FROM promotions WHERE code = ?").bind(code.toUpperCase()).first<any>();
-  if (!p) throw new HttpError(400, "PROMO_NOT_FOUND", "존재하지 않는 쿠폰 코드입니다.");
+  if (!p) throw new HttpError(404, "PROMO_NOT_FOUND", "존재하지 않는 쿠폰 코드입니다.");
   // #14: a code alone is not a discount — the caller must hold an unused claim.
   if (userId) {
     const claim = await env.DB.prepare("SELECT is_used FROM user_coupons WHERE user_id = ? AND coupon_code = ?").bind(userId, p.code).first<any>();
@@ -533,7 +533,7 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
   if (coinRaw > 0) {
     const bal = await env.DB.prepare("SELECT trip_coins FROM users WHERE id = ?").bind(user.id).first<{ trip_coins: number }>();
     const balance = Number(bal?.trip_coins || 0);
-    if (coinRaw > balance) throw new HttpError(400, "INSUFFICIENT_COINS", "보유 코인이 부족합니다.", { balance });
+    if (coinRaw > balance) throw new HttpError(409, "INSUFFICIENT_COINS", "보유 코인이 부족합니다.", { balance });
     if (coinRaw > q.totalMinor) throw new HttpError(400, "COINS_EXCEED_TOTAL", "코인 사용액은 결제 금액을 초과할 수 없습니다.", { maxUsable: q.totalMinor });
     coinsMinor = coinRaw;
   }

@@ -67,6 +67,17 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
     return json({ success: true, ...r });
   }
 
+  // #171: exact retired paths first -- the :id matcher below swallows
+  // /bookings/calculate ("calculate" looks like an id) and used to 404 it
+  // instead of answering the honest 410.
+
+  if (/^\/api\/v1\/bookings\/[^/]+\/pay$/.test(path)) {
+    throw new HttpError(410, "ENDPOINT_REMOVED", "이 결제 경로는 폐기되었습니다. /api/v1/payments/confirm 을 사용하세요.");
+  }
+  if (path === "/api/v1/bookings/calculate") {
+    throw new HttpError(410, "ENDPOINT_REMOVED", "가격 계산은 /api/v1/quotes 로 서버에서만 수행됩니다.");
+  }
+
   let m = path.match(/^\/api\/v1\/bookings\/([A-Za-z0-9_-]{4,64})$/);
   if (m && method === "GET") {
     const user = await requireUser(request, env);
@@ -116,11 +127,5 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
     });
   }
 
-  if (/^\/api\/v1\/bookings\/[^/]+\/pay$/.test(path)) {
-    throw new HttpError(410, "ENDPOINT_REMOVED", "이 결제 경로는 폐기되었습니다. /api/v1/payments/confirm 을 사용하세요.");
-  }
-  if (path === "/api/v1/bookings/calculate") {
-    throw new HttpError(410, "ENDPOINT_REMOVED", "가격 계산은 /api/v1/quotes 로 서버에서만 수행됩니다.");
-  }
   return null;
 }

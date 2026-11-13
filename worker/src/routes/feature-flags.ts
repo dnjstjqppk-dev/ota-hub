@@ -17,18 +17,11 @@ export async function handleFeatureFlags(request: Request, env: Env, url: URL): 
       map[f.key] = f.is_enabled === 1;
     });
 
+    // #178: clients need the boolean map only — the dependency graph and
+    // contract intel served no portal (the console uses /admin/* instead).
     return json({
       success: true,
       flags: map,
-      registry: flags.map((f) => ({
-        key: f.key,
-        category: f.category,
-        display_name: f.display_name,
-        is_enabled: f.is_enabled === 1,
-        requires_flags: f.requires_flags,
-        is_external_dependent: f.is_external_dependent === 1,
-        external_contract_status: f.external_contract_status
-      }))
     }, 200, {
       'Cache-Control': 'public, max-age=15, stale-while-revalidate=30'
     });

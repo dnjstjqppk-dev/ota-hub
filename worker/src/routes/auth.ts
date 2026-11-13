@@ -41,7 +41,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
       throw new HttpError(400, "CONSENT_REQUIRED", "이용약관 및 개인정보 수집·이용에 동의해야 가입할 수 있습니다.");
     }
     const exists = await env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
-    if (exists) throw new HttpError(409, "EMAIL_TAKEN", "이미 가입된 이메일입니다. 로그인해주세요.");
+    if (exists) throw new HttpError(409, "EMAIL_EXISTS", "이미 가입된 이메일입니다. 로그인해주세요.");
     const id = newId("usr");
     const versions = await currentVersions(env.DB);
     const marketing = body.agreeMarketing === true;

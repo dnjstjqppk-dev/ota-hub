@@ -80,11 +80,35 @@ async function health(request: Request, env: Env, url: URL): Promise<Response> {
   }, db && jwt ? 200 : 503);
 }
 
+// #181: one explicit router table instead of an anonymous call order. Every
+// router returns null outside its own paths; order below decides only two
+// genuine overlaps — /api/v1/admin/login+logout live in auth but under the
+// admin prefix, and /api/v1/partner/marketplace/* matches both the
+// marketplace router and the partner prefix (partner would 404 it, so
+// marketplace runs first). Catalog stays last: its detail prefixes are the
+// broadest matchers in the table.
+type ApiRouter = (request: Request, env: Env, url: URL) => Promise<Response | null>;
+const API_ROUTES: ReadonlyArray<{ name: string; handle: ApiRouter }> = [
+  { name: "auth", handle: handleAuth },
+  { name: "bookings", handle: handleBookings },
+  { name: "webhooks", handle: handleWebhooks },
+  { name: "feature-flags", handle: handleFeatureFlags },
+  { name: "url-ingest", handle: handleUrlIngest },
+  { name: "marketplace", handle: handleMarketplace },
+  { name: "support", handle: handleSupport },
+  { name: "admin", handle: handleAdmin },
+  { name: "partner", handle: handlePartner },
+  { name: "user", handle: handleUser },
+  { name: "affiliate", handle: handleAffiliate },
+  { name: "uploads", handle: handleUploads },
+  { name: "catalog", handle: handleCatalog },
+];
+
 async function route(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
   if (path === "/api/v1/health") return health(request, env, url);
-  for (const h of [handleAuth, handleBookings, handleWebhooks, handleFeatureFlags, handleUrlIngest, handleMarketplace, handleSupport, handleAdmin, handlePartner, handleUser, handleAffiliate, handleUploads, handleCatalog]) {
-    const r = await h(request, env, url);
+  for (const { handle } of API_ROUTES) {
+    const r = await handle(request, env, url);
     if (r) return r;
   }
   return json({ error: "요청하신 API를 찾을 수 없습니다.", code: "NOT_FOUND" }, 404);

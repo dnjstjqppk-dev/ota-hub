@@ -1,6 +1,6 @@
 import type { Env } from "../env.ts";
 import { HttpError, json, jsonCookies, readJson, str } from "../lib/http.ts";
-import { authCookie, checkAccountLock, clearAllAuthCookies, clearLoginFailures, jwtSecret, rateLimit, recordLoginFailure, requirePartner, requirePartnerOnboarding, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
+import { audit, authCookie, checkAccountLock, clearAllAuthCookies, clearLoginFailures, jwtSecret, rateLimit, recordLoginFailure, requirePartner, requirePartnerOnboarding, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
 import { decryptPiiField, encryptPiiField, hashPassword, isLegacyHash, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 import { EMAIL_RE, validatePasswordPolicy } from "./auth.ts";
@@ -163,6 +163,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       const sv = await verifyPasswordDetailed(pass, s.password_hash, resolvePbkdf2Iterations(env));
       if (!sv.ok) {
         await recordLoginFailure(env, "partner_login", email);
+        await audit(env, s.partner_id, "PARTNER_LOGIN_FAILED", "AUTH", email, { staff: s.id });
         throw new HttpError(401, "INVALID_CREDENTIALS", "파트너 이메일 또는 비밀번호가 일치하지 않습니다.");
       }
       if (s.is_active !== 1) throw new HttpError(403, "STAFF_DEACTIVATED", "비활성화된 직원 계정입니다. 관리자에게 문의하세요.");
@@ -205,6 +206,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const v = await verifyPasswordDetailed(pass, p.password_hash, resolvePbkdf2Iterations(env));
     if (!v.ok) {
       await recordLoginFailure(env, "partner_login", email);
+      await audit(env, p.id, "PARTNER_LOGIN_FAILED", "AUTH", email, {});
       throw new HttpError(401, "INVALID_CREDENTIALS", "파트너 이메일 또는 비밀번호가 일치하지 않습니다.");
     }
     await clearLoginFailures(env, "partner_login", email);
@@ -359,6 +361,9 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       return { ...rest, customerNameMasked: maskedName };
     });
 
+    // #177: money-console views are audited like the admin PII views (#102) —
+    // who looked at whose sales must be answerable.
+    await audit(env, pId, "PARTNER_DASHBOARD_VIEW", "PARTNER", pId, { orders: recent.length });
     return json({
       success: true,
       partner: {
@@ -402,11 +407,22 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     await rateLimit(request, env, "partner_profile", 120, 60);
     const b = await readJson(request);
     if (b.bankName !== undefined || b.bankAccountNumber !== undefined || b.bankAccountHolder !== undefined || b.taxInvoiceEmail !== undefined) needOwner();
+    // #180: length caps alone stored garbage phones, account numbers, and
+    // invoice emails. Names stay free-text (no format to check against).
     const contactPhone = str(b.contactPhone, 50);
+    if (b.contactPhone !== undefined && contactPhone && !/^[\d\s\-+()]{7,20}$/.test(contactPhone)) {
+      throw new HttpError(400, "INVALID_PHONE", "연락처 형식이 올바르지 않습니다.");
+    }
     const bankName = str(b.bankName, 50);
     const bankAccountNumber = str(b.bankAccountNumber, 50);
+    if (b.bankAccountNumber !== undefined && bankAccountNumber && !/^[A-Za-z0-9-]{4,30}$/.test(bankAccountNumber)) {
+      throw new HttpError(400, "INVALID_BANK_ACCOUNT", "계좌번호는 영문·숫자·- 4~30자여야 합니다.");
+    }
     const bankAccountHolder = str(b.bankAccountHolder, 100);
     const taxInvoiceEmail = str(b.taxInvoiceEmail, 254);
+    if (b.taxInvoiceEmail !== undefined && taxInvoiceEmail && !EMAIL_RE.test(taxInvoiceEmail)) {
+      throw new HttpError(400, "INVALID_EMAIL", "유효한 이메일 주소를 입력해주세요.");
+    }
     // #98: account + holder encrypt at rest when the PII key exists.
     const encAcct = bankAccountNumber ? await encryptPiiField(bankAccountNumber, env) : null;
     const encHolder = bankAccountHolder ? await encryptPiiField(bankAccountHolder, env) : null;
@@ -925,17 +941,24 @@ const PARTNER_OPENAPI = {
   info: { title: "getfortrip Partner Extranet API", version: "1.0.0", description: "Server-to-server API for partner PMS/ERP integrations. Authenticate with `Authorization: Bearer gft_live_...` (issue keys in the extranet under API 연동) or a partner JWT." },
   servers: [{ url: "/api/v1", description: "Same origin as the extranet (or https://ota-hub.dnjstjqppk.workers.dev/api/v1)" }],
   paths: {
+    "/partner/register": { post: { summary: "Apply for a partner account (admin approval required)", tags: ["Auth"] } },
+    "/partner/login": { post: { summary: "Owner/staff login (partner JWT, 24h)", tags: ["Auth"] } },
+    "/partner/logout": { post: { summary: "Revoke the current session", tags: ["Auth"] } },
+    "/partner/forgot-password": { post: { summary: "Request a password-reset email", tags: ["Auth"] } },
+    "/partner/reset-password": { post: { summary: "Reset with an emailed token", tags: ["Auth"] } },
     "/partner/dashboard": { get: { summary: "Sales metrics and recent orders", tags: ["Partner"] } },
     "/partner/profile": { get: { summary: "Read company/bank profile", tags: ["Partner"] }, patch: { summary: "Update contact and bank details", tags: ["Partner"] } },
     "/partner/products": {
       get: { summary: "List own products (hotel/car/activity)", tags: ["Catalog"] },
       post: { summary: "Register a product", tags: ["Catalog"] },
     },
+    "/partner/products/{id}": { get: { summary: "Read one own product (rooms included for hotels)", tags: ["Catalog"] } },
     "/partner/inventory": {
       get: { summary: "Read inventory calendar (?itemId=&month=YYYY-MM)", tags: ["Inventory"] },
       put: { summary: "Upsert a date cell (allocatedUnits, priceOverrideMinor, isClosed)", tags: ["Inventory"] },
     },
     "/partner/orders": { get: { summary: "List own orders (customer names masked)", tags: ["Orders"] } },
+    "/partner/orders/{id}": { get: { summary: "Read one own order (payments, refunds, history)", tags: ["Orders"] } },
     "/partner/orders/{id}/confirm": { post: { summary: "Confirm an order", tags: ["Orders"] } },
     "/partner/orders/{id}/reject": { post: { summary: "Reject an order", tags: ["Orders"] } },
     "/partner/settlements": { get: { summary: "Settlement batches and lifetime totals", tags: ["Settlements"] } },
@@ -945,6 +968,8 @@ const PARTNER_OPENAPI = {
       get: { summary: "List staff accounts", tags: ["Staff"] },
       post: { summary: "Invite a staff account", tags: ["Staff"] },
     },
+    "/partner/staff/{id}": { patch: { summary: "Update a staff account (owner only)", tags: ["Staff"] } },
+    "/partner/activities/{id}/slots": { put: { summary: "Upsert activity time slots", tags: ["Inventory"] } },
     "/partner/api-keys": {
       get: { summary: "List API keys (prefixes only)", tags: ["Integration"] },
       post: { summary: "Issue an API key (plaintext returned once)", tags: ["Integration"] },
@@ -954,6 +979,9 @@ const PARTNER_OPENAPI = {
       get: { summary: "Read order-event webhook URL", tags: ["Integration"] },
       put: { summary: "Save order-event webhook URL (https only)", tags: ["Integration"] },
     },
+    "/partner/webhook/test": { post: { summary: "Fire a test order event", tags: ["Integration"] } },
+    "/partner/webhook/deliveries": { get: { summary: "List recent webhook deliveries", tags: ["Integration"] } },
+    "/partner/webhook/rotate": { post: { summary: "Rotate the webhook signing secret", tags: ["Integration"] } },
     "/partner/ingest/url": { post: { summary: "Ingest a product from a supplier URL", tags: ["Catalog"] } },
   },
 };

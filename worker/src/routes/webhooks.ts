@@ -35,7 +35,7 @@ export async function handleWebhooks(request: Request, env: Env, url: URL): Prom
   // Shared-secret check on the registered URL (?key=...). Toss calls the exact
   // URL registered in its console, so the secret rides along on real events.
   if (env.TOSS_WEBHOOK_SECRET && url.searchParams.get("key") !== env.TOSS_WEBHOOK_SECRET) {
-    throw new HttpError(401, "INVALID_WEBHOOK_SECRET", "웹훅 인증에 실패했습니다.");
+    throw new HttpError(403, "INVALID_WEBHOOK_SECRET", "웹훅 인증에 실패했습니다.");
   }
   // #99: PG callbacks are low-volume; 2/s sustained is plenty and a 5x
   // tighter bound against quota-filling floods than the old 600/min.

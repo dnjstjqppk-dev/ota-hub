@@ -2,6 +2,7 @@ import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { rateLimit, requireUser } from "../lib/auth.ts";
 import { decryptField, encryptField, maskName, maskPassport, newId } from "../lib/crypto.ts";
+import { DOMAINS } from "../domain/pricing.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 
 const NAME_EN = /^[A-Z][A-Z' -]{0,48}$/;
@@ -41,11 +42,21 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     await rateLimit(request, env, "user_write", 120, 60);
     const itemId = str(b.itemId || b.item_id, 100);
     if (!itemId) throw new HttpError(400, "ITEM_REQUIRED", "상품 식별자가 필요합니다.");
+    // #182: the domain was free text and any garbage price collapsed to 0.
+    const wishDomain = str(b.domainType || b.domain_type || "HOTEL", 20).toUpperCase();
+    if (!(DOMAINS as readonly string[]).includes(wishDomain)) {
+      throw new HttpError(400, "INVALID_DOMAIN", `상품 유형은 ${DOMAINS.join("·")} 중 하나여야 합니다.`);
+    }
+    const rawPrice = b.priceKrw ?? b.price_krw ?? 0;
+    const wishPrice = Number(rawPrice);
+    if (!Number.isFinite(wishPrice) || wishPrice < 0 || !Number.isInteger(wishPrice)) {
+      throw new HttpError(400, "INVALID_PRICE", "가격은 0 이상의 정수(원)여야 합니다.");
+    }
     const id = newId("wsh");
     await db.prepare(
       `INSERT INTO wishlist (id, user_id, domain_type, item_id, item_title, price_krw, thumbnail_url) VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, domain_type, item_id) DO UPDATE SET item_title = excluded.item_title, price_krw = excluded.price_krw, thumbnail_url = excluded.thumbnail_url`,
-    ).bind(id, u.id, str(b.domainType || b.domain_type || "HOTEL", 20).toUpperCase(), itemId, str(b.itemTitle || b.title || "여행 상품", 200), Number(b.priceKrw || b.price_krw || 0) || 0, str(b.thumbnailUrl || b.thumbnail_url, 500)).run();
+    ).bind(id, u.id, wishDomain, itemId, str(b.itemTitle || b.title || "여행 상품", 200), wishPrice, str(b.thumbnailUrl || b.thumbnail_url, 500)).run();
     return json({ success: true, id, itemId }, 201);
   }
   if (path.startsWith("/api/v1/wishlist/") && method === "DELETE") {

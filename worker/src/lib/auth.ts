@@ -105,6 +105,9 @@ export async function requireAdmin(request: Request, env: Env): Promise<AuthUser
   if (!u) throw new HttpError(401, "UNAUTHORIZED", "관리자 인증이 필요합니다.");
   const row = await env.DB.prepare("SELECT role FROM users WHERE id = ?").bind(u.id).first<{ role: string }>();
   if (!row || row.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "관리자 권한이 없습니다.");
+  // #179: every authed console tap shares one bound (tighter per-endpoint
+  // buckets still apply on top where they exist).
+  await rateLimit(request, env, "admin", 300, 60);
   return { ...u, role: "ADMIN" };
 }
 
@@ -141,6 +144,7 @@ export async function requirePartner(request: Request, env: Env): Promise<AuthUs
     if (!p || p.is_active !== 1 || p.profile_status !== "ACTIVE") {
       throw new HttpError(403, "PARTNER_SUSPENDED", "승인 대기 중이거나 비활성화된 파트너 계정입니다.");
     }
+    await rateLimit(request, env, "partner", 300, 60);
     return { id: k.id, email: k.email, role: "PARTNER", partnerId: k.id, companyName: p.company_name || k.companyName };
   }
   if (u.role !== "PARTNER" && u.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "파트너 권한이 없습니다.");
@@ -152,8 +156,10 @@ export async function requirePartner(request: Request, env: Env): Promise<AuthUs
   }
   if (u.staffId) {
     const s = await env.DB.prepare("SELECT is_active FROM partner_staff WHERE id = ? AND partner_id = ?").bind(u.staffId, u.id).first<any>();
-    if (!s || s.is_active !== 1) throw new HttpError(401, "STAFF_DEACTIVATED", "비활성화된 직원 계정입니다. 다시 로그인해주세요.");
+    if (!s || s.is_active !== 1) throw new HttpError(403, "STAFF_DEACTIVATED", "비활성화된 직원 계정입니다. 다시 로그인해주세요.");
   }
+  // #179: the extranet's authed surface shares one bound (see requireAdmin).
+  await rateLimit(request, env, "partner", 300, 60);
   return { ...u, partnerId: u.id, companyName: p?.company_name || 'GetForTrip 입점 파트너' };
 }
 

@@ -57,7 +57,12 @@ async function resolveClickTitle(env: Env, domain: string, itemId: string): Prom
 export async function handleAffiliate(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
 
-  if (path.startsWith("/out/") || path.startsWith("/api/v1/out/")) {
+  // #175: one canonical outlink path (/api/v1/out/*). The bare legacy form
+  // redirects to it (clicks count on arrival) instead of serving twice.
+  if (path.startsWith("/out/")) {
+    return Response.redirect(`${url.origin}/api/v1${path}${url.search}`, 308);
+  }
+  if (path.startsWith("/api/v1/out/")) {
     // #132: every redirect writes a click row — bound the tap before any work.
     await rateLimit(request, env, "affiliate_out", 120, 60);
     const seg = path.replace("/api/v1", "").split("/").filter(Boolean);

@@ -237,18 +237,18 @@
 [x] 168. T12 무assert → 완료 (P3b / 성공분기 totalMinor>0 단언)
 [x] 169. 체크리스트 드리프트 → 완료 (P3b / EMAIL_FROM 추가절차 명시 + PARTNER_SITE_URL 선언값 정정 + 0041~0044 운영주의 추가)
 [x] 170. /admin/login USER 수락 → 완료 (P3b / 비어드민 403 ADMIN_ONLY + E2E #170)
-171. `bookings.ts:54,75` — :id가 410 가림 → 정확일치 우선 [S]
-172. `catalog.ts:515` — days=abc→null 200 → 기본값 [S]
-173. 에러코드 표기 불일치(TAKEN/EXISTS·400/401 등) → 통일 [S]
-174. `partner.ts:704` — OPENAPI 5그룹 누락 → 보완 [S]
-175. `affiliate.ts:13` — /out/ 중복 버전 → 정식+리다이렉트 [S]
-176. `admin.ts:567` — 미변경행도 updated 카운트 → 변경만 [S]
-177. 파트너 로그인실패·대시보드 감사누락 → 감사추가 [S]
-178. 공개 인텔(플래그/레지스트리/health) → 필드 축소 [S]
-179. 남용방어 불균형 → 제한통일+400 [S]
-180. `partner.ts:305` — PATCH 형식 미검증 → 형식검증 [S]
-181. `index.ts:59` — 디스패치 순서 결합 → 라우터테이블 [S]
-182. `user.ts:19,44` — 위시/알림 자유입력·NaN→0 → allowlist+검증 [S]
+[x] 171. :id가 410 가림 → 완료 (P3c / 410 2종을 :id 앞으로 이동 + E2E #171)
+[x] 172. days NaN 200 → 완료 (P3c / clampLimit(raw,5,90) + E2E #172)
+[x] 173. 에러코드 불일치 → 완료 (P3c / EMAIL_TAKEN→EXISTS·PROMOTION→PROMO·400 NOT_FOUND 3종→404·코인부족→409·직원비활성/웹훅시크릿→403 + E2E #173)
+[x] 174. OPENAPI 누락 → 완료 (P3c / Auth 5종·상품/주문/스태프 상세·슬롯·웹훅 3종 추가 + E2E #174)
+[x] 175. /out/ 중복 버전 → 완료 (P3c / 정식 /api/v1/out + bare 308 리다이렉트 + E2E #175 + verify T18 갱신)
+[x] 176. 미변경행 updated 카운트 → 완료 (P3c / UPDATE 발행분만 카운트 + E2E #176)
+[x] 177. 파트너 감사누락 → 완료 (P3c / 로그인실패·대시보드 감사 + E2E #177)
+[x] 178. 공개 인텔 → 완료 (P3c / 공개 플래그는 boolean map만(registry 삭제, 무소비 확인) + E2E #178. 레지스트리·health는 #41·#162 해소済)
+[x] 179. 남용방어 불균형 → 완료 (P3c / requireAdmin·requirePartner에 admin·partner 300/60 (API키 경로 포함) + E2E #179. "+400"은 해석 불가라 선례값 적용으로 기록)
+[x] 180. 파트너 PATCH 형식 미검증 → 완료 (P3c / 연락처·계좌·세금메일 형식검증(이름은 자유) + E2E #180)
+[x] 181. 디스패치 순서 결합 → 완료 (P3c / 명명 라우터테이블+2건 우선순위 문서화 — 동작 불변, 전체 E2E로 증명)
+[x] 182. 위시/알림 검증 → 완료 (P3c / 위시 도메인 allowlist+가격 정수검증 + E2E #182. 알림은 이미 엄격 검증됨 확인)
 
 ## 기각 20건 (구현 불필요)
 

@@ -337,7 +337,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const contractId = b.contractId ? str(b.contractId, 64) : before.contract_id;
     if (b.contractId) {
       const c = await db.prepare("SELECT status, contract_type FROM entity_contracts WHERE id = ?").bind(contractId).first<{ status: string; contract_type: string }>();
-      if (!c || c.contract_type !== "SUPPLIER") throw new HttpError(400, "CONTRACT_NOT_FOUND", "등록된 공급사 계약(SUPPLIER)이 아닙니다.");
+      if (!c || c.contract_type !== "SUPPLIER") throw new HttpError(404, "CONTRACT_NOT_FOUND", "등록된 공급사 계약(SUPPLIER)이 아닙니다.");
     }
     if (status === "LIVE") {
       if (!contractId) throw new HttpError(409, "CONTRACT_REQUIRED", "LIVE 전환에는 계약(entity_contracts) 등록이 필요합니다.");
@@ -419,7 +419,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       throw new HttpError(400, "INVALID_CONTRACT_TYPE", "contractType은 PG | SUPPLIER | SETTLEMENT_ACCOUNT | INSURANCE | OTHER 중 하나여야 합니다.");
     }
     const ent = await db.prepare("SELECT id FROM business_entities WHERE id = ?").bind(entityId).first();
-    if (!ent) throw new HttpError(400, "ENTITY_NOT_FOUND", "등록된 사업자 엔터티가 아닙니다.");
+    if (!ent) throw new HttpError(404, "ENTITY_NOT_FOUND", "등록된 사업자 엔터티가 아닙니다.");
     const id = b.id !== undefined ? str(b.id, 64) : newId("ect");
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new HttpError(400, "INVALID_ID", "id는 64자 이하의 영문·숫자·-_만 허용됩니다.");
     if (await db.prepare("SELECT id FROM entity_contracts WHERE id = ?").bind(id).first()) {
@@ -664,9 +664,9 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
           created++;
           stmts.push(db.prepare(`INSERT INTO ${spec.table} (${r.cols.join(", ")}) VALUES (${r.cols.map(() => "?").join(", ")})`).bind(...r.vals));
         } else {
-          updated++;
           const dataCols = r.cols.filter((c) => c !== "id");
           if (!dataCols.length) continue; // id-only row: nothing to change
+          updated++; // #176: count emitted UPDATEs, not merely existing ids
           stmts.push(db.prepare(`UPDATE ${spec.table} SET ${dataCols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`).bind(...r.vals.slice(1), r.id));
         }
       }
@@ -1111,7 +1111,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     }
     if (typeof b.isActive !== "boolean" && b.usageLimit === undefined) throw new HttpError(400, "INVALID_BODY", "isActive(boolean) 또는 usageLimit(정수·null)이 필요합니다.");
     const cur = await db.prepare("SELECT id, used_count FROM promotions WHERE id = ?").bind(m[1]).first<any>();
-    if (!cur) throw new HttpError(404, "PROMOTION_NOT_FOUND", "프로모션을 찾을 수 없습니다.");
+    if (!cur) throw new HttpError(404, "PROMO_NOT_FOUND", "프로모션을 찾을 수 없습니다.");
     if (b.usageLimit !== undefined) {
       const lim = b.usageLimit === null ? null : Number(b.usageLimit);
       if (lim !== null && (!Number.isSafeInteger(lim) || lim < 1)) throw new HttpError(400, "INVALID_USAGE_LIMIT", "사용 상한은 1 이상의 정수여야 합니다.");

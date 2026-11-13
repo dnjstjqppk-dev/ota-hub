@@ -1028,7 +1028,7 @@ test("admin: partner status/commission and supplier LIVE switch are validated", 
   assert.ok(sup, "a supplier without contract exists in seed data");
   assert.equal((await api("PATCH", `/api/v1/admin/suppliers/${sup.id}`, { token: ADMIN, body: { integrationStatus: "LIVE", adapter: "api" } })).status, 409);
   assert.equal((await api("PATCH", `/api/v1/admin/suppliers/${sup.id}`, { token: ADMIN, body: { adapter: "telepathy" } })).status, 400);
-  assert.equal((await api("PATCH", `/api/v1/admin/suppliers/${sup.id}`, { token: ADMIN, body: { contractId: "ctr_does_not_exist" } })).status, 400);
+  assert.equal((await api("PATCH", `/api/v1/admin/suppliers/${sup.id}`, { token: ADMIN, body: { contractId: "ctr_does_not_exist" } })).status, 404);
 });
 
 test("url ingest: drafts are never published with missing facts; publish is once-only and invents nothing", async () => {
@@ -1175,7 +1175,7 @@ test("partner staff: invite validation, login, role/active management", async ()
   const owner = roster.data.staff.find((s) => s.role === "OWNER");
   assert.equal((await api("PATCH", `/api/v1/partner/staff/${owner.id}`, { token: P.token, body: { isActive: false } })).status, 403);
   assert.equal((await api("PATCH", `/api/v1/partner/staff/${inv.data.id}`, { token: P.token, body: { isActive: false } })).status, 200);
-  assert.equal((await api("GET", "/api/v1/partner/dashboard", { token: login.data.token })).status, 401, "deactivated staff token rejected");
+  assert.equal((await api("GET", "/api/v1/partner/dashboard", { token: login.data.token })).status, 403, "deactivated staff token rejected");
   assert.equal((await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } })).status, 403);
 });
 
@@ -1987,7 +1987,7 @@ test("affiliate partners: admin register → /out/ 302 → signed postback conve
   assert.ok(list.some((p) => p.partner_id === pid));
   assert.ok(!JSON.stringify(list).includes(SECRET), "secret never listed");
   // /out/ redirects through the registered template and records the click.
-  const redir = await fetch(`${BASE}/out/${pid}/item123?domain=HOTEL`, { redirect: "manual" });
+  const redir = await fetch(`${BASE}/api/v1/out/${pid}/item123?domain=HOTEL`, { redirect: "manual" });
   assert.equal(redir.status, 302);
   const loc = redir.headers.get("location");
   assert.ok(loc.startsWith("https://partner.example.net/offer/item123?click=clk_"), loc);
@@ -3702,6 +3702,102 @@ test("#170: admin login refuses non-admin credentials", async () => {
   const r = await fetch(BASE + "/api/v1/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: U.email, password: "Passw0rd-QA-1" }) });
   assert.equal(r.status, 403);
   assert.equal((await r.json()).code, "ADMIN_ONLY");
+});
+
+test("#171: retired booking paths answer 410 before the id matcher", async () => {
+  assert.equal((await api("GET", "/api/v1/bookings/calculate", { token: A.token })).data.code, "ENDPOINT_REMOVED");
+  assert.equal((await api("POST", "/api/v1/bookings/bkg_x/pay", { token: A.token })).data.code, "ENDPOINT_REMOVED");
+});
+
+test("#172: insurance days clamp to a default instead of nulling totals", async () => {
+  const abc = await api("GET", "/api/v1/insurance/plans?days=abc");
+  assert.equal(abc.data.duration_days, 5);
+  assert.ok(abc.data.plans.every((p) => Number.isFinite(p.total_price_minor)));
+  assert.equal((await api("GET", "/api/v1/insurance/plans?days=-3")).data.duration_days, 1);
+  assert.equal((await api("GET", "/api/v1/insurance/plans?days=999")).data.duration_days, 90);
+});
+
+test("#173: error codes speak one dialect", async () => {
+  const U = await register("dup173");
+  assert.equal((await api("POST", "/api/v1/auth/register", { body: { email: U.email, password: "Passw0rd-QA-1", fullName: "x", agreeTerms: true, agreePrivacy: true } })).data.code, "EMAIL_EXISTS");
+  const bad = await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "HOTEL", itemId: "htl_seoul_01", unitId: "rm_seoul_01_dlx", startDate: day(60), endDate: day(61), rooms: 1, travelers: { adults: 1 }, promotionCode: "NOPE-173" } });
+  assert.equal(bad.status, 404);
+  assert.equal(bad.data.code, "PROMO_NOT_FOUND");
+});
+
+test("#174: partner OpenAPI documents every route group", async () => {
+  const doc = (await api("GET", "/api/v1/partner/openapi.json", { token: (await approvedPartner("doc174")).token })).data;
+  for (const p of ["/partner/register", "/partner/login", "/partner/logout", "/partner/forgot-password", "/partner/reset-password", "/partner/products/{id}", "/partner/orders/{id}", "/partner/staff/{id}", "/partner/activities/{id}/slots", "/partner/webhook/test", "/partner/webhook/deliveries", "/partner/webhook/rotate"]) {
+    assert.ok(doc.paths[p], `openapi documents ${p}`);
+  }
+});
+
+test("#175: bare outlinks redirect to the canonical path", async () => {
+  const r = await fetch(BASE + "/out/anypartner/anyitem?sub_id=s1", { redirect: "manual" });
+  assert.equal(r.status, 308);
+  assert.ok(String(r.headers.get("location")).includes("/api/v1/out/anypartner/anyitem?sub_id=s1"), r.headers.get("location"));
+});
+
+test("#176: bulk upsert counts only emitted updates", async () => {
+  const r = await api("POST", "/api/v1/admin/catalog/bulk", { token: ADMIN, body: { domain: "HOTEL", rows: [{ id: "htl_seoul_01" }] } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.created, 0);
+  assert.equal(r.data.updated, 0);
+  assert.deepEqual(r.data.failed, []);
+});
+
+test("#177: partner logins and dashboard views are audited", async () => {
+  const P = await approvedPartner("aud177");
+  const pe = sql(`SELECT email FROM partners WHERE id = '${P.id}'`)[0].email;
+  await api("POST", "/api/v1/partner/login", { body: { email: pe, password: "WrongPass-9" } });
+  assert.ok(sql(`SELECT COUNT(*) AS c FROM admin_audit_logs WHERE action = 'PARTNER_LOGIN_FAILED' AND target_id = '${pe}'`)[0].c >= 1, "login failure audited");
+  await api("GET", "/api/v1/partner/dashboard", { token: P.token });
+  assert.ok(sql(`SELECT COUNT(*) AS c FROM admin_audit_logs WHERE action = 'PARTNER_DASHBOARD_VIEW' AND target_id = '${P.id}'`)[0].c >= 1, "dashboard view audited");
+});
+
+test("#178: public flags carry the boolean map only", async () => {
+  const r = await api("GET", "/api/v1/feature-flags");
+  assert.equal(r.status, 200);
+  assert.equal(typeof r.data.flags.FLIGHT_BOOKING, "boolean");
+  assert.ok(!("registry" in r.data), "dependency/contract intel stays off the public shape");
+});
+
+test("#179: admin and partner taps share one bound each", async () => {
+  resetLimiter("admin", "partner");
+  assert.equal((await api("GET", "/api/v1/admin/entities", { token: ADMIN })).status, 200, "prime admin");
+  fillBucket("admin", 300);
+  try {
+    assert.equal((await api("GET", "/api/v1/admin/entities", { token: ADMIN })).status, 429);
+  } finally {
+    resetLimiter("admin");
+  }
+  const P = await approvedPartner("lim179");
+  assert.equal((await api("GET", "/api/v1/partner/dashboard", { token: P.token })).status, 200, "prime partner");
+  fillBucket("partner", 300);
+  try {
+    assert.equal((await api("GET", "/api/v1/partner/dashboard", { token: P.token })).status, 429);
+  } finally {
+    resetLimiter("partner");
+  }
+});
+
+test("#180: partner profile PATCH validates formats", async () => {
+  const P = await approvedPartner("fmt180");
+  assert.equal((await api("PATCH", "/api/v1/partner/profile", { token: P.token, body: { contactPhone: "abc" } })).data.code, "INVALID_PHONE");
+  assert.equal((await api("PATCH", "/api/v1/partner/profile", { token: P.token, body: { bankAccountNumber: "!!!" } })).data.code, "INVALID_BANK_ACCOUNT");
+  assert.equal((await api("PATCH", "/api/v1/partner/profile", { token: P.token, body: { taxInvoiceEmail: "not-an-email" } })).data.code, "INVALID_EMAIL");
+  const ok = await api("PATCH", "/api/v1/partner/profile", { token: P.token, body: { contactPhone: "+82-2-1234-5678", bankAccountNumber: "123-45-6789", taxInvoiceEmail: "tax180@local.test" } });
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+});
+
+test("#182: wishlist validates domain and price", async () => {
+  resetLimiter("user_write");
+  const U = await register("wsh182");
+  assert.equal((await api("POST", "/api/v1/wishlist", { token: U.token, body: { domainType: "SPACESHIP", itemId: "x1" } })).data.code, "INVALID_DOMAIN");
+  assert.equal((await api("POST", "/api/v1/wishlist", { token: U.token, body: { domainType: "HOTEL", itemId: "x1", priceKrw: "many" } })).data.code, "INVALID_PRICE");
+  assert.equal((await api("POST", "/api/v1/wishlist", { token: U.token, body: { domainType: "HOTEL", itemId: "x1", priceKrw: -5 } })).data.code, "INVALID_PRICE");
+  const ok = await api("POST", "/api/v1/wishlist", { token: U.token, body: { domainType: "hotel", itemId: "x1", priceKrw: 1000 } });
+  assert.equal(ok.status, 201, JSON.stringify(ok.data));
 });
 
 test("#153: moments carry uploaded photos end to end", async () => {

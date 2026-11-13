@@ -19,10 +19,10 @@ const contains = (s: string): string => `%${likeEscape(s)}%`;
  * `limit=abc` into LIMIT NaN (a 500 from SQLite) and `limit=-5` into an
  * unbounded scan (SQLite reads a negative LIMIT as no limit).
  */
-function clampLimit(raw: string | null, fallback = 50): number {
+function clampLimit(raw: string | null, fallback = 50, max = 100): number {
   const n = parseInt(raw || "", 10);
   if (!Number.isFinite(n)) return fallback;
-  return Math.max(1, Math.min(100, n));
+  return Math.max(1, Math.min(max, n));
 }
 
 const PRICE_NOTICE = "참고 가격 (공급사 실시간 검증 전)";
@@ -557,7 +557,8 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
 
     // 11. Travel Insurance Plans: GET /api/v1/insurance/plans
     if (path === "/api/v1/insurance/plans") {
-      const durationDays = Math.max(1, Math.min(90, parseInt(url.searchParams.get("days") || "5", 10)));
+      // #172: days=abc used to compute NaN and answer 200 with null totals.
+      const durationDays = clampLimit(url.searchParams.get("days"), 5, 90);
       const rows = await env.DB.prepare("SELECT * FROM travel_insurance_plans WHERE is_active = 1 ORDER BY daily_rate_minor ASC").all();
       // #145: same unpurchasable annotation as eSIM (quotes 409).
       const calculated = (rows.results || []).map((p: any) => ({
