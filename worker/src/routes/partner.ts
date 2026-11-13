@@ -335,10 +335,11 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
     const profile = await db.prepare("SELECT * FROM partner_profiles WHERE partner_id = ?").bind(pId).first<any>();
 
-    // Real month-to-date gross from this partner's own bookings (dead bookings excluded).
+    // #146: month-to-date gross counts captured money only — summing total_minor
+    // credited the partner for orders nobody paid for yet.
     const monthStart = new Date().toISOString().slice(0, 7) + "-01";
     const gross = await db.prepare(
-      `SELECT COALESCE(SUM(total_minor), 0) AS g FROM bookings
+      `SELECT COALESCE(SUM(paid_minor), 0) AS g FROM bookings
        WHERE partner_id = ? AND created_at >= ? AND status NOT IN ('EXPIRED', 'CANCELLED', 'REFUNDED', 'FAILED')`,
     ).bind(pId, monthStart).first<{ g: number }>();
     const grossKrw = Number(gross?.g || 0);
@@ -730,11 +731,11 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       "SELECT * FROM partner_settlement_batches WHERE partner_id = ? ORDER BY period_start DESC LIMIT 24"
     ).bind(pId).all();
 
-    // Real lifetime totals from this partner's own bookings (dead bookings excluded).
+    // #146: lifetime totals count captured money only (see dashboard above).
     const profile = await db.prepare("SELECT settlement_rate_bps, bank_name, bank_account_number FROM partner_profiles WHERE partner_id = ?").bind(pId).first<any>();
     const rateBps = profile?.settlement_rate_bps ?? 1000;
     const totals = await db.prepare(
-      `SELECT COALESCE(SUM(total_minor), 0) AS g FROM bookings
+      `SELECT COALESCE(SUM(paid_minor), 0) AS g FROM bookings
        WHERE partner_id = ? AND status NOT IN ('EXPIRED', 'CANCELLED', 'REFUNDED', 'FAILED')`,
     ).bind(pId).first<{ g: number }>();
     const grossKrw = Number(totals?.g || 0);

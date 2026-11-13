@@ -6,6 +6,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, toast } from '../composables/session'
+import { API_BASE_URL } from '../config/api'
 import { useResource } from '../composables/useResource'
 import { DOMAIN_LABEL, domainLabel, krw } from '../composables/format'
 import PageHeader from '../components/PageHeader.vue'
@@ -125,7 +126,9 @@ const suggest = async (term: string, signal: AbortSignal) => {
   return (await api(`/admin/catalog?${p}`, { signal })).items || []
 }
 
-const SITE = 'https://ota-hub.dnjstjqppk.workers.dev'
+// #155: storefront links follow the configured API host (same hub serves the
+// portals) instead of a hardcoded workers.dev URL.
+const SITE = API_BASE_URL.replace(/\/api\/v1\/?$/, '')
 const DETAIL: Record<string, string> = {
   HOTEL: '/hotels/detail/', FLIGHT: '/flights/detail/', TRAIN: '/trains/detail/', CAR: '/cars/detail/',
   TRANSFER: '/transfers/detail/', ACTIVITY: '/things-to-do/detail/', PACKAGE: '/packages/detail/'

@@ -912,7 +912,10 @@ test("partner webhook + money: https-only URL storage, dashboard/settlement tota
   const q = (await quote(A.token)).data.quote;
   const b = (await book(A.token, q)).data.booking;
   sql(`UPDATE bookings SET partner_id = '${P.id}' WHERE id = '${b.id}'`);
-  const total = Number(sql(`SELECT total_minor FROM bookings WHERE id = '${b.id}'`)[0].total_minor);
+  // #146: partner totals count captured money — pay first, then totals match.
+  assert.equal((await api("GET", "/api/v1/partner/dashboard", { token: P.token })).data.stats.monthlyGrossKrw, 0, "unpaid orders credit nothing");
+  assert.equal((await pay(A.token, b)).status, 200, "capture before totals");
+  const total = Number(sql(`SELECT paid_minor FROM bookings WHERE id = '${b.id}'`)[0].paid_minor);
   const dash = await api("GET", "/api/v1/partner/dashboard", { token: P.token });
   assert.equal(dash.data.stats.monthlyGrossKrw, total);
   const st = await api("GET", "/api/v1/partner/settlements", { token: P.token });
@@ -3591,4 +3594,67 @@ test("#145: esim and insurance plans say they cannot be bought yet", async () =>
   assert.equal(ins.status, 200);
   assert.ok(ins.data.plans.length > 0, "insurance plans listed");
   assert.ok(ins.data.plans.every((p) => p.purchasable === false && p.purchase_notice), "every insurance plan annotated");
+});
+
+test("#147: payment confirm replays on a shared idempotency key", async () => {
+  const U = await register("idem147");
+  const q = (await quote(U.token)).data.quote;
+  const b = (await book(U.token, q)).data.booking;
+  const key = idem();
+  const attempt = { bookingId: b.id, orderId: b.id, amount: b.totalMinor, paymentKey: `sbx_ok_idem147${rnd()}` };
+  const first = await api("POST", "/api/v1/payments/confirm", { token: U.token, headers: { "Idempotency-Key": key }, body: attempt });
+  assert.equal(first.status, 200, JSON.stringify(first.data));
+  assert.equal(first.data.replayed, undefined);
+  const again = await api("POST", "/api/v1/payments/confirm", { token: U.token, headers: { "Idempotency-Key": key }, body: attempt });
+  assert.equal(again.status, 200, JSON.stringify(again.data));
+  assert.equal(again.data.replayed, true);
+  assert.equal(again.data.booking.id, b.id);
+  assert.equal(sql(`SELECT COUNT(*) AS c FROM payments WHERE booking_id = '${b.id}'`)[0].c, 1, "one attempt, one payment row");
+  const other = await api("POST", "/api/v1/payments/confirm", { token: U.token, headers: { "Idempotency-Key": key }, body: { ...attempt, orderId: "bkg_elsewhere" } });
+  assert.equal(other.data.code, "IDEMPOTENCY_KEY_REUSED");
+});
+
+test("#149: dev seed scopes the simulator to legacy catalog suppliers", async () => {
+  const rows = Object.fromEntries(sql("SELECT id, adapter FROM suppliers WHERE id IN ('ptn_htl_01','ptn_flt_01','ptn_car_01','ptn_tour_01','ptn_direct_01','sup_airalo_01')").map((r) => [r.id, r.adapter]));
+  for (const id of ["ptn_htl_01", "ptn_flt_01", "ptn_car_01", "ptn_tour_01"]) assert.equal(rows[id], "simulator", `${id} simulates in dev`);
+  assert.equal(rows["ptn_direct_01"], "direct_contract", "1P direct keeps its adapter");
+  assert.equal(rows["sup_airalo_01"], "none", "upstream placeholders stay unconfigured");
+});
+
+test("#151: bookings stop dual-writing legacy REAL twins", async () => {
+  const U = await register("real151");
+  const q = (await quote(U.token)).data.quote;
+  const b = (await book(U.token, q)).data.booking;
+  const row = sql(`SELECT base_amount_krw AS base, tax_amount_krw AS tax, service_fee_krw AS fee, total_minor AS minor FROM bookings WHERE id = '${b.id}'`)[0];
+  assert.equal(Number(row.base), 0, "REAL base twin unwritten (column default)");
+  assert.equal(Number(row.tax), 0, "REAL tax twin unwritten (column default)");
+  assert.equal(Number(row.fee), 0, "REAL fee twin unwritten (column default)");
+  assert.ok(Number(row.minor) > 0, "integer total is the truth");
+  await pay(U.token, b);
+  await api("POST", `/api/v1/bookings/${b.id}/cancel`, { token: U.token });
+  const after = sql(`SELECT refunded_minor AS rm, refund_amount_krw AS rr, cancellation_fee_minor AS fm, cancellation_fee_krw AS fr FROM bookings WHERE id = '${b.id}'`)[0];
+  assert.ok(Number(after.rm) > 0, "refund recorded in minor");
+  assert.ok(after.rr === null || Number(after.rr) === 0, "REAL refund twin unwritten");
+  assert.ok(after.fr === null || Number(after.fr) === 0, "REAL fee twin unwritten");
+});
+
+test("#153: moments carry uploaded photos end to end", async () => {
+  resetLimiter("register");
+  const U = await register("mmt153");
+  const form = new FormData();
+  form.append("file", new Blob(["fake-jpeg-bytes"], { type: "image/jpeg" }), "spot.jpg");
+  form.append("purpose", "MOMENT_PHOTO");
+  const up = await fetch(BASE + "/api/v1/uploads", { method: "POST", headers: { Authorization: `Bearer ${U.token}` }, body: form });
+  const upBody = await up.text();
+  assert.equal(up.status, 201, upBody);
+  const photo = BASE + JSON.parse(upBody).url;
+  assert.ok(photo.startsWith("http://127.0.0.1:"), photo);
+  const id = (await api("POST", "/api/v1/moments", { token: U.token, body: { title: "E2E 사진", content: "본문", city: "서울", photos: [photo, "not-a-url"] } })).data.id;
+  const seen = (await api("GET", "/api/v1/moments")).data.moments.find((m) => m.id === id);
+  assert.ok(seen.photos_json.includes(photo), "uploaded photo kept");
+  assert.ok(!seen.photos_json.includes("not-a-url"), "junk dropped");
+  const liked = await api("POST", `/api/v1/moments/${id}/like`, { token: U.token });
+  assert.equal(liked.data.likesCount, 1);
+  const unliked = await api("DELETE", `/api/v1/moments/${id}/like`, { token: U.token });
+  assert.equal(unliked.data.likesCount, 0);
 });

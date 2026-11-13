@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { apiFetch } from '~/composables/useApi'
+import { apiFetch, useApiUrl } from '~/composables/useApi'
 import { useAuthStore } from '~/stores/auth'
 
 useHead({
@@ -30,6 +30,13 @@ const newCity = ref('')
 const newContent = ref('')
 const submitting = ref(false)
 const submitError = ref('')
+// #153: likes I toggled this session (the feed carries counts, not my state).
+const likedIds = ref(new Set<string>())
+const liking = ref('')
+// #153: photos attached to the draft (uploaded first, URLs attached on submit).
+const draftPhotos = ref<string[]>([])
+const uploading = ref(false)
+const uploadError = ref('')
 
 function toMoment(r: any): Moment {
   let photos: string[] = []
@@ -67,8 +74,56 @@ function openWrite() {
     return
   }
   submitError.value = ''
+  uploadError.value = ''
+  draftPhotos.value = []
   showWriteModal.value = true
 }
+
+const toggleLike = async (m: Moment) => {
+  if (!auth.isLoggedIn) {
+    navigateTo({ path: '/login', query: { redirect: '/moments' } })
+    return
+  }
+  if (liking.value) return
+  liking.value = m.id
+  const liked = likedIds.value.has(m.id)
+  const r = await apiFetch(`/moments/${encodeURIComponent(m.id)}/like`, { method: liked ? 'DELETE' : 'POST' })
+  liking.value = ''
+  if (!r.ok) return
+  if (liked) likedIds.value.delete(m.id)
+  else likedIds.value.add(m.id)
+  m.likes_count = Number((r.data as any)?.likesCount ?? m.likes_count)
+}
+
+const absolutizeUpload = (rel: string): string => {
+  const base = useApiUrl()
+  if (/^https?:\/\//.test(base)) return new URL(rel, base.endsWith('/') ? base : `${base}/`).href
+  return `${window.location.origin}${rel}`
+}
+
+const attachFiles = async (ev: Event) => {
+  const input = ev.target as HTMLInputElement
+  const files = [...(input.files || [])].filter((f) => f.type.startsWith('image/')).slice(0, 10 - draftPhotos.value.length)
+  if (!files.length) return
+  uploading.value = true
+  uploadError.value = ''
+  try {
+    for (const file of files) {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('purpose', 'MOMENT_PHOTO')
+      const res = await fetch(useApiUrl('/uploads'), { credentials: 'include', method: 'POST', body: form })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.url) throw new Error(json.error || '사진 업로드에 실패했습니다.')
+      draftPhotos.value.push(absolutizeUpload(String(json.url)))
+    }
+  } catch (e: any) {
+    uploadError.value = e.message || '사진 업로드에 실패했습니다.'
+  } finally {
+    uploading.value = false
+    input.value = ''
+  }
+};
 
 const submitMoment = async () => {
   const title = newTitle.value.trim()
@@ -78,7 +133,7 @@ const submitMoment = async () => {
   submitError.value = ''
   const r = await apiFetch('/moments', {
     method: 'POST',
-    body: { title, content, city: newCity.value.trim() || '서울' }
+    body: { title, content, city: newCity.value.trim() || '서울', photos: draftPhotos.value.slice(0, 10) }
   })
   submitting.value = false
   if (!r.ok) {
@@ -92,7 +147,7 @@ const submitMoment = async () => {
     city: newCity.value.trim() || '서울',
     title,
     content,
-    photos: [],
+    photos: draftPhotos.value.slice(0, 10),
     likes_count: 0,
     created_at: new Date().toISOString()
   })
@@ -100,6 +155,7 @@ const submitMoment = async () => {
   newTitle.value = ''
   newCity.value = ''
   newContent.value = ''
+  draftPhotos.value = []
 }
 
 onMounted(() => {
@@ -147,9 +203,16 @@ onMounted(() => {
                 <div class="text-xs text-slate-400">{{ m.city }} 여행기 · {{ m.created_at ? new Date(m.created_at).toLocaleDateString() : '' }}</div>
               </div>
             </div>
-            <span class="flex items-center gap-1 px-3 py-1 bg-rose-50 text-rose-600 rounded-full text-xs font-bold">
+            <button
+              type="button"
+              :disabled="liking === m.id"
+              :aria-pressed="likedIds.has(m.id)"
+              :aria-label="likedIds.has(m.id) ? '좋아요 취소' : '좋아요'"
+              :class="['flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold transition disabled:opacity-50', likedIds.has(m.id) ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-600 hover:bg-rose-100']"
+              @click="toggleLike(m)"
+            >
               <AppIcon name="heart" :size="13" /> {{ m.likes_count }}
-            </span>
+            </button>
           </div>
 
           <div>
@@ -181,6 +244,15 @@ onMounted(() => {
           <div>
             <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-content">내용</label>
             <textarea id="moment-content" v-model="newContent" rows="4" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs" placeholder="여행 꿀팁, 맛집, 호텔 후기를 적어주세요."></textarea>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-photos">사진 (최대 10장)</label>
+            <input id="moment-photos" type="file" accept="image/jpeg,image/png,image/webp" multiple :disabled="uploading || draftPhotos.length >= 10" class="w-full text-xs text-slate-600" @change="attachFiles" />
+            <p v-if="uploading" class="mt-1 text-xs text-slate-500" role="status">사진을 올리는 중…</p>
+            <p v-if="uploadError" class="mt-1 text-xs font-bold text-danger" role="alert">{{ uploadError }}</p>
+            <div v-if="draftPhotos.length" class="mt-2 flex flex-wrap gap-2">
+              <img v-for="(p, i) in draftPhotos" :key="p + i" :src="p" class="h-16 w-20 rounded-xl object-cover" alt="첨부 미리보기" />
+            </div>
           </div>
         </div>
 

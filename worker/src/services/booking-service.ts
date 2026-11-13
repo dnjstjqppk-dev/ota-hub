@@ -836,13 +836,16 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   }
   const stmts: Stmt[] = [
     db.prepare(
-      `INSERT INTO bookings (id, user_id, partner_id, booking_number, domain_type, item_id, title, base_amount_krw, tax_amount_krw, service_fee_krw, discount_amount_krw,
+      `INSERT INTO bookings (id, user_id, partner_id, booking_number, domain_type, item_id, title, discount_amount_krw,
         total_price, currency, status, customer_name, customer_email, customer_phone, details_json, inventory_lock_expires_at,
         quote_id, entity_id, supplier_id, total_minor, payment_status, supplier_status, idempotency_key, version, service_start, service_end,
         cancellation_policy_json, payment_mode, transaction_model, trip_coins_used)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'KRW', 'AWAITING_PAYMENT', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNPAID', 'NOT_REQUESTED', ?, 0, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'KRW', 'AWAITING_PAYMENT', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNPAID', 'NOT_REQUESTED', ?, 0, ?, ?, ?, ?, ?, ?)`
     ).bind(
-      id, user.id, bookingPartnerId, number, quote.domain_type, quote.item_id, quote.title, quote.base_minor, quote.tax_minor, quote.fee_minor, quote.discount_minor,
+      // #151: the base/tax/fee REAL twins go unwritten (no reader ever ran).
+      // total_price stays: NOT NULL legacy column (removal needs a rebuild).
+      // discount_amount_krw stays: the single functional discount store.
+      id, user.id, bookingPartnerId, number, quote.domain_type, quote.item_id, quote.title, quote.discount_minor,
       quote.total_minor, contactName, contactEmail, contactPhone,
       JSON.stringify({ travelers: params.travelers, rooms: params.rooms ?? null, simulation, specialRequests: str(body.specialRequests, 500) }),
       lockExpires, quote.id, entity.id, supplier.id, quote.total_minor, idemKey, quote.service_start, quote.service_end,
@@ -1286,8 +1289,8 @@ export async function applyRefundSucceeded(env: Env, b: BookingRow, pay: any, rf
     }),
     // #73: relative, like payments below — a concurrent external sync adds
     // its own slice instead of clobbering ours (or vice versa).
-    db.prepare("UPDATE bookings SET refunded_minor = refunded_minor + ?, refund_amount_krw = refund_amount_krw + ? WHERE id = ?")
-      .bind(rf.amount_minor, rf.amount_minor, b.id),
+    db.prepare("UPDATE bookings SET refunded_minor = refunded_minor + ? WHERE id = ?")
+      .bind(rf.amount_minor, b.id),
     db.prepare("UPDATE refunds SET status = 'SUCCEEDED', provider_refund_id = COALESCE(?, provider_refund_id), attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'PENDING'").bind(providerRefundId, rf.id),
     // #73: relative increment, never a stale-read absolute — concurrent
     // applies cannot lose-update each other's slice.
@@ -1346,7 +1349,7 @@ export async function cancelByCustomer(env: Env, user: AuthUser, bookingId: stri
   }
 
   const { feeMinor, refundMinor } = cancellationPreview(b);
-  await runBatch(db, transition(db, b, "CANCELLATION_REQUESTED", actor, null, { cancellation_fee_minor: feeMinor, cancellation_fee_krw: feeMinor }));
+  await runBatch(db, transition(db, b, "CANCELLATION_REQUESTED", actor, null, { cancellation_fee_minor: feeMinor }));
   let cur = await mustGet(env, b.id);
   const supplier = await loadSupplier(env, b.supplier_id);
   const adapter = adapterFor(supplier?.adapter || "none");
@@ -1355,7 +1358,7 @@ export async function cancelByCustomer(env: Env, user: AuthUser, bookingId: stri
   await logSupplierCall(env, b.supplier_id, b.id, "CANCEL", cx.outcome, Date.now() - t0, JSON.stringify(cx));
 
   if (cx.outcome === "REJECTED") {
-    await runBatch(db, transition(db, cur, b.status as BookingStatus, { type: "SUPPLIER", id: b.supplier_id }, `SUPPLIER_REJECTED_CANCEL`, { cancellation_fee_minor: 0, cancellation_fee_krw: 0 }));
+    await runBatch(db, transition(db, cur, b.status as BookingStatus, { type: "SUPPLIER", id: b.supplier_id }, `SUPPLIER_REJECTED_CANCEL`, { cancellation_fee_minor: 0 }));
     throw new HttpError(409, "SUPPLIER_REJECTED_CANCELLATION", `공급사가 취소를 거절했습니다: ${cx.message}`);
   }
   if (cx.outcome === "UNKNOWN") {
@@ -1551,7 +1554,6 @@ export async function applyExternalCancel(env: Env, bookingId: string, ext: Exte
 
   const minors = {
     refunded_minor: b.refunded_minor + delta,
-    refund_amount_krw: b.refunded_minor + delta,
     payment_status: fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED",
     ...(supplierCancelled ? { supplier_status: "CANCELLED" } : {}),
   };
@@ -1593,8 +1595,8 @@ export async function applyExternalCancel(env: Env, bookingId: string, ext: Exte
   // batch aborts (409 CONCURRENT_MODIFICATION, converted below when covered).
   const payGuard = (label: string) => db.prepare("INSERT INTO txn_guards (ok, label) SELECT COUNT(*), ? FROM payments WHERE id = ? AND refunded_minor = ?")
     .bind(label, pay.id, pay.refunded_minor);
-  const bookingMinors = db.prepare("UPDATE bookings SET refunded_minor = refunded_minor + ?, refund_amount_krw = refund_amount_krw + ? WHERE id = ?")
-    .bind(delta, delta, b.id);
+  const bookingMinors = db.prepare("UPDATE bookings SET refunded_minor = refunded_minor + ? WHERE id = ?")
+    .bind(delta, b.id);
   const statusMinors: Record<string, string | number | null> = { payment_status: minors.payment_status as string };
   if (supplierCancelled) statusMinors.supplier_status = "CANCELLED";
   const path = fullyRefunded ? refundPathToRefunded(b.status) : null;
@@ -1967,7 +1969,7 @@ export async function adminRefund(env: Env, admin: AuthUser, bookingId: string, 
   const after = await mustGet(env, b.id);
   const fee = after.paid_minor - after.refunded_minor;
   if (after.status === "REFUNDED" && fee > 0) {
-    await env.DB.prepare("UPDATE bookings SET cancellation_fee_minor = ?, cancellation_fee_krw = ? WHERE id = ?").bind(fee, fee, b.id).run();
+    await env.DB.prepare("UPDATE bookings SET cancellation_fee_minor = ? WHERE id = ?").bind(fee, b.id).run();
   }
   return mustGet(env, b.id);
 }

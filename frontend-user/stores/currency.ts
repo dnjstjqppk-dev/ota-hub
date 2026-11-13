@@ -1,9 +1,22 @@
 import { defineStore } from 'pinia'
 
+/**
+ * #157: pure conversion core (unit-tested). Until live rates arrive the
+ * hardcoded table below must never silently price anything — unloaded
+ * conversions fail safe to KRW truth instead of fictional dollars.
+ */
+export function convertKrw(krwAmount: number, activeCurrency: string, rates: Record<string, number>, loaded: boolean): { amount: number; currency: string; symbol: string } {
+  const symbols: Record<string, string> = { KRW: '₩', USD: '$', JPY: '¥', EUR: '€', CNY: '¥', GBP: '£' }
+  if (!loaded) return { amount: krwAmount, currency: 'KRW', symbol: '₩' }
+  const rate = rates[activeCurrency] || 1.0
+  return { amount: krwAmount / rate, currency: activeCurrency, symbol: symbols[activeCurrency] || '$' }
+}
+
 export const useCurrencyStore = defineStore('currency', {
   state: () => ({
     activeCurrency: 'KRW',
     symbol: '₩',
+    ratesLoaded: false,
     rates: {
       KRW: 1.0,
       USD: 1350.0,
@@ -13,6 +26,9 @@ export const useCurrencyStore = defineStore('currency', {
       GBP: 1720.0
     } as Record<string, number>
   }),
+  getters: {
+    ratesStale: (s): boolean => !s.ratesLoaded,
+  },
   actions: {
     async fetchRates() {
       try {
@@ -24,6 +40,7 @@ export const useCurrencyStore = defineStore('currency', {
           json.rates.forEach((r: any) => {
             if (r?.currency && Number.isFinite(Number(r.rate_to_krw))) this.rates[r.currency] = Number(r.rate_to_krw)
           })
+          this.ratesLoaded = true
         }
       } catch (e) {
         console.error('Failed to fetch FX rates', e)
@@ -42,12 +59,11 @@ export const useCurrencyStore = defineStore('currency', {
       }
     },
     formatKRW(krwAmount: number): string {
-      const rate = this.rates[this.activeCurrency] || 1.0
-      const converted = krwAmount / rate
-      if (this.activeCurrency === 'KRW' || this.activeCurrency === 'JPY') {
-        return `${this.symbol}${Math.round(converted).toLocaleString()}`
+      const { amount, currency, symbol } = convertKrw(krwAmount, this.activeCurrency, this.rates, this.ratesLoaded)
+      if (currency === 'KRW' || currency === 'JPY') {
+        return `${symbol}${Math.round(amount).toLocaleString()}`
       }
-      return `${this.symbol}${(Math.round(converted * 100) / 100).toFixed(2)}`
+      return `${symbol}${(Math.round(amount * 100) / 100).toFixed(2)}`
     }
   }
 })

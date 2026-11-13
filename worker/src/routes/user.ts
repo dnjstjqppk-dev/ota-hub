@@ -17,6 +17,12 @@ function assertRealDate(v: string, code: string, message: string): void {
   }
 }
 
+// #153: moment photos are https uploads in production; local dev serves the
+// same API over plain http loopback, which must not silently drop them.
+function isMomentPhotoUrl(p: string): boolean {
+  return /^https:\/\//.test(p) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(p);
+}
+
 export async function handleUser(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
   const method = request.method;
@@ -247,7 +253,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     const title = str(b.title, 120);
     const content = str(b.content, 5000);
     if (!title || !content) throw new HttpError(400, "INVALID_MOMENT", "제목과 내용을 입력해주세요.");
-    const photos = Array.isArray(b.photos) ? b.photos.filter((p: unknown) => typeof p === "string" && /^https:\/\//.test(p)).slice(0, 10) : [];
+    const photos = Array.isArray(b.photos) ? b.photos.filter((p: unknown) => typeof p === "string" && isMomentPhotoUrl(p)).slice(0, 10) : [];
     const id = newId("mmt");
     await db.prepare("INSERT INTO trip_moments (id, user_id, user_name, city, title, content, photos_json) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .bind(id, u.id, u.fullName || "여행자", str(b.city || "서울", 40), title, content, JSON.stringify(photos)).run();

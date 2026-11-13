@@ -1,5 +1,6 @@
 import type { Env } from "../env.ts";
-import { HttpError, json, readJson } from "../lib/http.ts";
+import { HttpError, json, readJson, str } from "../lib/http.ts";
+import { idempotencyPrecheck, idempotencyStore } from "../lib/idempotency.ts";
 import { rateLimit, requireUser } from "../lib/auth.ts";
 import { getPaymentProvider } from "../payments/provider.ts";
 import * as S from "../services/booking-service.ts";
@@ -30,7 +31,7 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
     const user = await requireUser(request, env);
     await rateLimit(request, env, "user_read", 600, 60);
     const rows = await env.DB.prepare(
-      `SELECT id, booking_number, domain_type, item_id, title, status, total_minor, total_price, currency, payment_status, service_start, service_end, created_at
+      `SELECT id, booking_number, domain_type, item_id, title, status, total_minor, currency, payment_status, service_start, service_end, created_at
        FROM bookings WHERE user_id = ? ORDER BY created_at DESC LIMIT 100`,
     ).bind(user.id).all<any>();
     const { STATUS_LABEL_KO } = await import("../domain/state-machine.ts");
@@ -39,7 +40,7 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
       bookings: (rows.results || []).map((r: any) => ({
         id: r.id, bookingNumber: r.booking_number, domain: r.domain_type, itemId: r.item_id, title: r.title, status: r.status,
         statusLabel: (STATUS_LABEL_KO as any)[r.status] || r.status,
-        totalMinor: r.total_minor ?? Math.round(Number(r.total_price || 0)), currency: r.currency,
+        totalMinor: r.total_minor ?? 0, currency: r.currency,
         paymentStatus: r.payment_status, serviceStart: r.service_start, serviceEnd: r.service_end, createdAt: r.created_at,
       })),
     });
@@ -48,7 +49,21 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
   if (path === "/api/v1/payments/confirm" && method === "POST") {
     const user = await requireUser(request, env);
     await rateLimit(request, env, "payments", 120, 60);
-    const r = await S.confirmPayment(env, user, await readJson(request));
+    const body = await readJson(request);
+    // #147: concurrent tabs submitting one payment share a key — the second
+    // replays the first instead of 409ing. Optional (old clients send none);
+    // same key + different payment is a 422, like the coin-adjust endpoint.
+    const idemKey = str(request.headers.get("Idempotency-Key"), 100);
+    if (idemKey) {
+      if (!/^[A-Za-z0-9_-]{16,80}$/.test(idemKey)) throw new HttpError(400, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key는 16~80자의 영문·숫자·-_여야 합니다.");
+      const idem = await idempotencyPrecheck(env, "payments:confirm", idemKey, [user.id, str(body.bookingId, 64), str(body.orderId, 64), String(body.amount), str(body.paymentKey, 200)]);
+      if (idem.replay) return json({ ...(idem.replay.body as Record<string, unknown>), replayed: true }, idem.replay.status);
+      const keyed = await S.confirmPayment(env, user, body);
+      const out = { success: true, ...keyed };
+      await idempotencyStore(env, "payments:confirm", idemKey, 200, out);
+      return json(out);
+    }
+    const r = await S.confirmPayment(env, user, body);
     return json({ success: true, ...r });
   }
 

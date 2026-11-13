@@ -90,7 +90,7 @@ onMounted(() => {
       <div class="card space-y-2 p-5">
         <div class="text-xs font-bold uppercase tracking-wider text-ink-subtle">등록 공급 상품</div>
         <div class="text-2xl font-black tabular text-ink">{{ stats.activeProductsCount }}개</div>
-        <div class="text-[11px] font-bold text-success">정상 판매 중</div>
+        <div class="text-[11px] text-ink-subtle">익스트라넷 등록 상품</div>
       </div>
       <div class="card space-y-2 p-5">
         <div class="text-xs font-bold uppercase tracking-wider text-ink-subtle">처리 대기 주문</div>

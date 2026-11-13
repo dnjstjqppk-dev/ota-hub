@@ -212,18 +212,18 @@
 
 ## P3 — 마이너 37건
 
-146. `partner.ts:541` — 합계가 미결제 포함 total 합산 → captured paid만 [S]
-147. `booking-service.ts:47` — confirm에 Idempotency-Key 없음. 동시탭 409 → 키+리플레이 [S]
-148. 마이그레이션 25건 ALTER에 IF NOT EXISTS 없음 → 가드/문서 [S]
-149. `dev-seed.mjs:49` — 전 공급사를 simulator로. 구분불가 → 범위지정 [S]
-150. `0003:53` — partner_cancellations 무접촉 데드테이블 → 구현/삭제 [S]
-151. `0001:272-277` — REAL 레거시 금액컬럼 이중기록 → 중단+1회 백필 [S]
-152. `partner/DashboardView.vue:92` — "정상판매중" 정적문구 → 도출/삭제 [S]
-153. moments 좋아요/사진 UI 없음 → UI 추가 [S]
-154. `help.vue:124-146` — 문의에 bookingId 없음 → 선택필드 [S]
-155. `admin/CatalogView.vue:128` — workers.dev 하드코딩 → 설정연동 [S]
-156. `initialBookings.ts` 등 데드 픽스처 → 삭제 [S]
-157. `currency.ts:8-14` — 폴백환율 침묵변환 → 표시/실패 [S]
+[x] 146. 합계 미결제 포함 → 완료 (P3a / 대시보드·정산 SUM(paid_minor)로, E2E는 선결제 후 단언으로)
+[x] 147. confirm 멱등키 없음 → 완료 (P3a / 선택적 Idempotency-Key+리플레이+422＋형식검증 + E2E #147)
+[x] 148. ALTER 가드 없음 → 완료 (P3a / worker/migrations/README.md — SQLite에 ADD COLUMN IF NOT EXISTS가 없어 추적 1회 적용(journal+배포게이트)으로 보장함을 문서화)
+[x] 149. 전 공급사 simulator → 완료 (P3a / dev-seed를 4개 레거시(ptn_htl·flt·car·tour_01)로 범위지정 — 직영·sup_*·unassigned_*는 시드 어댑터 유지 + E2E #149)
+[x] 150. partner_cancellations 데드테이블 → 완료 (P3a / 0043 DROP — 전수 무참조 확인, 라이브 취소경로는 bookings+refunds)
+[x] 151. REAL 이중기록 → 완료 (P3a / 0044 total_minor 백필 + base·tax·fee·cancel·refund REAL 쓰기 중단 + 목록 fallback 제거. total_price(NOT NULL)·discount(단일실효)는 유지·주석 + E2E #151)
+[x] 152. "정상판매중" 정적문구 → 완료 (P3a / 중립 라벨로 교체 — 대시보드는 판매여부를 모름)
+[x] 153. 모먼트 좋아요/사진 UI → 완료 (P3a / 좋아요 토글 + MOMENT_PHOTO 업로드·첨부 + 서버 localhost-http 허용 + E2E #153 + SFC 4종)
+[x] 154. 문의 예약 연결 없음 → 완료 (P3a / 예약 선택필드+연결 표시(서버 소유검증 기존) + SFC 2종)
+[x] 155. workers.dev 하드코딩 → 완료 (P3a / API_BASE_URL에서 origin 도출)
+[x] 156. 데드 픽스처 → 완료 (P3a / initialBookings.ts 삭제 — 무참조 확인, 카탈로그 8종은 라이브라 유지)
+[x] 157. 폴백환율 침묵변환 → 완료 (P3a / ratesLoaded+ratesStale+미로드 시 KRW 안전표시 + 순수 convertKrw 유닛 3종)
 158. `help.vue:17` — eSIM FAQ가 판매전제 → 문구정합 [S]
 159. `flights/search.vue:235,279` — router.back() 이탈 → patch [S]
 160. `transfers/detail/[id].vue:19` — 항공편명 입력 약속 vs 필드없음 → 필드/완화 [S]

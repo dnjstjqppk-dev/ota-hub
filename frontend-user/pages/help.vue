@@ -34,9 +34,17 @@ interface Inquiry {
   category: string
   subject: string
   body: string
+  booking_id: string | null
   status: string
   admin_note: string | null
   created_at: string
+}
+
+interface MyBooking {
+  id: string
+  bookingNumber: string
+  title: string
+  status: string
 }
 
 const inquiries = ref<Inquiry[]>([])
@@ -44,6 +52,9 @@ const listState = ref<'loading' | 'ready' | 'error'>('loading')
 const category = ref('BOOKING')
 const subject = ref('')
 const body = ref('')
+// #154: optional booking link for the inquiry (server verifies ownership).
+const bookingId = ref('')
+const myBookings = ref<MyBooking[]>([])
 const submitting = ref(false)
 const submitError = ref('')
 const submitted = ref(false)
@@ -61,6 +72,10 @@ const fetchMine = async () => {
   } else {
     listState.value = 'error'
   }
+  const b = await apiFetch('/bookings')
+  if (b.ok && Array.isArray((b.data as any).bookings)) {
+    myBookings.value = (b.data as any).bookings
+  }
 }
 
 function goLogin() {
@@ -74,7 +89,7 @@ const submitInquiry = async () => {
   submitting.value = true
   submitError.value = ''
   submitted.value = false
-  const r = await apiFetch('/inquiries', { method: 'POST', body: { category: category.value, subject: s, body: b } })
+  const r = await apiFetch('/inquiries', { method: 'POST', body: { category: category.value, subject: s, body: b, ...(bookingId.value ? { bookingId: bookingId.value } : {}) } })
   submitting.value = false
   if (!r.ok) {
     submitError.value = (r.data as any)?.error || '접수에 실패했습니다. 다시 시도해주세요.'
@@ -83,6 +98,7 @@ const submitInquiry = async () => {
   submitted.value = true
   subject.value = ''
   body.value = ''
+  bookingId.value = ''
   fetchMine()
 }
 
@@ -135,8 +151,15 @@ onMounted(() => {
           </div>
         </div>
         <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-booking">관련 예약 (선택)</label>
+          <select id="inq-booking" v-model="bookingId" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">
+            <option value="">예약 선택 안 함</option>
+            <option v-for="b in myBookings" :key="b.id" :value="b.id">{{ b.bookingNumber }} · {{ b.title }}</option>
+          </select>
+        </div>
+        <div>
           <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-body">내용</label>
-          <textarea id="inq-body" v-model="body" rows="5" maxlength="5000" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs" placeholder="예약 번호가 있으면 함께 적어주시면 더 빨리 확인할 수 있습니다."></textarea>
+          <textarea id="inq-body" v-model="body" rows="5" maxlength="5000" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs" placeholder="문의 내용을 입력해 주세요."></textarea>
         </div>
         <p v-if="submitError" class="text-xs font-bold text-danger" role="alert">{{ submitError }}</p>
         <p v-if="submitted" class="text-xs font-bold text-success" role="status">접수되었습니다. 확인 후 이 페이지에서 답변 상태를 볼 수 있습니다.</p>
@@ -165,6 +188,7 @@ onMounted(() => {
               <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold" :class="t.status === 'OPEN' ? 'bg-amber-50 text-amber-700' : t.status === 'IN_PROGRESS' ? 'bg-blue-50 text-trip-blue' : 'bg-emerald-50 text-emerald-700'">{{ STATUS_LABEL[t.status] || t.status }}</span>
             </div>
             <h3 class="font-bold text-slate-900 text-sm">{{ t.subject }}</h3>
+            <p v-if="t.booking_id" class="text-[11px] font-bold text-trip-blue">관련 예약: {{ t.booking_id }}</p>
             <p class="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{{ t.body }}</p>
             <p v-if="t.admin_note" class="text-xs text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">답변: {{ t.admin_note }}</p>
           </div>
