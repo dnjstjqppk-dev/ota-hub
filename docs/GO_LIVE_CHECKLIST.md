@@ -80,6 +80,24 @@ npx wrangler d1 execute ota_production --remote --command "SELECT id, adapter, i
 > npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT COUNT(*) FROM flights WHERE partner_id IS NOT NULL AND partner_id NOT IN (SELECT id FROM partners)) AS dangling_flights, (SELECT COUNT(*) FROM bookings WHERE partner_id IS NOT NULL AND partner_id NOT IN (SELECT id FROM partners)) AS dangling_bookings;"
 > # 기대: 둘 다 0
 > ```
+>
+> 0041(어드민 MFA) 주의: `admin_mfa_secrets` 테이블이 생긴다. 기존 어드민은
+> TOTP 등록 전까지 종전대로 로그인되며, 등록·확정 후 12시간 토큰+MFA가
+> 적용된다. 운영 작업 없음(어드민별 등록은 콘솔에서).
+>
+> 0042(슬롯 클레임) 주의: `booking_items`에 nullable 2컬럼+인덱스,
+> `activity_time_slots`에 갱신시각 1컬럼이 추가된다. 기존 행 영향 없음.
+>
+> 0043(데드테이블 제거) 주의: 무참조 `partner_cancellations`가 DROP된다.
+> 쓰는 코드가 없어 손실 행은 없으나 되돌릴 수 없으니 적용 전 백업을 확인한다.
+>
+> 0044(정수 합계 백필) 주의: `total_minor` NULL 행이 REAL `total_price`에서
+> 채워진다. 이후 목록·상세는 정수 컬럼만 읽는다. 적용 후 NULL 잔여 확인:
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT COUNT(*) AS null_minor FROM bookings WHERE total_minor IS NULL;"
+> # 기대: 0
+> ```
 
 ## 1. 판매주체 ACTIVE (사업자 정보 필요)
 
@@ -99,7 +117,7 @@ Invoke-RestMethod -Method Patch -Uri https://ota-hub.dnjstjqppk.workers.dev/api/
 확인:
 
 ```powershell
-(Invoke-RestMethod https://ota-hub.dnjstjqppk.workers.dev/api/v1/health).checks.sellerEntityActive
+(Invoke-RestMethod 'https://ota-hub.dnjstjqppk.workers.dev/api/v1/health?verbose=1' -Headers @{ Authorization = "Bearer $ADMIN_TOKEN" }).checks.sellerEntityActive
 # 기대: True
 ```
 
@@ -129,7 +147,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 npx wrangler secret put PII_ENC_KEY
 ```
 
-확인: `/health` → `piiEncryptionKey: True`.
+확인(어드민 토큰 필요): `/api/v1/health?verbose=1` → `piiEncryptionKey: True`.
 
 ## 4. 도메인 연결 (메일·PG보다 먼저)
 
@@ -146,7 +164,8 @@ npx wrangler secret put PII_ENC_KEY
 
 그 뒤 `wrangler.jsonc` vars가 실도메인을 가리키는지 확인하고 재배포
 (`PUBLIC_SITE_URL=https://getfortrip.com`,
-`PARTNER_SITE_URL=https://partner.getfortrip.com` — 현재 선언済,
+`PARTNER_SITE_URL`을 `https://partner.getfortrip.com`으로 변경
+(현재 선언값은 `ota-partner` workers.dev),
 `ALLOWED_ORIGINS`에 실도메인 포함 확인).
 
 확인: 3개 실도메인 루트 200 + `/api/v1/health` 200.
@@ -161,8 +180,9 @@ npx wrangler secret put PII_ENC_KEY
 npx wrangler secret put RESEND_API_KEY
 ```
 
-`EMAIL_FROM`은 `wrangler.jsonc` vars에 확정 발신자로 교체 후 재배포.
-확인: `/health` → `emailProvider: RESEND`.
+`wrangler.jsonc` vars에 발신자를 **추가** 후 재배포 (시크릿 아님 — 주소는 공개 정보):
+`"EMAIL_FROM": "getfortrip <noreply@getfortrip.com>"` (도메인 인증된 발신자로 교체).
+확인(어드민 토큰 필요): `/api/v1/health?verbose=1` → `emailProvider: RESEND`.
 
 ## 6. 오류 알림 (Sentry)
 
@@ -171,7 +191,7 @@ npx wrangler secret put RESEND_API_KEY
 npx wrangler secret put SENTRY_DSN   # 워커 런타임용
 ```
 
-확인: `/health` → `errorReporting: SENTRY`.
+확인(어드민 토큰 필요): `/api/v1/health?verbose=1` → `errorReporting: SENTRY`.
 
 ## 7. PG 연결 — 토스 테스트키로 먼저 검증 (계약 직후)
 
@@ -186,7 +206,7 @@ npx wrangler secret put TOSS_SECRET_KEY   # test_sk_... 입력
 `TOSS_CLIENT_KEY`(`test_ck_...`)는 공개키라 `wrangler.jsonc` vars에 넣고 재배포.
 확인 순서:
 
-1. `/health` → `paymentProvider: toss:SANDBOX`, `/api/v1/payments/config` → `enabled: true`.
+1. (어드민 토큰) `/api/v1/health?verbose=1` → `paymentProvider: toss:SANDBOX`, `/api/v1/payments/config` → `enabled: true`.
 2. 실카드가 아닌 토스 테스트결제로 1건 결제 → 운영자 확정(어드민 주문 상세) →
    바우처 발급 → 취소·환불까지 수행.
 3. 어드민 정산/원장에서 해당 건이 SANDBOX로 구분되는지 확인.
@@ -195,7 +215,7 @@ npx wrangler secret put TOSS_SECRET_KEY   # test_sk_... 입력
 
 상점관리자에서 라이브키(`live_sk_`, `live_ck_`) 발급 후 같은 자리에 교체.
 
-확인: `/health` → `paymentProvider: toss:LIVE`. 첫 실결제 1건은 소액 테스트
+확인(어드민 토큰): `/api/v1/health?verbose=1` → `paymentProvider: toss:LIVE`. 첫 실결제 1건은 소액 테스트
 상품으로 결제→확정→취소·환불 풀루프를 돌리고, 토스 상점관리자 입금/취소 내역과
 대사한 뒤 정상 상품 판매를 연다.
 

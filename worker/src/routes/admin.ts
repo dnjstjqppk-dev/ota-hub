@@ -752,7 +752,10 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   m = path.match(/^\/api\/v1\/admin\/affiliate\/partners\/([A-Za-z0-9_-]+)$/);
   if (m && method === "PATCH") {
     const b = await readJson(request);
-    const before = await db.prepare("SELECT * FROM affiliate_partners_config WHERE partner_id = ?").bind(m[1]).first<any>();
+    // #165: ids register lowercase-only — an uppercase PATCH id 404d instead
+    // of matching. Normalize before the lookup, not after the miss.
+    const pid = m[1].toLowerCase();
+    const before = await db.prepare("SELECT * FROM affiliate_partners_config WHERE partner_id = ?").bind(pid).first<any>();
     if (!before) throw new HttpError(404, "PARTNER_NOT_FOUND", "제휴사를 찾을 수 없습니다.");
     const name = b.name !== undefined ? str(b.name, 200) : before.name;
     const template = b.deepLinkTemplate !== undefined ? str(b.deepLinkTemplate, 500) : before.deep_link_template;
@@ -763,9 +766,9 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     if (!/^https:\/\/.+/.test(template)) throw new HttpError(400, "INVALID_DEEP_LINK", "deepLinkTemplate은 https:// URL이어야 합니다.");
     if (secret.length < 24 || secret.length > 200) throw new HttpError(400, "WEAK_PARTNER_SECRET", "secretKey는 24자 이상이어야 합니다.");
     await db.prepare("UPDATE affiliate_partners_config SET name = ?, deep_link_template = ?, affiliate_id = ?, secret_key = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE partner_id = ?")
-      .bind(name, template, affiliateId, secret, active, m[1]).run();
+      .bind(name, template, affiliateId, secret, active, pid).run();
     invalidateSupplierCache(); // #27: activation toggle must reflect in catalog outlinks immediately.
-    await audit(env, admin.id, "UPDATE_AFFILIATE_PARTNER", "AFFILIATE_PARTNER", m[1], { before: before.is_active, after: active });
+    await audit(env, admin.id, "UPDATE_AFFILIATE_PARTNER", "AFFILIATE_PARTNER", pid, { before: before.is_active, after: active });
     return json({ success: true });
   }
 
@@ -822,9 +825,10 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const rows = await db.prepare("SELECT slug, version, title, effective_from, updated_at FROM legal_documents ORDER BY slug").all();
     return json({ success: true, documents: rows.results || [] });
   }
-  m = path.match(/^\/api\/v1\/admin\/legal\/([a-z-]+)$/);
+  m = path.match(/^\/api\/v1\/admin\/legal\/([A-Za-z-]+)$/);
   if (m && method === "PATCH") {
     const b = await readJson(request);
+    m[1] = m[1].toLowerCase(); // #165: slugs are lowercase vocabulary — match it, don't 404.
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (b.version !== undefined) {

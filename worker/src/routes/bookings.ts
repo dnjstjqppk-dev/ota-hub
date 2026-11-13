@@ -16,7 +16,7 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
 
   if (path === "/api/v1/quotes" && method === "POST") {
     const user = await requireUser(request, env);
-    await rateLimit(request, env, "quotes", 300, 60);
+    await rateLimit(request, env, "quotes", 30, 60);
     return json({ success: true, quote: await S.createQuote(env, user, await readJson(request)) }, 201);
   }
 
@@ -48,7 +48,7 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
 
   if (path === "/api/v1/payments/confirm" && method === "POST") {
     const user = await requireUser(request, env);
-    await rateLimit(request, env, "payments", 120, 60);
+    await rateLimit(request, env, "payments", 60, 60);
     const body = await readJson(request);
     // #147: concurrent tabs submitting one payment share a key — the second
     // replays the first instead of 409ing. Optional (old clients send none);

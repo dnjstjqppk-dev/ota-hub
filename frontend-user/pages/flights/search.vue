@@ -232,7 +232,7 @@ useHead(() => ({ title: q.value.origin && q.value.dest ? `${cityOf(q.value.origi
             <p class="text-ink-muted tabular">{{ chosenOut.departure_time }} {{ chosenOut.departure_airport }} → {{ chosenOut.arrival_time }} {{ chosenOut.arrival_airport }} · {{ currency.formatKRW(chosenOut.base_price_krw) }}</p>
           </div>
         </div>
-        <button type="button" class="text-sm font-semibold text-primary hover:underline" @click="router.back()">가는 편 다시 고르기</button>
+        <button type="button" class="text-sm font-semibold text-primary hover:underline" @click="patch({ out: '' })">가는 편 다시 고르기</button>
       </div>
       <p v-else-if="step === 'return' && state === 'ready' && !chosenOut" class="card mb-4 p-4 text-sm text-ink" role="alert">
         선택한 가는 편을 찾을 수 없어요. <button type="button" class="font-semibold text-primary hover:underline" @click="patch({ out: '' })">가는 편부터 다시 고르기</button>
@@ -276,7 +276,7 @@ useHead(() => ({ title: q.value.origin && q.value.dest ? `${cityOf(q.value.origi
           <ResultsState v-else :state="state" :count="filtered.length" icon="flight" :empty-title="step === 'return' ? '이 가는 편과 함께 예약할 수 있는 오는 편이 없어요' : '조건에 맞는 항공편이 없어요'" :empty-hint="step === 'return' ? '왕복은 같은 판매처의 역방향 노선만 한 번에 예약할 수 있어요. 다른 가는 편을 고르거나 편도로 각각 예약해 주세요.' : '필터를 줄이거나 날짜·공항을 바꿔 보세요.'" error-title="항공편을 불러오지 못했어요" @retry="load">
             <template #empty-actions>
               <button v-if="activeCount" type="button" class="btn-primary" @click="patch(RESET)">필터 초기화</button>
-              <button v-if="step === 'return'" type="button" class="btn-secondary" @click="router.back()">가는 편 다시 고르기</button>
+              <button v-if="step === 'return'" type="button" class="btn-secondary" @click="patch({ out: '' })">가는 편 다시 고르기</button>
             </template>
             <ul class="space-y-3">
               <li v-for="f in filtered" :key="f.id">

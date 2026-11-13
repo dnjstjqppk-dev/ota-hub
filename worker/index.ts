@@ -10,6 +10,7 @@
  */
 import type { Env } from "./src/env.ts";
 import { SECURITY_HEADERS, errorResponse, json, preflight, withCors } from "./src/lib/http.ts";
+import { requireAdmin } from "./src/lib/auth.ts";
 import { captureException } from "./src/lib/sentry.ts";
 import { getPaymentProvider } from "./src/payments/provider.ts";
 import { handleAuth } from "./src/routes/auth.ts";
@@ -30,12 +31,19 @@ import { sitemap } from "./src/routes/seo.ts";
 
 export type { Env };
 
-async function health(env: Env): Promise<Response> {
+async function health(request: Request, env: Env, url: URL): Promise<Response> {
   let db = false;
   try {
     db = (await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>())?.ok === 1;
   } catch {}
   const jwt = (env.JWT_SECRET || "").trim().length >= 32;
+  // #162: monitors and smoke tests get liveness only (status/database/jwt —
+  // the smoke contract). Provider wiring, entity state, and cron errors are
+  // operator intel: verbose=1 plus an admin token, nothing less.
+  if (url.searchParams.get("verbose") !== "1") {
+    return json({ status: db && jwt ? "ok" : "degraded", checks: { database: db, jwtSecret: jwt }, time: new Date().toISOString() }, db && jwt ? 200 : 503);
+  }
+  await requireAdmin(request, env);
   const entity = db ? await env.DB.prepare("SELECT status FROM business_entities WHERE status = 'ACTIVE' LIMIT 1").first().catch(() => null) : null;
   const pay = getPaymentProvider(env);
   // #56: last cron run. Observability only — never affects the status code.
@@ -74,7 +82,7 @@ async function health(env: Env): Promise<Response> {
 
 async function route(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
-  if (path === "/api/v1/health") return health(env);
+  if (path === "/api/v1/health") return health(request, env, url);
   for (const h of [handleAuth, handleBookings, handleWebhooks, handleFeatureFlags, handleUrlIngest, handleMarketplace, handleSupport, handleAdmin, handlePartner, handleUser, handleAffiliate, handleUploads, handleCatalog]) {
     const r = await h(request, env, url);
     if (r) return r;

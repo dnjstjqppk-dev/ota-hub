@@ -106,6 +106,10 @@ async function runVerificationSuite() {
     const data = await res.json();
     if (data.status !== 'healthy' && data.status !== 'ok') throw new Error(`Status is not healthy: ${data.status}`);
     if (data.checks && !data.checks.database) throw new Error(`DB disconnected: ${JSON.stringify(data.checks)}`);
+    // #162: the public shape carries liveness only — provider wiring stays gated.
+    for (const f of ['paymentProvider', 'emailProvider', 'errorReporting', 'sellerEntityActive', 'piiEncryptionKey', 'cron']) {
+      if (data.checks && data.checks[f] !== undefined) throw new Error(`Public health leaks ${f}`);
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -350,6 +354,10 @@ async function runVerificationSuite() {
       }
     } else if (!qRes.ok) {
       throw new Error(`Quote creation failed unexpectedly: HTTP ${qRes.status}`);
+    } else {
+      // #168: the success branch asserted nothing — a 201 must carry a priced total.
+      const q = await qRes.json();
+      if (!q.quote || !(q.quote.totalMinor > 0)) throw new Error(`Quote success without priced total: ${JSON.stringify(q).slice(0, 200)}`);
     }
   });
 
@@ -661,6 +669,10 @@ async function runVerificationSuite() {
     partnerToken = json.token;
   });
 
+  // ---------------------------------------------------------------------------
+  // 29. PARTNER EXTRANET ENDPOINTS (split from 28 — #166: the section number
+  // 31 was skipped because two tests shared section 28)
+  // ---------------------------------------------------------------------------
   await test("Partner Extranet: Dashboard, Profile, Products, Inventory, Orders, Settlements", async () => {
     if (!partnerToken) throw new Error('Partner token not set');
 
@@ -704,7 +716,7 @@ async function runVerificationSuite() {
   });
 
   // ---------------------------------------------------------------------------
-  // 29. ADMIN EXTENDED CAPABILITIES (PARTNERS & USERS MANAGEMENT)
+  // 30. ADMIN EXTENDED CAPABILITIES (PARTNERS & USERS MANAGEMENT)
   // ---------------------------------------------------------------------------
   await test("Admin Console: Partners listing and Users RBAC management", async () => {
     if (!adminToken) throw new Error('Admin token not set');
@@ -727,7 +739,7 @@ async function runVerificationSuite() {
   });
 
   // ---------------------------------------------------------------------------
-  // 30. PARTNER ONBOARDING & PENDING APPROVAL SECURITY ENFORCEMENT
+  // 31. PARTNER ONBOARDING & PENDING APPROVAL SECURITY ENFORCEMENT
   // ---------------------------------------------------------------------------
   await test("Partner Onboarding: Registration requires admin approval before login", async () => {
     const applicantEmail = `applicant_${rand}@partner.getfortrip.com`;

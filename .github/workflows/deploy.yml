@@ -6,6 +6,11 @@ on:
       - main
   workflow_dispatch:
 
+# #167: a newer main must not deploy under an older run — cancel the stale one.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
 jobs:
   gate:
     runs-on: ubuntu-latest

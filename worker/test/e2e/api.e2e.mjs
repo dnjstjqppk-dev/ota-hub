@@ -289,7 +289,7 @@ test("toss webhook: hint triggers PG lookup; duplicates acknowledged; unknown or
 });
 
 test("outbox email: without a provider key, rows stay queued and maintenance says so", async () => {
-  const h = await api("GET", "/api/v1/health");
+  const h = await api("GET", "/api/v1/health?verbose=1", { token: ADMIN });
   assert.equal(h.data.checks.emailProvider, "NOT_CONFIGURED");
   const before = sql("SELECT COUNT(*) AS c FROM notification_outbox WHERE status IN ('PENDING','BLOCKED_NO_PROVIDER')")[0].c;
   assert.ok(before > 0, "earlier tests enqueued booking emails");
@@ -2639,16 +2639,17 @@ test("#56: maintenance heartbeats land in /health; staleness never fails health"
   const beat = sql("SELECT job, ok FROM cron_heartbeats WHERE job = 'maintenance'")[0];
   assert.equal(beat.job, "maintenance");
   assert.equal(beat.ok, 1);
-  const cron = (await api("GET", "/api/v1/health")).data.checks.cron;
+  const cron = (await api("GET", "/api/v1/health?verbose=1", { token: ADMIN })).data.checks.cron;
   assert.equal(cron.ok, true);
   assert.equal(cron.stale, false);
   assert.ok(cron.ageSec < 120, JSON.stringify(cron));
   sql("UPDATE cron_heartbeats SET ran_at = '2020-01-01T00:00:00.000Z' WHERE job = 'maintenance'");
-  const stale = await api("GET", "/api/v1/health");
+  const stale = await api("GET", "/api/v1/health?verbose=1", { token: ADMIN });
   assert.equal(stale.status, 200, "stale cron is reported, not a 503");
   assert.equal(stale.data.checks.cron.stale, true);
   assert.equal((await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN })).status, 200);
-  assert.equal((await api("GET", "/api/v1/health")).data.checks.cron.stale, false);
+  assert.equal((await api("GET", "/api/v1/health?verbose=1", { token: ADMIN })).data.checks.cron.stale, false);
+  assert.equal((await api("GET", "/api/v1/health")).status, 200, "public liveness unaffected by cron state");
 });
 
 test("#57: POST /admin/ingest/url scrapes a fixture page; SSRF stays 403", async () => {
@@ -3636,6 +3637,71 @@ test("#151: bookings stop dual-writing legacy REAL twins", async () => {
   assert.ok(Number(after.rm) > 0, "refund recorded in minor");
   assert.ok(after.rr === null || Number(after.rr) === 0, "REAL refund twin unwritten");
   assert.ok(after.fr === null || Number(after.fr) === 0, "REAL fee twin unwritten");
+});
+
+test("#162: public health carries liveness only; details need an admin", async () => {
+  const pub = await api("GET", "/api/v1/health");
+  assert.equal(pub.status, 200);
+  assert.equal(pub.data.checks.database, true);
+  assert.equal(pub.data.checks.jwtSecret, true);
+  for (const f of ["paymentProvider", "emailProvider", "errorReporting", "sellerEntityActive", "piiEncryptionKey", "cron"]) {
+    assert.ok(!(f in pub.data.checks), `public leaks ${f}`);
+  }
+  assert.equal((await api("GET", "/api/v1/health?verbose=1")).status, 401);
+  assert.equal((await api("GET", "/api/v1/health?verbose=1", { token: A.token })).status, 403);
+  const full = await api("GET", "/api/v1/health?verbose=1", { token: ADMIN });
+  assert.equal(full.status, 200);
+  assert.ok("paymentProvider" in full.data.checks && "cron" in full.data.checks);
+});
+
+test("#163: user password reset cannot burn partner tokens", async () => {
+  resetLimiter("partner_register");
+  const pe = `qa_ptn_163_${rnd()}@local.test`;
+  await api("POST", "/api/v1/partner/register", { body: { email: pe, password: "Passw0rd-QA-1", companyName: "QA 163", businessNumber: bizNo() } });
+  await api("POST", "/api/v1/partner/forgot-password", { body: { email: pe } });
+  const out = (await api("GET", "/api/v1/auth/dev-outbox", { token: ADMIN })).data.outbox.find((o) => o.recipient === pe && o.template === "PASSWORD_RESET");
+  const token = new URL(JSON.parse(out.payload_json).link).searchParams.get("token");
+  assert.equal((await api("POST", "/api/v1/auth/reset-password", { body: { token, newPassword: "NewPassw0rd-QA-2" } })).data.code, "INVALID_RESET_TOKEN");
+  assert.equal((await api("POST", "/api/v1/partner/reset-password", { body: { token, newPassword: "NewPassw0rd-QA-2" } })).status, 200);
+});
+
+test("#164: quote and payment taps are tightly bounded", async () => {
+  resetLimiter("quotes", "payments");
+  const U = await register("lim164");
+  let last = 0;
+  for (let i = 0; i < 31 && last !== 429; i++) {
+    last = (await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "HOTEL", itemId: "htl_seoul_01", unitId: "rm_seoul_01_dlx", startDate: day(60), endDate: day(61), rooms: 1, travelers: { adults: 1 } } })).status;
+  }
+  assert.equal(last, 429);
+  resetLimiter("quotes");
+  assert.equal((await api("POST", "/api/v1/payments/confirm", { token: U.token, body: { bookingId: "bkg-nope", orderId: "bkg-nope", amount: 1, paymentKey: "sbx_ok_nope" } })).status, 404, "prime payments");
+  fillBucket("payments", 60);
+  try {
+    assert.equal((await api("POST", "/api/v1/payments/confirm", { token: U.token, body: { bookingId: "bkg-nope", orderId: "bkg-nope", amount: 1, paymentKey: "sbx_ok_nope" } })).status, 429);
+  } finally {
+    resetLimiter("payments");
+  }
+});
+
+test("#165: admin PATCH matches lowercase ids case-insensitively", async () => {
+  const pid = `e2e165${rnd()}`;
+  const secret = `e2e-secret165-${rnd()}${rnd()}`;
+  sql(`INSERT INTO affiliate_partners_config (partner_id, name, deep_link_template, affiliate_id, secret_key, is_active) VALUES ('${pid}', 'e2e', 'https://example.test/{item_id}', 'E2E', '${secret}', 0)`);
+  try {
+    assert.equal((await api("PATCH", `/api/v1/admin/affiliate/partners/${pid.toUpperCase()}`, { token: ADMIN, body: { isActive: true } })).status, 200);
+    assert.equal(sql(`SELECT is_active AS v FROM affiliate_partners_config WHERE partner_id = '${pid}'`)[0].v, 1);
+    const title = (await api("GET", "/api/v1/admin/legal", { token: ADMIN })).data.documents.find((d) => d.slug === "privacy").title;
+    assert.equal((await api("PATCH", "/api/v1/admin/legal/PRIVACY", { token: ADMIN, body: { title } })).status, 200);
+  } finally {
+    sql(`DELETE FROM affiliate_partners_config WHERE partner_id = '${pid}'`);
+  }
+});
+
+test("#170: admin login refuses non-admin credentials", async () => {
+  const U = await register("adm170");
+  const r = await fetch(BASE + "/api/v1/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: U.email, password: "Passw0rd-QA-1" }) });
+  assert.equal(r.status, 403);
+  assert.equal((await r.json()).code, "ADMIN_ONLY");
 });
 
 test("#153: moments carry uploaded photos end to end", async () => {

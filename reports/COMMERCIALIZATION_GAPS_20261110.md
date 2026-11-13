@@ -224,19 +224,19 @@
 [x] 155. workers.dev 하드코딩 → 완료 (P3a / API_BASE_URL에서 origin 도출)
 [x] 156. 데드 픽스처 → 완료 (P3a / initialBookings.ts 삭제 — 무참조 확인, 카탈로그 8종은 라이브라 유지)
 [x] 157. 폴백환율 침묵변환 → 완료 (P3a / ratesLoaded+ratesStale+미로드 시 KRW 안전표시 + 순수 convertKrw 유닛 3종)
-158. `help.vue:17` — eSIM FAQ가 판매전제 → 문구정합 [S]
-159. `flights/search.vue:235,279` — router.back() 이탈 → patch [S]
-160. `transfers/detail/[id].vue:19` — 항공편명 입력 약속 vs 필드없음 → 필드/완화 [S]
-161. `pages/*/[id].vue` — 죽은 기본 id → 삭제 [S]
-162. `/health` — 설정노출(공개) → 게이트/축소 [S]
-163. `auth.ts:133` — 리셋이 파트너토큰 소모 → partner_id NULL 조건 [S]
-164. `bookings.ts:18,49` — 300/120분 관대 → 30/60 [S]
-165. `admin.ts:641,653` — PATCH 대문자 404 → 소문자화 [S]
-166. verify-production — T31 번호누락 → 재정렬 [S]
-167. `deploy.yml` — 동시성 없음 → cancel-in-progress [S]
-168. verify T12 — 성공분기 무assert → totalMinor assert [S]
-169. `GO_LIVE_CHECKLIST.md:78` — EMAIL_FROM 위치 오류 등 드리프트 → 수정/정리 [S]
-170. `auth.ts:53` — /admin/login이 USER 수락 → 비어드민 거부 [S]
+[x] 158. eSIM FAQ 판매전제 → 완료 (P3b / 판매준비중 문구로 교체)
+[x] 159. router.back 이탈 → 완료 (P3b / patch({out:''}) 2곳 — 딥링크·새로고침 진입도 이탈 없음)
+[x] 160. 항공편명 입력 약속 → 완료 (P3b / 실재 요청사항 필드로 안내 완화)
+[x] 161. 죽은 기본 id 페이지 → 완료 (P3b / 리다이렉트 스텁 7종 삭제 — 무링크 확인, detail·my/bookings 유지)
+[x] 162. /health 설정노출 → 완료 (P3b / 공개는 status·database·jwtSecret·time만, 상세요소는 verbose=1+어드민 + E2E #162 + verify T01 누출 단언 + 체크리스트 확인절차 토큰화)
+[x] 163. 리셋 파트너토큰 소모 → 완료 (P3b / 유저 리셋에 partner_id IS NULL + E2E #163(미소모 후 파트너 리셋 200))
+[x] 164. 관대한 견적·결제 제한 → 완료 (P3b / quotes 300→30·payments 120→60 + E2E #164(루프·충전429))
+[x] 165. PATCH 대문자 404 → 완료 (P3b / 제휴사·법무 slug 소문자 정규화 + E2E #165)
+[x] 166. T31 번호누락 → 완료 (P3b / 28절 2테스트 분리→29 신설, 구29·30→30·31 — 런타임 번호와 일치)
+[x] 167. 동시성 없음 → 완료 (P3b / production-deploy 그룹 cancel-in-progress)
+[x] 168. T12 무assert → 완료 (P3b / 성공분기 totalMinor>0 단언)
+[x] 169. 체크리스트 드리프트 → 완료 (P3b / EMAIL_FROM 추가절차 명시 + PARTNER_SITE_URL 선언값 정정 + 0041~0044 운영주의 추가)
+[x] 170. /admin/login USER 수락 → 완료 (P3b / 비어드민 403 ADMIN_ONLY + E2E #170)
 171. `bookings.ts:54,75` — :id가 410 가림 → 정확일치 우선 [S]
 172. `catalog.ts:515` — days=abc→null 200 → 기본값 [S]
 173. 에러코드 표기 불일치(TAKEN/EXISTS·400/401 등) → 통일 [S]

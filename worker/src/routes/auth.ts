@@ -75,6 +75,11 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
       throw new HttpError(401, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 일치하지 않습니다.");
     }
     await clearLoginFailures(env, "user_login", email);
+    // #170: the console door is admin-only — a USER credential that reaches
+    // /admin/login is refused here instead of minting into the wrong jar.
+    if (path === "/api/v1/admin/login" && u.role !== "ADMIN") {
+      throw new HttpError(403, "ADMIN_ONLY", "관리자 계정으로 로그인해주세요.");
+    }
     // #97: legacy hashes rotate on success while email is down; once mail can
     // deliver resets, legacy logins are refused instead of accepted forever.
     if (isLegacyHash(u.password_hash) && isEmailConfigured(env)) {
@@ -202,7 +207,9 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     const pw = String(body.newPassword || body.password || "");
     validatePassword(pw);
     const now = Math.floor(Date.now() / 1000);
-    const rec = await env.DB.prepare("SELECT token, user_id FROM password_reset_tokens WHERE token_hash = ? AND used = 0 AND expires_at > ?")
+    // #163: user resets must not burn partner tokens — the partner endpoint
+    // already scopes by partner_id, this side was missing its NULL guard.
+    const rec = await env.DB.prepare("SELECT token, user_id FROM password_reset_tokens WHERE token_hash = ? AND used = 0 AND expires_at > ? AND partner_id IS NULL")
       .bind(await sha256Hex(token), now).first<{ token: string; user_id: string }>();
     if (!rec) throw new HttpError(400, "INVALID_RESET_TOKEN", "만료되었거나 이미 사용된 링크입니다.");
     const r = await env.DB.batch([

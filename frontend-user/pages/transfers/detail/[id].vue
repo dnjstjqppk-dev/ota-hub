@@ -17,7 +17,7 @@ const facts = computed(() => {
     ['차량 등급', x.vehicle_class],
     ['최대 탑승 인원', x.max_passengers ? `${x.max_passengers}명` : null],
     ['최대 수하물', x.max_luggage ? `${x.max_luggage}개` : null],
-    ['항공편 추적', x.flight_tracking ? '지원 (예약 시 항공편명 입력)' : null]
+    ['항공편 추적', x.flight_tracking ? '지원 (예약 시 요청사항에 항공편명을 적어주세요)' : null]
   ] as [string, string | null][]).filter(([, v]) => v)
 })
 
