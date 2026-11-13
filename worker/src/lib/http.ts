@@ -31,6 +31,17 @@ export function json(data: unknown, status = 200, headers: Record<string, string
   });
 }
 
+/**
+ * #127: a JSON response carrying several Set-Cookie values (e.g. clearing
+ * every auth jar at logout). A Record<string, string> header map cannot
+ * express repeats, so cookies append as separate values.
+ */
+export function jsonCookies(data: unknown, status: number, cookies: string[], headers: Record<string, string> = {}): Response {
+  const h = new Headers({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...SECURITY_HEADERS, "Content-Security-Policy": API_CSP, ...headers });
+  for (const c of cookies) h.append("Set-Cookie", c);
+  return new Response(JSON.stringify(data), { status, headers: h });
+}
+
 export function errorResponse(e: unknown): Response {
   if (e instanceof HttpError) {
     return json({ error: e.message, code: e.code, details: e.details ?? undefined }, e.status);

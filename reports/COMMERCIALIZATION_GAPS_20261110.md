@@ -185,30 +185,30 @@
 
 ### Go·문구·API 표면
 
-122. `backend/jwt.go:23-29` — 폴백 시크릿·미인증 SSE/IDOR·하드코딩 수치 → 인증/실계산 [M]
-123. `backend/curation_handler.go:14-34` — 미인증 ingest(Gemini 과금)·하드코딩·api.exe·nil-deref → 인증+문서+바이너리 삭제 [M]
+[x] 122. JWT 폴백·SSE/IDOR·하드코딩 수치 → 완료 (P2g / 폴백 시크릿 삭제(JWT_SECRET 32자+ 미설정 시 fail-closed, 로그인은 503) + SSE 인증(헤더·?token=, ACAO * 제거) + 예약 3종 소유자·어드민 게이트(401/403/404) + 파트너 대시보드·정산 실계산(월매출·대기·상품수·평점·요율별 정산, 디렉토리 공유) + Go 테스트 5종. 번외 FINDING: CreateDraftBooking UnixNano ID가 Windows 시계 granularity에서 충돌 가능 — 테스트는 sleep 우회, 스토어 수정은 후속)
+[x] 123. 미인증 ingest·하드코딩·바이너리·nil-deref → 완료 (P2g / ingest·resync 어드민 전용 + .env.example 문서(어드민JWT·과금·제휴ID 5종) + api.exe 삭제(untracked build artifact) + resync nil-referral 409 + Go 테스트 2종. 번외: 규칙기반 합성 토큰 카운트 150/420→0)
 [x] (`806b37c`) 124. 푸터/privacy — 절대적 토스 문구(계약전) → 계약후 한정/게이트 [S]
-125. `terms.vue:60` — 일괄 세금10% 별도 vs 도메인별 0 → 도메인별 문구+TLS 문구 수정 [S]
-126. `BookingDetail.vue:65` — 연락·이중청구없음 약속 vs admin_note만 → 내역확인 안내로 변경 [S]
-127. `auth.ts:73` — 로그아웃이 1개 쿠키만 삭제 → 3개 전부 [S]
-128. `auth.ts:86` — PARTNER 토큰에 /me 500 → requireUser+가드 [S]
-129. `auth.ts:145` — dev-outbox 미인증. 스테이징 수확 → 어드민/비활성 [S]
-130. `catalog.ts:99,145,175,223` — limit=abc→500, -5→무제한 → 클램프 [S]
-131. `catalog.ts:405` — 슬롯 정규식이 하이픈 제외 → 하이픈 허용 [S]
-132. `affiliate.ts:13` — /out/ 레이트리밋 없음. INSERT 플러드 → 제한+검증 [S]
+[x] 125. 일괄 세금10%·TLS 문구 → 완료 (P2g / terms 제6조 도메인별(호텔·렌터카·공항이동 10%, 항공·철도·이용권·패키지 면세, TAX_BPS와 일치) + privacy §8 전송구간 암호화 운영환경 한정)
+[x] 126. MANUAL_REVIEW 연락·이중청구 약속 → 완료 (P2g / 예약 내역 확인 안내로 교체 — 리뷰 해소 경로에 고객 통지가 없음 확인)
+[x] 127. 로그아웃 1개 쿠키 → 완료 (P2g / 3개 jar 전삭제(jsonCookies+clearAllAuthCookies, user·admin·partner 로그아웃 공통) + E2E #127(CORS 포함 3종·3개))
+[x] 128. PARTNER /me → 완료 (P2g / GET·PATCH requireUser(DB 검증 역할 게이트) + E2E #128 401 핀. 정정: 현 코드도 null 가드로 401이라 500은 미재현 — 감사는 구 리비전 관측 추정, 처방 하드닝은 적용)
+[x] 129. dev-outbox 미인증 → 완료 (P2g / requireAdmin(리셋 링크는 bearer secret) + E2E 기존 4곳 ADMIN 토큰 + E2E #129(401/403/200))
+[x] 130. limit 파싱 → 완료 (P2g / clampLimit 1..100(기본 50, 호텔·항공 2곳 — trains 이하 5종은 고정 50이라 해당 없음) + E2E #130)
+[x] 131. 슬롯 정규식 하이픈 → 완료 (P2g / [A-Za-z0-9_-]+ + E2E #131(하이픈 ID 슬롯 서빙))
+[x] 132. /out/ 무제한 → 완료 (P2g / affiliate_out 120/60 + itemId 필수 400 + E2E #132(400/404/429))
 [x] 133. 포스트백 커미션 검증 → 완료 (코드는 6e 이전부터 차단済(`affiliate.ts` INVALID_PAYLOAD) / 6f에서 E2E #133 3종 assert(음수·비수치 400 + 정상 200) 추가 입증)
-134. `user.ts:83` — 승객정보 미검증·무제한 → 형식검증+제한 [S]
-135. `admin.ts:963` — 공지 PATCH가 제목/본문 무시하고 성공 → 수락 또는 400 [S]
-136. `admin.ts:931` — 프로모 PATCH가 isActive 외 무시하고 성공 → 전체수정 또는 400 [S]
-137. `admin.ts:305` — entities 상태 자유입력 → allowlist [S]
-138. `partner.ts:37` — 가입에 이메일/사업자번호 검증·형식없음 → 검증+유니크 [S]
-139. `marketplace.ts:135` — 3P 가격 NaN/도메인자유/무제한 → 검증+제한 [S]
-140. `marketplace.ts:116` — 파트너 정산 SELECT * 로 마진노출 → 안전 프로젝션 [S]
-141. 공개 GET(suggest·목록7·esim·보험·레지스트리·마켓·플래그) 무제한 → 읽기제한 [S]
-142. 인증 읽기/쓰기(위시·승객·쿠폰·모먼트·문의·예약) 무제한 → 제한확대 [S]
-143. money 경로 핸들러 유닛 0·verify에 confirm/cancel 프로브 없음 → 샌드박스 프로브 [M]
-144. 롱테일 미탐지(리셋·위시·알림·리뷰·티켓·웹훅·어드민/파트너 쓰기 다수) → 프로브 확대 [M]
-145. `catalog.ts:500,514` — esim/보험에 구매불가 주석 없음(409인데 구매가능 표시) → 주석 추가 [S]
+[x] 134. 승객정보 미검증·무제한 → 완료 (P2g / 생년월일·여권만료 실재날짜, 성별 MALE·FEMALE·OTHER, 국적 영문3자 + 20명 상한 409 + E2E #134)
+[x] 135. 공지 PATCH 무시 성공 → 완료 (P2g / 제목·본문 수락(POST 동일 규칙, 감사 포함) + E2E #135)
+[x] 136. 프로모 PATCH 무시 성공 → 완료 (P2g / isActive·usageLimit 외 키 400 IMMUTABLE_FIELD + E2E #136)
+[x] 137. entities 상태 자유입력 → 완료 (P2g / DRAFT·ACTIVE·SUSPENDED·RETIRED allowlist(CHECK 미러, 소문자 정규화) + 콘솔 CLOSED→RETIRED(구 옵션은 500 유발) + E2E #137)
+[x] 138. 파트너 가입 무검증 → 완료 (P2g / EMAIL_RE + 사업자번호 10자리(C2 동일) + 복호비교 유니크 409(랜덤IV라 평문 비교, 소규모·저빈도라 스캔 허용) + 픽스처 고유번호화(bizNo) + E2E #138)
+[x] 139. 3P 가격·도메인 무검증 → 완료 (P2g / HOTEL·ACTIVITY allowlist + 정수 0..10억(#69 동일형, 0원 허용) + E2E #139)
+[x] 140. 파트너 정산 마진노출 → 완료 (P2g / 안전 프로젝션(자신의 gross·수수료·입금·환수차감 유지, supply_cost·net_platform_profit·supplier·귀속·지급수단 제외) + E2E #140)
+[x] 141. 공개 GET 무제한 → 완료 (P2g / catalog_read 600/60(카탈로그 전표면)·market_read 300/60·flags_read 300/60 + E2E #141(12표면 200·충전429). 레지스트리는 #41 이후 어드민 전용이라 범위 외)
+[x] 142. 인증 읽기/쓰기 무제한 → 완료 (P2g / user_read 600/60(위시·승객·쿠폰·리뷰·모먼트·문의·예약3종)·user_write 120/60(위시·승객·좋아요취소)·market_write 120/60(3P 등록) + E2E #142(충전·루프429). 어드민 표면은 범위 외)
+[x] 143. money 유닛 0·verify confirm/cancel 없음 → 완료 (P2g / money-handlers.test.ts 7종(confirm·cancel 가드·preview·voucher·충돌·하한가·정산분개) + verify T42(가드+샌드박스 전주기))
+[x] 144. 롱테일 미탐지 → 완료 (P2g / verify T43~T47(리셋침묵·위시/알림·리뷰/모먼트·티켓/웹훅·프로모/프로필, 읽기전용 변형 포함) + 파트너 승인 프로브 C1/C2 수리(직행 ACTIVE 409 해소) + 정리 탈퇴에 비밀번호 추가(400 누수 해소). 로컬 verify 잔여 실패 T11·T13·T14·T20·T31·T38·T39는 기존 드리프트(P2g 범위 외))
+[x] 145. esim/보험 구매가능 표시 → 완료 (P2g / purchasable:false+purchase_notice(UI 문구와 일치) + E2E #145)
 
 ## P3 — 마이너 37건
 

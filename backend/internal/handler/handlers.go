@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -58,12 +59,30 @@ func checkAdminAuth(r *http.Request) bool {
 	return claims.Role == "ADMIN" || claims.Role == "SUPER_ADMIN"
 }
 
+func verifyTokenString(token string) (*JWTClaims, error) {
+	secret, ok := getJWTSecret()
+	if !ok {
+		return nil, errors.New("auth is not configured")
+	}
+	return ValidateJWT(token, secret)
+}
+
 func getVerifiedClaims(r *http.Request) (*JWTClaims, error) {
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
 		return nil, errors.New("missing authorization header")
 	}
-	return ValidateJWT(auth, getJWTSecret())
+	return verifyTokenString(auth)
+}
+
+// #122: booking ownership — the booking's own user, or an admin. Callers
+// report a missing booking as 404 first (worker P0-06 order), then refuse
+// cross-user access with 403.
+func canViewBooking(claims *JWTClaims, b domain.Booking) bool {
+	if claims.Role == "ADMIN" || claims.Role == "SUPER_ADMIN" {
+		return true
+	}
+	return claims.ID != "" && claims.ID == b.UserID
 }
 
 func checkPartnerAuth(r *http.Request) bool {
@@ -470,17 +489,35 @@ func (h *APIHandler) PayBooking(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) GetBookingDetail(w http.ResponseWriter, r *http.Request) {
+	claims, err := getVerifiedClaims(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	id := r.PathValue("id")
 	b, exists := h.store.Bookings[id]
 	if !exists {
 		writeError(w, http.StatusNotFound, "booking not found")
 		return
 	}
+	if !canViewBooking(claims, b) {
+		writeError(w, http.StatusForbidden, "this booking belongs to another user")
+		return
+	}
 	writeJSON(w, http.StatusOK, b)
 }
 
 func (h *APIHandler) GetUserBookings(w http.ResponseWriter, r *http.Request) {
+	claims, err := getVerifiedClaims(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	userId := r.PathValue("userId")
+	if claims.Role != "ADMIN" && claims.Role != "SUPER_ADMIN" && claims.ID != userId {
+		writeError(w, http.StatusForbidden, "this booking list belongs to another user")
+		return
+	}
 	userBookings := make([]domain.Booking, 0)
 	for _, b := range h.store.Bookings {
 		if b.UserID == userId {
@@ -491,7 +528,19 @@ func (h *APIHandler) GetUserBookings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *APIHandler) CancelBooking(w http.ResponseWriter, r *http.Request) {
+	claims, err := getVerifiedClaims(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	id := r.PathValue("id")
+	if b, exists := h.store.Bookings[id]; !exists {
+		writeError(w, http.StatusNotFound, "booking not found")
+		return
+	} else if !canViewBooking(claims, b) {
+		writeError(w, http.StatusForbidden, "this booking belongs to another user")
+		return
+	}
 	updated, err := h.store.TransitionBookingStatus(id, domain.StatusCancelReq, "Customer requested self-service cancellation", "USER")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -521,12 +570,17 @@ func (h *APIHandler) AdminLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if (email == "admin@getfortrip.com" || email == "admin") && req.Password == adminPass {
+		secret, ok := getJWTSecret()
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "auth signing is not configured")
+			return
+		}
 		token, err := GenerateJWT(JWTClaims{
 			ID:    "adm_001",
 			Email: "admin@getfortrip.com",
 			Role:  "SUPER_ADMIN",
 			Exp:   time.Now().Add(24 * time.Hour).Unix(),
-		}, getJWTSecret())
+		}, secret)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to issue admin token")
 			return
@@ -610,6 +664,19 @@ func (h *APIHandler) GetNotices(w http.ResponseWriter, r *http.Request) {
 // --- REAL-TIME SSE HANDLER ---
 
 func (h *APIHandler) SSEStream(w http.ResponseWriter, r *http.Request) {
+	// #122: the stream used to be anonymous (live booking counts to anyone)
+	// and forced Access-Control-Allow-Origin *. EventSource cannot send an
+	// Authorization header, so a ?token= query token is accepted too. The
+	// CORS middleware decides the origin now.
+	token := strings.TrimSpace(r.Header.Get("Authorization"))
+	if token == "" {
+		token = strings.TrimSpace(r.URL.Query().Get("token"))
+	}
+	if _, err := verifyTokenString(token); err != nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
@@ -619,7 +686,6 @@ func (h *APIHandler) SSEStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -661,23 +727,65 @@ func (h *APIHandler) PartnerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// #65: no credential lives in the repo (mirrors AdminLogin). The directory below
-	// is fixture identity only; the password comes from the environment and the
-	// session token is a signed JWT, never a static string.
+	// #65: no credential lives in the repo (mirrors AdminLogin). The directory
+	// is fixture identity only; the password comes from the environment and
+	// the session token is a signed JWT, never a static string.
 	partnerPass := os.Getenv("GO_PARTNER_PASSWORD")
 	if partnerPass == "" {
 		writeError(w, http.StatusServiceUnavailable, "partner login is not configured")
 		return
 	}
 
-	validPartners := map[string]struct {
-		ID             string
-		CompanyName    string
-		PartnerType    string
-		BusinessNumber string
-		ContactPhone   string
-		SettlementRate float64
-	} {
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	partner, ok := partnerDirectory()[email]
+	if !ok || req.Password != partnerPass {
+		writeError(w, http.StatusUnauthorized, "Invalid credentials")
+		return
+	}
+
+	secret, ok := getJWTSecret()
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "auth signing is not configured")
+		return
+	}
+	token, err := GenerateJWT(JWTClaims{
+		ID:        partner.ID,
+		Email:     email,
+		Role:      "PARTNER",
+		PartnerID:  partner.ID,
+		Exp:       time.Now().Add(24 * time.Hour).Unix(),
+	}, secret)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to issue partner token")
+		return
+	}
+
+	resp := map[string]any{
+		"id":              partner.ID,
+		"company_name":    partner.CompanyName,
+		"email":           email,
+		"partner_type":    partner.PartnerType,
+		"business_number": partner.BusinessNumber,
+		"contact_phone":   partner.ContactPhone,
+		"settlement_rate": partner.SettlementRate,
+		"token":           token,
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+type partnerIdentity struct {
+	ID             string
+	CompanyName    string
+	PartnerType    string
+	BusinessNumber string
+	ContactPhone   string
+	SettlementRate float64
+}
+
+// partnerDirectory is the fixture identity table behind PartnerLogin. Shared
+// with the dashboard so the dashboard rate can never drift from login.
+func partnerDirectory() map[string]partnerIdentity {
+	return map[string]partnerIdentity{
 		"hotel_partner@getfortrip.com": {
 			ID:             "ptn_htl_01",
 			CompanyName:    "(주)하얏트 코리아 호스피탈리티",
@@ -703,51 +811,64 @@ func (h *APIHandler) PartnerLogin(w http.ResponseWriter, r *http.Request) {
 			SettlementRate: 0.95,
 		},
 	}
+}
 
-	email := strings.ToLower(strings.TrimSpace(req.Email))
-	partner, ok := validPartners[email]
-	if !ok || req.Password != partnerPass {
-		writeError(w, http.StatusUnauthorized, "Invalid credentials")
-		return
+func partnerSettlementRate(partnerID string) float64 {
+	for _, p := range partnerDirectory() {
+		if p.ID == partnerID {
+			return p.SettlementRate
+		}
 	}
-
-	token, err := GenerateJWT(JWTClaims{
-		ID:        partner.ID,
-		Email:     email,
-		Role:      "PARTNER",
-		PartnerID:  partner.ID,
-		Exp:       time.Now().Add(24 * time.Hour).Unix(),
-	}, getJWTSecret())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to issue partner token")
-		return
-	}
-
-	resp := map[string]any{
-		"id":              partner.ID,
-		"company_name":    partner.CompanyName,
-		"email":           email,
-		"partner_type":    partner.PartnerType,
-		"business_number": partner.BusinessNumber,
-		"contact_phone":   partner.ContactPhone,
-		"settlement_rate": partner.SettlementRate,
-		"token":           token,
-	}
-	writeJSON(w, http.StatusOK, resp)
+	return 0.90
 }
 
 func (h *APIHandler) GetPartnerDashboard(w http.ResponseWriter, r *http.Request) {
-	if !checkPartnerAuth(r) {
+	claims, err := getVerifiedClaims(r)
+	if err != nil || claims.Role != "PARTNER" {
 		writeError(w, http.StatusUnauthorized, "partner authentication required")
 		return
 	}
+	// #122: every figure is computed from the store — the old fixed
+	// 18,450,000/16,605,000/4.9 answered every partner identically.
+	rate := partnerSettlementRate(claims.PartnerID)
+	now := time.Now()
+	var gross float64
+	pending := 0
+	for _, b := range h.store.Bookings {
+		if b.CreatedAt.Year() == now.Year() && b.CreatedAt.Month() == now.Month() {
+			gross += b.FinalAmountKRW
+		}
+		switch b.Status {
+		case domain.StatusDraft, domain.StatusPendingPayment, domain.StatusPaid,
+			domain.StatusIssuing, domain.StatusCancelReq, domain.StatusIssueFailed:
+			pending++
+		}
+	}
+	var scoreSum float64
+	var scoreN int
+	for _, hotel := range h.store.Hotels {
+		if hotel.ReviewScore > 0 {
+			scoreSum += hotel.ReviewScore
+			scoreN++
+		}
+	}
+	for _, a := range h.store.Activities {
+		if a.ReviewScore > 0 {
+			scoreSum += a.ReviewScore
+			scoreN++
+		}
+	}
+	var average any
+	if scoreN > 0 {
+		average = math.Round(scoreSum/float64(scoreN)*10) / 10
+	}
 	stats := map[string]any{
-		"monthly_gross_krw":       18450000,
-		"monthly_net_krw":         16605000,
-		"pending_bookings_count":  4,
-		"active_products_count":   12,
-		"average_rating":          4.9,
-		"commission_rate_percent": 10,
+		"monthly_gross_krw":       int(math.Round(gross)),
+		"monthly_net_krw":         int(math.Round(gross * rate)),
+		"pending_bookings_count":  pending,
+		"active_products_count":   len(h.store.Hotels) + len(h.store.Activities) + len(h.store.UniversalProducts),
+		"average_rating":          average,
+		"commission_rate_percent": math.Round((1-rate)*1000) / 10,
 	}
 	writeJSON(w, http.StatusOK, stats)
 }
@@ -794,33 +915,33 @@ func (h *APIHandler) PartnerActionBooking(w http.ResponseWriter, r *http.Request
 }
 
 func (h *APIHandler) GetPartnerSettlements(w http.ResponseWriter, r *http.Request) {
-	if !checkPartnerAuth(r) {
+	claims, err := getVerifiedClaims(r)
+	if err != nil || claims.Role != "PARTNER" {
 		writeError(w, http.StatusUnauthorized, "partner authentication required")
 		return
 	}
-	settlements := []map[string]any{
-		{
-			"id":             "stl-2026-10-1",
-			"period":         "2026-10-01 ~ 2026-10-15",
-			"payout_date":    "2026-10-25",
-			"orders_count":   18,
-			"gross_krw":      8450000,
-			"fee_krw":        845000,
-			"net_payout_krw": 7605000,
-			"status":         "SCHEDULED",
-			"tax_invoice":    "ISSUED",
-		},
-		{
-			"id":             "stl-2026-09-2",
-			"period":         "2026-09-16 ~ 2026-09-30",
-			"payout_date":    "2026-10-10",
-			"orders_count":   24,
-			"gross_krw":      12200000,
-			"fee_krw":        1220000,
-			"net_payout_krw": 10980000,
-			"status":         "PAID",
-			"tax_invoice":    "COMPLETED",
-		},
+	// #122: one row per recorded booking at the partner's own directory rate —
+	// the old two fixed 2026-09/10 batches answered every partner identically.
+	rate := partnerSettlementRate(claims.PartnerID)
+	settlements := make([]map[string]any, 0)
+	for _, b := range h.store.Bookings {
+		gross := b.FinalAmountKRW
+		fee := gross * (1 - rate)
+		status := "SCHEDULED"
+		switch b.Status {
+		case domain.StatusCompleted, domain.StatusRefunded:
+			status = "PAID"
+		case domain.StatusCancelled:
+			status = "VOID"
+		}
+		settlements = append(settlements, map[string]any{
+			"id":             "stl-" + b.ID,
+			"booking_id":     b.ID,
+			"gross_krw":      int(math.Round(gross)),
+			"fee_krw":        int(math.Round(fee)),
+			"net_payout_krw": int(math.Round(gross - fee)),
+			"status":         status,
+		})
 	}
 	writeJSON(w, http.StatusOK, settlements)
 }

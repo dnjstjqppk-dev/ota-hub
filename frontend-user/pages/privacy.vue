@@ -123,7 +123,7 @@ const co = useCompany()
       <section class="space-y-2">
         <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">8. 기술적·관리적 보호 조치</h2>
         <p>
-          회사는 개인정보를 전송 구간 TLS 암호화, 비밀번호 단방향 해시(PBKDF2), 여권번호 AES-256-GCM 암호화로 보호하며,
+          회사는 운영 환경에서 전송 구간 암호화(HTTPS/TLS)를 적용하고, 비밀번호 단방향 해시(PBKDF2), 여권번호 AES-256-GCM 암호화로 개인정보를 보호하며,
           데이터베이스 접근 권한 통제와 접근 기록 관리를 시행하고 있습니다.
         </p>
       </section>

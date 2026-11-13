@@ -22,6 +22,8 @@ if (!/127\.0\.0\.1|localhost/.test(BASE)) throw new Error("E2E suite runs agains
 const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 const rnd = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 const idem = () => `idem_${rnd()}${rnd()}`;
+// #138: partner business numbers are unique per signup — fixtures mint theirs.
+const bizNo = () => { const d = String(1000000000 + Math.floor(Math.random() * 9000000000)); return `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`; };
 
 async function api(method, path, { token, body, headers = {} } = {}) {
   const h = { "Content-Type": "application/json", ...headers };
@@ -59,6 +61,17 @@ function sql(command) {
  */
 function resetLimiter(...buckets) {
   for (const bucket of buckets) sql(`DELETE FROM login_attempts WHERE ip_address LIKE '${bucket}:%'`);
+}
+
+// #141/#142: fill a generous bucket to its bound without hundreds of HTTP
+// round-trips. The key prefix-learns from a live row (primed by one real
+// request) so the fill lands on the key the limiter actually counts. One
+// recursive-CTE INSERT (a 600-tuple VALUES list overflows cmd.exe).
+function fillBucket(bucket, n) {
+  const keys = sql(`SELECT DISTINCT ip_address AS k FROM login_attempts WHERE ip_address LIKE '${bucket}:%'`);
+  if (!keys.length) throw new Error(`fillBucket(${bucket}): prime with one real request first`);
+  const now = Math.floor(Date.now() / 1000);
+  sql(`INSERT INTO login_attempts (ip_address, email, attempted_at) WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x < ${n}) SELECT '${keys[0].k}', 'e2e-fill', ${now} FROM c`);
 }
 
 async function register(tag) {
@@ -130,7 +143,7 @@ test("auth: password reset never returns the token; token is single-use", async 
   assert.equal(r.status, 200);
   assert.equal(r.data.resetToken, undefined);
   assert.ok(!JSON.stringify(r.data).includes("rst_"));
-  const outbox = await api("GET", "/api/v1/auth/dev-outbox");
+  const outbox = await api("GET", "/api/v1/auth/dev-outbox", { token: ADMIN });
   const mail = outbox.data.outbox.find((m) => m.recipient === A.email && m.template === "PASSWORD_RESET");
   const token = new URL(JSON.parse(mail.payload_json).link).searchParams.get("token");
   assert.equal((await api("POST", "/api/v1/auth/reset-password", { body: { token, newPassword: "NewPassw0rd-QA-2" } })).status, 200);
@@ -620,7 +633,7 @@ test("#35: logins issue HttpOnly jars; cookie alone authenticates", async () => 
   const aSet = al.headers.get("set-cookie") || "";
   assert.ok(aSet.includes("getfortrip_admin_jwt=") && /httponly/i.test(aSet), aSet);
   const pe = `qa_ptn_jarc_${rnd()}@local.test`;
-  await api("POST", "/api/v1/partner/register", { body: { email: pe, password: "Passw0rd-QA-1", companyName: "QA jar", businessNumber: "000-00-00000" } });
+  await api("POST", "/api/v1/partner/register", { body: { email: pe, password: "Passw0rd-QA-1", companyName: "QA jar", businessNumber: bizNo() } });
   const plog = await fetch(BASE + "/api/v1/partner/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: pe, password: "Passw0rd-QA-1" }) });
   const pSet = plog.headers.get("set-cookie") || "";
   assert.ok(pSet.includes("getfortrip_partner_jwt=") && /httponly/i.test(pSet), pSet);
@@ -737,7 +750,7 @@ test("sitemap: dynamic, includes catalog detail pages", async () => {
 
 async function approvedPartner(tag) {
   const email = `qa_ptn_${tag}_${rnd()}@local.test`;
-  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: `QA ${tag}`, businessNumber: "000-00-00000" } });
+  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: `QA ${tag}`, businessNumber: bizNo() } });
   assert.equal(reg.status, 201, JSON.stringify(reg.data));
   sql(`UPDATE partner_profiles SET status = 'ACTIVE' WHERE partner_id = '${reg.data.partnerId}'`);
   const login = await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } });
@@ -747,7 +760,7 @@ async function approvedPartner(tag) {
 
 test("C1 onboarding: PENDING owners log in and complete profile; business endpoints stay ACTIVE-only", async () => {
   const email = `qa_ptn_onb_${rnd()}@local.test`;
-  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: "QA onboarding", businessNumber: "000-00-00000" } });
+  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: "QA onboarding", businessNumber: bizNo() } });
   assert.equal(reg.status, 201, JSON.stringify(reg.data));
   const login = await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } });
   assert.equal(login.status, 200, JSON.stringify(login.data));
@@ -768,7 +781,7 @@ test("C1 onboarding: PENDING owners log in and complete profile; business endpoi
 
 test("C1/C2 onboarding loop: real doc upload, business check, then approval unlocks the extranet", async () => {
   const email = `qa_ptn_loop_${rnd()}@local.test`;
-  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: "QA loop", businessNumber: "000-00-00000" } });
+  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: "QA loop", businessNumber: bizNo() } });
   assert.equal(reg.status, 201, JSON.stringify(reg.data));
   const id = reg.data.partnerId;
   const T = (await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } })).data.token;
@@ -989,7 +1002,7 @@ test("admin: member suspension is refused (no schema support); coin adjustments 
 
 test("admin: partner status/commission and supplier LIVE switch are validated", async () => {
   const email = `qa_adm_${rnd()}@local.test`;
-  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: "QA admin", businessNumber: "000-00-00000" } });
+  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: "QA admin", businessNumber: bizNo() } });
   const id = reg.data.partnerId;
   const found = await api("GET", `/api/v1/admin/partners?q=${encodeURIComponent(email)}`, { token: ADMIN });
   assert.equal(found.data.partners[0].id, id);
@@ -1222,11 +1235,11 @@ test("partner password reset: forgot issues single-use links for owners and staf
   resetLimiter("partner_register", "partner_login", "partner_forgot");
   const P = await approvedPartner("rst");
   const ownerEmail = `qa_ptn_rst_${rnd()}@local.test`;
-  const reg = await api("POST", "/api/v1/partner/register", { body: { email: ownerEmail, password: "Passw0rd-QA-1", companyName: "QA reset", businessNumber: "000-00-00000" } });
+  const reg = await api("POST", "/api/v1/partner/register", { body: { email: ownerEmail, password: "Passw0rd-QA-1", companyName: "QA reset", businessNumber: bizNo() } });
   sql(`UPDATE partner_profiles SET status = 'ACTIVE' WHERE partner_id = '${reg.data.partnerId}'`);
   assert.equal((await api("POST", "/api/v1/partner/forgot-password", { body: { email: "nobody@local.test" } })).status, 200, "no enumeration");
   assert.equal((await api("POST", "/api/v1/partner/forgot-password", { body: { email: ownerEmail } })).status, 200);
-  const outbox = await api("GET", "/api/v1/auth/dev-outbox");
+  const outbox = await api("GET", "/api/v1/auth/dev-outbox", { token: ADMIN });
   const row = outbox.data.outbox.find((o) => o.recipient === ownerEmail && o.template === "PASSWORD_RESET");
   assert.ok(row, "reset email queued");
   const token = new URL(JSON.parse(row.payload_json).link).searchParams.get("token");
@@ -1239,7 +1252,7 @@ test("partner password reset: forgot issues single-use links for owners and staf
   const staffEmail = `rst_stf_${rnd()}@local.test`;
   await api("POST", "/api/v1/partner/staff", { token: P.token, body: { email: staffEmail, fullName: "리셋 직원", password: "Passw0rd-QA-1" } });
   assert.equal((await api("POST", "/api/v1/partner/forgot-password", { body: { email: staffEmail } })).status, 200);
-  const outbox2 = await api("GET", "/api/v1/auth/dev-outbox");
+  const outbox2 = await api("GET", "/api/v1/auth/dev-outbox", { token: ADMIN });
   const row2 = outbox2.data.outbox.find((o) => o.recipient === staffEmail);
   const token2 = new URL(JSON.parse(row2.payload_json).link).searchParams.get("token");
   assert.equal((await api("POST", "/api/v1/partner/reset-password", { body: { token: token2, newPassword: "StaffNew-Pass-9" } })).status, 200);
@@ -1787,7 +1800,7 @@ test("security: logout/reset revoke sessions; roles re-read; money paths throttl
   const E = await register("resetsess");
   const login1 = await api("POST", "/api/v1/auth/login", { body: { email: E.email, password: "Passw0rd-QA-1" } });
   assert.equal((await api("POST", "/api/v1/auth/forgot-password", { body: { email: E.email } })).status, 200);
-  const outbox = await api("GET", "/api/v1/auth/dev-outbox");
+  const outbox = await api("GET", "/api/v1/auth/dev-outbox", { token: ADMIN });
   const mail = outbox.data.outbox.find((m) => m.recipient === E.email && m.template === "PASSWORD_RESET");
   const token = new URL(JSON.parse(mail.payload_json).link).searchParams.get("token");
   assert.equal((await api("POST", "/api/v1/auth/reset-password", { body: { token, newPassword: "NewPassw0rd-QA-9" } })).status, 200);
@@ -3112,7 +3125,8 @@ test("#97: legacy hashes rotate to PBKDF2 on next success (refusal waits on mail
 
 test("#98: bank and business numbers encrypt at rest, decrypt at the edge", async () => {
   const email = `qa_pii98_${rnd()}@local.test`;
-  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: "QA PII", businessNumber: "111-22-33333", bankAccountNumber: "999-88-777777", bankAccountHolder: "QAPII" } });
+  const biz98 = bizNo();
+  const reg = await api("POST", "/api/v1/partner/register", { body: { email, password: "Passw0rd-QA-1", companyName: "QA PII", businessNumber: biz98, bankAccountNumber: "999-88-777777", bankAccountHolder: "QAPII" } });
   assert.equal(reg.status, 201, JSON.stringify(reg.data));
   const pid = reg.data.partnerId;
   assert.ok(sql(`SELECT business_number AS v FROM partners WHERE id = '${pid}'`)[0].v.startsWith("v1:"));
@@ -3120,13 +3134,13 @@ test("#98: bank and business numbers encrypt at rest, decrypt at the edge", asyn
   assert.ok(prof.a.startsWith("v1:") && prof.h.startsWith("v1:"));
   const T = (await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } })).data.token;
   const view = (await api("GET", "/api/v1/partner/profile", { token: T })).data.partner;
-  assert.equal(view.business_number, "111-22-33333");
+  assert.equal(view.business_number, biz98);
   assert.equal(view.profile.bank_account_number, "999-88-777777");
   assert.equal((await api("PATCH", "/api/v1/partner/profile", { token: T, body: { bankAccountNumber: "111-00-222222" } })).status, 200);
   assert.ok(sql(`SELECT bank_account_number AS v FROM partner_profiles WHERE partner_id = '${pid}'`)[0].v.startsWith("v1:"));
   const adm = (await api("GET", `/api/v1/admin/partners?q=${encodeURIComponent(email)}`, { token: ADMIN })).data.partners[0];
   assert.equal(adm.bank_account_number, "111-00-222222");
-  assert.equal(adm.business_number, "111-22-33333");
+  assert.equal(adm.business_number, biz98);
 });
 
 test("#99: webhook dedupe rows prune after 30 days", async () => {
@@ -3346,4 +3360,235 @@ test("#111: moment moderation round-trips through blind and approve", async () =
   assert.equal((await api("POST", `/api/v1/admin/moments/${id}/restore`, { token: ADMIN })).status, 200);
   const plain = (await api("GET", "/api/v1/moments")).data.moments.find((m) => m.id === id);
   assert.ok(plain && plain.is_featured === 0, "restore unblinds without featuring");
+});
+
+test("#127: logout clears every portal jar, including across CORS", async () => {
+  resetLimiter("register", "login", "partner_register", "partner_login");
+  const jarOf = (cookies, name) => (cookies.find((c) => c.startsWith(`${name}=`)) || "").split(";")[0];
+  const U = await register("jar127");
+  const uLogin = await fetch(BASE + "/api/v1/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: U.email, password: "Passw0rd-QA-1" }) });
+  const uJar = jarOf(uLogin.headers.getSetCookie(), "getfortrip_jwt");
+  assert.ok(uJar, "user jar set");
+  const aLogin = await fetch(BASE + "/api/v1/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }) });
+  const aJar = jarOf(aLogin.headers.getSetCookie(), "getfortrip_admin_jwt");
+  assert.ok(aJar, "admin jar set");
+  const pe = `qa_ptn_jar127_${rnd()}@local.test`;
+  const preg = await api("POST", "/api/v1/partner/register", { body: { email: pe, password: "Passw0rd-QA-1", companyName: "QA jar127", businessNumber: bizNo() } });
+  assert.equal(preg.status, 201, JSON.stringify(preg.data));
+  sql(`UPDATE partner_profiles SET status = 'ACTIVE' WHERE partner_id = '${preg.data.partnerId}'`);
+  const pLogin = await fetch(BASE + "/api/v1/partner/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: pe, password: "Passw0rd-QA-1" }) });
+  const pJar = jarOf(pLogin.headers.getSetCookie(), "getfortrip_partner_jwt");
+  assert.ok(pJar, "partner jar set");
+  const all = [uJar, aJar, pJar].join("; ");
+  for (const [name, path] of [["user", "/api/v1/auth/logout"], ["admin", "/api/v1/admin/logout"], ["partner", "/api/v1/partner/logout"]]) {
+    const lo = await fetch(BASE + path, { method: "POST", headers: { Cookie: all } });
+    assert.equal(lo.status, 200, `${name} logout`);
+    const cleared = lo.headers.getSetCookie();
+    for (const jar of ["getfortrip_jwt", "getfortrip_admin_jwt", "getfortrip_partner_jwt"]) {
+      assert.ok(cleared.some((c) => c.startsWith(`${jar}=`) && c.includes("Max-Age=0")), `${name} logout clears ${jar}: ${JSON.stringify(cleared)}`);
+    }
+  }
+  // CORS-wrapped logout keeps three distinct clears (no comma-folding).
+  const co = await fetch(BASE + "/api/v1/auth/logout", { method: "POST", headers: { Cookie: all, Origin: "https://ota-hub.dnjstjqppk.workers.dev" } });
+  assert.equal(co.headers.getSetCookie().length, 3, JSON.stringify(co.headers.getSetCookie()));
+});
+
+test("#128: partner tokens never read user profiles", async () => {
+  const P = await approvedPartner("me128");
+  const get = await api("GET", "/api/v1/auth/me", { token: P.token });
+  assert.equal(get.status, 401, JSON.stringify(get.data));
+  assert.equal(get.data.code, "UNAUTHORIZED");
+  assert.equal((await api("PATCH", "/api/v1/auth/me", { token: P.token, body: { fullName: "X" } })).status, 401);
+});
+
+test("#129: dev-outbox needs an admin", async () => {
+  assert.equal((await api("GET", "/api/v1/auth/dev-outbox")).status, 401);
+  assert.equal((await api("GET", "/api/v1/auth/dev-outbox", { token: A.token })).status, 403);
+  const r = await api("GET", "/api/v1/auth/dev-outbox", { token: ADMIN });
+  assert.equal(r.status, 200);
+  assert.ok(Array.isArray(r.data.outbox));
+});
+
+test("#130: list limits clamp instead of 500ing or unbounding", async () => {
+  for (const p of ["/api/v1/hotels", "/api/v1/flights"]) {
+    assert.equal((await api("GET", `${p}?limit=abc`)).status, 200, `${p} abc`);
+    assert.equal((await api("GET", `${p}?limit=-5`)).status, 200, `${p} -5`);
+    const big = await api("GET", `${p}?limit=1000000`);
+    assert.equal(big.status, 200);
+    assert.ok(big.data.data.length <= 100, `${p} capped at 100`);
+    const one = await api("GET", `${p}?limit=1`);
+    assert.ok(one.data.data.length <= 1, `${p} limit=1 honored`);
+  }
+});
+
+test("#131: hyphenated activity ids serve slots", async () => {
+  sql(`INSERT OR IGNORE INTO activities (id, partner_id, title, category, city, country, price_krw) VALUES ('act-e2e-131', 'ptn_tour_01', 'E2E 하이픈', 'EXPERIENCE', '서울', '대한민국', 10000)`);
+  sql(`INSERT OR IGNORE INTO activity_time_slots (id, activity_id, slot_date, start_time, price_adult_minor, price_child_minor) VALUES ('slot_e2e_131', 'act-e2e-131', '2027-05-05', '10:00', 10000, 5000)`);
+  try {
+    const r = await api("GET", "/api/v1/activities/act-e2e-131/slots?date=2027-05-05");
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    assert.equal(r.data.activity_id, "act-e2e-131");
+    assert.ok(r.data.slots.some((s) => s.start_time === "10:00"), "slot served");
+  } finally {
+    sql("DELETE FROM activities WHERE id = 'act-e2e-131'");
+  }
+});
+
+test("#132: affiliate outlinks are rate-bounded and need an item", async () => {
+  resetLimiter("affiliate_out");
+  assert.equal((await api("GET", "/api/v1/out/trip")).status, 400);
+  assert.equal((await api("GET", "/api/v1/out/nope-x7/item-1")).status, 404);
+  const secret = `e2e-secret132-${rnd()}${rnd()}`;
+  sql(`INSERT OR REPLACE INTO affiliate_partners_config (partner_id, name, deep_link_template, affiliate_id, secret_key, is_active) VALUES ('e2eout132', 'e2e', 'https://example.test/p?click={click_id}&item={item_id}', 'E2E', '${secret}', 1)`);
+  try {
+    resetLimiter("affiliate_out");
+    let last = 0;
+    for (let i = 0; i < 121 && last !== 429; i++) {
+      last = (await fetch(BASE + "/api/v1/out/e2eout132/item-1", { redirect: "manual" })).status;
+    }
+    assert.equal(last, 429);
+  } finally {
+    sql("DELETE FROM affiliate_partners_config WHERE partner_id = 'e2eout132'");
+    sql("DELETE FROM affiliate_clicks WHERE partner_name = 'e2eout132'");
+    resetLimiter("affiliate_out");
+  }
+});
+
+test("#134: saved travelers validate formats and cap at 20", async () => {
+  resetLimiter("register", "user_write");
+  const U = await register("pax134");
+  const base = { nameKo: "김검증", lastNameEn: "KIM", firstNameEn: "CHECK" };
+  assert.equal((await api("POST", "/api/v1/user/passengers", { token: U.token, body: { ...base, birthDate: "1990-13-99" } })).data.code, "INVALID_BIRTH_DATE");
+  assert.equal((await api("POST", "/api/v1/user/passengers", { token: U.token, body: { ...base, gender: "UNKNOWN" } })).data.code, "INVALID_GENDER");
+  assert.equal((await api("POST", "/api/v1/user/passengers", { token: U.token, body: { ...base, nationality: "K1" } })).data.code, "INVALID_NATIONALITY");
+  assert.equal((await api("POST", "/api/v1/user/passengers", { token: U.token, body: { ...base, passportExpiry: "tomorrow" } })).data.code, "INVALID_PASSPORT_EXPIRY");
+  for (let i = 0; i < 20; i++) {
+    const r = await api("POST", "/api/v1/user/passengers", { token: U.token, body: { ...base, birthDate: "1990-01-01", nationality: "KOR" } });
+    assert.equal(r.status, 201, `slot ${i}: ${JSON.stringify(r.data)}`);
+  }
+  assert.equal((await api("POST", "/api/v1/user/passengers", { token: U.token, body: base })).data.code, "PASSENGER_LIMIT_REACHED");
+});
+
+test("#135: notice PATCH edits title and body", async () => {
+  const created = await api("POST", "/api/v1/admin/notices", { token: ADMIN, body: { title: `E2E 135 ${rnd()}`, content: "원본", bannerActive: false } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  const id = created.data.id;
+  assert.equal((await api("PATCH", `/api/v1/admin/notices/${id}`, { token: ADMIN, body: { title: "수정됨", content: "수정 본문" } })).status, 200);
+  const seen = (await api("GET", "/api/v1/admin/notices", { token: ADMIN })).data.notices.find((n) => n.id === id);
+  assert.equal(seen.title, "수정됨");
+  assert.equal(seen.content, "수정 본문");
+  assert.equal((await api("PATCH", `/api/v1/admin/notices/${id}`, { token: ADMIN, body: { title: " " } })).status, 400);
+});
+
+test("#136: promo PATCH rejects silently-ignored fields", async () => {
+  const code = `E2E-136-${Date.now().toString(36).toUpperCase()}`;
+  const created = await api("POST", "/api/v1/admin/promotions", { token: ADMIN, body: { code, title: "E2E 136", discountType: "FIXED_AMOUNT", discountValue: 1000 } });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  const id = created.data.id;
+  assert.equal((await api("PATCH", `/api/v1/admin/promotions/${id}`, { token: ADMIN, body: { title: "바꾸기" } })).data.code, "IMMUTABLE_FIELD");
+  assert.equal((await api("PATCH", `/api/v1/admin/promotions/${id}`, { token: ADMIN, body: { discountValue: 1 } })).data.code, "IMMUTABLE_FIELD");
+  assert.equal((await api("PATCH", `/api/v1/admin/promotions/${id}`, { token: ADMIN, body: { isActive: false } })).status, 200);
+  assert.equal((await api("PATCH", `/api/v1/admin/promotions/${id}`, { token: ADMIN, body: { isActive: true, usageLimit: 5 } })).status, 200);
+});
+
+test("#137: entity status follows the allowlist", async () => {
+  const eid = `ent_e2e_137_${Date.now().toString(36)}`;
+  sql(`INSERT INTO business_entities (id, entity_type, legal_name, status) VALUES ('${eid}', 'CORPORATION', 'E2E 137', 'DRAFT')`);
+  try {
+    assert.equal((await api("PATCH", `/api/v1/admin/entities/${eid}`, { token: ADMIN, body: { status: "CLOSED" } })).data.code, "INVALID_STATUS");
+    assert.equal((await api("PATCH", `/api/v1/admin/entities/${eid}`, { token: ADMIN, body: { status: "suspended" } })).status, 200);
+    const after = (await api("GET", "/api/v1/admin/entities", { token: ADMIN })).data.entities.find((e) => e.id === eid);
+    assert.equal(after.status, "SUSPENDED");
+  } finally {
+    sql(`DELETE FROM entity_change_log WHERE entity_id = '${eid}'; DELETE FROM business_entities WHERE id = '${eid}'`);
+  }
+});
+
+test("#138: partner signup validates email and business number, once each", async () => {
+  resetLimiter("partner_register");
+  const biz = bizNo();
+  assert.equal((await api("POST", "/api/v1/partner/register", { body: { email: "not-an-email", password: "Passw0rd-QA-1", companyName: "X", businessNumber: biz } })).data.code, "INVALID_EMAIL");
+  assert.equal((await api("POST", "/api/v1/partner/register", { body: { email: `qa138a_${rnd()}@local.test`, password: "Passw0rd-QA-1", companyName: "X", businessNumber: "12-345" } })).data.code, "INVALID_BIZ_NO");
+  const ok = await api("POST", "/api/v1/partner/register", { body: { email: `qa138b_${rnd()}@local.test`, password: "Passw0rd-QA-1", companyName: "QA 138", businessNumber: biz } });
+  assert.equal(ok.status, 201, JSON.stringify(ok.data));
+  assert.equal((await api("POST", "/api/v1/partner/register", { body: { email: `qa138c_${rnd()}@local.test`, password: "Passw0rd-QA-1", companyName: "QA 138 dup", businessNumber: biz.replace("-", "") } })).data.code, "BUSINESS_NUMBER_EXISTS");
+});
+
+test("#139: 3P registration validates price and domain", async () => {
+  const P = await approvedPartner("mkt139");
+  const attempt = (body) => api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 139", domain: "ACTIVITY", city: "서울", ...body } });
+  assert.equal((await attempt({ price: "abc" })).data.code, "INVALID_PRICE");
+  assert.equal((await attempt({ price: -5 })).data.code, "INVALID_PRICE");
+  assert.equal((await attempt({ price: 2000000000 })).data.code, "INVALID_PRICE");
+  assert.equal((await attempt({ price: 19.99 })).data.code, "INVALID_PRICE");
+  assert.equal((await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 139", domain: "FLIGHT", city: "서울", price: 10000 } })).data.code, "INVALID_DOMAIN");
+  const zero = await api("POST", "/api/v1/partner/marketplace/products", { token: P.token, body: { title: "E2E 139 zero", domain: "ACTIVITY", city: "서울", price: 0, capacity: 5 } });
+  assert.equal(zero.status, 201, JSON.stringify(zero.data));
+});
+
+test("#140: partner settlements hide platform margin internals", async () => {
+  const P = await approvedPartner("mgn140");
+  const U = await register("mgn140u");
+  const { b } = await fullHotelBooking(U.token);
+  sql(`INSERT INTO marketplace_order_settlements (id, booking_id, domain_type, merchant_model, seller_id, seller_name, supplier_id, gross_amount_minor, supply_cost_minor, commission_amount_minor, seller_payout_minor, net_platform_profit_minor) VALUES ('stl_e2e_140', '${b.id}', 'HOTEL', '3P', '${P.id}', 'QA 140', 'sup_x', 100000, 70000, 10000, 90000, 20000)`);
+  try {
+    const r = await api("GET", "/api/v1/partner/marketplace/settlements", { token: P.token });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    const row = r.data.settlements.find((s) => s.id === "stl_e2e_140");
+    assert.ok(row, "seeded row visible");
+    assert.equal(row.gross_amount_minor, 100000);
+    assert.equal(row.commission_amount_minor, 10000);
+    assert.equal(row.seller_payout_minor, 90000);
+    for (const f of ["supply_cost_minor", "net_platform_profit_minor", "supplier_id", "attribution_source", "payout_method", "payout_reference"]) {
+      assert.ok(!(f in row), `partner field leaked: ${f}`);
+    }
+  } finally {
+    sql("DELETE FROM marketplace_order_settlements WHERE id = 'stl_e2e_140'");
+  }
+});
+
+test("#141: public reads are rate-bounded", async () => {
+  resetLimiter("catalog_read", "market_read", "flags_read");
+  for (const p of ["/api/v1/search/suggest?q=%EC%84%9C%EC%9A%B8", "/api/v1/hotels?limit=1", "/api/v1/flights?limit=1", "/api/v1/trains", "/api/v1/cars", "/api/v1/transfers", "/api/v1/activities", "/api/v1/packages", "/api/v1/esim/plans", "/api/v1/insurance/plans", "/api/v1/marketplace/catalog?model=3P", "/api/v1/feature-flags"]) {
+    assert.equal((await api("GET", p)).status, 200, p);
+  }
+  fillBucket("catalog_read", 600);
+  try {
+    assert.equal((await api("GET", "/api/v1/hotels?limit=1")).status, 429);
+  } finally {
+    resetLimiter("catalog_read");
+  }
+  assert.equal((await api("GET", "/api/v1/hotels?limit=1")).status, 200);
+});
+
+test("#142: authed reads and writes are rate-bounded", async () => {
+  resetLimiter("user_read", "user_write");
+  assert.equal((await api("GET", "/api/v1/wishlist", { token: A.token })).status, 200, "prime user_read");
+  fillBucket("user_read", 600);
+  try {
+    assert.equal((await api("GET", "/api/v1/wishlist", { token: A.token })).status, 429);
+    assert.equal((await api("GET", "/api/v1/bookings", { token: A.token })).status, 429);
+  } finally {
+    resetLimiter("user_read");
+  }
+  assert.equal((await api("GET", "/api/v1/wishlist", { token: A.token })).status, 200);
+  resetLimiter("user_write");
+  let last = 0;
+  for (let i = 0; i < 121 && last !== 429; i++) {
+    last = (await api("POST", "/api/v1/wishlist", { token: A.token, body: { itemId: "htl_seoul_01" } })).status;
+  }
+  assert.equal(last, 429);
+  resetLimiter("user_write");
+  assert.equal((await api("DELETE", "/api/v1/wishlist/htl_seoul_01", { token: A.token })).status, 200);
+});
+
+test("#145: esim and insurance plans say they cannot be bought yet", async () => {
+  const e = await api("GET", "/api/v1/esim/plans");
+  assert.equal(e.status, 200);
+  assert.ok(e.data.plans.length > 0, "esim plans listed");
+  assert.ok(e.data.plans.every((p) => p.purchasable === false && p.purchase_notice), "every esim plan annotated");
+  const ins = await api("GET", "/api/v1/insurance/plans");
+  assert.equal(ins.status, 200);
+  assert.ok(ins.data.plans.length > 0, "insurance plans listed");
+  assert.ok(ins.data.plans.every((p) => p.purchasable === false && p.purchase_notice), "every insurance plan annotated");
 });

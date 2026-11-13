@@ -10,10 +10,20 @@ import (
 )
 
 // IngestWebhook handles POST /api/v1/webhook/ingest
-// Receives crawled raw HTML/JSON from Python crawlers for Agoda, TripCom, Klook, KKday, MyRealTrip
+// Receives crawled raw HTML/JSON from Python crawlers for Agoda, TripCom, Klook, KKday, MyRealTrip.
+//
+// #123: admin-JWT only. Every call burns a Gemini rewrite (billed per token
+// when GEMINI_API_KEY is set) and mints monetized referral URLs, so anonymous
+// callers must never reach the pipeline. Configure via backend/.env
+// (JWT_SECRET + ADMIN_PASSWORD); affiliate IDs are optional overrides there,
+// development defaults otherwise.
 func (h *APIHandler) IngestWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed. Use POST.")
+		return
+	}
+	if !checkAdminAuth(r) {
+		writeError(w, http.StatusUnauthorized, "admin authentication required")
 		return
 	}
 
@@ -64,11 +74,23 @@ func (h *APIHandler) GetCuratedProductDetail(w http.ResponseWriter, r *http.Requ
 }
 
 // ResyncWebhook handles POST /api/v1/curated/products/{id}/sync-webhook
+//
+// #123: admin-JWT only (same billable pipeline as IngestWebhook), and a
+// product without a recorded referral refuses with 409 instead of panicking
+// on a nil AffiliateReferral.
 func (h *APIHandler) ResyncWebhook(w http.ResponseWriter, r *http.Request) {
+	if !checkAdminAuth(r) {
+		writeError(w, http.StatusUnauthorized, "admin authentication required")
+		return
+	}
 	id := r.PathValue("id")
 	p := h.store.GetUniversalProduct(id)
 	if p == nil {
 		writeError(w, http.StatusNotFound, "Product not found")
+		return
+	}
+	if p.AffiliateReferral == nil {
+		writeError(w, http.StatusConflict, "Product has no recorded referral to resync from")
 		return
 	}
 

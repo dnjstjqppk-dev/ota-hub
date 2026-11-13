@@ -1,6 +1,6 @@
 # Go-Live Checklist — PG 계약 후 바로 장사하기
 
-> 전제: `main` 최신이 CI로 배포되어 있고, 운영 verify 41/41이다:
+> 전제: `main` 최신이 CI로 배포되어 있고, 운영 verify 47/47이다:
 > `BASE_URL=https://ota-hub.dnjstjqppk.workers.dev VERIFY_ACK_PROD=1 TEST_ADMIN_PASSWORD='...' node scripts/verify-production.js`.
 > (기본 엄격 모드: 스킵이 있으면 실패. T41 실정산 없이 통과하려면 `VERIFY_ALLOW_SKIP=1`,
 > 실정산까지 수행하려면 `VERIFY_LIVE_SETTLE=1`을 붙인다. 운영 기본값은 읽기전용 변형

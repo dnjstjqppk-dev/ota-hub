@@ -37,6 +37,7 @@ export async function handleSupport(request: Request, env: Env, url: URL): Promi
   }
   if (path === "/api/v1/inquiries" && method === "GET") {
     const u = await requireUser(request, env);
+    await rateLimit(request, env, "user_read", 600, 60);
     const rows = await db.prepare(
       "SELECT id, category, subject, body, booking_id, status, admin_note, created_at, resolved_at FROM support_tickets WHERE user_id = ? ORDER BY created_at DESC LIMIT 50"
     ).bind(u.id).all();

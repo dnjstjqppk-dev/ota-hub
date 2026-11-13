@@ -11,8 +11,10 @@ import (
 )
 
 func TestIngestWebhookHTTPHandler(t *testing.T) {
+	t.Setenv("JWT_SECRET", p2gTestSecret)
 	store := repository.NewStore()
 	h := NewAPIHandler(store)
+	admin := mintP2GToken(t, JWTClaims{ID: "adm_001", Role: "SUPER_ADMIN"})
 
 	reqPayload := domain.IngestRawRequest{
 		Platform:        domain.PlatformKlook,
@@ -30,6 +32,7 @@ func TestIngestWebhookHTTPHandler(t *testing.T) {
 	bodyBytes, _ := json.Marshal(reqPayload)
 	req := httptest.NewRequest("POST", "/api/v1/webhook/ingest", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+admin)
 	w := httptest.NewRecorder()
 
 	h.IngestWebhook(w, req)

@@ -14,6 +14,7 @@ import (
 )
 
 func TestSecurityAndContract(t *testing.T) {
+	t.Setenv("JWT_SECRET", "p2g-test-jwt-secret-min-32-chars-ok!")
 	store := repository.NewStore()
 	h := NewAPIHandler(store)
 
@@ -26,7 +27,8 @@ func TestSecurityAndContract(t *testing.T) {
 		}
 
 		// With valid admin token
-		admToken, err := GenerateJWT(JWTClaims{ID: "adm_001", Role: "ADMIN"}, getJWTSecret())
+		secret, _ := getJWTSecret()
+		admToken, err := GenerateJWT(JWTClaims{ID: "adm_001", Role: "ADMIN"}, secret)
 		if err != nil {
 			t.Fatalf("Failed to generate test admin JWT: %v", err)
 		}

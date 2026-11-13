@@ -1,8 +1,8 @@
 import type { Env } from "../env.ts";
 import { isNonProduction } from "../env.ts";
-import { HttpError, clientIp, json, readJson, str } from "../lib/http.ts";
+import { HttpError, clientIp, json, jsonCookies, readJson, str } from "../lib/http.ts";
 import { JWT_TTL_SECONDS, hashPassword, isLegacyHash, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed, verifyTotp } from "../lib/crypto.ts";
-import { audit, authCookie, checkAccountLock, clearAuthCookie, clearLoginFailures, getAuthUser, jwtSecret, rateLimit, recordLoginFailure, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
+import { audit, authCookie, checkAccountLock, clearAllAuthCookies, clearAuthCookie, clearLoginFailures, getAuthUser, jwtSecret, rateLimit, recordLoginFailure, requireAdmin, requireUser, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
 import { consentStmts, currentVersions } from "../lib/consents.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 
@@ -101,12 +101,12 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
 
   if (path === "/api/v1/auth/logout" && method === "POST") {
     await revokeCurrentToken(request, env);
-    return json({ success: true }, 200, { "Set-Cookie": clearAuthCookie(env, "getfortrip_jwt") });
+    return jsonCookies({ success: true }, 200, clearAllAuthCookies(env));
   }
 
   if (path === "/api/v1/admin/logout" && method === "POST") {
     await revokeCurrentToken(request, env);
-    return json({ success: true }, 200, { "Set-Cookie": clearAuthCookie(env, "getfortrip_admin_jwt") });
+    return jsonCookies({ success: true }, 200, clearAllAuthCookies(env));
   }
 
   // #37: authenticated password change. Verifies the current password (a live
@@ -134,8 +134,9 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
   }
 
   if (path === "/api/v1/auth/me" && method === "GET") {
-    const a = await getAuthUser(request, env);
-    if (!a) throw new HttpError(401, "UNAUTHORIZED", "로그인이 필요합니다.");
+    // #128: a PARTNER token must never read a user profile — the role gate
+    // (DB-verified) rejects it before the users lookup runs.
+    const a = await requireUser(request, env);
     const u = await env.DB.prepare("SELECT id, email, full_name, phone_number, role, tier, trip_coins, avatar_url, marketing_consent FROM users WHERE id = ?").bind(a.id).first<any>();
     if (!u) throw new HttpError(401, "UNAUTHORIZED", "사용자 정보를 찾을 수 없습니다.");
     const pu = { ...publicUser(u), marketingConsent: Number(u.marketing_consent) === 1 };
@@ -145,8 +146,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
   // Profile edit: name and phone only (email is the login identity and is not editable here).
   // marketingConsent toggles the marketing flag AND appends a consent record (A4).
   if (path === "/api/v1/auth/me" && method === "PATCH") {
-    const a = await getAuthUser(request, env);
-    if (!a) throw new HttpError(401, "UNAUTHORIZED", "로그인이 필요합니다.");
+    const a = await requireUser(request, env);
     const body = await readJson(request);
     const fullName = str(body.fullName, 60);
     const phone = str(body.phoneNumber, 30);
@@ -256,6 +256,8 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
 
   if (path === "/api/v1/auth/dev-outbox" && method === "GET" && isNonProduction(env)) {
     // Development aid only: lets local QA read parked emails (e.g. reset links).
+    // #129: password-reset links are bearer secrets — admin eyes only, even here.
+    await requireAdmin(request, env);
     const rows = await env.DB.prepare("SELECT recipient, template, payload_json, created_at FROM notification_outbox ORDER BY created_at DESC LIMIT 20").all();
     return json({ success: true, outbox: rows.results });
   }

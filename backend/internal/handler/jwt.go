@@ -20,12 +20,16 @@ type JWTClaims struct {
 	Exp       int64  `json:"exp"`
 }
 
-func getJWTSecret() string {
-	sec := os.Getenv("JWT_SECRET")
-	if sec == "" {
-		sec = "gft_internal_secure_jwt_signing_key_2026_min32chars"
+// getJWTSecret returns the configured HMAC signing secret. #122: the
+// hardcoded fallback is gone — anyone holding that string could mint admin
+// tokens. With JWT_SECRET unset (or under 32 chars, mirroring the worker
+// gate) every JWT check fails closed.
+func getJWTSecret() (string, bool) {
+	sec := strings.TrimSpace(os.Getenv("JWT_SECRET"))
+	if len(sec) < 32 {
+		return "", false
 	}
-	return sec
+	return sec, true
 }
 
 func base64UrlEncode(b []byte) string {

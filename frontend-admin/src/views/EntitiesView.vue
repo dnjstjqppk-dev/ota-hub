@@ -125,7 +125,7 @@ function statusTone(s: string) {
       <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <label v-for="f in ENTITY_FIELDS" :key="f.key" class="block"><span class="field-label">{{ f.label }}<span v-if="f.required" class="text-danger"> *</span></span><input v-model="eform[f.key]" class="input mt-1 w-full" :placeholder="f.label" /></label>
         <label class="block"><span class="field-label">상태</span>
-          <select v-model="estatus" class="input mt-1 w-full"><option value="">변경 안 함</option><option>ACTIVE</option><option>SUSPENDED</option><option>CLOSED</option></select>
+          <select v-model="estatus" class="input mt-1 w-full"><option value="">변경 안 함</option><option>ACTIVE</option><option>SUSPENDED</option><option>RETIRED</option></select>
         </label>
       </div>
       <div class="mt-4 flex gap-2">

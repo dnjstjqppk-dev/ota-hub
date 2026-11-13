@@ -251,6 +251,11 @@ export function clearAuthCookie(env: Env, name: AuthJar): string {
   return `${name}=; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=0`;
 }
 
+/** #127: one browser can hold all three portal sessions — logout clears every jar. */
+export function clearAllAuthCookies(env: Env): string[] {
+  return (["getfortrip_jwt", "getfortrip_admin_jwt", "getfortrip_partner_jwt"] as const).map((jar) => clearAuthCookie(env, jar));
+}
+
 export async function audit(env: Env, adminId: string, action: string, targetType: string, targetId: string, details: unknown): Promise<void> {
   await env.DB.prepare("INSERT INTO admin_audit_logs (id, admin_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(`aud_${crypto.randomUUID().replace(/-/g, "")}`, adminId, action, targetType, targetId, typeof details === "string" ? details : JSON.stringify(details))

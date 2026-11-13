@@ -6,12 +6,24 @@
  */
 import type { Env } from "../env.ts";
 import { json, str } from "../lib/http.ts";
+import { rateLimit } from "../lib/auth.ts";
 import { hotelRatePlans, supplierBookabilityMap, type Bookability } from "../services/catalog.ts";
 import { airportsForCityCode, airportsForPlaceName, likeEscape, parseDomain, suggest } from "../services/suggest-service.ts";
 import { catalogSnapshot } from "./seo.ts";
 
 /** User text for a LIKE '%...%' pattern: `%`/`_`/`\` become literals, never wildcards. */
 const contains = (s: string): string => `%${likeEscape(s)}%`;
+
+/**
+ * #130: list limits clamp to 1..100 (default 50). A bare parseInt turned
+ * `limit=abc` into LIMIT NaN (a 500 from SQLite) and `limit=-5` into an
+ * unbounded scan (SQLite reads a negative LIMIT as no limit).
+ */
+function clampLimit(raw: string | null, fallback = 50): number {
+  const n = parseInt(raw || "", 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(1, Math.min(100, n));
+}
 
 const PRICE_NOTICE = "참고 가격 (공급사 실시간 검증 전)";
 
@@ -41,6 +53,10 @@ function annotate(rows: any[], map: Map<string, Bookability>, fallbackSupplier: 
 export async function handleCatalog(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
   if (request.method !== "GET") return null;
+  // #141: the whole public read surface (suggest, 7 lists + details, slots,
+  // esim/insurance, policies/legal/seo/promotions/notices/fx) shared one
+  // unbounded tap — floods now 429 instead of melting D1.
+  await rateLimit(request, env, "catalog_read", 600, 60);
     // Search autocomplete: places reference data + live catalog products (see services/suggest-service.ts)
     if (path === "/api/v1/search/suggest") {
       const started = Date.now();
@@ -115,7 +131,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       const freeCancel = url.searchParams.get("freeCancel") === "true" || url.searchParams.get("free_cancellation") === "1";
       const breakfast = url.searchParams.get("breakfast") === "true" || url.searchParams.get("free_breakfast") === "1";
       const sortBy = url.searchParams.get("sortBy") || "recommended";
-      const limit = parseInt(url.searchParams.get("limit") || "50", 10);
+      const limit = clampLimit(url.searchParams.get("limit"));
 
       let q = "SELECT * FROM hotels WHERE is_active = 1";
       const p: any[] = [];
@@ -191,7 +207,7 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       const timeSlot = url.searchParams.get("timeSlot") || "";
       const cabinClass = url.searchParams.get("cabinClass") || url.searchParams.get("class") || "";
       const sortBy = url.searchParams.get("sortBy") || "cheapest";
-      const limit = parseInt(url.searchParams.get("limit") || "50", 10);
+      const limit = clampLimit(url.searchParams.get("limit"));
 
       let q = "SELECT * FROM flights WHERE is_active = 1";
       const p: any[] = [];
@@ -422,7 +438,9 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
     }
     // 13. Activity Time Slots & Availability: GET /api/v1/activities/:id/slots.
     // Must precede the detail prefix-match below, which would otherwise swallow it.
-    const slotMatch = path.match(/^\/api\/v1\/activities\/([A-Za-z0-9_]+)\/slots$/);
+    // #131: activity ids may carry hyphens — the old class dropped them into
+    // the detail prefix-match (404) instead of serving their slots.
+    const slotMatch = path.match(/^\/api\/v1\/activities\/([A-Za-z0-9_-]+)\/slots$/);
     if (slotMatch) {
       const activityId = slotMatch[1];
       const targetDate = url.searchParams.get("date") || new Date().toISOString().slice(0, 10);
@@ -527,19 +545,29 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
       }
       sql += " ORDER BY country_name, price_minor ASC";
       const rows = await env.DB.prepare(sql).bind(...params).all();
-      return json({ success: true, plans: rows.results });
+      // #145: quotes 409 these plans (ESIM_INSURANCE_QUOTE_UNSUPPORTED), so
+      // the catalog must not present them as purchasable either.
+      const plans = (rows.results || []).map((p: any) => ({
+        ...p,
+        purchasable: false,
+        purchase_notice: "판매 준비 중입니다. 통신사 제휴가 끝나면 구매할 수 있어요.",
+      }));
+      return json({ success: true, plans, notice: "eSIM 판매를 준비하고 있어요. 지금은 요금제와 참고가만 볼 수 있어요." });
     }
 
     // 11. Travel Insurance Plans: GET /api/v1/insurance/plans
     if (path === "/api/v1/insurance/plans") {
       const durationDays = Math.max(1, Math.min(90, parseInt(url.searchParams.get("days") || "5", 10)));
       const rows = await env.DB.prepare("SELECT * FROM travel_insurance_plans WHERE is_active = 1 ORDER BY daily_rate_minor ASC").all();
+      // #145: same unpurchasable annotation as eSIM (quotes 409).
       const calculated = (rows.results || []).map((p: any) => ({
         ...p,
         total_price_minor: p.daily_rate_minor * durationDays,
-        duration_days: durationDays
+        duration_days: durationDays,
+        purchasable: false,
+        purchase_notice: "판매 준비 중입니다. 보험사 제휴가 끝나면 구매할 수 있어요.",
       }));
-      return json({ success: true, plans: calculated, duration_days: durationDays });
+      return json({ success: true, plans: calculated, duration_days: durationDays, notice: "여행자보험 판매를 준비하고 있어요. 지금은 요금제와 참고가만 볼 수 있어요." });
     }
 
     // 14. External supplier registry moved behind admin auth (#41):

@@ -253,15 +253,17 @@ func (g *GeminiClient) generateFallbackContent(p *domain.UniversalProduct, rawSc
 	}
 
 	return &domain.CuratedContent{
-		ProductID:        p.ID,
-		B2CTitle:         b2cTitle,
-		OneLineSummary:   oneLineSummary,
-		KeyBenefits:      keyBenefits,
-		SEOBlogContent:   seoBlog,
-		SEOMetaKeywords:  keywords,
-		AIModelVersion:   "gemini-2.5-flash-synthetic",
-		PromptTokens:     150,
-		CompletionTokens: 420,
+		ProductID:       p.ID,
+		B2CTitle:        b2cTitle,
+		OneLineSummary:  oneLineSummary,
+		KeyBenefits:     keyBenefits,
+		SEOBlogContent:  seoBlog,
+		SEOMetaKeywords: keywords,
+		AIModelVersion:  "gemini-2.5-flash-synthetic",
+		// #123 (incidental): rule-based synthesis burns no tokens — the old
+		// fixed 150/420 posed as measured usage.
+		PromptTokens:     0,
+		CompletionTokens: 0,
 		CreatedAt:        time.Now(),
 		UpdatedAt:        time.Now(),
 	}

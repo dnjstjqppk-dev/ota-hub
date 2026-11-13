@@ -58,9 +58,12 @@ export async function handleAffiliate(request: Request, env: Env, url: URL): Pro
   const path = url.pathname;
 
   if (path.startsWith("/out/") || path.startsWith("/api/v1/out/")) {
+    // #132: every redirect writes a click row — bound the tap before any work.
+    await rateLimit(request, env, "affiliate_out", 120, 60);
     const seg = path.replace("/api/v1", "").split("/").filter(Boolean);
     const partner = (seg[1] || "").toLowerCase();
     const itemId = (seg[2] || "").slice(0, 100);
+    if (!itemId) throw new HttpError(400, "ITEM_REQUIRED", "상품 식별자가 없는 제휴 링크입니다.");
     const cfg = await env.DB.prepare("SELECT partner_id, deep_link_template, is_active FROM affiliate_partners_config WHERE partner_id = ?").bind(partner).first<any>();
     if (!cfg || cfg.is_active !== 1 || !/^https:\/\//.test(cfg.deep_link_template || "")) {
       throw new HttpError(404, "PARTNER_LINK_UNAVAILABLE", "해당 제휴 링크는 현재 제공되지 않습니다.");

@@ -5,6 +5,17 @@ import { decryptField, encryptField, maskName, maskPassport, newId } from "../li
 import { isEmailConfigured } from "../services/email-service.ts";
 
 const NAME_EN = /^[A-Z][A-Z' -]{0,48}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// #134: the wallet feeds booking-traveler imports, so stored rows must already
+// be well-formed — and one account must not warehouse unlimited rows.
+const GENDERS = ["MALE", "FEMALE", "OTHER"] as const;
+const MAX_SAVED_TRAVELERS = 20;
+
+function assertRealDate(v: string, code: string, message: string): void {
+  if (!DATE_RE.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`)) || new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) !== v) {
+    throw new HttpError(400, code, message);
+  }
+}
 
 export async function handleUser(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
@@ -14,12 +25,14 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
   // ---------------- Wishlist ----------------
   if (path === "/api/v1/wishlist" && method === "GET") {
     const u = await requireUser(request, env);
+    await rateLimit(request, env, "user_read", 600, 60);
     const rows = await db.prepare("SELECT id, domain_type, item_id, item_title, price_krw, thumbnail_url, created_at FROM wishlist WHERE user_id = ? ORDER BY created_at DESC").bind(u.id).all();
     return json({ success: true, wishlist: rows.results, count: rows.results.length });
   }
   if (path === "/api/v1/wishlist" && method === "POST") {
     const u = await requireUser(request, env);
     const b = await readJson(request);
+    await rateLimit(request, env, "user_write", 120, 60);
     const itemId = str(b.itemId || b.item_id, 100);
     if (!itemId) throw new HttpError(400, "ITEM_REQUIRED", "상품 식별자가 필요합니다.");
     const id = newId("wsh");
@@ -31,6 +44,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
   }
   if (path.startsWith("/api/v1/wishlist/") && method === "DELETE") {
     const u = await requireUser(request, env);
+    await rateLimit(request, env, "user_write", 120, 60);
     const t = decodeURIComponent(path.slice("/api/v1/wishlist/".length));
     await db.prepare("DELETE FROM wishlist WHERE user_id = ? AND (id = ? OR item_id = ?)").bind(u.id, t, t).run();
     return json({ success: true });
@@ -39,6 +53,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
   // ---------------- Price alerts (owner-scoped) ----------------
   if (path === "/api/v1/price-alerts" && method === "GET") {
     const u = await requireUser(request, env);
+    await rateLimit(request, env, "user_read", 600, 60);
     const rows = await db.prepare("SELECT * FROM price_alerts WHERE user_id = ? ORDER BY created_at DESC").bind(u.id).all();
     return json({ success: true, alerts: rows.results });
   }
@@ -70,6 +85,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
   // ---------------- Saved travelers (passport encrypted) ----------------
   if (path === "/api/v1/user/passengers" && method === "GET") {
     const u = await requireUser(request, env);
+    await rateLimit(request, env, "user_read", 600, 60);
     const rows = await db.prepare("SELECT * FROM saved_travelers WHERE user_id = ? ORDER BY is_primary DESC, created_at ASC").bind(u.id).all<any>();
     const out = [];
     for (const r of rows.results || []) {
@@ -90,6 +106,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
   if (path === "/api/v1/user/passengers" && method === "POST") {
     const u = await requireUser(request, env);
     const b = await readJson(request);
+    await rateLimit(request, env, "user_write", 120, 60);
     const nameKo = str(b.nameKo || b.name_ko, 40);
     const last = str(b.lastNameEn || b.last_name_en, 50).toUpperCase();
     const first = str(b.firstNameEn || b.first_name_en, 50).toUpperCase();
@@ -97,15 +114,26 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     const passport = str(b.passportNumber || b.passport_number, 20).toUpperCase();
     if (passport && !/^[A-Z0-9]{6,12}$/.test(passport)) throw new HttpError(400, "INVALID_PASSPORT", "여권번호 형식이 올바르지 않습니다.");
     if (passport && !env.PII_ENC_KEY) throw new HttpError(503, "PII_KEY_MISSING", "여권 정보 암호화 키가 설정되지 않아 저장할 수 없습니다.");
+    const birth = str(b.birthDate || b.birth, 10);
+    if (birth) assertRealDate(birth, "INVALID_BIRTH_DATE", "생년월일은 YYYY-MM-DD 형식이어야 합니다.");
+    const gender = str(b.gender || "MALE", 10).toUpperCase();
+    if (!(GENDERS as readonly string[]).includes(gender)) throw new HttpError(400, "INVALID_GENDER", "성별은 MALE | FEMALE | OTHER 중 하나여야 합니다.");
+    const expiry = str(b.passportExpiry || b.passport_expiry, 10);
+    if (expiry) assertRealDate(expiry, "INVALID_PASSPORT_EXPIRY", "여권 만료일은 YYYY-MM-DD 형식이어야 합니다.");
+    const nationality = str(b.nationality || "KOR", 3).toUpperCase();
+    if (!/^[A-Z]{3}$/.test(nationality)) throw new HttpError(400, "INVALID_NATIONALITY", "국적은 영문 3자리 코드여야 합니다.");
+    const held = await db.prepare("SELECT COUNT(*) AS c FROM saved_travelers WHERE user_id = ?").bind(u.id).first<{ c: number }>();
+    if (Number(held?.c || 0) >= MAX_SAVED_TRAVELERS) throw new HttpError(409, "PASSENGER_LIMIT_REACHED", `저장 여행자는 최대 ${MAX_SAVED_TRAVELERS}명까지 저장할 수 있습니다.`);
     const enc = passport ? await encryptField(passport, env.PII_ENC_KEY!) : "";
     const id = newId("psg");
     await db.prepare(
       "INSERT INTO saved_travelers (id, user_id, name_ko, last_name_en, first_name_en, birth_date, gender, passport_number, passport_expiry, nationality, is_primary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
-    ).bind(id, u.id, nameKo, last, first, str(b.birthDate || b.birth, 10), str(b.gender || "MALE", 10).toUpperCase(), enc, str(b.passportExpiry || b.passport_expiry, 10), str(b.nationality || "KOR", 3).toUpperCase()).run();
+    ).bind(id, u.id, nameKo, last, first, birth, gender, enc, expiry, nationality).run();
     return json({ success: true, id }, 201);
   }
   if (path.startsWith("/api/v1/user/passengers/") && method === "DELETE") {
     const u = await requireUser(request, env);
+    await rateLimit(request, env, "user_write", 120, 60);
     await db.prepare("DELETE FROM saved_travelers WHERE id = ? AND user_id = ?").bind(path.slice("/api/v1/user/passengers/".length), u.id).run();
     return json({ success: true });
   }
@@ -113,6 +141,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
   // ---------------- Coupons (one claim per user per code) ----------------
   if (path === "/api/v1/user/coupons" && method === "GET") {
     const u = await requireUser(request, env);
+    await rateLimit(request, env, "user_read", 600, 60);
     const mine = await db.prepare("SELECT * FROM user_coupons WHERE user_id = ? AND is_used = 0").bind(u.id).all();
     const promos = await db.prepare("SELECT id, code, title, discount_type, discount_value, min_order_amount_krw, max_discount_krw, valid_until FROM promotions WHERE is_active = 1").all();
     return json({ success: true, coupons: mine.results, availablePromotions: promos.results });
@@ -135,6 +164,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
 
   // ---------------- Reviews (verified only with a real fulfilled booking) ----------------
   if (path === "/api/v1/reviews" && method === "GET") {
+    await rateLimit(request, env, "user_read", 600, 60);
     const targetId = str(url.searchParams.get("targetId") || url.searchParams.get("target_id"), 100);
     const domain = str(url.searchParams.get("domain") || "HOTEL", 20).toUpperCase();
     const rows = targetId
@@ -183,6 +213,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
 
   // ---------------- Moments ----------------
   if (path === "/api/v1/moments" && method === "GET") {
+    await rateLimit(request, env, "user_read", 600, 60);
     const res = await db.prepare("SELECT id, user_name, user_avatar, city, title, content, photos_json, likes_count, is_featured, created_at FROM trip_moments WHERE is_blinded = 0 ORDER BY is_featured DESC, created_at DESC LIMIT 30").all();
     return json({ success: true, moments: res.results });
   }
@@ -201,6 +232,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
   }
   if (likeMatch && method === "DELETE") {
     const u = await requireUser(request, env);
+    await rateLimit(request, env, "user_write", 120, 60);
     const r = await db.prepare("DELETE FROM moment_likes WHERE moment_id = ? AND user_id = ?").bind(likeMatch[1], u.id).run();
     if (r.meta.changes) {
       await db.prepare("UPDATE trip_moments SET likes_count = MAX(0, likes_count - 1) WHERE id = ?").bind(likeMatch[1]).run();

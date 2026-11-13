@@ -73,7 +73,7 @@ const headline = computed(() => {
 const subline = computed(() => {
   const b = booking.value
   if (!b) return ''
-  if (b.status === 'MANUAL_REVIEW_REQUIRED') return '결제 또는 공급사 응답을 확인하는 중입니다. 고객센터에서 확인 후 연락드리며, 이중 청구는 발생하지 않습니다.'
+  if (b.status === 'MANUAL_REVIEW_REQUIRED') return '결제 또는 공급사 응답을 확인하는 중입니다. 처리 결과는 이 예약 내역에서 확인할 수 있습니다.'
   if (b.status === 'FAILED') return b.paidMinor > 0 ? '결제된 금액은 전액 환불 처리됩니다.' : '결제는 청구되지 않았습니다.'
   if (IN_FLIGHT.includes(b.status)) return '보통 1~2분 내에 완료됩니다. 이 화면은 자동으로 갱신됩니다.'
   if (b.status === 'SUPPLIER_CONFIRMED') return '공급사 확정이 완료되었으며 바우처를 발급하고 있습니다.'

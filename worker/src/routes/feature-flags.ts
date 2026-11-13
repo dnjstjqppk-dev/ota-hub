@@ -1,6 +1,6 @@
 import type { Env } from '../env.ts';
 import { HttpError, json, readJson } from '../lib/http.ts';
-import { requireAdmin } from '../lib/auth.ts';
+import { rateLimit, requireAdmin } from '../lib/auth.ts';
 import { getAllFeatureFlags, updateFeatureFlag } from '../services/feature-flag-service.ts';
 
 export async function handleFeatureFlags(request: Request, env: Env, url: URL): Promise<Response | null> {
@@ -9,6 +9,8 @@ export async function handleFeatureFlags(request: Request, env: Env, url: URL): 
 
   // 1. Public client endpoint: GET /api/v1/feature-flags
   if (path === '/api/v1/feature-flags' && method === 'GET') {
+    // #141: every portal polls this on boot — bound the shared tap.
+    await rateLimit(request, env, 'flags_read', 300, 60);
     const flags = await getAllFeatureFlags(env);
     const map: Record<string, boolean> = {};
     flags.forEach((f) => {

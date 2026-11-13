@@ -38,6 +38,7 @@ func loginPartner(t *testing.T, h *APIHandler, email, password string) (int, str
 
 func TestPartnerLogin(t *testing.T) {
 	t.Setenv("GO_PARTNER_PASSWORD", "test-partner-pass-65")
+	t.Setenv("JWT_SECRET", "p2g-test-jwt-secret-min-32-chars-ok!")
 	store := repository.NewStore()
 	h := NewAPIHandler(store)
 
@@ -72,7 +73,8 @@ func TestPartnerLogin(t *testing.T) {
 	}
 
 	// The issued token is a verifiable PARTNER JWT, not a static string.
-	claims, err := ValidateJWT(resp.Data.Token, getJWTSecret())
+	secret, _ := getJWTSecret()
+	claims, err := ValidateJWT(resp.Data.Token, secret)
 	if err != nil {
 		t.Fatalf("Login token is not a valid JWT: %v", err)
 	}
@@ -101,6 +103,7 @@ func TestPartnerLoginUnconfigured(t *testing.T) {
 
 func TestGetPartnerDashboard(t *testing.T) {
 	t.Setenv("GO_PARTNER_PASSWORD", "test-partner-pass-65")
+	t.Setenv("JWT_SECRET", "p2g-test-jwt-secret-min-32-chars-ok!")
 	store := repository.NewStore()
 	h := NewAPIHandler(store)
 
@@ -134,6 +137,7 @@ func TestGetPartnerDashboard(t *testing.T) {
 
 func TestGetPartnerSettlements(t *testing.T) {
 	t.Setenv("GO_PARTNER_PASSWORD", "test-partner-pass-65")
+	t.Setenv("JWT_SECRET", "p2g-test-jwt-secret-min-32-chars-ok!")
 	store := repository.NewStore()
 	h := NewAPIHandler(store)
 
@@ -149,6 +153,7 @@ func TestGetPartnerSettlements(t *testing.T) {
 
 func TestPartnerLoginInvalid(t *testing.T) {
 	t.Setenv("GO_PARTNER_PASSWORD", "test-partner-pass-65")
+	t.Setenv("JWT_SECRET", "p2g-test-jwt-secret-min-32-chars-ok!")
 	store := repository.NewStore()
 	h := NewAPIHandler(store)
 
@@ -178,6 +183,7 @@ func TestPartnerLoginInvalid(t *testing.T) {
 
 func TestPartnerActionNonexistentBooking(t *testing.T) {
 	t.Setenv("GO_PARTNER_PASSWORD", "test-partner-pass-65")
+	t.Setenv("JWT_SECRET", "p2g-test-jwt-secret-min-32-chars-ok!")
 	store := repository.NewStore()
 	h := NewAPIHandler(store)
 

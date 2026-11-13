@@ -46,7 +46,7 @@ async function confirmProdTarget() {
     process.exit(2);
   }
   const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await new Promise((resolve) => rl.question(`Type PROCEED to run 41 live tests against PRODUCTION (${BASE_URL}): `, resolve));
+  const answer = await new Promise((resolve) => rl.question(`Type PROCEED to run 47 live tests against PRODUCTION (${BASE_URL}): `, resolve));
   rl.close();
   if (String(answer).trim() !== 'PROCEED') {
     console.error('Aborted: production run not confirmed.');
@@ -610,13 +610,35 @@ async function runVerificationSuite() {
         password: qaPass,
         companyName: `검증용 QA 파트너 (${rand})`,
         partnerType: 'HOTEL',
-        businessNumber: `VERIFY-${rand}`,
+        businessNumber: `888-77-${rand}`,
         contactPhone: '010-0000-0000',
         representativeName: 'Verify QA',
       }),
     });
     if (!regRes.ok) throw new Error(`QA partner registration failed: HTTP ${regRes.status}`);
     const regJson = await regRes.json();
+    // C1/C2: approval needs onboarding docs plus a recorded business check —
+    // the old direct-ACTIVE call 409s. Same loop as the E2E onboarding test.
+    const qaLogin = await fetch(`${BASE_URL}/api/v1/partner/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: qaEmail, password: qaPass }),
+    });
+    if (!qaLogin.ok) throw new Error(`QA partner pre-approval login failed: HTTP ${qaLogin.status}`);
+    const qaToken = (await qaLogin.json()).token;
+    for (const purpose of ['BUSINESS_CERT', 'BANK_CERT']) {
+      const form = new FormData();
+      form.append('file', new Blob(['%PDF-1.4 fake-cert'], { type: 'application/pdf' }), `${purpose.toLowerCase()}.pdf`);
+      form.append('purpose', purpose);
+      const up = await fetch(`${BASE_URL}/api/v1/uploads`, { method: 'POST', headers: { Authorization: `Bearer ${qaToken}` }, body: form });
+      if (up.status !== 201) throw new Error(`${purpose} upload failed: HTTP ${up.status}: ${await up.text()}`);
+    }
+    const vb = await fetch(`${BASE_URL}/api/v1/admin/partners/${regJson.partnerId}/verify-business`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ method: 'MANUAL', note: 'verify-production: 서류 대조 확인' }),
+    });
+    if (!vb.ok) throw new Error(`QA partner business check failed: HTTP ${vb.status}`);
     const apprRes = await fetch(`${BASE_URL}/api/v1/admin/partners/${regJson.partnerId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
@@ -1110,6 +1132,267 @@ async function runVerificationSuite() {
   });
 
   // ---------------------------------------------------------------------------
+  // 42. MONEY SANDBOX CYCLE (#143)
+  // ---------------------------------------------------------------------------
+  await test("Money Sandbox: confirm/cancel guards hold; sandbox runs the full money cycle", async () => {
+    // Guard probes first: safe on every target (no writes).
+    const anon = await fetch(`${BASE_URL}/api/v1/payments/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bookingId: 'bkg-nope', orderId: 'bkg-nope', amount: 1, paymentKey: 'sbx_ok_nope' }),
+    });
+    if (anon.status !== 401) throw new Error(`Expected 401 for anonymous confirm, got ${anon.status}`);
+    const missing = await fetch(`${BASE_URL}/api/v1/payments/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userAToken}` },
+      body: JSON.stringify({ bookingId: 'bkg-nope', orderId: 'bkg-nope', amount: 1, paymentKey: 'sbx_ok_nope' }),
+    });
+    if (missing.status !== 404) throw new Error(`Expected 404 for unknown-booking confirm, got ${missing.status}`);
+    const noCancel = await fetch(`${BASE_URL}/api/v1/bookings/bkg-nope/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${userAToken}` },
+    });
+    if (noCancel.status !== 404) throw new Error(`Expected 404 for unknown-booking cancel, got ${noCancel.status}`);
+    // Full cycle: sandbox provider only (never real money), mutating targets only.
+    const cfg = await (await fetch(`${BASE_URL}/api/v1/payments/config`)).json();
+    if (!cfg.enabled || cfg.mode !== 'SANDBOX') {
+      skip(`money cycle needs the sandbox provider (this target: ${cfg.enabled ? cfg.mode : 'DISABLED'})`);
+      return;
+    }
+    if (!ALLOW_MUTATION) {
+      console.log('(read-only: guards only, the cycle runs on mutating targets)');
+      return;
+    }
+    const docs = ((await (await fetch(`${BASE_URL}/api/v1/legal`)).json()).documents || []);
+    const ver = Object.fromEntries(docs.map((d) => [d.slug, d.version]));
+    const consents = { refundPolicy: ver['refund-policy'], privacy: ver.privacy, thirdParty: ver.privacy };
+    const start = new Date(Date.now() + 40 * 86400000).toISOString().slice(0, 10);
+    const end = new Date(Date.now() + 41 * 86400000).toISOString().slice(0, 10);
+    const qRes = await fetch(`${BASE_URL}/api/v1/quotes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userAToken}` },
+      body: JSON.stringify({ domain: 'HOTEL', itemId: 'htl_seoul_01', unitId: 'rm_seoul_01_dlx', startDate: start, endDate: end, rooms: 1, travelers: { adults: 2 } }),
+    });
+    if (qRes.status === 409) {
+      const qErr = await qRes.json().catch(() => ({}));
+      if (qErr.code === 'NOT_DIRECTLY_BOOKABLE') {
+        skip('money cycle needs a contracted supplier on this target');
+        return;
+      }
+      throw new Error(`Quote refused: HTTP 409 ${JSON.stringify(qErr)}`);
+    }
+    if (!qRes.ok) throw new Error(`Quote failed: HTTP ${qRes.status}`);
+    const quote = (await qRes.json()).quote;
+    const bRes = await fetch(`${BASE_URL}/api/v1/bookings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userAToken}`, 'Idempotency-Key': `verify143_key_${rand}_${rand}` },
+      body: JSON.stringify({
+        quoteId: quote.quoteId,
+        contact: { name: '검증', email: userAEmail, phone: '+82-10-0000-0000' },
+        travelers: [
+          { type: 'ADULT', lastNameEn: 'KIM', firstNameEn: 'VERIFY' },
+          { type: 'ADULT', lastNameEn: 'LEE', firstNameEn: 'VERIFY' },
+        ],
+        simulation: {},
+        consents,
+      }),
+    });
+    if (!bRes.ok) throw new Error(`Booking failed: HTTP ${bRes.status}: ${await bRes.text()}`);
+    const booking = (await bRes.json()).booking;
+    const pRes = await fetch(`${BASE_URL}/api/v1/payments/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userAToken}` },
+      body: JSON.stringify({ bookingId: booking.id, orderId: booking.id, amount: booking.totalMinor, paymentKey: `sbx_ok_verify143${rand}` }),
+    });
+    if (!pRes.ok) throw new Error(`Confirm failed: HTTP ${pRes.status}: ${await pRes.text()}`);
+    const cRes = await fetch(`${BASE_URL}/api/v1/bookings/${booking.id}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${userAToken}` },
+    });
+    if (!cRes.ok) throw new Error(`Cancel failed: HTTP ${cRes.status}: ${await cRes.text()}`);
+    const done = (await cRes.json()).booking;
+    if (!['REFUNDED', 'CANCELLED'].includes(done.status)) throw new Error(`Cancel left ${done.status}, money not settled`);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 43. PASSWORD RESET SILENCE (#144)
+  // ---------------------------------------------------------------------------
+  await test("Accounts: password-reset requests stay silent and tokenless", async () => {
+    for (const email of [`nobody_${rand}@getfortrip.com`, userAEmail]) {
+      const r = await fetch(`${BASE_URL}/api/v1/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (!r.ok) throw new Error(`forgot-password failed for ${email}: HTTP ${r.status}`);
+      const text = await r.text();
+      if (/rst_|resetToken|token=/.test(text)) throw new Error(`reset response leaks a token for ${email}`);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 44. WISHLIST & PRICE ALERTS (#144)
+  // ---------------------------------------------------------------------------
+  await test("Wishlist & alerts: reads open, writes self-cleaning", async () => {
+    const list = await fetch(`${BASE_URL}/api/v1/wishlist`, { headers: { Authorization: `Bearer ${userAToken}` } });
+    if (!list.ok) throw new Error(`Wishlist read failed: HTTP ${list.status}`);
+    const alerts = await fetch(`${BASE_URL}/api/v1/price-alerts`, { headers: { Authorization: `Bearer ${userAToken}` } });
+    if (!alerts.ok) throw new Error(`Price-alert read failed: HTTP ${alerts.status}`);
+    if (!ALLOW_MUTATION) {
+      console.log('(read-only: write cycle runs on mutating targets)');
+      return;
+    }
+    const add = await fetch(`${BASE_URL}/api/v1/wishlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userAToken}` },
+      body: JSON.stringify({ domainType: 'HOTEL', itemId: 'htl_seoul_01', itemTitle: 'verify probe' }),
+    });
+    if (add.status !== 201) throw new Error(`Wishlist add failed: HTTP ${add.status}`);
+    const listed = await (await fetch(`${BASE_URL}/api/v1/wishlist`, { headers: { Authorization: `Bearer ${userAToken}` } })).json();
+    if (!listed.wishlist.some((w) => w.item_id === 'htl_seoul_01')) throw new Error('Wishlist add not listed');
+    const del = await fetch(`${BASE_URL}/api/v1/wishlist/htl_seoul_01`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${userAToken}` },
+    });
+    if (!del.ok) throw new Error(`Wishlist remove failed: HTTP ${del.status}`);
+    const pa = await fetch(`${BASE_URL}/api/v1/price-alerts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userAToken}` },
+      body: JSON.stringify({ routeOrHotel: 'verify probe', targetPrice: 1000 }),
+    });
+    if (pa.status !== 201) throw new Error(`Price-alert create failed: HTTP ${pa.status}`);
+    const paid = (await pa.json()).id;
+    const padel = await fetch(`${BASE_URL}/api/v1/price-alerts/${paid}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${userAToken}` },
+    });
+    if (!padel.ok) throw new Error(`Price-alert delete failed: HTTP ${padel.status}`);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 45. REVIEWS & MOMENTS (#144)
+  // ---------------------------------------------------------------------------
+  await test("Reviews & moments: reads open, writes need their backing", async () => {
+    const rev = await fetch(`${BASE_URL}/api/v1/reviews?targetId=htl_seoul_01&domain=HOTEL`);
+    if (!rev.ok) throw new Error(`Reviews read failed: HTTP ${rev.status}`);
+    const revJson = await rev.json();
+    if (!revJson.success || !Array.isArray(revJson.reviews) || !revJson.summary) throw new Error('Reviews shape broken');
+    const mom = await fetch(`${BASE_URL}/api/v1/moments`);
+    if (!mom.ok) throw new Error(`Moments read failed: HTTP ${mom.status}`);
+    // Both writes below are rejected before any INSERT — safe on every target.
+    const noride = await fetch(`${BASE_URL}/api/v1/reviews`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userAToken}` },
+      body: JSON.stringify({ targetId: 'htl_seoul_01', domainType: 'HOTEL', rating: 5, comment: 'verify probe without a stay' }),
+    });
+    if (noride.status !== 400) throw new Error(`Expected 400 for booking-less review, got ${noride.status}`);
+    const noTitle = await fetch(`${BASE_URL}/api/v1/moments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userAToken}` },
+      body: JSON.stringify({ content: 'verify probe without a title' }),
+    });
+    if (noTitle.status !== 400) throw new Error(`Expected 400 for title-less moment, got ${noTitle.status}`);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 46. SUPPORT TICKETS & PG WEBHOOK (#144)
+  // ---------------------------------------------------------------------------
+  await test("Support & webhooks: guarded writes, open reads", async () => {
+    const mine = await fetch(`${BASE_URL}/api/v1/inquiries`, { headers: { Authorization: `Bearer ${userAToken}` } });
+    if (!mine.ok) throw new Error(`Inquiry read failed: HTTP ${mine.status}`);
+    const noFields = await fetch(`${BASE_URL}/api/v1/inquiries`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userAToken}` },
+      body: JSON.stringify({ category: 'GENERAL' }),
+    });
+    if (noFields.status !== 400) throw new Error(`Expected 400 for field-less inquiry, got ${noFields.status}`);
+    const triage = await fetch(`${BASE_URL}/api/v1/admin/tickets`, { headers: { Authorization: `Bearer ${adminToken}` } });
+    if (!triage.ok) throw new Error(`Admin ticket read failed: HTTP ${triage.status}`);
+    const badStatus = await fetch(`${BASE_URL}/api/v1/admin/tickets/tkt_nope`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ status: 'BOGUS' }),
+    });
+    if (badStatus.status !== 400) throw new Error(`Expected 400 for bogus ticket status, got ${badStatus.status}`);
+    const badHook = await fetch(`${BASE_URL}/api/v1/webhooks/toss`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    if (badHook.status !== 400) throw new Error(`Expected 400 for field-less webhook, got ${badHook.status}`);
+    if (!ALLOW_MUTATION) {
+      console.log('(read-only: live ticket/webhook cycle runs on mutating targets)');
+      return;
+    }
+    const ghost = await fetch(`${BASE_URL}/api/v1/webhooks/toss`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventType: 'PAYMENT_STATUS_CHANGED', data: { orderId: `verify144_${rand}`, status: 'DONE' } }),
+    });
+    const ghostJson = await ghost.json();
+    if (!ghost.ok || ghostJson.action !== 'NO_UNKNOWN_PAYMENT') throw new Error(`Unknown-order webhook mishandled: HTTP ${ghost.status} ${JSON.stringify(ghostJson)}`);
+    const opened = await fetch(`${BASE_URL}/api/v1/inquiries`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userAToken}` },
+      body: JSON.stringify({ category: 'GENERAL', subject: 'verify probe', body: 'verify-production long-tail probe' }),
+    });
+    if (opened.status !== 201) throw new Error(`Inquiry create failed: HTTP ${opened.status}`);
+    const tid = (await opened.json()).id;
+    const resolved = await fetch(`${BASE_URL}/api/v1/admin/tickets/${tid}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ status: 'RESOLVED' }),
+    });
+    if (!resolved.ok) throw new Error(`Ticket triage failed: HTTP ${resolved.status}`);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 47. ADMIN & PARTNER WRITES (#144)
+  // ---------------------------------------------------------------------------
+  await test("Admin & partner writes: reads open, mutations self-restoring", async () => {
+    const promos = await fetch(`${BASE_URL}/api/v1/admin/promotions`, { headers: { Authorization: `Bearer ${adminToken}` } });
+    if (!promos.ok) throw new Error(`Admin promotions read failed: HTTP ${promos.status}`);
+    const prof = await fetch(`${BASE_URL}/api/v1/partner/profile`, { headers: { Authorization: `Bearer ${partnerToken}` } });
+    if (!prof.ok) throw new Error(`Partner profile read failed: HTTP ${prof.status}`);
+    if (!ALLOW_MUTATION) {
+      console.log('(read-only: write cycle runs on mutating targets)');
+      return;
+    }
+    // A created-then-disabled promo is inert residue (never claimable while off).
+    const code = `VFY${rand}X1`;
+    const created = await fetch(`${BASE_URL}/api/v1/admin/promotions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        code, title: 'verify probe (disabled)', discountType: 'FIXED_AMOUNT', discountValue: 1000,
+        validFrom: new Date().toISOString(), validUntil: new Date(Date.now() + 86400000).toISOString(),
+      }),
+    });
+    if (created.status !== 201) throw new Error(`Promo create failed: HTTP ${created.status}: ${await created.text()}`);
+    const pid = (await created.json()).id;
+    const off = await fetch(`${BASE_URL}/api/v1/admin/promotions/${pid}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ isActive: false }),
+    });
+    if (!off.ok) throw new Error(`Promo disable failed: HTTP ${off.status}`);
+    // Partner contact phone round-trips back to its original (zero residue).
+    const before = (await (await fetch(`${BASE_URL}/api/v1/partner/profile`, { headers: { Authorization: `Bearer ${partnerToken}` } })).json()).partner.contact_phone;
+    const patched = await fetch(`${BASE_URL}/api/v1/partner/profile`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken}` },
+      body: JSON.stringify({ contactPhone: '02-0000-0000' }),
+    });
+    if (!patched.ok) throw new Error(`Partner profile write failed: HTTP ${patched.status}`);
+    const restored = await fetch(`${BASE_URL}/api/v1/partner/profile`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken}` },
+      body: JSON.stringify({ contactPhone: before || '010-0000-0000' }),
+    });
+    if (!restored.ok) throw new Error(`Partner profile restore failed: HTTP ${restored.status}`);
+  });
+
+  // ---------------------------------------------------------------------------
   // CLEANUP (#114): withdraw the explorer users created above. Best effort —
   // users with live bookings cannot withdraw (409) and are reported, never
   // force-deleted. (Partner fixtures have no self-delete endpoint; the suite
@@ -1119,10 +1402,12 @@ async function runVerificationSuite() {
   for (const [email, token] of [[userAEmail, userAToken], [userBEmail, userBToken]]) {
     if (!token) continue;
     try {
+      // Withdrawal needs the password — without it every cleanup 400s and the
+      // explorers leak (found while adding the #143/#144 probes).
       const w = await fetch(`${BASE_URL}/api/v1/auth/me/withdraw`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'verify-production cleanup' }),
+        body: JSON.stringify({ password: strongPass, reason: 'verify-production cleanup' }),
       });
       if (!w.ok) leftovers.push(`${email} (withdraw HTTP ${w.status})`);
     } catch (e) {

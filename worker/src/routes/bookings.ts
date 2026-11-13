@@ -28,6 +28,7 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
 
   if (path === "/api/v1/bookings" && method === "GET") {
     const user = await requireUser(request, env);
+    await rateLimit(request, env, "user_read", 600, 60);
     const rows = await env.DB.prepare(
       `SELECT id, booking_number, domain_type, item_id, title, status, total_minor, total_price, currency, payment_status, service_start, service_end, created_at
        FROM bookings WHERE user_id = ? ORDER BY created_at DESC LIMIT 100`,
@@ -54,6 +55,7 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
   let m = path.match(/^\/api\/v1\/bookings\/([A-Za-z0-9_-]{4,64})$/);
   if (m && method === "GET") {
     const user = await requireUser(request, env);
+    await rateLimit(request, env, "user_read", 600, 60);
     const b = await S.getBooking(env, m[1]);
     if (!b) throw new HttpError(404, "BOOKING_NOT_FOUND", "예약 정보를 찾을 수 없습니다.");
     if (b.user_id !== user.id && user.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "타인의 예약에는 접근할 수 없습니다.");
@@ -73,6 +75,7 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
   m = path.match(/^\/api\/v1\/bookings\/([A-Za-z0-9_-]{4,64})\/receipt$/);
   if (m && method === "GET") {
     const ruser = await requireUser(request, env);
+    await rateLimit(request, env, "user_read", 600, 60);
     const rb = await S.getBooking(env, m[1]);
     if (!rb) throw new HttpError(404, "BOOKING_NOT_FOUND", "예약 정보를 찾을 수 없습니다.");
     if (rb.user_id !== ruser.id && ruser.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "타인의 예약에는 접근할 수 없습니다.");

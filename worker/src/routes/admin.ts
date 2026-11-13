@@ -16,6 +16,8 @@ const MAX_COIN_ADJUSTMENT = 10_000_000;
 // Mirrors the CHECK constraints on `suppliers` (migrations/0002_ota_core.sql).
 const SUPPLIER_ADAPTERS = ["none", "direct_contract", "simulator", "api"] as const;
 const SUPPLIER_STATUSES = ["LIVE", "SANDBOX_VERIFIED", "DEV_DONE_CONTRACT_PENDING", "CONTRACTED_IN_DEV", "EXTERNAL_LINK_ONLY", "NOT_INTEGRATED", "BLOCKED"] as const;
+// Mirrors the CHECK constraint on `business_entities` (migrations/0002_ota_core.sql).
+const ENTITY_STATUSES = ["DRAFT", "ACTIVE", "SUSPENDED", "RETIRED"] as const;
 
 // ---------------------------------------------------------------------------
 // Admin product catalog: per-domain tables, one validated CRUD surface.
@@ -384,7 +386,12 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     for (const f of fields) next[f] = b[f] !== undefined ? str(b[f], 200) || null : before[f];
     let status = before.status;
     if (b.status) {
-      status = str(b.status, 20);
+      // #137: free input tripped the CHECK constraint into a 500 — reject
+      // unknown states with a 400 naming the four legal ones.
+      status = str(b.status, 20).toUpperCase();
+      if (!(ENTITY_STATUSES as readonly string[]).includes(status)) {
+        throw new HttpError(400, "INVALID_STATUS", `status는 ${ENTITY_STATUSES.join(" | ")} 중 하나여야 합니다.`);
+      }
       if (status === "ACTIVE" && (!next.business_registration_no || !next.travel_agency_license_no || !next.ecommerce_registration_no || !next.representative_name || !next.cs_phone)) {
         throw new HttpError(409, "ENTITY_INCOMPLETE", "ACTIVE 전환에는 사업자등록번호, 관광사업(여행업) 등록번호, 통신판매업 신고번호, 대표자, 고객센터 연락처가 필요합니다.");
       }
@@ -1092,6 +1099,12 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   m = path.match(/^\/api\/v1\/admin\/promotions\/([A-Za-z0-9_-]+)$/);
   if (m && method === "PATCH") {
     const b = await readJson(request);
+    // #136: only the switch and the cap are mutable here — anything else
+    // (title, value, dates) used to be silently dropped while reporting
+    // success. Reject it so callers learn the field never applied.
+    for (const k of Object.keys(b && typeof b === "object" ? b : {})) {
+      if (k !== "isActive" && k !== "usageLimit") throw new HttpError(400, "IMMUTABLE_FIELD", `${k} 필드는 이 경로에서 변경할 수 없습니다 (isActive·usageLimit만 가능).`);
+    }
     if (typeof b.isActive !== "boolean" && b.usageLimit === undefined) throw new HttpError(400, "INVALID_BODY", "isActive(boolean) 또는 usageLimit(정수·null)이 필요합니다.");
     const cur = await db.prepare("SELECT id, used_count FROM promotions WHERE id = ?").bind(m[1]).first<any>();
     if (!cur) throw new HttpError(404, "PROMOTION_NOT_FOUND", "프로모션을 찾을 수 없습니다.");
@@ -1133,10 +1146,16 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
   m = path.match(/^\/api\/v1\/admin\/notices\/([A-Za-z0-9_-]+)$/);
   if (m && method === "PATCH") {
     const b = await readJson(request);
-    const r = await db.prepare("UPDATE notices SET banner_active = COALESCE(?, banner_active), is_emergency = COALESCE(?, is_emergency) WHERE id = ?")
-      .bind(b.bannerActive === undefined ? null : b.bannerActive ? 1 : 0, b.isEmergency === undefined ? null : b.isEmergency ? 1 : 0, m[1]).run();
+    // #135: title/content used to be silently ignored while the call
+    // reported success — they are real fields now (same rules as POST).
+    const title = b.title === undefined ? null : str(b.title, 200);
+    const content = b.content === undefined ? null : str(b.content, 4000);
+    if (title !== null && !title) throw new HttpError(400, "INVALID_NOTICE", "제목을 입력해주세요.");
+    if (content !== null && !content) throw new HttpError(400, "INVALID_NOTICE", "내용을 입력해주세요.");
+    const r = await db.prepare("UPDATE notices SET title = COALESCE(?, title), content = COALESCE(?, content), banner_active = COALESCE(?, banner_active), is_emergency = COALESCE(?, is_emergency) WHERE id = ?")
+      .bind(title, content, b.bannerActive === undefined ? null : b.bannerActive ? 1 : 0, b.isEmergency === undefined ? null : b.isEmergency ? 1 : 0, m[1]).run();
     if (!r.meta.changes) throw new HttpError(404, "NOTICE_NOT_FOUND", "공지를 찾을 수 없습니다.");
-    await audit(env, admin.id, "UPDATE_NOTICE", "NOTICE", m[1], { bannerActive: b.bannerActive, isEmergency: b.isEmergency });
+    await audit(env, admin.id, "UPDATE_NOTICE", "NOTICE", m[1], { title, contentLength: content?.length ?? null, bannerActive: b.bannerActive, isEmergency: b.isEmergency });
     return json({ success: true });
   }
 

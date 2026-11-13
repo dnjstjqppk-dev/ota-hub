@@ -1,6 +1,6 @@
 import type { Env } from '../env.ts';
 import { HttpError, json, readJson, str } from '../lib/http.ts';
-import { audit, requireAdmin, requirePartner } from '../lib/auth.ts';
+import { audit, rateLimit, requireAdmin, requirePartner } from '../lib/auth.ts';
 import { getMarketplaceFinancialSummary } from '../services/marketplace-service.ts';
 import { isFeatureEnabled } from '../services/feature-flag-service.ts';
 import { moneyLog, settlementPayoutStmts } from '../services/booking-service.ts';
@@ -127,6 +127,7 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
 
   // 1. Public / Client Catalog Model Query: GET /api/v1/marketplace/catalog
   if (path === '/api/v1/marketplace/catalog' && method === 'GET') {
+    await rateLimit(request, env, 'market_read', 300, 60);
     const model = url.searchParams.get('model'); // '1P', '3P', 'CONSIGNMENT'
     const domain = url.searchParams.get('domain');
 
@@ -339,11 +340,20 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
 
   // 5. Partner Extranet Settlements: GET /api/v1/partner/marketplace/settlements
   if (path === '/api/v1/partner/marketplace/settlements' && method === 'GET') {
+    await rateLimit(request, env, 'market_read', 300, 60);
     const partner = await requirePartner(request, env);
     const pId = partner.partnerId || partner.id;
     const companyName = partner.companyName || 'GetForTrip 공인 파트너';
+    // #140: the partner's own settlement math (gross, their commission, their
+    // payout, recovery deductions) — but never platform internals
+    // (supply_cost_minor, net_platform_profit_minor) or ops fields
+    // (supplier_id, attribution_source, payout_method/reference).
     const rows = await env.DB.prepare(`
-      SELECT * FROM marketplace_order_settlements
+      SELECT id, booking_id, booking_item_id, domain_type, merchant_model,
+             seller_id, seller_name, gross_amount_minor, commission_amount_minor,
+             seller_payout_minor, recovery_deducted_minor, fulfillment_status,
+             settlement_status, payout_batch_id, created_at, settled_at
+      FROM marketplace_order_settlements
       WHERE seller_id = ?
       ORDER BY created_at DESC LIMIT 100
     `).bind(pId).all();
@@ -358,6 +368,9 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
 
   // 6. Partner 3P Product Registration with Marketplace Attribution: POST /api/v1/partner/marketplace/products
   if (path === '/api/v1/partner/marketplace/products' && method === 'POST') {
+    // #142 (partner write): product registration inserts domain + catalog +
+    // supplier rows — bound like the other partner writes (120/60).
+    await rateLimit(request, env, 'market_write', 120, 60);
     const partner = await requirePartner(request, env);
     const pId = partner.partnerId || partner.id;
     const companyName = partner.companyName || 'GetForTrip 공인 파트너';
@@ -372,7 +385,15 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     const title = str(b.title, 200);
     const domain = str(b.domain || 'ACTIVITY', 20).toUpperCase();
     const city = str(b.city || '서울', 100);
-    const retailPrice = Math.max(1000, Number(b.price || 50000));
+    // #139: the old `Math.max(1000, Number(b.price || 50000))` stored NaN for
+    // "abc", silently floored negatives, and took any domain into the
+    // activities table. Same shape as the /partner/products rule (#69), plus
+    // an upper bound (single-item prices above 10억 KRW are input errors).
+    if (!['HOTEL', 'ACTIVITY'].includes(domain)) throw new HttpError(400, 'INVALID_DOMAIN', '상품 유형은 HOTEL·ACTIVITY 중 하나여야 합니다.');
+    const retailPrice = b.price === undefined || b.price === null || b.price === '' ? 50000 : Number(b.price);
+    if (!Number.isInteger(retailPrice) || retailPrice < 0 || retailPrice > 1_000_000_000) {
+      throw new HttpError(400, 'INVALID_PRICE', '요금은 0 이상 10억 이하의 정수(원)여야 합니다.');
+    }
     // Daily sellable capacity. Unset (null) means the product cannot be quoted
     // until an operator configures it (P0 2026-11-10: capacity-less products
     // used to sell unlimited inventory).

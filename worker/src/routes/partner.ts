@@ -1,9 +1,10 @@
 import type { Env } from "../env.ts";
-import { HttpError, json, readJson, str } from "../lib/http.ts";
-import { authCookie, checkAccountLock, clearAuthCookie, clearLoginFailures, jwtSecret, rateLimit, recordLoginFailure, requirePartner, requirePartnerOnboarding, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
+import { HttpError, json, jsonCookies, readJson, str } from "../lib/http.ts";
+import { authCookie, checkAccountLock, clearAllAuthCookies, clearLoginFailures, jwtSecret, rateLimit, recordLoginFailure, requirePartner, requirePartnerOnboarding, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
 import { decryptPiiField, encryptPiiField, hashPassword, isLegacyHash, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 import { EMAIL_RE, validatePasswordPolicy } from "./auth.ts";
+import { normalizeBizNo } from "../services/business-verify.ts";
 import * as S from "../services/booking-service.ts";
 import { BOOKING_STATUSES } from "../domain/state-machine.ts";
 import { pageMeta, pageParams } from "../lib/pagination.ts";
@@ -68,11 +69,34 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     if (!email || !companyName || !password || !businessNumber) {
       throw new HttpError(400, "MISSING_FIELDS", "회사명, 이메일, 비밀번호, 사업자등록번호는 필수 항목입니다.");
     }
+    // #138: the signup used to accept any email shape and any business-number
+    // string, repeatedly — validate both, and refuse a number that is already
+    // on file. Format matches the C2 check (10 digits); liveness stays on the
+    // approval gate, which never accepts an unchecked number.
+    if (!EMAIL_RE.test(email)) throw new HttpError(400, "INVALID_EMAIL", "유효한 이메일 주소를 입력해주세요.");
+    const bizDigits = normalizeBizNo(businessNumber);
+    if (!/^\d{10}$/.test(bizDigits)) throw new HttpError(400, "INVALID_BIZ_NO", "사업자등록번호는 숫자 10자리여야 합니다.");
     validatePasswordPolicy(password);
 
     const existing = await db.prepare("SELECT id FROM partners WHERE email = ?").bind(email).first();
     if (existing) {
       throw new HttpError(409, "EMAIL_EXISTS", "이미 가입 신청된 파트너 이메일입니다.");
+    }
+    // Numbers encrypt at rest (#98, random IV), so a stored-value comparison
+    // could never match — uniqueness is decided on decrypted plaintext. The
+    // partners table is small and registration is rate-limited, so the scan
+    // stays cheap; rows that cannot be decrypted prove no clash either way.
+    const prior = await db.prepare("SELECT business_number FROM partners").all<{ business_number: string }>();
+    for (const row of prior.results || []) {
+      let plain: string | null = null;
+      try {
+        plain = await decryptPiiField(row.business_number, env);
+      } catch {
+        continue;
+      }
+      if (plain && normalizeBizNo(plain) === bizDigits) {
+        throw new HttpError(409, "BUSINESS_NUMBER_EXISTS", "이미 가입 신청된 사업자등록번호입니다.");
+      }
     }
 
     const partnerId = `ptn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -221,7 +245,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
   if (path === "/api/v1/partner/logout" && method === "POST") {
     await revokeCurrentToken(request, env);
-    return json({ success: true }, 200, { "Set-Cookie": clearAuthCookie(env, "getfortrip_partner_jwt") });
+    return jsonCookies({ success: true }, 200, clearAllAuthCookies(env));
   }
 
   if (path === "/api/v1/partner/forgot-password" && method === "POST") {

@@ -142,7 +142,7 @@ per-partner rows, not a worker secret. Rotate each real secret at its source:)
 - [ ] Admin RBAC verified: Non-admin users cannot access `/api/v1/admin/*`.
 - [ ] IDOR check: Users cannot view bookings belonging to others.
 - [ ] Webhook HMAC verification active: Invalid signatures return `401/403`.
-- [ ] Run full automated test suite against production with explicit ack (Must be 41/41 PASS):
+- [ ] Run full automated test suite against production with explicit ack (Must be 47/47 PASS):
   `BASE_URL=https://ota-hub.dnjstjqppk.workers.dev VERIFY_ACK_PROD=1 TEST_ADMIN_PASSWORD='...' node scripts/verify-production.js`.
 - [ ] SRE incident postmortem filed within 24 hours.
 
