@@ -1,20 +1,26 @@
-name: Cloudflare Automated Rebuild & Deploy
+name: CI/CD
 
+# TG-06: split jobs by cost. PRs run `fast` only; pushes to main run
+# fast + e2e, then deploy. workflow_dispatch allows manual E2E re-runs.
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
-# #167: a newer main must not deploy under an older run — cancel the stale one.
+# #167 preserved per ref: a newer run on the same branch cancels the stale one,
+# so a newer main never deploys under an older run (and PRs don't pile up).
 concurrency:
-  group: production-deploy
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  gate:
+  fast:
     runs-on: ubuntu-latest
-    name: Quality Gates (must all pass before deploy)
+    name: Fast gates (branding, unit, types, audit)
 
     steps:
       - name: Checkout repository
@@ -62,6 +68,29 @@ jobs:
           npm --prefix frontend-admin audit --omit=dev --audit-level=critical
           npm --prefix frontend-partner audit --omit=dev --audit-level=critical
 
+  e2e:
+    runs-on: ubuntu-latest
+    name: Worker E2E suite (main only)
+    needs: fast
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm --prefix frontend-user install
+          cd frontend-admin && npm install
+          cd .. && npm --prefix frontend-partner install
+
       - name: Build all 3 portals for local worker assets
         run: node scripts/build-all.js
 
@@ -83,7 +112,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     name: Build & Deploy to Cloudflare Workers
-    needs: gate
+    needs: [fast, e2e]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
       - name: Checkout repository
