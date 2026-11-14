@@ -1,7 +1,6 @@
 package referral
 
 import (
-	"getfortrip/backend/internal/domain"
 	"strings"
 	"testing"
 )
@@ -11,42 +10,42 @@ func TestSynthesizerAllPlatforms(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		platform      domain.OTAPlatform
+		platform      OTAPlatform
 		rawURL        string
 		expectedParam string
 		expectedVal   string
 	}{
 		{
 			name:          "Agoda Referral Link",
-			platform:      domain.PlatformAgoda,
+			platform:      PlatformAgoda,
 			rawURL:        "https://www.agoda.com/ko-kr/shinjuku-granbell-hotel/hotel/tokyo-jp.html?hotel_id=482910&tag=old_tag",
 			expectedParam: "cid=",
 			expectedVal:   syn.AgodaCID,
 		},
 		{
 			name:          "TripCom Referral Link",
-			platform:      domain.PlatformTripCom,
+			platform:      PlatformTripCom,
 			rawURL:        "https://kr." + "trip" + ".com/hotels/detail/?hotelId=123456&SID=old",
 			expectedParam: "Allianceid=",
 			expectedVal:   syn.TripComAllianceID,
 		},
 		{
 			name:          "Klook Referral Link",
-			platform:      domain.PlatformKlook,
+			platform:      PlatformKlook,
 			rawURL:        "https://www.klook.com/ko/activity/12345-usj-express/?aid=9999",
 			expectedParam: "aid=",
 			expectedVal:   syn.KlookAID,
 		},
 		{
 			name:          "KKday Referral Link",
-			platform:      domain.PlatformKKday,
+			platform:      PlatformKKday,
 			rawURL:        "https://www.kkday.com/ko/product/54321?cid=8888",
 			expectedParam: "cid=",
 			expectedVal:   syn.KKdayCID,
 		},
 		{
 			name:          "MyRealTrip Referral Link",
-			platform:      domain.PlatformMyRealTrip,
+			platform:      PlatformMyRealTrip,
 			rawURL:        "https://www.myrealtrip.com/offers/98765",
 			expectedParam: "mrt_partner_id=",
 			expectedVal:   syn.MyRealTripPID,
@@ -75,19 +74,19 @@ func TestSynthesizerAllPlatforms(t *testing.T) {
 func TestExtractPlatform(t *testing.T) {
 	syn := NewSynthesizer()
 
-	if syn.ExtractPlatform("https://www.agoda.com/hotel/1") != domain.PlatformAgoda {
+	if syn.ExtractPlatform("https://www.agoda.com/hotel/1") != PlatformAgoda {
 		t.Errorf("Failed to detect Agoda platform")
 	}
-	if syn.ExtractPlatform("https://kr."+"trip"+".com/flights") != domain.PlatformTripCom {
+	if syn.ExtractPlatform("https://kr."+"trip"+".com/flights") != PlatformTripCom {
 		t.Errorf("Failed to detect TripCom platform")
 	}
-	if syn.ExtractPlatform("https://www.klook.com/activity/2") != domain.PlatformKlook {
+	if syn.ExtractPlatform("https://www.klook.com/activity/2") != PlatformKlook {
 		t.Errorf("Failed to detect Klook platform")
 	}
-	if syn.ExtractPlatform("https://www.kkday.com/product/3") != domain.PlatformKKday {
+	if syn.ExtractPlatform("https://www.kkday.com/product/3") != PlatformKKday {
 		t.Errorf("Failed to detect KKday platform")
 	}
-	if got := syn.ExtractPlatform("https://www.myrealtrip.com/offers/4"); got != domain.PlatformMyRealTrip {
-		t.Errorf("Failed to detect MyRealTrip platform. Got '%s', expected '%s'", got, domain.PlatformMyRealTrip)
+	if got := syn.ExtractPlatform("https://www.myrealtrip.com/offers/4"); got != PlatformMyRealTrip {
+		t.Errorf("Failed to detect MyRealTrip platform. Got '%s', expected '%s'", got, PlatformMyRealTrip)
 	}
 }

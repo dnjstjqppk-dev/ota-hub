@@ -15,6 +15,9 @@
 > Go(`backend/`)·PostgreSQL·Redis는 배포 배선에 포함되지 않는다.
 > Go 서비스는 테스트만 유지되는 보조 구현이다. 상세: 전수 감사 리포트
 > [FULL_AUDIT_20261109](reports/FULL_AUDIT_20261109.md) §Go 백엔드.
+> TG-01 (2026-11-14): backend/ 축소 — 서빙 중복(cmd·handler·repository·domain·engine)과
+> 미배선 파이프라인(curation·ingest·webhook) 삭제. Go 잔류분은 테스트 딸린 순수 오프라인
+> 유틸리티만(`internal/referral`). 원칙·재진입 규칙: backend/README.md.
 
 | 계층 | 기술 스택 | 버전 / 도구 | 선정 근거 및 핵심 역할 |
 | :--- | :--- | :--- | :--- |

@@ -2,7 +2,6 @@ package referral
 
 import (
 	"fmt"
-	"getfortrip/backend/internal/domain"
 	"net/url"
 	"os"
 	"strings"
@@ -61,7 +60,7 @@ func (s *Synthesizer) CleanURL(rawURL string) (string, error) {
 }
 
 // BuildReferralURL creates the final monetized URL for the given platform and product slug
-func (s *Synthesizer) BuildReferralURL(platform domain.OTAPlatform, rawSourceURL, subTrackingID string) (*domain.AffiliateReferral, error) {
+func (s *Synthesizer) BuildReferralURL(platform OTAPlatform, rawSourceURL, subTrackingID string) (*AffiliateReferral, error) {
 	cleanURL, err := s.CleanURL(rawSourceURL)
 	if err != nil {
 		cleanURL = rawSourceURL
@@ -80,32 +79,32 @@ func (s *Synthesizer) BuildReferralURL(platform domain.OTAPlatform, rawSourceURL
 	}
 
 	switch platform {
-	case domain.PlatformAgoda:
+	case PlatformAgoda:
 		partnerID = s.AgodaCID
 		q.Set("pcs", "1")
 		q.Set("cid", partnerID)
 		q.Set("tag", subTrackingID)
 		q.Set("hl", "ko-kr")
 
-	case domain.PlatformTripCom:
+	case PlatformTripCom:
 		partnerID = s.TripComAllianceID
 		q.Set("Allianceid", partnerID)
 		q.Set("SID", subTrackingID)
 		q.Set("OUID", "getfortrip")
 
-	case domain.PlatformKlook:
+	case PlatformKlook:
 		partnerID = s.KlookAID
 		q.Set("aid", partnerID)
 		q.Set("aff_adid", subTrackingID)
 		q.Set("aff_label1", "getfortrip")
 
-	case domain.PlatformKKday:
+	case PlatformKKday:
 		partnerID = s.KKdayCID
 		q.Set("cid", partnerID)
 		q.Set("ud1", subTrackingID)
 		q.Set("ud2", "getfortrip")
 
-	case domain.PlatformMyRealTrip:
+	case PlatformMyRealTrip:
 		partnerID = s.MyRealTripPID
 		q.Set("mrt_partner_id", partnerID)
 		q.Set("utm_source", "getfortrip")
@@ -119,7 +118,7 @@ func (s *Synthesizer) BuildReferralURL(platform domain.OTAPlatform, rawSourceURL
 	parsed.RawQuery = q.Encode()
 	finalURL := parsed.String()
 
-	return &domain.AffiliateReferral{
+	return &AffiliateReferral{
 		Platform:         platform,
 		OriginalURL:      rawSourceURL,
 		CleanURL:         cleanURL,
@@ -131,19 +130,19 @@ func (s *Synthesizer) BuildReferralURL(platform domain.OTAPlatform, rawSourceURL
 }
 
 // ExtractPlatform identifies which OTA platform a URL belongs to
-func (s *Synthesizer) ExtractPlatform(rawURL string) domain.OTAPlatform {
+func (s *Synthesizer) ExtractPlatform(rawURL string) OTAPlatform {
 	lower := strings.ToLower(rawURL)
 	switch {
 	case strings.Contains(lower, "myrealtrip.com"):
-		return domain.PlatformMyRealTrip
+		return PlatformMyRealTrip
 	case strings.Contains(lower, "agoda.com"):
-		return domain.PlatformAgoda
+		return PlatformAgoda
 	case strings.Contains(lower, "klook.com"):
-		return domain.PlatformKlook
+		return PlatformKlook
 	case strings.Contains(lower, "kkday.com"):
-		return domain.PlatformKKday
+		return PlatformKKday
 	case strings.Contains(lower, "."+"trip"+"."+"com") || strings.Contains(lower, "//"+"trip"+"."+"com") || strings.Contains(lower, "ctrip.com"):
-		return domain.PlatformTripCom
+		return PlatformTripCom
 	default:
 		return ""
 	}
