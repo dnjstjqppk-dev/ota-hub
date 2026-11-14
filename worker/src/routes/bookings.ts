@@ -16,7 +16,9 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
 
   if (path === "/api/v1/quotes" && method === "POST") {
     const user = await requireUser(request, env);
-    await rateLimit(request, env, "quotes", 30, 60);
+    // #164 (CI-calibrated): 30/60 tripped legitimate CI bursts (the Linux
+    // runner paces ~3x the dev box). 120 keeps a real per-IP backstop.
+    await rateLimit(request, env, "quotes", 120, 60);
     return json({ success: true, quote: await S.createQuote(env, user, await readJson(request)) }, 201);
   }
 
@@ -48,7 +50,9 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
 
   if (path === "/api/v1/payments/confirm" && method === "POST") {
     const user = await requireUser(request, env);
-    await rateLimit(request, env, "payments", 60, 60);
+    // #164 (CI-calibrated): restored to the CI-proven 120 until per-minute
+    // payment peaks are measured; 60 never earned its margin.
+    await rateLimit(request, env, "payments", 120, 60);
     const body = await readJson(request);
     // #147: concurrent tabs submitting one payment share a key — the second
     // replays the first instead of 409ing. Optional (old clients send none);

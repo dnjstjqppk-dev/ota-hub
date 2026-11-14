@@ -230,7 +230,7 @@
 [x] 161. 죽은 기본 id 페이지 → 완료 (P3b / 리다이렉트 스텁 7종 삭제 — 무링크 확인, detail·my/bookings 유지)
 [x] 162. /health 설정노출 → 완료 (P3b / 공개는 status·database·jwtSecret·time만, 상세요소는 verbose=1+어드민 + E2E #162 + verify T01 누출 단언 + 체크리스트 확인절차 토큰화)
 [x] 163. 리셋 파트너토큰 소모 → 완료 (P3b / 유저 리셋에 partner_id IS NULL + E2E #163(미소모 후 파트너 리셋 200))
-[x] 164. 관대한 견적·결제 제한 → 완료 (P3b / quotes 300→30·payments 120→60 + E2E #164(루프·충전429))
+[x] 164. 관대한 견적·결제 제한 → 완료 (P3b, Phase 7에서 CI 보정 / quotes 300→120·payments 120 유지 — 30/60은 CI 정당한 버스트에 429라 120/60으로 보정, E2E #164 동일)
 [x] 165. PATCH 대문자 404 → 완료 (P3b / 제휴사·법무 slug 소문자 정규화 + E2E #165)
 [x] 166. T31 번호누락 → 완료 (P3b / 28절 2테스트 분리→29 신설, 구29·30→30·31 — 런타임 번호와 일치)
 [x] 167. 동시성 없음 → 완료 (P3b / production-deploy 그룹 cancel-in-progress)

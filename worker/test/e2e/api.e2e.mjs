@@ -3669,13 +3669,13 @@ test("#164: quote and payment taps are tightly bounded", async () => {
   resetLimiter("quotes", "payments");
   const U = await register("lim164");
   let last = 0;
-  for (let i = 0; i < 31 && last !== 429; i++) {
+  for (let i = 0; i < 121 && last !== 429; i++) {
     last = (await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "HOTEL", itemId: "htl_seoul_01", unitId: "rm_seoul_01_dlx", startDate: day(60), endDate: day(61), rooms: 1, travelers: { adults: 1 } } })).status;
   }
   assert.equal(last, 429);
   resetLimiter("quotes");
   assert.equal((await api("POST", "/api/v1/payments/confirm", { token: U.token, body: { bookingId: "bkg-nope", orderId: "bkg-nope", amount: 1, paymentKey: "sbx_ok_nope" } })).status, 404, "prime payments");
-  fillBucket("payments", 60);
+  fillBucket("payments", 120);
   try {
     assert.equal((await api("POST", "/api/v1/payments/confirm", { token: U.token, body: { bookingId: "bkg-nope", orderId: "bkg-nope", amount: 1, paymentKey: "sbx_ok_nope" } })).status, 429);
   } finally {

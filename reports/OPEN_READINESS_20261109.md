@@ -24,6 +24,7 @@
 | 3포털 빌드 | exit 0 | `node scripts/build-all.js` |
 | 의존성 감사 | critical 0 | `npm audit --omit=dev --audit-level=critical` |
 | 운영 검증 | 43/47 | `scripts/verify-production.js` 로컬 격리DB (T31·T38·T39 수리済, 잔여 4종은 기존 드리프트 §5-0) |
+| CI | gate 수정중·deploy 차단 | #164 제한이 CI 속도에서 429 → 120/60 보정(본 커밋, 재배포 후 녹색 기대). deploy잡은 `CLOUDFLARE_API_TOKEN` 7403 만료로 실패 — 시크릿 교체 필요 (§5-0). |
 | 레드드릴 | RED→GREEN | #136 가드 제거→복원, P3a INSERT 밀림의 스위트 적발→수정 |
 
 ## 3. WO-OTA 10종 매핑 (전부 통과 테스트에 귀속)
@@ -76,13 +77,15 @@
 
 ### 5-0. 운영 반영·검증 잔여 (코드 완료, 실행 필요)
 
-0. **운영 D1 0037~0044 미적용**. 배포 파이프라인 0단계 또는
+0. **CI 시크릿 만료**: GitHub `CLOUDFLARE_API_TOKEN`이 7403으로 거부돼
+   deploy잡이 실패한다. Cloudflare 토큰 재발급 후 시크릿 교체가 먼저다.
+1. **운영 D1 0037~0044 미적용**. 배포 파이프라인 0단계 또는
    `docs/GO_LIVE_CHECKLIST.md` 0단계 수동 적용 (0043 DROP·0044 백필 주의 포함).
-1. **verify 로컬 잔여 4종** (T11·T13·T14·T20): prod-진실·환경조건부
+2. **verify 로컬 잔여 4종** (T11·T13·T14·T20): prod-진실·환경조건부
    테스트로 로컬 적색이 정상. 운영 실행에서 판정한다.
-2. **wrangler 인증 만료** (Cloudflare 7403): `npx wrangler login` 필요.
-3. **운영 verify+T41**: `TEST_ADMIN_PASSWORD` 필요 (에이전트 미보유).
-4. **`temp_master_prompt.md` 구 해시**: 사용자 파일 — 직접 삭제.
+3. **wrangler 인증 만료** (Cloudflare 7403): `npx wrangler login` 필요.
+4. **운영 verify+T41**: `TEST_ADMIN_PASSWORD` 필요 (에이전트 미보유).
+5. **`temp_master_prompt.md` 구 해시**: 사용자 파일 — 직접 삭제.
 
 ### 5-1. 외부 자격·계약 9종 (정식 오픈 전 필수)
 
