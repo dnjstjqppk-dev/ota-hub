@@ -33,6 +33,8 @@ export interface Env {
   SENTRY_RELEASE?: string;
   /** Database dialect: "pg" on the TG-09 harness, unset (= D1) everywhere else. */
   DB_DIALECT?: string;
+  /** Injected ephemeral store (harness). Unset = D1-backed default. */
+  EPHEMERAL?: import("./lib/ephemeral.ts").EphemeralStore;
   /** PBKDF2 iteration override (default 100000, clamped 10000–1000000). */
   PBKDF2_ITERATIONS?: string;
   /** NTS business-status API key (data.go.kr). Unset = API verification unavailable, manual review only. */

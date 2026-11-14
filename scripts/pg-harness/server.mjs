@@ -13,6 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { createD1Shim } from './d1-shim.mjs';
+import { d1Ephemeral, withFallback } from '../../worker/src/lib/ephemeral.ts';
+import { redisEphemeral } from '../redis-store/redis-ephemeral.mjs';
 import worker from '../../worker/index.ts';
 
 pg.types.setTypeParser(20, (v) => parseInt(v, 10));
@@ -83,8 +85,24 @@ const UPLOADS = {
   },
 };
 
+const shim = createD1Shim(pool);
+// TG-10: E2E_REDIS_URL injects Redis-first ephemeral state (D1 fallback);
+// unset keeps the production-default D1 path. Both run the full suite.
+let ephemeralStore = d1Ephemeral(shim);
+if (process.env.E2E_REDIS_URL) {
+  try {
+    ephemeralStore = withFallback(await redisEphemeral(process.env.E2E_REDIS_URL), d1Ephemeral(shim));
+    console.log('ephemeral store: redis (d1 fallback)');
+  } catch {
+    console.log('ephemeral store: redis unreachable at boot, d1 only (fallback proof mode)');
+  }
+} else {
+  console.log('ephemeral store: d1');
+}
+
 const env = {
-  DB: createD1Shim(pool),
+  DB: shim,
+  EPHEMERAL: ephemeralStore,
   ASSETS,
   UPLOADS,
   APP_ENV: 'test',

@@ -1,6 +1,7 @@
 import type { Env } from "../env.ts";
 import { HttpError } from "./http.ts";
 import { sha256Hex } from "./crypto.ts";
+import { ephemeral } from "./ephemeral.ts";
 
 /**
  * Generic Idempotency-Key support backed by the idempotency_keys table
@@ -22,15 +23,12 @@ export async function idempotencyPrecheck(
   parts: string[],
 ): Promise<{ fingerprint: string; replay: { status: number; body: unknown } | null }> {
   const fingerprint = await sha256Hex(parts.join("\u0000"));
-  await env.DB.prepare("INSERT OR IGNORE INTO idempotency_keys (scope, idem_key, request_hash) VALUES (?, ?, ?)")
-    .bind(scope, key, fingerprint).run();
-  const row = await env.DB.prepare("SELECT request_hash, status_code, response_json FROM idempotency_keys WHERE scope = ? AND idem_key = ?")
-    .bind(scope, key).first<{ request_hash: string; status_code: number | null; response_json: string | null }>();
-  if (!row || row.request_hash !== fingerprint) {
+  const row = await ephemeral(env).claimIdem(scope, key, fingerprint);
+  if (row.hash === null || row.hash !== fingerprint) {
     throw new HttpError(422, "IDEMPOTENCY_KEY_REUSED", "이 Idempotency-Key는 다른 요청에 이미 사용되었습니다.");
   }
-  if (row.status_code !== null && row.status_code !== undefined && row.response_json) {
-    return { fingerprint, replay: { status: row.status_code, body: JSON.parse(row.response_json) } };
+  if (row.status !== null && row.status !== undefined && row.body) {
+    return { fingerprint, replay: { status: row.status, body: JSON.parse(row.body) } };
   }
   return { fingerprint, replay: null };
 }
@@ -42,6 +40,5 @@ export async function idempotencyStore(
   status: number,
   body: unknown,
 ): Promise<void> {
-  await env.DB.prepare("UPDATE idempotency_keys SET status_code = ?, response_json = ? WHERE scope = ? AND idem_key = ?")
-    .bind(status, JSON.stringify(body).slice(0, 8000), scope, key).run();
+  await ephemeral(env).storeIdem(scope, key, status, JSON.stringify(body).slice(0, 8000));
 }

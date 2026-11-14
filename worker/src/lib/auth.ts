@@ -1,6 +1,7 @@
 import type { Env } from "../env.ts";
 import { sha256Hex, verifyJwt } from "./crypto.ts";
 import { HttpError, clientIp } from "./http.ts";
+import { ephemeral } from "./ephemeral.ts";
 
 export interface AuthUser {
   id: string;
@@ -40,12 +41,11 @@ export async function getAuthUser(request: Request, env: Env): Promise<AuthUser 
   if (!p || typeof p.id !== "string") return null;
   // Revocation: logged-out JTIs and pre-reset sessions stop here (audit [m]).
   if (typeof p.jti === "string") {
-    const revoked = await env.DB.prepare("SELECT 1 AS x FROM revoked_tokens WHERE jti = ?").bind(p.jti).first();
-    if (revoked) return null;
+    if (await ephemeral(env).isRevoked(p.jti)) return null;
   }
   if (typeof p.iat === "number") {
-    const rs = await env.DB.prepare("SELECT reset_at FROM session_resets WHERE subject_id = ?").bind(p.id).first<{ reset_at: number }>();
-    if (rs && p.iat < Number(rs.reset_at)) return null;
+    const resetAt = await ephemeral(env).getReset(p.id);
+    if (resetAt !== null && p.iat < resetAt) return null;
   }
   // Suspended/deleted accounts lose API access immediately, even with a live JWT (A8/A1).
   if (!p.role || p.role === "USER") {
@@ -74,7 +74,7 @@ export async function revokeCurrentToken(request: Request, env: Env): Promise<vo
   if (!token) return;
   const p = await verifyJwt(token, secret);
   if (!p || typeof p.jti !== "string" || typeof p.exp !== "number") return;
-  await env.DB.prepare("INSERT OR IGNORE INTO revoked_tokens (jti, expires_at) VALUES (?, ?)").bind(p.jti, p.exp).run();
+  await ephemeral(env).revokeJti(p.jti, p.exp);
 }
 
 /** Kill every session of a subject (password reset/change). */
@@ -82,8 +82,7 @@ export async function resetSubjectSessions(env: Env, subjectId: string): Promise
   // +1: JWT iat has second granularity, so a same-second cutoff would spare
   // tokens minted earlier in this second. Same-second post-reset logins get a
   // stillborn token and must retry.
-  await env.DB.prepare("INSERT INTO session_resets (subject_id, reset_at) VALUES (?, ?) ON CONFLICT(subject_id) DO UPDATE SET reset_at = excluded.reset_at")
-    .bind(subjectId, Math.floor(Date.now() / 1000) + 1).run();
+  await ephemeral(env).setReset(subjectId, Math.floor(Date.now() / 1000) + 1);
 }
 
 export async function requireUser(request: Request, env: Env): Promise<AuthUser> {
@@ -205,13 +204,10 @@ export async function rateLimit(request: Request, env: Env, bucket: string, limi
   const now = Math.floor(Date.now() / 1000);
   const key = `${bucket}:${ip}`;
   try {
-    const row = await env.DB.prepare("SELECT COUNT(*) AS c FROM login_attempts WHERE ip_address = ? AND attempted_at > ?")
-      .bind(key, now - windowSec)
-      .first<{ c: number }>();
-    if (Number(row?.c || 0) >= limit) {
+    if ((await ephemeral(env).count(key, now, windowSec)) >= limit) {
       throw new HttpError(429, "TOO_MANY_REQUESTS", "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.");
     }
-    await env.DB.prepare("INSERT INTO login_attempts (ip_address, email, attempted_at) VALUES (?, ?, ?)").bind(key, bucket, now).run();
+    await ephemeral(env).recordHit(key, bucket, now, windowSec);
   } catch (e) {
     if (e instanceof HttpError) throw e;
     throw new HttpError(503, "RATE_LIMIT_UNAVAILABLE", "일시적으로 요청을 처리할 수 없습니다.");
@@ -232,21 +228,18 @@ const LOGIN_FAIL_MAX = 10;
 const failKey = (scope: string, email: string) => `${scope}_fail:${email.trim().toLowerCase()}`;
 
 export async function checkAccountLock(env: Env, scope: string, email: string): Promise<void> {
-  const row = await env.DB.prepare("SELECT COUNT(*) AS c FROM login_attempts WHERE ip_address = ? AND attempted_at > ?")
-    .bind(failKey(scope, email), Math.floor(Date.now() / 1000) - LOGIN_FAIL_WINDOW_SEC)
-    .first<{ c: number }>();
-  if (Number(row?.c || 0) >= LOGIN_FAIL_MAX) {
+  const n = await ephemeral(env).count(failKey(scope, email), Math.floor(Date.now() / 1000), LOGIN_FAIL_WINDOW_SEC);
+  if (n >= LOGIN_FAIL_MAX) {
     throw new HttpError(429, "ACCOUNT_LOCKED", "로그인 실패가 반복되어 계정이 잠시 잠겼습니다. 15분 후 다시 시도해주세요.");
   }
 }
 
 export async function recordLoginFailure(env: Env, scope: string, email: string): Promise<void> {
-  await env.DB.prepare("INSERT INTO login_attempts (ip_address, email, attempted_at) VALUES (?, ?, ?)")
-    .bind(failKey(scope, email), scope, Math.floor(Date.now() / 1000)).run();
+  await ephemeral(env).recordHit(failKey(scope, email), scope, Math.floor(Date.now() / 1000), LOGIN_FAIL_WINDOW_SEC);
 }
 
 export async function clearLoginFailures(env: Env, scope: string, email: string): Promise<void> {
-  await env.DB.prepare("DELETE FROM login_attempts WHERE ip_address = ?").bind(failKey(scope, email)).run();
+  await ephemeral(env).clear(failKey(scope, email));
 }
 
 export type AuthJar = "getfortrip_jwt" | "getfortrip_admin_jwt" | "getfortrip_partner_jwt";

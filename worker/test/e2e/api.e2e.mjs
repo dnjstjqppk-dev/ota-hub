@@ -68,7 +68,23 @@ function sql(command) {
  * so late registration-heavy tests reset their bucket instead of tripping the
  * production limit. Production limits themselves are never weakened.
  */
+function redisHelper(...args) {
+  const helper = fileURLToPath(new URL("../../../scripts/redis-store/redis-helper.mjs", import.meta.url));
+  execFileSync(process.execPath, [helper, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+}
+
+function redisCount(bucketPrefix) {
+  const helper = fileURLToPath(new URL("../../../scripts/redis-store/redis-helper.mjs", import.meta.url));
+  const out = execFileSync(process.execPath, [helper, "count", bucketPrefix], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return JSON.parse(out).n;
+}
+
 function resetLimiter(...buckets) {
+  // TG-10: with Redis ephemeral state, buckets live in Redis, not login_attempts.
+  if (REDIS_ALIVE) {
+    for (const bucket of buckets) redisHelper("reset", bucket);
+    return;
+  }
   for (const bucket of buckets) sql(`DELETE FROM login_attempts WHERE ip_address LIKE '${bucket}:%'`);
 }
 
@@ -77,6 +93,11 @@ function resetLimiter(...buckets) {
 // request) so the fill lands on the key the limiter actually counts. One
 // recursive-CTE INSERT (a 600-tuple VALUES list overflows cmd.exe).
 function fillBucket(bucket, n) {
+  // TG-10: Redis branch fills the learned ZSET (same prime rule, same bound math).
+  if (REDIS_ALIVE) {
+    redisHelper("fill", bucket, String(n));
+    return;
+  }
   const keys = sql(`SELECT DISTINCT ip_address AS k FROM login_attempts WHERE ip_address LIKE '${bucket}:%'`);
   if (!keys.length) throw new Error(`fillBucket(${bucket}): prime with one real request first`);
   const now = Math.floor(Date.now() / 1000);
@@ -123,8 +144,16 @@ async function fullHotelBooking(token, simulation, scenario = "ok", qextra = {})
 }
 
 let A, B, ADMIN, TXC;
+let REDIS_ALIVE = false; // TG-10: probed below — Redis configured AND answering.
 before(async () => {
-  sql("DELETE FROM login_attempts"); // local DB only: reset rate-limit window between runs
+  // TG-10: with Redis ephemeral state the buckets live there instead. When the
+  // URL is set but Redis answers nothing, the harness serves D1 fallback and
+  // the helpers must probe D1 too (fallback proof mode).
+  if (process.env.E2E_REDIS_URL) {
+    try { redisHelper("ping"); REDIS_ALIVE = true; } catch { REDIS_ALIVE = false; }
+  }
+  if (REDIS_ALIVE) redisHelper("reset", "");
+  else sql("DELETE FROM login_attempts"); // local DB only: reset rate-limit window between runs
   // A3: transaction consents ride on every booking-create, pinned to /legal versions.
   const docs = (await api("GET", "/api/v1/legal")).data.documents || [];
   const ver = Object.fromEntries(docs.map((d) => [d.slug, d.version]));
@@ -1828,7 +1857,10 @@ test("security: logout/reset revoke sessions; roles re-read; money paths throttl
   assert.equal((await api("GET", `/api/v1/bookings/${b.id}`, { token: admLogin.data.token })).status, 403);
   // Money paths consume rate-limit buckets (wiring proof; thresholds stay above suite volume).
   for (const bucket of ["quotes:", "bookings:"]) {
-    assert.ok(sql(`SELECT COUNT(*) AS c FROM login_attempts WHERE ip_address LIKE '${bucket}%'`)[0].c > 0, `${bucket} bucket missing`);
+    const n = REDIS_ALIVE
+      ? redisCount(bucket)
+      : sql(`SELECT COUNT(*) AS c FROM login_attempts WHERE ip_address LIKE '${bucket}%'`)[0].c;
+    assert.ok(n > 0, `${bucket} bucket missing`);
   }
   // Admin list views are audited like detail views; reconciliation tracks legacy hashes.
   assert.equal((await api("GET", "/api/v1/admin/bookings?pageSize=1", { token: ADMIN })).status, 200);
@@ -3102,7 +3134,8 @@ test("#96: accounts lock after repeated failures, recover when the window slides
   const V = await register("lock96b");
   assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: V.email, password: "Passw0rd-QA-1" } })).status, 200);
   // Window slide (simulated by clearing) restores the locked account.
-  sql(`DELETE FROM login_attempts WHERE ip_address = 'user_login_fail:${U.email}'`);
+  if (REDIS_ALIVE) redisHelper("delkey", `user_login_fail:${U.email}`);
+  else sql(`DELETE FROM login_attempts WHERE ip_address = 'user_login_fail:${U.email}'`);
   assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: U.email, password: "Passw0rd-QA-1" } })).status, 200);
   // Success clears misses: 9 fails + success + 9 fails never locks.
   resetLimiter("login");
@@ -3123,7 +3156,8 @@ test("#96: partner accounts lock the same way", async () => {
     assert.equal((await api("POST", "/api/v1/partner/login", { body: { email, password: "Wrong-Pass-1" } })).status, 401);
   }
   assert.equal((await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } })).data.code, "ACCOUNT_LOCKED");
-  sql(`DELETE FROM login_attempts WHERE ip_address = 'partner_login_fail:${email}'`);
+  if (REDIS_ALIVE) redisHelper("delkey", `partner_login_fail:${email}`);
+  else sql(`DELETE FROM login_attempts WHERE ip_address = 'partner_login_fail:${email}'`);
   assert.equal((await api("POST", "/api/v1/partner/login", { body: { email, password: "Passw0rd-QA-1" } })).status, 200);
 });
 
@@ -3199,11 +3233,12 @@ test("#103: partner writes are rate-bounded per path", async () => {
   resetLimiter("partner_profile");
   try {
     const P = await approvedPartner("rl103");
-    let last = 200;
-    for (let i = 0; i < 121 && last !== 429; i++) {
-      last = (await api("PATCH", "/api/v1/partner/profile", { token: P.token, body: { contactPhone: `02-1000-${String(i).padStart(4, "0")}` } })).status;
-    }
-    assert.equal(last, 429);
+    // Brink-fill (fast on every backend): 1 prime + 119 filled = 120, so the
+    // next real request trips the bound. A 121-request loop assumes sub-second
+    // requests and flakes on slow transports.
+    assert.equal((await api("PATCH", "/api/v1/partner/profile", { token: P.token, body: { contactPhone: "02-1000-0000" } })).status, 200);
+    fillBucket("partner_profile", 119);
+    assert.equal((await api("PATCH", "/api/v1/partner/profile", { token: P.token, body: { contactPhone: "02-1000-0001" } })).status, 429);
   } finally {
     // TG-09: leave no rows behind — a fast run reaches #180 inside the same
     // 60s window and would inherit a full bucket (D1 only passed on timing luck).
