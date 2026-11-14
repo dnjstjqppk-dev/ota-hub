@@ -94,6 +94,12 @@ jobs:
       - name: Build all 3 portals for local worker assets
         run: node scripts/build-all.js
 
+      # TG-06 fix: this job runs on its own runner — the fast job's validated
+      # DB does not travel here. Apply migrations before dev-seed, or the seed
+      # dies with "no such table" (observed 2026-11-14).
+      - name: Apply D1 migrations to the E2E database
+        run: npx wrangler d1 migrations apply ota_local --local -c wrangler.local.jsonc
+
       - name: Run worker E2E suite against local wrangler dev
         run: |
           # Ephemeral CI-only secrets (never committed; .dev.vars is git-ignored).
