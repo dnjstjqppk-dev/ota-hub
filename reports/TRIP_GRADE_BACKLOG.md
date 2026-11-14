@@ -43,7 +43,9 @@
   증거: YAML 파싱 PASS + main 푸시에서 fast·e2e 잡 실행(CI 관찰). PR 단축은
   on.pull_request + 잡 if 조건으로 구성(검사). #167 동시성은 ref별 그룹으로 유지.
   후속 수정: 분리 후 e2e 잡이 자체 마이그레이션 없이 dev-seed부터 돌려
-  no-such-table로 실패 → e2e 잡에 Apply D1 migrations 단계 추가(본 커밋).
+  no-such-table로 실패 → e2e 잡에 Apply D1 migrations 단계 추가.
+  최종: CI run 43560751989 — fast ✓(1m25s)·e2e ✓(11m7s)·deploy ✗(7403 토큰 만료,
+  사용자 블로커로 예상됨). Phase 1 전체 [x] 2026-11-14.
 - [x] **TG-07 D1→Postgres 이전 설계** (문서·코드)
   범위: 이전 설계서 + DB 접근 리포지토리 인터페이스. 신규 코드는 인터페이스 경유.
   수용: 설계 문서 + 인터페이스 + 기존 테스트 녹색. 의존: 없음.
