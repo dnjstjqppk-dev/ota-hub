@@ -36,5 +36,30 @@
     // is registered (docs/GO_LIVE_CHECKLIST.md step 6). TOSS_CLIENT_KEY and
     // EMAIL_FROM stay unset until their real values exist — no placeholders.
     "PAYMENT_PROVIDER": "toss"
+  },
+  // TG-08: staging mirrors production safety (no sandbox provider, no draft
+  // entity, no simulated suppliers — APP_ENV=staging counts as production).
+  // Hub only; admin/partner consoles ride the hub /admin/ + /partner/ fallbacks.
+  "env": {
+    "staging": {
+      "name": "ota-hub-staging",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "ota_staging",
+          "database_id": "56accb00-19fb-47ad-bc0e-9a2e456adda5",
+          "migrations_dir": "worker/migrations"
+        }
+      ],
+      "r2_buckets": [
+        { "binding": "UPLOADS", "bucket_name": "getfortrip-uploads-staging" }
+      ],
+      "vars": {
+        "APP_ENV": "staging",
+        "ALLOWED_ORIGINS": "https://ota-hub-staging.dnjstjqppk.workers.dev",
+        "PUBLIC_SITE_URL": "https://ota-hub-staging.dnjstjqppk.workers.dev",
+        "PARTNER_SITE_URL": "https://ota-hub-staging.dnjstjqppk.workers.dev/partner/"
+      }
+    }
   }
 }
