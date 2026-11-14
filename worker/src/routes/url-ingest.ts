@@ -139,7 +139,7 @@ export async function handleUrlIngest(request: Request, env: Env, url: URL): Pro
         city = COALESCE(?, city),
         country = COALESCE(?, country),
         address = COALESCE(?, address),
-        currency = CASE WHEN ? IS NOT NULL THEN 'KRW' ELSE currency END,
+        currency = CASE WHEN CAST(? AS TEXT) IS NOT NULL THEN 'KRW' ELSE currency END,
         cancellation_policy = COALESCE(?, cancellation_policy),
         status = COALESCE(?, status),
         updated_at = ?

@@ -243,6 +243,8 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     const deletedEmail = `deleted_${user.id}@deleted.local`;
     const unusableHash = await hashPassword(randomToken(32), resolvePbkdf2Iterations(env));
     const reason = str(body.reason, 300) || "USER_REQUEST";
+    // TG-09: retention horizon computed in JS (portable: no date('now') in SQL).
+    const retainUntil5y = new Date(Date.now() + 5 * 365 * 86400_000).toISOString().slice(0, 10);
     await env.DB.batch([
       // Profile and credential purge (anonymized, login-impossible afterwards).
       env.DB.prepare("UPDATE users SET email = ?, full_name = '탈퇴회원', phone_number = NULL, birth_date = NULL, password_hash = ?, trip_coins = 0, marketing_consent = 0, avatar_url = NULL, status = 'DELETED', deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), deletion_reason = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")
@@ -252,9 +254,9 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
       env.DB.prepare("DELETE FROM price_alerts WHERE user_id = ?").bind(user.id),
       env.DB.prepare("DELETE FROM user_coupons WHERE user_id = ?").bind(user.id),
       // E-Commerce Act Art. 6 retention isolation (contract/payment/dispute records kept 5y).
-      env.DB.prepare("INSERT OR IGNORE INTO retained_records (id, user_id, record_type, record_id, retain_until, reason) SELECT 'rtn_' || id, ?, 'BOOKING', id, date('now','+5 years'), 'E_COMMERCE_ART6_CONTRACT' FROM bookings WHERE user_id = ?").bind(user.id, user.id),
-      env.DB.prepare("INSERT OR IGNORE INTO retained_records (id, user_id, record_type, record_id, retain_until, reason) SELECT 'rtn_' || id, ?, 'PAYMENT', id, date('now','+5 years'), 'E_COMMERCE_ART6_PAYMENT' FROM payments WHERE booking_id IN (SELECT id FROM bookings WHERE user_id = ?)").bind(user.id, user.id),
-      env.DB.prepare("INSERT OR IGNORE INTO retained_records (id, user_id, record_type, record_id, retain_until, reason) SELECT 'rtn_' || id, ?, 'REFUND', id, date('now','+5 years'), 'E_COMMERCE_ART6_DISPUTE' FROM refunds WHERE booking_id IN (SELECT id FROM bookings WHERE user_id = ?)").bind(user.id, user.id),
+      env.DB.prepare("INSERT OR IGNORE INTO retained_records (id, user_id, record_type, record_id, retain_until, reason) SELECT 'rtn_' || id, ?, 'BOOKING', id, ?, 'E_COMMERCE_ART6_CONTRACT' FROM bookings WHERE user_id = ?").bind(user.id, retainUntil5y, user.id),
+      env.DB.prepare("INSERT OR IGNORE INTO retained_records (id, user_id, record_type, record_id, retain_until, reason) SELECT 'rtn_' || id, ?, 'PAYMENT', id, ?, 'E_COMMERCE_ART6_PAYMENT' FROM payments WHERE booking_id IN (SELECT id FROM bookings WHERE user_id = ?)").bind(user.id, retainUntil5y, user.id),
+      env.DB.prepare("INSERT OR IGNORE INTO retained_records (id, user_id, record_type, record_id, retain_until, reason) SELECT 'rtn_' || id, ?, 'REFUND', id, ?, 'E_COMMERCE_ART6_DISPUTE' FROM refunds WHERE booking_id IN (SELECT id FROM bookings WHERE user_id = ?)").bind(user.id, retainUntil5y, user.id),
     ]);
     await resetSubjectSessions(env, user.id);
     await audit(env, user.id, "ACCOUNT_WITHDRAWN", "USER", user.id, { reason });

@@ -188,7 +188,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
       ? await db.prepare("SELECT id, user_name, domain_type, target_id, rating, comment, verified_stay, created_at FROM reviews WHERE target_id = ? AND domain_type = ? ORDER BY verified_stay DESC, created_at DESC LIMIT 50").bind(targetId, domain).all<any>()
       : await db.prepare("SELECT id, user_name, domain_type, target_id, rating, comment, verified_stay, created_at FROM reviews ORDER BY created_at DESC LIMIT 50").all<any>();
     const summary = targetId
-      ? await db.prepare("SELECT COUNT(*) AS count, ROUND(AVG(rating), 1) AS average, SUM(CASE WHEN verified_stay = 1 THEN 1 ELSE 0 END) AS verified FROM reviews WHERE target_id = ? AND domain_type = ?").bind(targetId, domain).first<any>()
+      ? await db.prepare("SELECT COUNT(*) AS count, ROUND(AVG(rating) * 10) / 10 AS average, SUM(CASE WHEN verified_stay = 1 THEN 1 ELSE 0 END) AS verified FROM reviews WHERE target_id = ? AND domain_type = ?").bind(targetId, domain).first<any>()
       : null;
     // Reviewer names are public: show a masked name only.
     const reviews = (rows.results || []).map((r: any) => ({ ...r, user_name: maskName(r.user_name), verified_stay: r.verified_stay === 1 }));
@@ -222,7 +222,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     // C8: product scores are always recomputed from verified reviews — never stored claims.
     const scoreTable = domain === "HOTEL" ? "hotels" : domain === "ACTIVITY" ? "activities" : null;
     if (scoreTable) {
-      await db.prepare(`UPDATE ${scoreTable} SET review_count = (SELECT COUNT(*) FROM reviews WHERE domain_type = ? AND target_id = ?), review_score = (SELECT ROUND(AVG(rating), 1) FROM reviews WHERE domain_type = ? AND target_id = ?) WHERE id = ?`)
+      await db.prepare(`UPDATE ${scoreTable} SET review_count = (SELECT COUNT(*) FROM reviews WHERE domain_type = ? AND target_id = ?), review_score = (SELECT ROUND(AVG(rating) * 10) / 10 FROM reviews WHERE domain_type = ? AND target_id = ?) WHERE id = ?`)
         .bind(domain, targetId, domain, targetId, targetId).run();
     }
     return json({ success: true, reviewId: id, verifiedStay: true }, 201);
@@ -252,7 +252,7 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     await rateLimit(request, env, "user_write", 120, 60);
     const r = await db.prepare("DELETE FROM moment_likes WHERE moment_id = ? AND user_id = ?").bind(likeMatch[1], u.id).run();
     if (r.meta.changes) {
-      await db.prepare("UPDATE trip_moments SET likes_count = MAX(0, likes_count - 1) WHERE id = ?").bind(likeMatch[1]).run();
+      await db.prepare("UPDATE trip_moments SET likes_count = CASE WHEN likes_count - 1 > 0 THEN likes_count - 1 ELSE 0 END WHERE id = ?").bind(likeMatch[1]).run();
     }
     const c = await db.prepare("SELECT likes_count FROM trip_moments WHERE id = ?").bind(likeMatch[1]).first<{ likes_count: number }>();
     return json({ success: true, liked: false, likesCount: Number(c?.likes_count || 0) });

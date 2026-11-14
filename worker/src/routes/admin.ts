@@ -272,20 +272,20 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
 
   if (path === "/api/v1/admin/reconciliation" && method === "GET") {
     // Integrity checks: unbalanced journals, payment vs booking mismatches, deposits left on terminal bookings.
-    const unbalanced = await db.prepare("SELECT journal_id, SUM(CASE WHEN direction='DEBIT' THEN amount_minor ELSE -amount_minor END) AS diff FROM ledger_entries GROUP BY journal_id HAVING diff != 0").all();
+    const unbalanced = await db.prepare("SELECT journal_id, SUM(CASE WHEN direction='DEBIT' THEN amount_minor ELSE -amount_minor END) AS diff FROM ledger_entries GROUP BY journal_id HAVING SUM(CASE WHEN direction='DEBIT' THEN amount_minor ELSE -amount_minor END) != 0").all();
     const paidMismatch = await db.prepare(
-      "SELECT b.id, b.booking_number, b.paid_minor, COALESCE(SUM(p.amount_minor),0) AS captured FROM bookings b LEFT JOIN payments p ON p.booking_id = b.id AND p.status IN ('CAPTURED','PARTIALLY_REFUNDED','REFUNDED') WHERE b.total_minor IS NOT NULL GROUP BY b.id HAVING b.paid_minor != captured",
+      "SELECT b.id, b.booking_number, b.paid_minor, COALESCE(SUM(p.amount_minor),0) AS captured FROM bookings b LEFT JOIN payments p ON p.booking_id = b.id AND p.status IN ('CAPTURED','PARTIALLY_REFUNDED','REFUNDED') WHERE b.total_minor IS NOT NULL GROUP BY b.id HAVING b.paid_minor != COALESCE(SUM(p.amount_minor),0)",
     ).all();
     const refundMismatch = await db.prepare(
-      "SELECT b.id, b.booking_number, b.refunded_minor, COALESCE(SUM(r.amount_minor),0) AS refunded FROM bookings b LEFT JOIN refunds r ON r.booking_id = b.id AND r.status = 'SUCCEEDED' WHERE b.total_minor IS NOT NULL GROUP BY b.id HAVING b.refunded_minor != refunded",
+      "SELECT b.id, b.booking_number, b.refunded_minor, COALESCE(SUM(r.amount_minor),0) AS refunded FROM bookings b LEFT JOIN refunds r ON r.booking_id = b.id AND r.status = 'SUCCEEDED' WHERE b.total_minor IS NOT NULL GROUP BY b.id HAVING b.refunded_minor != COALESCE(SUM(r.amount_minor),0)",
     ).all();
     const strandedDeposits = await db.prepare(
-      "SELECT l.booking_id, b.status, SUM(CASE WHEN l.direction='CREDIT' THEN l.amount_minor ELSE -l.amount_minor END) AS deposit FROM ledger_entries l JOIN bookings b ON b.id = l.booking_id WHERE l.account = 'CUSTOMER_DEPOSITS' AND b.status IN ('REFUNDED','CANCELLED','FAILED','VOUCHER_ISSUED','TICKETED','COMPLETED') GROUP BY l.booking_id HAVING deposit != 0",
+      "SELECT l.booking_id, b.status, SUM(CASE WHEN l.direction='CREDIT' THEN l.amount_minor ELSE -l.amount_minor END) AS deposit FROM ledger_entries l JOIN bookings b ON b.id = l.booking_id WHERE l.account = 'CUSTOMER_DEPOSITS' AND b.status IN ('REFUNDED','CANCELLED','FAILED','VOUCHER_ISSUED','TICKETED','COMPLETED') GROUP BY l.booking_id, b.status HAVING SUM(CASE WHEN l.direction='CREDIT' THEN l.amount_minor ELSE -l.amount_minor END) != 0",
     ).all();
     // #17: a SETTLED order's supplier payable must be fully relieved by its
     // payout journal — anything left is a missing/partial payout posting.
     const payableStranded = await db.prepare(
-      "SELECT l.booking_id, SUM(CASE WHEN l.direction='CREDIT' THEN l.amount_minor ELSE -l.amount_minor END) AS payable FROM ledger_entries l JOIN marketplace_order_settlements s ON s.booking_id = l.booking_id AND s.settlement_status = 'SETTLED' WHERE l.account = 'SUPPLIER_PAYABLE' GROUP BY l.booking_id HAVING payable != 0",
+      "SELECT l.booking_id, SUM(CASE WHEN l.direction='CREDIT' THEN l.amount_minor ELSE -l.amount_minor END) AS payable FROM ledger_entries l JOIN marketplace_order_settlements s ON s.booking_id = l.booking_id AND s.settlement_status = 'SETTLED' WHERE l.account = 'SUPPLIER_PAYABLE' GROUP BY l.booking_id HAVING SUM(CASE WHEN l.direction='CREDIT' THEN l.amount_minor ELSE -l.amount_minor END) != 0",
     ).all();
     // Legacy static-salt SHA-256 password hashes still on record (users + partners + staff).
     // Sunset is blocked on email delivery (Resend): forcing rotation now would lock out

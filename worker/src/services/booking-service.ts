@@ -237,8 +237,8 @@ async function runBatch(db: D1Database, stmts: Stmt[]): Promise<D1Result[]> {
     return await db.batch([...stmts, db.prepare("DELETE FROM txn_guards")]);
   } catch (e: any) {
     const m = String(e?.message || e);
-    if (m.includes("ok = 1")) throw new HttpError(409, "CONCURRENT_MODIFICATION", "예약 상태가 이미 변경되었습니다. 새로고침 후 다시 시도해주세요.");
-    if (m.includes("quantity > 0")) throw new HttpError(409, "SOLD_OUT", "선택하신 일정의 잔여 재고가 소진되었습니다.");
+    if (m.includes("ok = 1") || m.includes("txn_guards_ok_check")) throw new HttpError(409, "CONCURRENT_MODIFICATION", "예약 상태가 이미 변경되었습니다. 새로고침 후 다시 시도해주세요.");
+    if (m.includes("quantity > 0") || m.includes("inventory_holds_quantity_check")) throw new HttpError(409, "SOLD_OUT", "선택하신 일정의 잔여 재고가 소진되었습니다.");
     if (m.includes("bookings.quote_id") || m.includes("idx_bookings_quote")) throw new HttpError(409, "QUOTE_ALREADY_USED", "이미 사용된 견적입니다. 다시 조회해주세요.");
     if (m.includes("idx_payments_one_active")) throw new HttpError(409, "PAYMENT_IN_PROGRESS", "이미 처리 중이거나 완료된 결제가 있습니다.");
     throw e;
@@ -248,7 +248,7 @@ async function runBatch(db: D1Database, stmts: Stmt[]): Promise<D1Result[]> {
 /** #73: the single-flight PENDING index (0039) turns a racing second refund into a 409, never a 500. */
 export function throwOnRefundConflict(e: unknown): never {
   const m = String((e as any)?.message || e);
-  if (m.includes("idx_refunds_one_pending") || m.includes("UNIQUE constraint failed: refunds")) {
+  if (m.includes("idx_refunds_one_pending") || m.includes("UNIQUE constraint failed: refunds") || (m.includes("violates unique constraint") && /refunds/i.test(m))) {
     throw new HttpError(409, "REFUND_IN_PROGRESS", "이미 진행 중인 환불이 있습니다. 완료 후 다시 시도해주세요.");
   }
   throw e;
@@ -297,6 +297,25 @@ function holdQuantity(domain: Domain, params: QuoteParams): number {
 }
 
 interface HoldTarget { itemId: string; unitKey: string; date: string; capacity: number }
+
+/**
+ * TG-09: per-key mutual exclusion for the guarded hold INSERT. D1 serializes
+ * writers by architecture (no-op there); Postgres needs explicit exclusion or
+ * concurrent bookings both read stale capacity and oversell. Sorted acquisition
+ * (multi-date stays lock several keys) with best-effort release in reverse.
+ * The harness runs a single-connection pool so session-level advisory locks are
+ * sound; production PG needs the txn design (TG-09 follow-up, see rollback doc).
+ */
+async function lockInventoryKeys(env: Env, targets: HoldTarget[]): Promise<() => Promise<void>> {
+  if (env.DB_DIALECT !== "pg") return async () => {};
+  const keys = [...new Set(targets.map((t) => `${t.itemId}|${t.unitKey}|${t.date}`))].sort();
+  for (const k of keys) await env.DB.prepare("SELECT pg_advisory_lock(hashtext(?))").bind(k).run();
+  return async () => {
+    for (const k of [...keys].reverse()) {
+      await env.DB.prepare("SELECT pg_advisory_unlock(hashtext(?))").bind(k).run().catch(() => undefined);
+    }
+  };
+}
 
 /** Inventory to hold for an order: every capacity-managed product, on each of its service dates. */
 function holdTargets(domain: Domain, product: CatalogProduct, inbound: CatalogProduct | null, q: { serviceStart: string; serviceEnd: string; legs?: LegResult[] }): HoldTarget[] {
@@ -759,6 +778,11 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   // have closed the date or cut the allotment since. Re-check against the
   // live calendar BEFORE consuming coins/coupons; the guarded hold INSERT
   // below stays as the race backstop for concurrent bookings.
+  // TG-09: the PG advisory lock spans recheck-through-batch (check-then-act
+  // must be atomic). D1 no-ops. Flat wrap on purpose (no re-indent churn).
+  const targets = holdTargets(quote.domain_type, product, inbound, { serviceStart: quote.service_start, serviceEnd: quote.service_end, legs: fresh.legs });
+  const unlockInventory = await lockInventoryKeys(env, targets);
+  try {
   const recheckQty = holdQuantity(quote.domain_type, params);
   for (const t of holdTargets(quote.domain_type, product, inbound, { serviceStart: quote.service_start, serviceEnd: quote.service_end, legs: fresh.legs })) {
     if ((await availableUnits(env, t.itemId, t.unitKey, t.date, t.capacity)) < recheckQty) {
@@ -883,7 +907,6 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
     );
   }
   const qty = holdQuantity(quote.domain_type, params);
-  const targets = holdTargets(quote.domain_type, product, inbound, { serviceStart: quote.service_start, serviceEnd: quote.service_end, legs: fresh.legs });
   for (const t of targets) {
     stmts.push(
       db.prepare(
@@ -918,6 +941,9 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
     throw e;
   }
   return { replayed: false, booking: await serializeBooking(env, (await getBooking(env, id))!, user) };
+  } finally {
+    await unlockInventory();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1669,9 +1695,11 @@ export async function firePriceAlerts(env: Env): Promise<number> {
  * state machine with full history (2026-11-09 audit [m]).
  */
 export async function completePastBookings(env: Env): Promise<number> {
+  // TG-09: today computed in JS (portable: no date('now') in SQL).
+  const today = new Date().toISOString().slice(0, 10);
   const rows = await env.DB.prepare(
-    "SELECT id FROM bookings WHERE status IN ('TICKETED', 'VOUCHER_ISSUED') AND service_end < date('now') ORDER BY service_end LIMIT 50",
-  ).all<{ id: string }>();
+    "SELECT id FROM bookings WHERE status IN ('TICKETED', 'VOUCHER_ISSUED') AND service_end < ? ORDER BY service_end LIMIT 50",
+  ).bind(today).all<{ id: string }>();
   let done = 0;
   for (const r of rows.results || []) {
     const b = await getBooking(env, r.id);

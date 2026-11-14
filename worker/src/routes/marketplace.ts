@@ -147,7 +147,7 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     if (modelUp && channelFlag[modelUp] && !(await isFeatureEnabled(env, channelFlag[modelUp]))) {
       throw new HttpError(503, 'FEATURE_DISABLED', `${modelUp} 판매 채널이 운영 정책에 따라 일시 중단되었습니다.`);
     }
-    let sql = 'SELECT id, domain_type, item_id, merchant_model, seller_id, seller_name, fulfillment_provider, retail_price_minor, refund_responsible_party, status, created_at, updated_at FROM marketplace_catalog_items WHERE status = "ACTIVE"';
+    let sql = 'SELECT id, domain_type, item_id, merchant_model, seller_id, seller_name, fulfillment_provider, retail_price_minor, refund_responsible_party, status, created_at, updated_at FROM marketplace_catalog_items WHERE status = \'ACTIVE\'';
     const params: unknown[] = [];
     if (!modelUp) {
       for (const [m, flag] of Object.entries(channelFlag)) {
