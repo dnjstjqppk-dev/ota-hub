@@ -62,6 +62,7 @@ export default defineNuxtPlugin((nuxtApp) => {
   const parsed = parseDsn(dsn)
   if (!parsed) return
   const environment = (useRuntimeConfig().public as Record<string, unknown>).sentryEnv as string || 'production'
+  const release = (useRuntimeConfig().public as Record<string, unknown>).sentryRelease as string || ''
 
   const send = (err: unknown) => {
     try {
@@ -72,6 +73,7 @@ export default defineNuxtPlugin((nuxtApp) => {
         level: 'error',
         platform: 'javascript',
         environment,
+        ...(release ? { release } : {}),
         exception: {
           values: [
             {

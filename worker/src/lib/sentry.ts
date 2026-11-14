@@ -72,6 +72,7 @@ export interface SentryContext {
   url?: string;
   method?: string;
   environment?: string;
+  release?: string;
 }
 
 export function eventId(): string {
@@ -90,6 +91,7 @@ export function buildEvent(err: unknown, ctx: SentryContext = {}): Record<string
     level: "error",
     platform: "javascript",
     environment: ctx.environment || "production",
+    ...(ctx.release ? { release: ctx.release } : {}),
     exception: {
       values: [
         {
@@ -149,7 +151,11 @@ export function captureException(
   try {
     const dsn = (env.SENTRY_DSN || "").trim();
     if (!dsn) return false;
-    const event = buildEvent(err, { environment: env.APP_ENV && env.APP_ENV !== "" ? env.APP_ENV : "production", ...extra });
+    const event = buildEvent(err, {
+      environment: env.APP_ENV && env.APP_ENV !== "" ? env.APP_ENV : "production",
+      release: (env.SENTRY_RELEASE || "").trim() || undefined,
+      ...extra,
+    });
     const req = buildEnvelope(dsn, event);
     if (!req) return false;
     const send = (transport || fetch)(req.url, { method: "POST", headers: req.headers, body: req.body })

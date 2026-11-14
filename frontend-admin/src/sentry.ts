@@ -62,7 +62,7 @@ export interface EnvelopeRequest {
   body: string
 }
 
-export function buildEnvelope(dsn: string, err: unknown, extra: { url?: string; environment?: string }): EnvelopeRequest | null {
+export function buildEnvelope(dsn: string, err: unknown, extra: { url?: string; environment?: string; release?: string }): EnvelopeRequest | null {
   const p = parseDsn(dsn)
   if (!p) return null
   const e = err instanceof Error ? err : new Error(typeof err === 'string' ? err : 'Unknown error')
@@ -72,6 +72,7 @@ export function buildEnvelope(dsn: string, err: unknown, extra: { url?: string; 
     level: 'error',
     platform: 'javascript',
     environment: extra.environment || 'production',
+    ...(extra.release ? { release: extra.release } : {}),
     exception: {
       values: [
         {
@@ -101,6 +102,7 @@ interface VueAppLike {
 export interface SentryOptions {
   dsn: string
   environment?: string
+  release?: string
   transport?: (url: string, init: Record<string, unknown>) => Promise<unknown>
 }
 
@@ -111,9 +113,10 @@ export function initSentry(app: VueAppLike, opts: SentryOptions): boolean {
     if (!parseDsn(dsn)) return false
     if (typeof window === 'undefined') return false
     const environment = opts.environment || 'production'
+    const release = (opts.release || '').trim() || undefined
     const send = (err: unknown) => {
       try {
-        const req = buildEnvelope(dsn, err, { url: window.location.href, environment })
+        const req = buildEnvelope(dsn, err, { url: window.location.href, environment, release })
         if (!req) return
         const t = opts.transport || fetch
         void Promise.resolve(t(req.url, { method: 'POST', headers: req.headers, body: req.body, keepalive: true })).catch(() => undefined)

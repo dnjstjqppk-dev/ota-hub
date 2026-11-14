@@ -29,6 +29,8 @@ export interface Env {
   EMAIL_FROM?: string;
   /** Sentry DSN for unhandled-error reporting. Unset = reporting disabled (silent no-op). */
   SENTRY_DSN?: string;
+  /** Release tag (git sha) stamped on Sentry events. Unset = events carry no release. */
+  SENTRY_RELEASE?: string;
   /** PBKDF2 iteration override (default 100000, clamped 10000–1000000). */
   PBKDF2_ITERATIONS?: string;
   /** NTS business-status API key (data.go.kr). Unset = API verification unavailable, manual review only. */

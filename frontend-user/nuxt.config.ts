@@ -107,6 +107,7 @@ export default defineNuxtConfig({
       apiBase: process.env.NUXT_PUBLIC_API_BASE || '/api/v1',
       sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
       sentryEnv: process.env.NUXT_PUBLIC_SENTRY_ENV || 'production',
+      sentryRelease: process.env.NUXT_PUBLIC_SENTRY_RELEASE || '',
       brandName: 'getfortrip',
       brandDomain: process.env.PUBLIC_SITE_URL ? new URL(process.env.PUBLIC_SITE_URL).hostname : 'getfortrip.com',
       // A5/A6: company + CPO facts are build-time env, never hardcoded. Empty = "preparing"

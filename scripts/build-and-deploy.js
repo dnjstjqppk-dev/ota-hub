@@ -17,6 +17,19 @@ const DRY_RUN = process.env.DRY_RUN === '1';
 // SKIP_D1_MIGRATE=1 keeps a deploy code-only when the schema step must run
 // separately (outage window, manual review). Default applies migrations (#51).
 const SKIP_D1_MIGRATE = process.env.SKIP_D1_MIGRATE === '1';
+// Release tag stamped on Sentry events (TG-05). Never fails the deploy:
+// 'unknown' when git is unavailable. Overridable via SENTRY_RELEASE.
+function gitSha() {
+  try {
+    const sha = require('child_process')
+      .execSync('git rev-parse --short HEAD', { cwd: rootDir, stdio: ['ignore', 'pipe', 'pipe'] })
+      .toString().trim();
+    return sha || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+const SENTRY_RELEASE = process.env.SENTRY_RELEASE || gitSha();
 
 function run(cmd) {
   if (DRY_RUN) {
@@ -46,15 +59,15 @@ try {
 
   // 1. Deploy ota-hub (executes scripts/build-all.js to generate all 3 dists)
   console.log('\n☁️ [1/4] Triggering Wrangler build and deploy (ota-hub)...');
-  run('npx wrangler deploy');
+  run(`npx wrangler deploy --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
 
   // 2. Deploy ota-admin (dedicated worker host)
   console.log('\n☁️ [2/4] Triggering Wrangler deploy for Admin Portal (ota-admin)...');
-  run('npx wrangler deploy -c frontend-admin/wrangler.jsonc');
+  run(`npx wrangler deploy -c frontend-admin/wrangler.jsonc --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
 
   // 3. Deploy ota-partner (dedicated worker host)
   console.log('\n☁️ [3/4] Triggering Wrangler deploy for Partner Extranet (ota-partner)...');
-  run('npx wrangler deploy -c frontend-partner/wrangler.jsonc');
+  run(`npx wrangler deploy -c frontend-partner/wrangler.jsonc --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
 
   // 4. Post-deploy smoke (#52): unauthenticated, read-only, no secrets needed.
   console.log('\n🩺 [4/4] Running post-deploy smoke probe...');

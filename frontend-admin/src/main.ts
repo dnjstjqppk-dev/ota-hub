@@ -14,7 +14,7 @@ try {
 } catch { /* storage blocked: stay light */ }
 
 const app = createApp(App)
-initSentry(app, { dsn: import.meta.env.VITE_SENTRY_DSN || '', environment: import.meta.env.MODE })
+initSentry(app, { dsn: import.meta.env.VITE_SENTRY_DSN || '', environment: import.meta.env.MODE, release: import.meta.env.VITE_SENTRY_RELEASE || '' })
 app.component('AppIcon', AppIcon)
 app.use(createPinia())
 app.use(router)

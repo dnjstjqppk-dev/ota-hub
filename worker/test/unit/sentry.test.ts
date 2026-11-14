@@ -92,3 +92,25 @@ test("sentry: capture never throws, even with a failing transport", () => {
   );
   assert.doesNotThrow(() => captureException({} as Env, null, undefined));
 });
+
+test("sentry: event carries the release tag when configured, omits it otherwise", () => {
+  assert.equal(buildEvent(new Error("x"), { release: "abc1234" }).release, "abc1234");
+  assert.equal("release" in buildEvent(new Error("x"), {}), false);
+  assert.equal("release" in buildEvent(new Error("x"), { release: "" }), false);
+});
+
+test("sentry: capture forwards SENTRY_RELEASE from env into the payload", async () => {
+  const calls: Array<{ url: string; init: Record<string, unknown> }> = [];
+  const waited: Promise<unknown>[] = [];
+  const ok = captureException(
+    { SENTRY_DSN: DSN, SENTRY_RELEASE: "deadbee", APP_ENV: "test" } as Env,
+    { waitUntil: (p) => void waited.push(p) },
+    new Error("tagged"),
+    {},
+    async (url, init) => void calls.push({ url, init }),
+  );
+  assert.equal(ok, true);
+  await Promise.all(waited);
+  assert.equal(calls.length, 1);
+  assert.equal(JSON.parse(String(calls[0].init.body).split("\n")[2]).release, "deadbee");
+});

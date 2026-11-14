@@ -193,6 +193,8 @@ npx wrangler secret put SENTRY_DSN   # 워커 런타임용
 
 확인(어드민 토큰 필요): `/api/v1/health?verbose=1` → `errorReporting: SENTRY`.
 
+릴리스 태그는 배포 시 git sha로 자동 주입된다(워커 `--var` + 포털 빌드 env). 별도 등록 불필요.
+
 ## 7. PG 연결 — 토스 테스트키로 먼저 검증 (계약 직후)
 
 상점관리자에서 테스트키(`test_sk_`, `test_ck_`)를 발급받아 등록한다.

@@ -145,3 +145,6 @@ jobs:
           # Baked into the 3 portal builds at build time. Empty = reporters stay disabled.
           VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           NUXT_PUBLIC_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # Release tag stamped on portal Sentry events (TG-05).
+          VITE_SENTRY_RELEASE: ${{ github.sha }}
+          NUXT_PUBLIC_SENTRY_RELEASE: ${{ github.sha }}
