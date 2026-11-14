@@ -97,6 +97,19 @@ export async function requireUser(request: Request, env: Env): Promise<AuthUser>
 }
 
 /**
+ * TG-03: best-effort viewer for analytics attribution. Never throws: null
+ * when anonymous or invalid. No extra DB hit without a token (getAuthUser
+ * short-circuits), so public reads stay cheap.
+ */
+export async function optionalUser(request: Request, env: Env): Promise<AuthUser | null> {
+  try {
+    return await getAuthUser(request, env);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Admin check re-reads the role from the database so a demoted admin's
  * still-valid JWT stops working immediately.
  */

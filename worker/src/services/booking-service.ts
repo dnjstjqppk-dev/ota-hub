@@ -1763,6 +1763,8 @@ export async function runMaintenance(env: Env): Promise<Record<string, number>> 
     env.DB.prepare("DELETE FROM txn_guards WHERE id < (SELECT COALESCE(MAX(id), 0) - 5000 FROM txn_guards)"),
     env.DB.prepare("DELETE FROM password_reset_tokens WHERE used = 1 OR expires_at < ?").bind(epoch),
     env.DB.prepare("DELETE FROM idempotency_keys WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')"),
+    // TG-03: analytics retention — 90 days of funnel events, then purged.
+    env.DB.prepare("DELETE FROM analytics_events WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-90 days')"),
     env.DB.prepare("DELETE FROM revoked_tokens WHERE expires_at < ?").bind(epoch),
     env.DB.prepare("DELETE FROM quotes WHERE status = 'EXPIRED' AND created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')"),
     env.DB.prepare("DELETE FROM inventory_holds WHERE status = 'RELEASED' AND created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')"),

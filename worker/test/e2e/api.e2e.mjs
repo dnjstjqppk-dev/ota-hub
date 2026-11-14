@@ -3827,3 +3827,23 @@ test("#153: moments carry uploaded photos end to end", async () => {
   const unliked = await api("DELETE", `/api/v1/moments/${id}/like`, { token: U.token });
   assert.equal(unliked.data.likesCount, 0);
 });
+
+test("tg03: search, view, and book events land in analytics_events", async () => {
+  resetLimiter("register", "quotes", "bookings");
+  const U = await register("tg03");
+  const s = await api("GET", "/api/v1/hotels?city=Seoul", { token: U.token });
+  assert.equal(s.status, 200, JSON.stringify(s.data));
+  const target = s.data.data[0].id;
+  const v = await api("GET", `/api/v1/hotels/${target}`, { token: U.token });
+  assert.equal(v.status, 200, JSON.stringify(v.data));
+  const q = (await quote(U.token)).data.quote;
+  const b = await book(U.token, q, {});
+  assert.equal(b.status, 201, JSON.stringify(b.data));
+  const rows = sql(`SELECT event_type, domain, entity_id, user_id, meta_json FROM analytics_events WHERE user_id = '${U.id}' ORDER BY id`);
+  const types = rows.map((r) => r.event_type);
+  assert.ok(types.includes("search") && types.includes("view") && types.includes("book"), JSON.stringify(rows));
+  assert.equal(rows.find((r) => r.event_type === "view").entity_id, target);
+  assert.equal(rows.find((r) => r.event_type === "book").entity_id, b.data.booking.id);
+  assert.ok(rows.every((r) => r.domain === "HOTEL"), JSON.stringify(rows));
+  assert.ok("resultCount" in JSON.parse(rows.find((r) => r.event_type === "search").meta_json));
+});

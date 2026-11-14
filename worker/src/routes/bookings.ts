@@ -2,6 +2,7 @@ import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { idempotencyPrecheck, idempotencyStore } from "../lib/idempotency.ts";
 import { rateLimit, requireUser } from "../lib/auth.ts";
+import { trackEvent } from "../lib/analytics.ts";
 import { getPaymentProvider } from "../payments/provider.ts";
 import * as S from "../services/booking-service.ts";
 
@@ -26,6 +27,8 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
     const user = await requireUser(request, env);
     await rateLimit(request, env, "bookings", 120, 60);
     const r = await S.createBooking(env, user, await readJson(request), request.headers.get("Idempotency-Key"), request);
+    // TG-03: funnel "book" fires on fresh bookings only — replays already counted.
+    if (!r.replayed) await trackEvent(env, { type: "book", domain: r.booking.domain, entityId: r.booking.id, userId: user.id });
     return json({ success: true, replayed: r.replayed, booking: r.booking }, r.replayed ? 200 : 201);
   }
 
