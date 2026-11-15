@@ -7,7 +7,7 @@
 import pg from 'pg';
 import { webcrypto as crypto } from 'node:crypto';
 
-const pool = new pg.Pool({ connectionString: process.env.E2E_PG_URL || 'postgres://postgres:LocalPg2026%21x@127.0.0.1:55433/ota_pg' });
+const pool = new pg.Pool({ connectionString: process.env.E2E_PG_URL || 'postgres://postgres:LocalPg2026%21x@127.0.0.1:15433/ota_pg' });
 
 async function pbkdf2Hash(password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));

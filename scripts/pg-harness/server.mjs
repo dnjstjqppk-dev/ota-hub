@@ -30,7 +30,7 @@ mkdirSync(UPLOADS_ROOT, { recursive: true });
 // Single connection: advisory inventory locks are session-level, so the proof
 // pool must not multiplex. statement_timeout fails loud instead of hanging.
 const pool = new pg.Pool({
-  connectionString: process.env.E2E_PG_URL || 'postgres://postgres:LocalPg2026%21x@127.0.0.1:55433/ota_pg',
+  connectionString: process.env.E2E_PG_URL || 'postgres://postgres:LocalPg2026%21x@127.0.0.1:15433/ota_pg',
   max: 1,
   statement_timeout: 15000,
 });

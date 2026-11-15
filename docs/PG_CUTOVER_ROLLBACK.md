@@ -6,7 +6,7 @@
 ## 1. 로컬 증명 구성 (재현 절차)
 
 ```powershell
-docker run -d --name gft-pg -e POSTGRES_PASSWORD=LocalPg2026!x -e POSTGRES_DB=ota_pg -p 127.0.0.1:55433:5432 postgres:16-alpine
+docker run -d --name gft-pg -e POSTGRES_PASSWORD=LocalPg2026!x -e POSTGRES_DB=ota_pg -p 127.0.0.1:15433:5432 postgres:16-alpine
 node scripts/pg-harness/dump-schema.mjs        # D1 sqlite_master 덤프 (바이트 보존)
 node scripts/pg-harness/port-schema.mjs        # -> scripts/pg-harness/schema.sql
 node scripts/pg-harness/extract-dml.mjs        # -> scripts/pg-harness/seed-data.sql
