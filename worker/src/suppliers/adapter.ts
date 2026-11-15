@@ -29,7 +29,7 @@ export type CancelResult =
 
 export interface Simulation {
   supplier?: "confirm" | "fail" | "timeout" | "pending";
-  ticketing?: "ok" | "fail";
+  ticketing?: "ok" | "fail" | "timeout";
   cancel?: "ok" | "reject" | "timeout";
 }
 
@@ -74,6 +74,7 @@ export const simulatorAdapter: SupplierAdapter = {
   },
   async ticket(c) {
     if (c.simulation.ticketing === "fail") return { outcome: "FAILED", code: "TICKETING_REJECTED", message: "발권 거절 (시뮬레이터)" };
+    if (c.simulation.ticketing === "timeout") return { outcome: "UNKNOWN", message: "발권 응답 시간 초과 (시뮬레이터)" };
     return { outcome: "ISSUED", ticketNumbers: Array.from({ length: c.travelerCount }, (_, i) => `999-${String(Date.now()).slice(-7)}${i}`) };
   },
   async cancel(c) {

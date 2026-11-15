@@ -1,6 +1,6 @@
 -- TG-09 ported schema: D1 sqlite_master -> Postgres. Regenerate with
 --   node scripts/pg-harness/port-schema.mjs C:\tmp\pg-schema-dump.json
--- Tables: 70, indexes: 90. Do not hand-edit.
+-- Tables: 71, indexes: 92. Do not hand-edit.
 
 -- scripts/pg-harness/compat.sql
 -- SQLite-compat helpers for the TG-09 Postgres proof. The D1 shim keeps
@@ -421,6 +421,23 @@ CREATE TABLE inventory_holds (
     status TEXT NOT NULL CHECK (status IN ('HELD', 'COMMITTED', 'RELEASED')),
     expires_at TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT gft_now()
+);
+
+-- table job_queue
+CREATE TABLE job_queue (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  booking_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 5,
+  available_at TEXT NOT NULL,
+  claimed_at TEXT,
+  claimed_by TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL DEFAULT gft_now(),
+  updated_at TEXT NOT NULL DEFAULT gft_now()
 );
 
 -- table ledger_entries
@@ -1198,6 +1215,12 @@ CREATE INDEX idx_inventory_holds_booking ON inventory_holds (booking_id);
 
 -- index idx_inventory_holds_lookup
 CREATE INDEX idx_inventory_holds_lookup ON inventory_holds (item_id, unit_key, service_date, status);
+
+-- index idx_job_queue_booking
+CREATE INDEX idx_job_queue_booking ON job_queue (booking_id);
+
+-- index idx_job_queue_due
+CREATE INDEX idx_job_queue_due ON job_queue (status, available_at);
 
 -- index idx_ledger_booking
 CREATE INDEX idx_ledger_booking ON ledger_entries (booking_id);

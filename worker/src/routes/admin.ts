@@ -9,6 +9,7 @@ import { likeEscape } from "../services/suggest-service.ts";
 import { verifyBusinessNumber } from "../services/business-verify.ts";
 import { pageMeta, pageParams } from "../lib/pagination.ts";
 import { idempotencyPrecheck, idempotencyStore } from "../lib/idempotency.ts";
+import { listJobs, type JobStatus } from "../services/queue-service.ts";
 
 const PARTNER_STATUSES = ["ACTIVE", "REJECTED", "SUSPENDED", "PENDING_APPROVAL"] as const;
 const USER_ROLES = ["USER", "ADMIN"] as const;
@@ -268,6 +269,16 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const stats = await S.runMaintenanceWithHeartbeat(env);
     await audit(env, admin.id, "RUN_MAINTENANCE", "SYSTEM", "maintenance", stats);
     return json({ success: true, stats });
+  }
+
+  // TG-11: saga queue visibility — depth and dead letters without DB access.
+  // No customer PII in projection (mirrors the #74 refunds queue).
+  if (path === "/api/v1/admin/jobs" && method === "GET") {
+    const status = (url.searchParams.get("status") || "").toUpperCase();
+    if (status && !["PENDING", "CLAIMED", "DONE", "DEAD"].includes(status)) {
+      throw new HttpError(400, "INVALID_JOB_STATUS", "status는 PENDING | CLAIMED | DONE | DEAD 중 하나여야 합니다.");
+    }
+    return json({ success: true, jobs: await listJobs(env, (status || null) as JobStatus | null) });
   }
 
   if (path === "/api/v1/admin/reconciliation" && method === "GET") {

@@ -3904,3 +3904,66 @@ test("tg03: search, view, and book events land in analytics_events", async () =>
   assert.ok(rows.every((r) => r.domain === "HOTEL"), JSON.stringify(rows));
   assert.ok("resultCount" in JSON.parse(rows.find((r) => r.event_type === "search").meta_json));
 });
+
+
+test("tg11: supplier timeout retries from the queue and fulfils on recovery", async () => {
+  resetLimiter("register", "quotes", "bookings");
+  const { p } = await fullHotelBooking(A.token, { supplier: "timeout" });
+  const id = p.data.booking.id;
+  assert.equal(p.data.booking.status, "MANUAL_REVIEW_REQUIRED");
+  assert.equal(sql(`SELECT COUNT(*) AS c FROM job_queue WHERE booking_id = '${id}' AND type = 'FULFIL_BOOK' AND status = 'PENDING'`)[0].c, 1);
+  // The supplier recovers before the next pump: flip the stored simulation.
+  const det = JSON.parse(sql(`SELECT details_json AS d FROM bookings WHERE id = '${id}'`)[0].d);
+  det.simulation.supplier = "confirm";
+  sql(`UPDATE bookings SET details_json = '${JSON.stringify(det).replace(/'/g, "''")}' WHERE id = '${id}'`);
+  const m = await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN });
+  assert.ok(m.data.stats.jobsDone >= 1, JSON.stringify(m.data.stats));
+  const after = (await api("GET", `/api/v1/bookings/${id}`, { token: A.token })).data.booking;
+  assert.equal(after.status, "VOUCHER_ISSUED");
+  assert.ok(after.items[0].voucher_code);
+  assert.equal(sql(`SELECT status AS s FROM job_queue WHERE booking_id = '${id}'`)[0].s, "DONE");
+});
+
+test("tg11: retries exhaust into a single full refund with a dead letter", async () => {
+  resetLimiter("register", "quotes", "bookings");
+  const { p } = await fullHotelBooking(A.token, { supplier: "timeout" });
+  const id = p.data.booking.id;
+  const paid = p.data.booking.paidMinor;
+  for (let i = 0; i < 5; i++) {
+    sql(`UPDATE job_queue SET available_at = '2000-01-01T00:00:00.000Z' WHERE booking_id = '${id}' AND status = 'PENDING'`);
+    await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN });
+  }
+  await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN });
+  const after = (await api("GET", `/api/v1/bookings/${id}`, { token: A.token })).data.booking;
+  assert.equal(after.status, "REFUNDED");
+  assert.equal(after.refundedMinor, paid);
+  assert.equal(sql(`SELECT COUNT(*) AS c FROM refunds WHERE booking_id = '${id}' AND status = 'SUCCEEDED'`)[0].c, 1);
+  assert.equal(sql(`SELECT status AS s FROM job_queue WHERE booking_id = '${id}'`)[0].s, "DEAD");
+  const jobId = sql(`SELECT id FROM job_queue WHERE booking_id = '${id}'`)[0].id;
+  assert.equal(sql(`SELECT COUNT(*) AS c FROM admin_audit_logs WHERE action = 'JOB_DEAD_LETTER' AND target_id = '${jobId}'`)[0].c, 1);
+  const jobs = (await api("GET", "/api/v1/admin/jobs?status=DEAD", { token: ADMIN })).data.jobs;
+  assert.ok(jobs.some((j) => j.booking_id === id && j.type === "FULFIL_BOOK"), JSON.stringify(jobs.length));
+  assert.equal((await api("GET", "/api/v1/admin/jobs?status=NOPE", { token: ADMIN })).status, 400);
+  // A further pump never compensates twice.
+  sql(`UPDATE job_queue SET available_at = '2000-01-01T00:00:00.000Z' WHERE booking_id = '${id}'`);
+  await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN });
+  assert.equal(sql(`SELECT COUNT(*) AS c FROM refunds WHERE booking_id = '${id}'`)[0].c, 1);
+});
+
+test("tg11: ticketing timeout retries from the queue and tickets on recovery", async () => {
+  resetLimiter("register", "quotes", "bookings");
+  const fq = (await api("POST", "/api/v1/quotes", { token: A.token, body: { domain: "FLIGHT", itemId: "flt_ke703", startDate: fday(70), travelers: { adults: 1 } } })).data.quote;
+  const b = (await book(A.token, fq, { simulation: { ticketing: "timeout" }, travelers: [{ type: "ADULT", lastNameEn: "HAN", firstNameEn: "GIL", birthDate: "1992-05-05", passportNumber: "M9990001", passportExpiry: day(900) }] })).data.booking;
+  const p = await pay(A.token, b);
+  assert.equal(p.data.booking.status, "MANUAL_REVIEW_REQUIRED");
+  assert.equal(p.data.booking.statusReason, "TICKETING_FAILED_PNR_NOT_VOIDED");
+  assert.equal(sql(`SELECT COUNT(*) AS c FROM job_queue WHERE booking_id = '${b.id}' AND type = 'TICKET_ISSUE' AND status = 'PENDING'`)[0].c, 1);
+  const det = JSON.parse(sql(`SELECT details_json AS d FROM bookings WHERE id = '${b.id}'`)[0].d);
+  det.simulation.ticketing = "ok";
+  sql(`UPDATE bookings SET details_json = '${JSON.stringify(det).replace(/'/g, "''")}' WHERE id = '${b.id}'`);
+  await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN });
+  const after = (await api("GET", `/api/v1/bookings/${b.id}`, { token: A.token })).data.booking;
+  assert.equal(after.status, "TICKETED");
+  assert.ok(after.items[0].ticket_numbers.length >= 1);
+  assert.equal(sql(`SELECT status AS s FROM job_queue WHERE booking_id = '${b.id}'`)[0].s, "DONE");
+});

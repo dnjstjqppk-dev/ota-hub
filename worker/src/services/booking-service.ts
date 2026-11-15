@@ -23,6 +23,7 @@ import { getPaymentProvider, requirePaymentProvider } from "../payments/provider
 import { planOrderSettlement } from "./marketplace-service.ts";
 import { flushOutbox, outboxInsert } from "./email-service.ts";
 import { flushPartnerWebhooks, hookEnqueueStmts, loadPartnerHook } from "./webhook-service.ts";
+import { findLiveJob, jobEnqueueStmt, pumpJobs, type JobHandler, type JobRow, type JobRunResult } from "./queue-service.ts";
 
 /** Snapshot stored with a partner order-event delivery (read at dispatch time). */
 function hookSnapshot(b: BookingRow, status: string, extra: Record<string, unknown> = {}) {
@@ -1073,6 +1074,82 @@ async function logSupplierCall(env: Env, supplierId: string, bookingId: string, 
     .bind(newId("sac"), supplierId, bookingId, op, outcome, ms, summary.slice(0, 500)).run();
 }
 
+/**
+ * TG-11: shared supplier-failure compensation. The sync FAILED path and
+ * queue exhaustion converge here so the two can never diverge.
+ */
+async function compensateSupplierFailure(env: Env, b: BookingRow, reason: string, supplierStatus: string, refundNote: string): Promise<BookingRow> {
+  const db = env.DB;
+  await runBatch(db, [
+    ...transition(db, b, "REFUND_PENDING", { type: "SUPPLIER", id: b.supplier_id }, reason, { supplier_status: supplierStatus }),
+    db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+    ...(await releaseSlotStmts(db, b.id)),
+    outboxInsert(db, "EMAIL", b.customer_email, "SUPPLIER_REJECTED", { bookingId: b.id, bookingNumber: b.booking_number }),
+  ]);
+  const cur = await mustGet(env, b.id);
+  await startRefund(env, cur, cur.paid_minor, refundNote);
+  return mustGet(env, b.id);
+}
+
+/** TG-11: shared supplier-confirm application (sync path and queue retry). */
+async function applySupplierConfirmed(env: Env, b: BookingRow, reference: string, pnr: string | null): Promise<void> {
+  await runBatch(env.DB, [
+    ...transition(env.DB, b, "SUPPLIER_CONFIRMED", { type: "SUPPLIER", id: b.supplier_id }, null, { supplier_status: "CONFIRMED", supplier_reference: reference }),
+    env.DB.prepare("UPDATE booking_items SET supplier_status = 'CONFIRMED', supplier_reference = ?, pnr = ?, updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(reference, pnr, b.id),
+  ]);
+}
+
+/** TG-11: shared ticket issuance application (sync path and queue retry). */
+async function applyTicketIssued(env: Env, b: BookingRow, ticketNumbers: string[]): Promise<void> {
+  const db = env.DB;
+  const supplier = await loadSupplier(env, b.supplier_id);
+  const split = L.recognitionSplit(b.paid_minor, Math.round(Number(b.discount_amount_krw || 0)), supplier?.settlement_rate_bps ?? 9000);
+  const grossMinor = Number(b.paid_minor || 0) + Math.round(Number(b.discount_amount_krw || 0));
+  // Planned first (reads only), written in the same batch: a ticketed
+  // booking can never lack its settlement row (2026-11-09 audit [M]).
+  const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, grossMinor);
+  await runBatch(db, [
+    ...transition(db, b, "TICKETED", { type: "SUPPLIER", id: b.supplier_id }, null, { supplier_status: "TICKETED" }),
+    db.prepare("UPDATE booking_items SET ticket_numbers_json = ?, supplier_status = 'TICKETED', updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(JSON.stringify(ticketNumbers), b.id),
+    ...journalStmts(db, L.fulfilmentRecognized(b.id, b.paid_minor, split), b),
+    db.prepare("INSERT INTO notification_outbox (id, channel, recipient, template, payload_json, status) VALUES (?, 'EMAIL', ?, ?, ?, 'PENDING')")
+      .bind(newId("ntf"), b.customer_email, "FLIGHT_TICKETED", JSON.stringify({ bookingId: b.id, bookingNumber: b.booking_number })),
+    settlement.stmt(db),
+  ]);
+}
+
+/**
+ * TG-11: ticket-failure refund branch (PNR voided at the supplier, then
+ * refunded). Returns true when the branch ran; false leaves the booking
+ * for retry/operator when the void itself is unconfirmed.
+ */
+async function refundAfterTicketFailure(env: Env, b: BookingRow, code: string): Promise<boolean> {
+  const db = env.DB;
+  const supplier = await loadSupplier(env, b.supplier_id);
+  const cx = await adapterFor(supplier?.adapter || "none").cancel(supplierCtx(b, 1));
+  if (cx.outcome !== "CANCELLED") return false;
+  await runBatch(db, [
+    ...transition(db, b, "REFUND_PENDING", { type: "SUPPLIER", id: b.supplier_id }, `TICKETING_FAILED:${code}`, { supplier_status: "CANCELLED" }),
+    db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
+    ...(await releaseSlotStmts(db, b.id)),
+  ]);
+  const cur = await mustGet(env, b.id);
+  await startRefund(env, cur, cur.paid_minor, "발권 실패로 인한 전액 환불");
+  return true;
+}
+
+/** TG-11: enqueue-once fulfil retry for a timeout booking (sync return unchanged). */
+async function fulfilBookEnqueue(db: D1Database, bookingId: string): Promise<Stmt[]> {
+  if (await findLiveJob(db, "FULFIL_BOOK", bookingId)) return [];
+  return [jobEnqueueStmt(db, "FULFIL_BOOK", bookingId, nowIso())];
+}
+
+/** TG-11: enqueue-once ticket retry for an unconfirmed issuance. */
+async function ticketIssueEnqueue(db: D1Database, bookingId: string): Promise<Stmt[]> {
+  if (await findLiveJob(db, "TICKET_ISSUE", bookingId)) return [];
+  return [jobEnqueueStmt(db, "TICKET_ISSUE", bookingId, nowIso())];
+}
+
 export async function fulfil(env: Env, b: BookingRow): Promise<BookingRow> {
   const db = env.DB;
   const supplier = await loadSupplier(env, b.supplier_id);
@@ -1084,10 +1161,7 @@ export async function fulfil(env: Env, b: BookingRow): Promise<BookingRow> {
   await logSupplierCall(env, b.supplier_id, b.id, "BOOK", r.outcome, Date.now() - t0, JSON.stringify(r));
 
   if (r.outcome === "CONFIRMED") {
-    await runBatch(db, [
-      ...transition(db, cur, "SUPPLIER_CONFIRMED", { type: "SUPPLIER", id: b.supplier_id }, null, { supplier_status: "CONFIRMED", supplier_reference: r.reference }),
-      db.prepare("UPDATE booking_items SET supplier_status = 'CONFIRMED', supplier_reference = ?, pnr = ?, updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(r.reference, r.pnr, b.id),
-    ]);
+    await applySupplierConfirmed(env, cur, r.reference, r.pnr);
     return issue(env, await mustGet(env, b.id));
   }
   if (r.outcome === "PENDING") {
@@ -1108,17 +1182,9 @@ export async function fulfil(env: Env, b: BookingRow): Promise<BookingRow> {
     return mustGet(env, b.id); // awaits operator/partner confirmation
   }
   if (r.outcome === "FAILED") {
-    await runBatch(db, [
-      ...transition(db, cur, "REFUND_PENDING", { type: "SUPPLIER", id: b.supplier_id }, `SUPPLIER_FAILED:${r.code}`, { supplier_status: "FAILED" }),
-      db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
-      ...(await releaseSlotStmts(db, b.id)),
-      outboxInsert(db, "EMAIL", b.customer_email, "SUPPLIER_REJECTED", { bookingId: b.id, bookingNumber: b.booking_number }),
-    ]);
-    cur = await mustGet(env, b.id);
-    await startRefund(env, cur, cur.paid_minor, `공급사 예약 실패 전액 환불 (${r.code})`);
-    return mustGet(env, b.id);
+    return compensateSupplierFailure(env, cur, `SUPPLIER_FAILED:${r.code}`, "FAILED", `공급사 예약 실패 전액 환불 (${r.code})`);
   }
-  await runBatch(db, transition(db, cur, "MANUAL_REVIEW_REQUIRED", { type: "SUPPLIER", id: b.supplier_id }, "SUPPLIER_RESPONSE_UNKNOWN", { supplier_status: "UNKNOWN" }));
+  await runBatch(db, [...transition(db, cur, "MANUAL_REVIEW_REQUIRED", { type: "SUPPLIER", id: b.supplier_id }, "SUPPLIER_RESPONSE_UNKNOWN", { supplier_status: "UNKNOWN" }), ...await fulfilBookEnqueue(db, b.id)]);
   return mustGet(env, b.id);
 }
 
@@ -1149,28 +1215,15 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
     const r = await adapter.ticket(supplierCtx(cur, await travelerCount(env, b.id)));
     await logSupplierCall(env, b.supplier_id, b.id, "TICKET", r.outcome, Date.now() - t0, JSON.stringify(r));
     if (r.outcome === "ISSUED") {
-      // Planned first (reads only), written in the same batch: a ticketed
-      // booking can never lack its settlement row (2026-11-09 audit [M]).
-      const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, grossMinor);
-      await runBatch(db, [
-        ...transition(db, cur, "TICKETED", { type: "SUPPLIER", id: b.supplier_id }, null, { supplier_status: "TICKETED" }),
-        db.prepare("UPDATE booking_items SET ticket_numbers_json = ?, supplier_status = 'TICKETED', updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(JSON.stringify(r.ticketNumbers), b.id),
-        ...journalStmts(db, L.fulfilmentRecognized(b.id, b.paid_minor, split), cur),
-        notify("FLIGHT_TICKETED"),
-        settlement.stmt(db),
-      ]);
+      await applyTicketIssued(env, cur, r.ticketNumbers);
       return mustGet(env, b.id);
     }
     // Ticketing failed after PNR: void the PNR at the supplier, then refund.
-    const cx = await adapter.cancel(supplierCtx(cur, 1));
-    if (r.outcome === "FAILED" && cx.outcome === "CANCELLED") {
-      await runBatch(db, [
-        ...transition(db, cur, "REFUND_PENDING", { type: "SUPPLIER", id: b.supplier_id }, `TICKETING_FAILED:${r.code}`, { supplier_status: "CANCELLED" }),
-        db.prepare("UPDATE inventory_holds SET status = 'RELEASED' WHERE booking_id = ?").bind(b.id),
-        ...(await releaseSlotStmts(db, b.id)),
-      ]);
-      cur = await mustGet(env, b.id);
-      await startRefund(env, cur, cur.paid_minor, "발권 실패로 인한 전액 환불");
+    if (r.outcome === "FAILED" && await refundAfterTicketFailure(env, cur, r.code)) {
+      return mustGet(env, b.id);
+    }
+    if (r.outcome === "UNKNOWN") {
+      await runBatch(db, [...transition(db, cur, "MANUAL_REVIEW_REQUIRED", { type: "SYSTEM", id: null }, "TICKETING_FAILED_PNR_NOT_VOIDED"), ...await ticketIssueEnqueue(db, b.id)]);
       return mustGet(env, b.id);
     }
     await runBatch(db, transition(db, cur, "MANUAL_REVIEW_REQUIRED", { type: "SYSTEM", id: null }, "TICKETING_FAILED_PNR_NOT_VOIDED"));
@@ -1751,8 +1804,90 @@ export async function sweepSupplierTimeouts(env: Env): Promise<number> {
   return done;
 }
 
+// ---------------------------------------------------------------------------
+// TG-11: queue saga handlers
+// ---------------------------------------------------------------------------
+/** Retryable timeout shape: any operator decision changes the reason, ending retries. */
+async function loadRetryableBooking(env: Env, bookingId: string, reason: string): Promise<BookingRow | null> {
+  const b = await getBooking(env, bookingId);
+  if (!b || b.status !== "MANUAL_REVIEW_REQUIRED" || b.status_reason !== reason) return null;
+  return b;
+}
+
+async function runFulfilBookJob(env: Env, job: JobRow): Promise<JobRunResult> {
+  const b = await loadRetryableBooking(env, job.booking_id, "SUPPLIER_RESPONSE_UNKNOWN");
+  if (!b) return { action: "done" }; // decided, compensated, or gone meanwhile
+  const supplier = await loadSupplier(env, b.supplier_id);
+  const adapter = adapterFor(supplier?.adapter || "none");
+  const t0 = Date.now();
+  const r = await adapter.book(supplierCtx(b, await travelerCount(env, b.id)));
+  await logSupplierCall(env, b.supplier_id, b.id, "BOOK", r.outcome, Date.now() - t0, JSON.stringify(r));
+  if (r.outcome === "CONFIRMED") {
+    await applySupplierConfirmed(env, await mustGet(env, b.id), r.reference, r.pnr);
+    await issue(env, await mustGet(env, b.id));
+    return { action: "done" };
+  }
+  if (r.outcome === "PENDING") {
+    // The supplier will confirm later; the operator owns the booking from
+    // here (same manual-review UX as a sync timeout), so the job is done.
+    if (r.reference) {
+      try {
+        const fresh = await mustGet(env, b.id);
+        await runBatch(env.DB, [
+          guard(env.DB, fresh, "job-fulfil-pending-ref"),
+          env.DB.prepare("UPDATE bookings SET supplier_reference = ? WHERE id = ?").bind(r.reference, b.id),
+        ]);
+      } catch { /* raced an operator decision: their write wins */ }
+    }
+    return { action: "done" };
+  }
+  if (r.outcome === "FAILED") {
+    await compensateSupplierFailure(env, await mustGet(env, b.id), `SUPPLIER_FAILED:${r.code}`, "FAILED", `공급사 예약 실패 전액 환불 (${r.code})`);
+    return { action: "done" };
+  }
+  return { action: "retry", error: r.message.slice(0, 300) };
+}
+
+async function exhaustFulfilBookJob(env: Env, job: JobRow): Promise<void> {
+  const b = await loadRetryableBooking(env, job.booking_id, "SUPPLIER_RESPONSE_UNKNOWN");
+  if (!b) return;
+  await compensateSupplierFailure(env, await mustGet(env, b.id), "SUPPLIER_CONFIRM_TIMEOUT", "TIMEOUT", "공급사 확정 기한 초과 전액 환불 (재시도 소진)");
+}
+
+async function runTicketIssueJob(env: Env, job: JobRow): Promise<JobRunResult> {
+  const b = await loadRetryableBooking(env, job.booking_id, "TICKETING_FAILED_PNR_NOT_VOIDED");
+  if (!b) return { action: "done" };
+  const supplier = await loadSupplier(env, b.supplier_id);
+  const adapter = adapterFor(supplier?.adapter || "none");
+  const t0 = Date.now();
+  const r = await adapter.ticket(supplierCtx(b, await travelerCount(env, b.id)));
+  await logSupplierCall(env, b.supplier_id, b.id, "TICKET", r.outcome, Date.now() - t0, JSON.stringify(r));
+  if (r.outcome === "ISSUED") {
+    await applyTicketIssued(env, await mustGet(env, b.id), r.ticketNumbers);
+    return { action: "done" };
+  }
+  if (r.outcome === "FAILED") {
+    if (await refundAfterTicketFailure(env, await mustGet(env, b.id), r.code)) return { action: "done" };
+    return { action: "retry", error: `TICKET_FAILED_VOID_UNCONFIRMED:${r.code}` };
+  }
+  return { action: "retry", error: r.message.slice(0, 300) };
+}
+
+async function exhaustTicketIssueJob(env: Env, job: JobRow): Promise<void> {
+  const b = await loadRetryableBooking(env, job.booking_id, "TICKETING_FAILED_PNR_NOT_VOIDED");
+  if (!b) return;
+  // Best effort: a voidable PNR still refunds; otherwise the booking stays
+  // in manual review with a loud dead-letter for the operator.
+  await refundAfterTicketFailure(env, await mustGet(env, b.id), "RETRIES_EXHAUSTED");
+}
+
+const JOB_HANDLERS: Record<string, JobHandler> = {
+  FULFIL_BOOK: { run: runFulfilBookJob, exhausted: exhaustFulfilBookJob },
+  TICKET_ISSUE: { run: runTicketIssueJob, exhausted: exhaustTicketIssueJob },
+};
+
 export async function runMaintenance(env: Env): Promise<Record<string, number>> {
-  const stats = { expired: 0, paymentsReconciled: 0, refundsRetried: 0, quotesExpired: 0, emailsSent: 0, emailsPending: 0, webhooksSent: 0, webhooksPending: 0, rowsPruned: 0, alertsFired: 0, completed: 0, supplierTimeouts: 0 };
+  const stats = { expired: 0, paymentsReconciled: 0, refundsRetried: 0, quotesExpired: 0, emailsSent: 0, emailsPending: 0, webhooksSent: 0, webhooksPending: 0, rowsPruned: 0, alertsFired: 0, completed: 0, supplierTimeouts: 0, jobsDone: 0, jobsRequeued: 0, jobsDead: 0 };
   const now = nowIso();
   const stale = await env.DB.prepare("SELECT * FROM bookings WHERE status = 'AWAITING_PAYMENT' AND inventory_lock_expires_at <= ? LIMIT 100").bind(now).all<BookingRow>();
   for (const b of stale.results || []) {
@@ -1775,6 +1910,11 @@ export async function runMaintenance(env: Env): Promise<Record<string, number>> 
     await processRefund(env, r.id);
     stats.refundsRetried++;
   }
+  // TG-11: saga retries before the mail flush so job outcomes notify in the same pass.
+  const jobs = await pumpJobs(env, JOB_HANDLERS);
+  stats.jobsDone = jobs.done;
+  stats.jobsRequeued = jobs.requeued;
+  stats.jobsDead = jobs.dead;
   const mail = await flushOutbox(env);
   stats.emailsSent = mail.sent;
   stats.emailsPending = mail.pending;

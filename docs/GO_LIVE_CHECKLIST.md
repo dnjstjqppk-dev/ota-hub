@@ -98,6 +98,19 @@ npx wrangler d1 execute ota_production --remote --command "SELECT id, adapter, i
 > npx wrangler d1 execute ota_production --remote --command "SELECT COUNT(*) AS null_minor FROM bookings WHERE total_minor IS NULL;"
 > # 기대: 0
 > ```
+>
+> 0045(분석 이벤트) 주의: `analytics_events` 테이블이 생긴다. 7개 도메인
+> 목록/상세·예약생성과 함께 적재되며 90일 보존 후 유지보수가 삭제한다.
+> 기존 행 영향 없음. 운영 작업 없음.
+>
+> 0046(잡 큐) 주의: `job_queue` 테이블+인덱스 2종이 생긴다. 공급사 타임아웃
+> 예약이 크론 펌프로 재시도·보상되기 시작한다(최대 5회·백오프, 소진 시
+> 전액 자동환불 + 데드레터 감사). 기존 행 영향 없음. 적용 후 확인:
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT name FROM sqlite_master WHERE name = 'job_queue') AS q, (SELECT COUNT(*) FROM job_queue WHERE status = 'DEAD') AS dead;"
+> # 기대: q job_queue, dead 0 (누적 시 어드민 /admin/jobs로 확인)
+> ```
 
 ## 1. 판매주체 ACTIVE (사업자 정보 필요)
 
