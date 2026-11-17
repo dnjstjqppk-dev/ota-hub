@@ -156,9 +156,12 @@ function detailLink(h: any) {
 // Filters change the URL → the URL drives loading. Search-form fields only follow the URL when it changes.
 // Ignore the route change that navigates away from this page (it is still mounted during the transition).
 watch(() => route.fullPath, () => { if (route.path !== '/hotels/list') return; syncDraft(); load() })
+// TG-15: SSR the first paint (ISR caches it); the watcher re-loads on client query changes.
+// A server-side failure must 503 (uncached), never bake an error shell into the edge cache.
+await useAsyncData('tg15-hotels-list', () => load())
+if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => {
   const d = new Date(); today.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-  load()
 })
 onBeforeUnmount(() => ctrl?.abort())
 

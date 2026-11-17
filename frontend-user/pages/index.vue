@@ -127,6 +127,9 @@ const PROMISES = [
       </ul>
     </nav>
 
+    <!-- CR-05 operator-managed banners and curated picks (hidden when none are live) -->
+    <HomeMarketing />
+
     <!-- Active promotion (only when a real, unexpired one exists) -->
     <section v-if="promo" class="mx-auto mt-10 max-w-7xl px-4 lg:px-6">
       <div class="flex flex-col items-start gap-4 rounded-card bg-midnight-900 px-6 py-6 text-white sm:flex-row sm:items-center sm:justify-between sm:px-8">

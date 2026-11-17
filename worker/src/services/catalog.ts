@@ -2,11 +2,12 @@ import type { Env } from "../env.ts";
 import { flag } from "../env.ts";
 import type { CatalogProduct, Domain, StructuredPolicy } from "../domain/pricing.ts";
 import { HttpError } from "../lib/http.ts";
+import { supplierApiConfigured } from "../suppliers/live-adapter.ts";
 
 export interface SupplierRow {
   id: string;
   name: string;
-  adapter: "none" | "direct_contract" | "simulator" | "api";
+  adapter: "none" | "direct_contract" | "simulator" | "api" | "ndc" | "gds";
   integration_status: string;
   transaction_model: "MERCHANT_OF_RECORD" | "AGENCY" | "AFFILIATE";
   settlement_rate_bps: number;
@@ -213,6 +214,15 @@ export function bookabilityOf(env: Env, supplier: SupplierRow | null): Bookabili
   }
   if (supplier.adapter === "direct_contract" && supplier.integration_status === "LIVE") {
     return { bookable: true, reason: null, mode: "LIVE", adapter: supplier.adapter, outlinkPartner: null };
+  }
+  // TG-18: ndc/gds sell only when LIVE *and* a usable API base/key pair is
+  // configured (same trust model as Toss live keys: the operator holding
+  // production credentials is the contract). Unconfigured pairs stay
+  // unsellable with an explicit reason instead of a silent gap.
+  if ((supplier.adapter === "ndc" || supplier.adapter === "gds") && supplier.integration_status === "LIVE") {
+    return supplierApiConfigured(env, supplier.adapter)
+      ? { bookable: true, reason: null, mode: "LIVE", adapter: supplier.adapter, outlinkPartner: null }
+      : { bookable: false, reason: "SUPPLIER_API_NOT_CONFIGURED", mode: null, adapter: supplier.adapter, outlinkPartner: null };
   }
   return { bookable: false, reason: "SUPPLIER_NOT_INTEGRATED", mode: null, adapter: supplier.adapter, outlinkPartner: null };
 }

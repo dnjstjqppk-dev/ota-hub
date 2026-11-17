@@ -14,11 +14,16 @@ export function validatePasswordPolicy(pw: string): void {
 }
 const validatePassword = validatePasswordPolicy;
 
-function publicUser(u: any) {
+export function publicUser(u: any) {
   return { id: u.id, email: u.email, fullName: u.full_name, phoneNumber: u.phone_number, role: u.role || "USER", tier: u.tier, tripCoins: u.trip_coins, avatarUrl: u.avatar_url };
 }
 
-async function issueSession(env: Env, u: any) {
+/** CR-06: social-only accounts store this marker instead of a hash; no password ever verifies against it. */
+export const SOCIAL_ONLY_HASH = "oauth:no-password";
+export const isSocialOnlyHash = (h: string | null | undefined) => typeof h === "string" && h.startsWith("oauth:");
+export const WITHDRAW_PHRASE = "탈퇴합니다";
+
+export async function issueSession(env: Env, u: any) {
   const token = await signJwt({ id: u.id, email: u.email, fullName: u.full_name, role: u.role || "USER", tier: u.tier }, jwtSecret(env));
   return { token, cookie: authCookie(token, env) };
 }
@@ -124,11 +129,15 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     const body = await readJson(request);
     const current = String(body.currentPassword || "");
     const next = String(body.newPassword || "");
-    if (!current) throw new HttpError(400, "PASSWORD_REQUIRED", "현재 비밀번호를 입력해주세요.");
     validatePassword(next);
     const full = await env.DB.prepare("SELECT password_hash FROM users WHERE id = ?").bind(a.id).first<{ password_hash: string }>();
-    if (!full || !(await verifyPasswordDetailed(current, full.password_hash)).ok) {
-      throw new HttpError(401, "INVALID_CREDENTIALS", "현재 비밀번호가 일치하지 않습니다.");
+    if (!full) throw new HttpError(401, "UNAUTHORIZED", "로그인이 필요합니다.");
+    // CR-06: a social-only account sets its first password without a "current" one.
+    if (!isSocialOnlyHash(full.password_hash)) {
+      if (!current) throw new HttpError(400, "PASSWORD_REQUIRED", "현재 비밀번호를 입력해주세요.");
+      if (!(await verifyPasswordDetailed(current, full.password_hash)).ok) {
+        throw new HttpError(401, "INVALID_CREDENTIALS", "현재 비밀번호가 일치하지 않습니다.");
+      }
     }
     await env.DB.prepare("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
       .bind(await hashPassword(next, resolvePbkdf2Iterations(env)), a.id).run();
@@ -142,9 +151,13 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     // #128: a PARTNER token must never read a user profile — the role gate
     // (DB-verified) rejects it before the users lookup runs.
     const a = await requireUser(request, env);
-    const u = await env.DB.prepare("SELECT id, email, full_name, phone_number, role, tier, trip_coins, avatar_url, marketing_consent FROM users WHERE id = ?").bind(a.id).first<any>();
+    const u = await env.DB.prepare("SELECT id, email, full_name, phone_number, role, tier, trip_coins, avatar_url, marketing_consent, password_hash FROM users WHERE id = ?").bind(a.id).first<any>();
     if (!u) throw new HttpError(401, "UNAUTHORIZED", "사용자 정보를 찾을 수 없습니다.");
-    const pu = { ...publicUser(u), marketingConsent: Number(u.marketing_consent) === 1 };
+    const ids = await env.DB.prepare("SELECT provider FROM user_identities WHERE user_id = ? ORDER BY created_at").bind(a.id).all<{ provider: string }>();
+    const pu = {
+      ...publicUser(u), marketingConsent: Number(u.marketing_consent) === 1,
+      hasPassword: !isSocialOnlyHash(u.password_hash), socialProviders: (ids.results || []).map((r) => r.provider),
+    };
     return json({ ...pu, user: pu });
   }
 
@@ -227,12 +240,19 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     await rateLimit(request, env, "withdraw", 5, 3600);
     const body = await readJson(request);
     const pw = String(body.password || "");
-    if (!pw) throw new HttpError(400, "PASSWORD_REQUIRED", "탈퇴하려면 비밀번호를 입력해주세요.");
     const full = await env.DB.prepare("SELECT password_hash, status FROM users WHERE id = ?").bind(user.id).first<{ password_hash: string; status: string }>();
     if (!full) throw new HttpError(404, "USER_NOT_FOUND", "회원을 찾을 수 없습니다.");
     if (full.status === "DELETED") throw new HttpError(409, "ALREADY_WITHDRAWN", "이미 탈퇴한 계정입니다.");
-    if (!(await verifyPasswordDetailed(pw, full.password_hash)).ok) {
-      throw new HttpError(401, "INVALID_CREDENTIALS", "비밀번호가 일치하지 않습니다.");
+    if (isSocialOnlyHash(full.password_hash)) {
+      // CR-06: a social-only account has no password to re-enter; it re-confirms with a typed phrase.
+      if (String(body.confirm || "").trim() !== WITHDRAW_PHRASE) {
+        throw new HttpError(400, "CONFIRM_REQUIRED", `탈퇴하려면 "${WITHDRAW_PHRASE}"를 정확히 입력해주세요.`);
+      }
+    } else {
+      if (!pw) throw new HttpError(400, "PASSWORD_REQUIRED", "탈퇴하려면 비밀번호를 입력해주세요.");
+      if (!(await verifyPasswordDetailed(pw, full.password_hash)).ok) {
+        throw new HttpError(401, "INVALID_CREDENTIALS", "비밀번호가 일치하지 않습니다.");
+      }
     }
     const blocker = await env.DB.prepare(
       "SELECT COUNT(*) AS c FROM bookings WHERE user_id = ? AND status NOT IN ('COMPLETED','CANCELLED','REFUNDED','FAILED','EXPIRED')"
@@ -253,6 +273,8 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
       env.DB.prepare("DELETE FROM wishlist WHERE user_id = ?").bind(user.id),
       env.DB.prepare("DELETE FROM price_alerts WHERE user_id = ?").bind(user.id),
       env.DB.prepare("DELETE FROM user_coupons WHERE user_id = ?").bind(user.id),
+      // CR-06: the provider account is released so it can sign up afresh later.
+      env.DB.prepare("DELETE FROM user_identities WHERE user_id = ?").bind(user.id),
       // E-Commerce Act Art. 6 retention isolation (contract/payment/dispute records kept 5y).
       env.DB.prepare("INSERT OR IGNORE INTO retained_records (id, user_id, record_type, record_id, retain_until, reason) SELECT 'rtn_' || id, ?, 'BOOKING', id, ?, 'E_COMMERCE_ART6_CONTRACT' FROM bookings WHERE user_id = ?").bind(user.id, retainUntil5y, user.id),
       env.DB.prepare("INSERT OR IGNORE INTO retained_records (id, user_id, record_type, record_id, retain_until, reason) SELECT 'rtn_' || id, ?, 'PAYMENT', id, ?, 'E_COMMERCE_ART6_PAYMENT' FROM payments WHERE booking_id IN (SELECT id FROM bookings WHERE user_id = ?)").bind(user.id, retainUntil5y, user.id),

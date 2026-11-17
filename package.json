@@ -9,13 +9,16 @@
   ],
   "scripts": {
     "build": "node scripts/build-all.js",
-    "build:user": "npm --prefix frontend-user run generate",
+    "build:user": "npm --prefix frontend-user run build",
     "build:admin": "npm --prefix frontend-admin run build",
     "check:branding": "node scripts/check-branding.js",
     "build:all": "node scripts/build-all.js",
     "deploy": "node scripts/build-and-deploy.js",
     "test": "node --test \"worker/test/unit/*.test.ts\" \"frontend-user/tests/*.test.mjs\" \"frontend-admin/tests/*.test.mjs\" \"frontend-partner/tests/*.test.mjs\" \"scripts/pg-harness/*.test.mjs\" \"scripts/redis-store/*.test.mjs\"",
     "test:e2e": "node --test worker/test/e2e/api.e2e.mjs",
+    "test:e2e:stripe": "node --test worker/test/e2e/stripe.e2e.mjs",
+    "test:e2e:suppliers": "node --test worker/test/e2e/suppliers.e2e.mjs",
+    "test:e2e:replica": "node --test worker/test/e2e/replica.e2e.mjs",
     "typecheck": "tsc -p worker/tsconfig.json"
   },
   "devDependencies": {

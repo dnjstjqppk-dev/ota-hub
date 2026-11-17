@@ -23,7 +23,7 @@
     { "binding": "UPLOADS", "bucket_name": "getfortrip-uploads" }
   ],
   "assets": {
-    "directory": "frontend-user/.output/public",
+    "directory": "hub-assets",
     "binding": "ASSETS",
     "not_found_handling": "none",
     "run_worker_first": true

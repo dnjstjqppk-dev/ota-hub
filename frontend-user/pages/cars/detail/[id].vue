@@ -6,7 +6,7 @@ import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
-const { item: c, state, reload } = useCatalogDetail('/cars', id, generatedFallback('CAR', id))
+const { item: c, state, reload } = await useCatalogDetail('/cars', id, generatedFallback('CAR', id))
 
 const TYPE_KO: Record<string, string> = { SEDAN: '세단', SUV: 'SUV', VAN: '승합/밴', COMPACT: '소형', LUXURY: '고급', EV: '전기차' }
 const facts = computed(() => {
@@ -47,6 +47,7 @@ useHead(() => {
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">요금은 대여 일수 × 1일 요금에 세금 10%가 더해져 계산돼요. 운전자 자격과 현장 보증금은 렌터카 회사 규정을 따라요.</p>
         </DetailHero>
         <ReviewsSection domain="CAR" :target-id="c.id" />
+        <RecoRail domain="CAR" :item-id="c.id" />
       </div>
       <DetailBookingCard :item="c" domain="CAR" :price-krw="c.daily_price_krw" unit-label="1일" cancellation="FREE" date-mode="range" start-label="인수일" end-label="반납일" :alert-label="c.company_name + ' ' + c.vehicle_model" />
     </div>

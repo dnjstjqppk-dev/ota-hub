@@ -14,6 +14,7 @@ import PageHeader from '../components/PageHeader.vue'
 import StatePanel from '../components/StatePanel.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import SidePanel from '../components/SidePanel.vue'
+import BookingThread from '../components/BookingThread.vue'
 import EntitySearch from '../components/EntitySearch.vue'
 import PageNav from '../components/PageNav.vue'
 
@@ -282,6 +283,8 @@ const ACTOR: Record<string, string> = { SYSTEM: '시스템', USER: '고객', ADM
               </li>
             </ol>
           </section>
+
+          <BookingThread v-if="id" :booking-id="id" />
 
           <section v-if="detail.data.value?.supplierCalls?.length">
             <h3 class="mb-2 font-bold">공급사 API 호출</h3>

@@ -76,6 +76,7 @@ const handleLogin = async () => {
       <p v-if="errorMessage" class="flex items-start gap-2 rounded-xl bg-danger-soft px-3.5 py-2.5 text-sm font-medium text-danger" role="alert"><AppIcon name="close" :size="16" class="mt-0.5" />{{ errorMessage }}</p>
       <button type="submit" :disabled="isSubmitting" class="btn-primary w-full py-3 text-base">{{ isSubmitting ? '로그인 중…' : '로그인' }}</button>
     </form>
+    <SocialLoginButtons :redirect="redirectPath" />
     <p class="mt-6 text-center text-sm text-ink-muted">아직 회원이 아니신가요? <NuxtLink :to="{ path: '/register', query: route.query.redirect ? { redirect: route.query.redirect } : {} }" class="font-semibold text-primary hover:underline">회원가입</NuxtLink></p>
     <p class="mt-6 border-t border-line pt-5 text-center text-xs text-ink-subtle">공급사·제휴 파트너는 <a :href="BRAND.partnerConsoleUrl" class="font-semibold text-ink-muted hover:text-primary">파트너 콘솔</a>에서 로그인해 주세요.</p>
   </AuthCard>

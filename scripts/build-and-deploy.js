@@ -1,10 +1,11 @@
 // scripts/build-and-deploy.js
 /**
- * getfortrip Platform - Automated Rebuild & Deploy Pipeline (3 Independent Portals)
+ * getfortrip Platform - Automated Rebuild & Deploy Pipeline (4 Workers, 3 Portals)
  * ==============================================================================
- * 1. ota-hub (User Web + Central API Gateway + Unified Router): https://ota-hub.dnjstjqppk.workers.dev
- * 2. ota-admin (Dedicated Admin Console): https://ota-admin.dnjstjqppk.workers.dev
- * 3. ota-partner (Dedicated Partner Extranet): https://ota-partner.dnjstjqppk.workers.dev
+ * 1. ota-hub (Central API Gateway + Console Fallbacks): https://ota-hub.dnjstjqppk.workers.dev
+ * 2. ota-user (User Web SSR + ISR): https://ota-user.dnjstjqppk.workers.dev (apex after GO_LIVE step 4)
+ * 3. ota-admin (Dedicated Admin Console): https://ota-admin.dnjstjqppk.workers.dev
+ * 4. ota-partner (Dedicated Partner Extranet): https://ota-partner.dnjstjqppk.workers.dev
  * ==============================================================================
  */
 
@@ -48,34 +49,40 @@ try {
   // the journal moved (#51: deploys used to ship code without schema, and the
   // drift was fixed by hand each time). A failed migration aborts the deploy.
   if (SKIP_D1_MIGRATE) {
-    console.log('⏭️ [0/4] D1 migrations SKIPPED (SKIP_D1_MIGRATE=1) — run them manually:');
+    console.log('⏭️ [0/5] D1 migrations SKIPPED (SKIP_D1_MIGRATE=1) — run them manually:');
     console.log('   npx wrangler d1 migrations apply ota_production --remote');
   } else {
-    console.log('🗄️ [0/4] Applying D1 migrations to ota_production (remote)...');
+    console.log('🗄️ [0/5] Applying D1 migrations to ota_production (remote)...');
     run('npx wrangler d1 migrations apply ota_production --remote');
-    console.log('🔍 [0/4] Verifying latest applied migrations...');
+    console.log('🔍 [0/5] Verifying latest applied migrations...');
     run('npx wrangler d1 execute ota_production --remote --command "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 5"');
   }
 
-  // 1. Deploy ota-hub (executes scripts/build-all.js to generate all 3 dists)
-  console.log('\n☁️ [1/4] Triggering Wrangler build and deploy (ota-hub)...');
+  // 1. Deploy ota-hub (executes scripts/build-all.js to build all portals;
+  // hub serves the API + console fallbacks, user SSR rides ota-user).
+  console.log('\n☁️ [1/5] Triggering Wrangler build and deploy (ota-hub)...');
   run(`npx wrangler deploy --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
 
-  // 2. Deploy ota-admin (dedicated worker host)
-  console.log('\n☁️ [2/4] Triggering Wrangler deploy for Admin Portal (ota-admin)...');
+  // 2. Deploy ota-user (TG-15: user portal SSR + ISR worker).
+  console.log('\n☁️ [2/5] Triggering Wrangler deploy for User Portal SSR (ota-user)...');
+  run(`npx wrangler deploy -c frontend-user/wrangler.jsonc --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
+
+  // 3. Deploy ota-admin (dedicated worker host)
+  console.log('\n☁️ [3/5] Triggering Wrangler deploy for Admin Portal (ota-admin)...');
   run(`npx wrangler deploy -c frontend-admin/wrangler.jsonc --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
 
-  // 3. Deploy ota-partner (dedicated worker host)
-  console.log('\n☁️ [3/4] Triggering Wrangler deploy for Partner Extranet (ota-partner)...');
+  // 4. Deploy ota-partner (dedicated worker host)
+  console.log('\n☁️ [4/5] Triggering Wrangler deploy for Partner Extranet (ota-partner)...');
   run(`npx wrangler deploy -c frontend-partner/wrangler.jsonc --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
 
-  // 4. Post-deploy smoke (#52): unauthenticated, read-only, no secrets needed.
-  console.log('\n🩺 [4/4] Running post-deploy smoke probe...');
+  // 5. Post-deploy smoke (#52): unauthenticated, read-only, no secrets needed.
+  console.log('\n🩺 [5/5] Running post-deploy smoke probe...');
   run('node scripts/smoke-production.js');
 
   console.log('\n==============================================================================');
-  console.log('🎉 [SUCCESS] getfortrip 3 Independent Portals successfully deployed to Cloudflare!');
-  console.log('   - User Portal:    https://ota-hub.dnjstjqppk.workers.dev');
+  console.log('🎉 [SUCCESS] getfortrip 3 Portals successfully deployed to Cloudflare!');
+  console.log('   - User Portal:    https://ota-user.dnjstjqppk.workers.dev');
+  console.log('   - API Hub:        https://ota-hub.dnjstjqppk.workers.dev');
   console.log('   - Admin Console:  https://ota-admin.dnjstjqppk.workers.dev');
   console.log('   - Partner Portal: https://ota-partner.dnjstjqppk.workers.dev');
   console.log('==============================================================================\n');

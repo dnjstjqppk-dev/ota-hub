@@ -1,24 +1,29 @@
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { apiFetch } from '~/composables/useApi'
 
 /**
  * Loads one catalog product from the API. `fallback` is the build-time snapshot entry for the SAME id:
- * it paints synchronously for prerendered SEO and is replaced by the live row on mount. A live 404 (delisted since the snapshot) clears it; an unknown id still renders "not found".
+ * TG-15: the first paint is SSR (ISR caches it). Server-side misses 404 and server-side failures 503 — a stale fallback or an error shell must never bake into the edge cache.
  */
-export function useCatalogDetail(apiPath: string, id: string, fallback: Record<string, any> | null = null) {
+export async function useCatalogDetail(apiPath: string, id: string, fallback: Record<string, any> | null = null) {
   const item = ref<any>(fallback)
   const state = ref<'loading' | 'ok' | 'notfound' | 'error'>(fallback ? 'ok' : 'loading')
+  const liveOk = ref(false)
 
   async function load() {
     if (!id) { item.value = null; state.value = 'notfound'; return }
     if (!fallback) state.value = 'loading'
     const r = await apiFetch(`${apiPath}/${encodeURIComponent(id)}`)
-    if (r.ok && r.data?.data) { item.value = r.data.data; state.value = 'ok'; return }
+    if (r.ok && r.data?.data) { item.value = r.data.data; state.value = 'ok'; liveOk.value = true; return }
     if (r.status === 404) { item.value = null; state.value = 'notfound'; return }
     state.value = fallback ? 'ok' : 'error'
   }
 
-  onMounted(load)
+  await useAsyncData(`tg15-detail-${apiPath}-${id}`, () => load())
+  if (import.meta.server && !liveOk.value) {
+    if (state.value === 'notfound') throw createError({ statusCode: 404, statusMessage: 'Product not found' })
+    throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
+  }
   return { item, state, reload: load }
 }
 

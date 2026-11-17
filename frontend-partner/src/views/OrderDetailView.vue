@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiUrl, partnerToken } from '../config/api'
+import OrderMessages from '../components/OrderMessages.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -65,6 +66,15 @@ onMounted(fetchDetail)
         <div><p class="label">결제 / 환불</p><p class="font-bold tabular text-ink">{{ krw(booking.paid_minor) }} / {{ krw(booking.refunded_minor) }}</p></div>
         <div><p class="label">공급사 확정번호</p><p class="font-mono font-bold text-ink">{{ booking.supplier_reference || '-' }}</p></div>
       </div>
+
+      <div class="card p-5" data-testid="special-requests">
+        <h2 class="mb-2 text-sm font-black text-ink">고객 요청사항</h2>
+        <p v-if="booking.specialRequests" class="whitespace-pre-line break-words rounded-xl bg-warning-soft px-4 py-3 text-sm text-ink">{{ booking.specialRequests }}</p>
+        <p v-else class="text-xs text-ink-subtle">요청사항이 없어요.</p>
+        <p class="mt-2 text-[11px] text-ink-subtle">요청사항은 보장 사항이 아니에요. 반영이 어렵다면 아래 메시지로 미리 안내해주세요.</p>
+      </div>
+
+      <OrderMessages :order-id="id" />
 
       <div class="card overflow-hidden">
         <h2 class="border-b border-line px-4 py-3 text-sm font-black text-ink">결제 내역</h2>

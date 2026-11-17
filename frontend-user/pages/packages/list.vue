@@ -47,7 +47,10 @@ function features(p: any): string[] { try { const f = JSON.parse(p.details_json 
 function detailLink(p: any) { const x = q.value; return { path: `/packages/detail/${p.id}`, query: { ...(x.date ? { startDate: x.date } : {}), adults: String(x.adults), ...(x.children ? { children: String(x.children) } : {}) } } }
 
 watch(() => route.fullPath, () => { if (!isSelf()) return; syncDraft(); load() })
-onMounted(() => { today.value = todayIso(); load() })
+// TG-15: SSR the first paint (ISR caches it); the watcher re-loads on client query changes.
+await useAsyncData('tg15-packages-list', () => load())
+if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
+onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
 useHead(() => ({ title: q.value.city ? `${q.value.city} 항공+호텔` : '항공+호텔 패키지' }))
 </script>

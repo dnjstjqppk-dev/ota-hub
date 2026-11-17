@@ -13,11 +13,15 @@
 import type { Env } from "../env.ts";
 import { isNonProduction } from "../env.ts";
 import { HttpError } from "../lib/http.ts";
+import { stripeProvider } from "./stripe.ts";
 
 export type ConfirmResult =
   | { outcome: "CAPTURED"; paymentKey: string; amountMinor: number; method: string; approvedAt: string; raw: unknown }
   | { outcome: "FAILED"; code: string; message: string; raw: unknown }
-  | { outcome: "UNKNOWN"; message: string };
+  | { outcome: "UNKNOWN"; message: string }
+  // TG-17: 3DS step-up (Stripe). The caller parks the payment UNKNOWN and
+  // hands actionUrl to the client; completion finalizes via reconcile.
+  | { outcome: "ACTION_REQUIRED"; paymentKey: string; actionUrl: string; raw: unknown };
 
 export type RefundResult =
   | { outcome: "SUCCEEDED"; refundId: string; raw: unknown }
@@ -187,6 +191,11 @@ export function getPaymentProvider(env: Env): PaymentProvider | null {
     // TOSS_API_BASE exists only to aim the contract tests at a stub. Production always talks to Toss.
     const stub = isNonProduction(env) ? (env.TOSS_API_BASE || "").trim() : "";
     return tossProvider(env.TOSS_SECRET_KEY, env.TOSS_CLIENT_KEY, stub || undefined);
+  }
+  if (p === "stripe" && env.STRIPE_SECRET_KEY) {
+    // Same stub rule as Toss. returnBase feeds the 3DS return_url.
+    const stub = isNonProduction(env) ? (env.STRIPE_API_BASE || "").trim() : "";
+    return stripeProvider(env.STRIPE_SECRET_KEY, env.STRIPE_PUBLISHABLE_KEY, stub || undefined, env.PUBLIC_SITE_URL);
   }
   return null;
 }

@@ -217,6 +217,9 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
         <p v-if="cancelMsg" class="mt-2 text-sm text-danger" role="alert">{{ cancelMsg }}</p>
       </section>
 
+      <!-- CR-03: conversation with the seller (or getfortrip CS when there is no partner) -->
+      <BookingMessages :booking-id="bookingId" class="print:hidden" />
+
       <details v-if="booking.paidMinor > 0" class="rounded-2xl border border-line bg-surface p-5 text-sm" data-testid="receipt-block" @toggle="(e: any) => loadReceipt(e.target.open)">
         <summary class="cursor-pointer font-semibold text-ink">결제 영수증</summary>
         <p v-if="receiptLoading" class="mt-3 text-ink-muted">불러오는 중…</p>
@@ -232,7 +235,7 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
             <div v-for="rf in receipt.refunds" :key="rf.id" class="flex justify-between text-success"><dt>환불 · {{ rf.status }}</dt><dd>{{ formatKrw(rf.amountMinor) }}</dd></div>
             <div class="flex justify-between border-t border-line pt-2"><dt class="text-ink-subtle">실결제액</dt><dd class="font-bold">{{ formatKrw(receipt.paidMinor - receipt.refundedMinor) }}</dd></div>
           </dl>
-          <button class="rounded-xl border border-line-strong px-4 py-2 text-xs font-semibold print:hidden" @click="window.print()">영수증 인쇄</button>
+          <button class="rounded-xl border border-line-strong px-4 py-2 text-xs font-semibold print:hidden" @click="printVoucher">영수증 인쇄</button>
         </div>
       </details>
 

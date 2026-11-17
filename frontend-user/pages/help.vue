@@ -27,7 +27,7 @@ const CATEGORIES = [
   { value: 'TECHNICAL', label: '이용 오류' },
   { value: 'GENERAL', label: '기타' }
 ]
-const STATUS_LABEL: Record<string, string> = { OPEN: '접수', IN_PROGRESS: '처리 중', RESOLVED: '답변 완료', CLOSED: '종료' }
+const STATUS_LABEL: Record<string, string> = { OPEN: '접수', IN_PROGRESS: '처리 중', NEEDS_HUMAN: '상담원 연결됨', RESOLVED: '답변 완료', CLOSED: '종료' }
 
 interface Inquiry {
   id: string
@@ -170,7 +170,7 @@ onMounted(() => {
     </div>
 
     <!-- 내 문의 내역 -->
-    <div v-if="auth.isLoggedIn" class="space-y-4">
+    <div v-if="auth.isLoggedIn" id="inquiries" class="scroll-mt-24 space-y-4">
       <h2 class="text-lg font-black text-slate-900">내 문의 내역</h2>
       <ResultsState
         :state="listState"
@@ -185,12 +185,12 @@ onMounted(() => {
           <div v-for="t in inquiries" :key="t.id" class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-2">
             <div class="flex items-center justify-between gap-2">
               <span class="text-[11px] font-bold text-slate-500">{{ CATEGORIES.find((c) => c.value === t.category)?.label || t.category }} · {{ t.created_at ? new Date(t.created_at).toLocaleDateString() : '' }}</span>
-              <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold" :class="t.status === 'OPEN' ? 'bg-amber-50 text-amber-700' : t.status === 'IN_PROGRESS' ? 'bg-blue-50 text-trip-blue' : 'bg-emerald-50 text-emerald-700'">{{ STATUS_LABEL[t.status] || t.status }}</span>
+              <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold" :class="t.status === 'OPEN' ? 'bg-amber-50 text-amber-700' : (t.status === 'IN_PROGRESS' || t.status === 'NEEDS_HUMAN') ? 'bg-blue-50 text-trip-blue' : 'bg-emerald-50 text-emerald-700'">{{ STATUS_LABEL[t.status] || t.status }}</span>
             </div>
             <h3 class="font-bold text-slate-900 text-sm">{{ t.subject }}</h3>
             <p v-if="t.booking_id" class="text-[11px] font-bold text-trip-blue">관련 예약: {{ t.booking_id }}</p>
             <p class="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{{ t.body }}</p>
-            <p v-if="t.admin_note" class="text-xs text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">답변: {{ t.admin_note }}</p>
+            <InquiryThread :ticket-id="t.id" :status="t.status" :has-reply="!!t.admin_note" @changed="fetchMine" />
           </div>
         </div>
       </ResultsState>

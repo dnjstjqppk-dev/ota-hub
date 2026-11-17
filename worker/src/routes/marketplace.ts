@@ -167,10 +167,11 @@ export async function handleMarketplace(request: Request, env: Env, url: URL): P
     sql += ' ORDER BY created_at DESC LIMIT 100';
 
     const rows = await env.DB.prepare(sql).bind(...params).all();
+    // TG-15: public allowlisted surface — edge-cacheable like the 7 lists.
     return json({
       success: true,
       items: rows.results || []
-    });
+    }, 200, { "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=3600" });
   }
 
   // 2. Admin Marketplace Financial Summary: GET /api/v1/admin/marketplace/summary

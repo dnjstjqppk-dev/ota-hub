@@ -69,7 +69,10 @@ function book(t: any) { router.push({ path: '/checkout', query: { domain: 'TRANS
 
 watch(() => route.fullPath, () => { if (isSelf()) syncDraft() })
 watch(() => [q.value.airport, q.value.destination], () => { if (isSelf()) load() })
-onMounted(() => { today.value = todayIso(); load() })
+// TG-15: SSR the first paint (ISR caches it); the watcher re-loads on client query changes.
+await useAsyncData('tg15-transfers-list', () => load())
+if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
+onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
 useHead(() => ({ title: q.value.airport ? `${q.value.airport} 공항 이동` : '공항 이동 검색' }))
 </script>

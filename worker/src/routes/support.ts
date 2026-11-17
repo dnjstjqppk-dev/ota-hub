@@ -3,9 +3,10 @@ import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { audit, rateLimit, requireAdmin, requireUser } from "../lib/auth.ts";
 import { newId } from "../lib/crypto.ts";
 import { pageMeta, pageParams } from "../lib/pagination.ts";
+import { maybeBotReply } from "../services/csbot-service.ts";
 
 const CATEGORIES = ["BOOKING", "PAYMENT", "REFUND", "ACCOUNT", "TECHNICAL", "GENERAL"] as const;
-const STATUSES = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"] as const;
+const STATUSES = ["OPEN", "IN_PROGRESS", "NEEDS_HUMAN", "RESOLVED", "CLOSED"] as const;
 
 export async function handleSupport(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
@@ -33,7 +34,9 @@ export async function handleSupport(request: Request, env: Env, url: URL): Promi
     await db.prepare(
       "INSERT INTO support_tickets (id, user_id, email, category, subject, body, booking_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
     ).bind(id, u.id, u.email, category, subject, body, bookingId).run();
-    return json({ success: true, id, status: "OPEN" }, 201);
+    // TG-21: treatment members get an instant bot first-reply (control: none).
+    const bot = await maybeBotReply(env, { id, user_id: u.id, category, subject, booking_id: bookingId, status: "OPEN" }, body, u.fullName || "고객");
+    return json({ success: true, id, status: "OPEN", botReplied: bot.replied }, 201);
   }
   if (path === "/api/v1/inquiries" && method === "GET") {
     const u = await requireUser(request, env);

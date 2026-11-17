@@ -702,13 +702,17 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   if (orderMatch && method === "GET") {
     const b = await db.prepare(
       `SELECT id, booking_number, domain_type, item_id, title, status, status_reason, total_minor, paid_minor, refunded_minor,
-              currency, payment_status, supplier_status, supplier_reference, customer_name, service_start, service_end, created_at
+              currency, payment_status, supplier_status, supplier_reference, customer_name, service_start, service_end, created_at, details_json
        FROM bookings WHERE id = ? AND partner_id = ?`
     ).bind(orderMatch[1], pId).first<any>();
     if (!b) throw new HttpError(404, "ORDER_NOT_FOUND", "주문을 찾을 수 없습니다.");
     const name = b.customer_name || "고객";
-    const { customer_name: _drop, ...rest } = b;
-    const booking = { ...rest, customerNameMasked: name.length > 2 ? `${name[0]}*${name.slice(2)}` : `${name[0]}*` };
+    const { customer_name: _drop, details_json: detailsRaw, ...rest } = b;
+    // CR-03: the partner fulfils special requests, so it sees that one field —
+    // the traveler list (passports, birth dates) in the same blob stays server-side.
+    let specialRequests: string | null = null;
+    try { specialRequests = String(JSON.parse(detailsRaw || "{}")?.specialRequests || "").trim() || null; } catch { specialRequests = null; }
+    const booking = { ...rest, specialRequests, customerNameMasked: name.length > 2 ? `${name[0]}*${name.slice(2)}` : `${name[0]}*` };
     const payments = await db.prepare(
       "SELECT id, provider, mode, amount_minor, currency, status, refunded_minor, method, approved_at, created_at FROM payments WHERE booking_id = ? ORDER BY created_at"
     ).bind(b.id).all();
@@ -739,6 +743,46 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       note: str(body.note, 300) || null,
     });
     return json({ success: true, bookingId: orderId, status: (after as any).status });
+  }
+
+  // 8a. CR-07: the partner's own payout statement for one batch. Same settled
+  // rows the operator's transfer statement uses, minus platform internals and
+  // with the payout account masked (the partner already knows its account).
+  const stmtMatch = path.match(/^\/api\/v1\/partner\/settlements\/([A-Za-z0-9_.-]+)\/statement$/);
+  if (stmtMatch && method === "GET") {
+    const batch = await db.prepare(
+      "SELECT id, period_start, period_end, gross_minor, commission_minor, payout_minor, status, payout_date, created_at FROM partner_settlement_batches WHERE id = ? AND partner_id = ?",
+    ).bind(stmtMatch[1], pId).first<any>();
+    if (!batch) throw new HttpError(404, "BATCH_NOT_FOUND", "정산 내역을 찾을 수 없습니다.");
+    const lines = await db.prepare(
+      `SELECT s.id, s.booking_id, b.booking_number, s.domain_type, s.gross_amount_minor, s.commission_amount_minor, s.seller_payout_minor,
+              s.recovery_deducted_minor, s.settlement_status, s.settled_at
+       FROM marketplace_order_settlements s LEFT JOIN bookings b ON b.id = s.booking_id
+       WHERE s.payout_batch_id = ? AND s.seller_id = ? ORDER BY s.settled_at`,
+    ).bind(batch.id, pId).all<any>();
+    const rows = (lines.results || []).map((l: any) => ({ ...l, net_payout_minor: (Number(l.seller_payout_minor) || 0) - (Number(l.recovery_deducted_minor) || 0) }));
+    const totals = rows.reduce((t: any, l: any) => ({
+      gross: t.gross + (Number(l.gross_amount_minor) || 0),
+      commission: t.commission + (Number(l.commission_amount_minor) || 0),
+      deducted: t.deducted + (Number(l.recovery_deducted_minor) || 0),
+      net: t.net + l.net_payout_minor,
+    }), { gross: 0, commission: 0, deducted: 0, net: 0 });
+    const prof = await db.prepare(
+      "SELECT p.business_number, pr.tax_invoice_email, pr.bank_name, pr.bank_account_number, pr.settlement_rate_bps FROM partners p LEFT JOIN partner_profiles pr ON pr.partner_id = p.id WHERE p.id = ?",
+    ).bind(pId).first<any>();
+    let acct = "";
+    try { acct = String((await decryptPiiField(prof?.bank_account_number, env)) || ""); } catch { acct = ""; }
+    const maskedAcct = acct.length > 4 ? `${"*".repeat(acct.length - 4)}${acct.slice(-4)}` : (acct ? "****" : "");
+    return json({
+      success: true,
+      statement: {
+        batch, lines: rows, totals,
+        partner: { id: pId, companyName: partner.companyName, businessNumber: prof?.business_number || null, taxInvoiceEmail: prof?.tax_invoice_email || null, settlementRateBps: prof?.settlement_rate_bps ?? null },
+        payoutAccount: prof?.bank_name || maskedAcct ? `${prof?.bank_name || ""} ${maskedAcct}`.trim() : null,
+        taxInvoice: "MANUAL",
+        issuedAt: new Date().toISOString(),
+      },
+    });
   }
 
   // 8. Partner Settlements

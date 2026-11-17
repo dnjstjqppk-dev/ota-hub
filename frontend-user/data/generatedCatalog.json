@@ -1,6 +1,6 @@
 {
- "generatedAt": "2026-11-10T09:52:54.780Z",
- "via": "http://localhost:8797/api/v1",
+ "generatedAt": "2026-11-16T12:11:20.098Z",
+ "via": "https://ota-hub.dnjstjqppk.workers.dev/api/v1",
  "products": {
   "HOTEL": {
    "htl_bangkok_01": {
@@ -364,18 +364,18 @@
   },
   "TRANSFER": {
    "tf_gmp_van_01": {
-    "name": "김포공항 비즈니스 패밀리 밴",
-    "city": "서울 도심 (명동/강남/잠실) 전역",
+    "name": "김포 비즈니스 프리미엄 밴",
+    "city": "서울 강서/여의도/마포 및 서울 전역",
     "image": null,
-    "priceKrw": 80000,
+    "priceKrw": 85000,
     "score": null,
     "reviewCount": 0
    },
    "tf_hnd_van_01": {
-    "name": "토요타 알파드 하이브리드 리무진 (Alphard Executive)",
-    "city": "도쿄 23구 (신주쿠/시부야/긴자/롯폰기) 전역",
+    "name": "도쿄 하네다 프리미엄 알파드 밴",
+    "city": "도쿄 23구 전역 (신주쿠/시부야/긴자/롯폰기)",
     "image": null,
-    "priceKrw": 165000,
+    "priceKrw": 155000,
     "score": null,
     "reviewCount": 0
    },
@@ -388,10 +388,10 @@
     "reviewCount": 0
    },
    "tf_icn_luxury_01": {
-    "name": "럭셔리 퍼스트 클래스 세단 (VIP Luxury)",
-    "city": "서울 전역 및 경기/인천 수도권",
+    "name": "퍼스트 클래스 럭셔리 세단 (First Class)",
+    "city": "수도권 전역 (서울/인천 송도/판교/수원)",
     "image": null,
-    "priceKrw": 220000,
+    "priceKrw": 180000,
     "score": null,
     "reviewCount": 0
    },
@@ -412,23 +412,31 @@
     "reviewCount": 0
    },
    "tf_kix_van_01": {
-    "name": "토요타 알파드 / 하이에이스 리무진",
-    "city": "오사카 시내 (난바/우메다/신사이바시) / 교토",
+    "name": "오사카 간사이 국제공항 전용 픽업 밴",
+    "city": "오사카 도심 (난바/우메다/USJ) 및 교토 전역",
     "image": null,
-    "priceKrw": 180000,
+    "priceKrw": 195000,
     "score": null,
     "reviewCount": 0
    },
    "tf_nrt_van_01": {
-    "name": "토요타 하이에이스 / 알파드 프리미엄 리무진",
-    "city": "도쿄 23구 호텔/숙소 직행",
+    "name": "도쿄 나리타 국제공항 리무진 밴",
+    "city": "도쿄 23구 및 디즈니랜드 리조트 전역",
     "image": null,
-    "priceKrw": 260000,
+    "priceKrw": 240000,
     "score": null,
     "reviewCount": 0
    }
   },
   "ACTIVITY": {
+   "act_6d4829701ebb4c809982e14981e0ebfb": {
+    "name": "제주 한라산 프라이빗 투어 (54967)",
+    "city": "제주",
+    "image": null,
+    "priceKrw": 80000,
+    "score": null,
+    "reviewCount": 0
+   },
    "act_disney_tokyo": {
     "name": "도쿄 디즈니랜드 1일 e-티켓 (모바일 QR 즉시 입장 확정)",
     "city": "도쿄",

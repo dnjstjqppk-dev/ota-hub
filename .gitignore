@@ -8,6 +8,8 @@ vendor/
 
 # Build artifacts & caches
 dist/
+hub-assets/admin/
+hub-assets/partner/
 .output/*
 !.output/public/
 .output/public/*

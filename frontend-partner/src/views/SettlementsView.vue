@@ -309,16 +309,17 @@ onMounted(() => {
               <th>최종 실지급액 (Net)</th>
               <th>지급 상태</th>
               <th>지급 완료 일시</th>
+              <th class="!text-right">명세서</th>
             </tr>
           </thead>
           <tbody class="font-medium">
             <tr v-if="loading">
-              <td colspan="6" class="p-8 text-center font-bold text-ink-subtle">
+              <td colspan="7" class="p-8 text-center font-bold text-ink-subtle">
                 정산 명세서를 불러오는 중입니다...
               </td>
             </tr>
             <tr v-else-if="batches.length === 0">
-              <td colspan="6" class="p-8 text-center font-bold text-ink-subtle">
+              <td colspan="7" class="p-8 text-center font-bold text-ink-subtle">
                 아직 확정된 월별 정산 명세서가 없습니다.
               </td>
             </tr>
@@ -338,6 +339,7 @@ onMounted(() => {
                 </span>
               </td>
               <td class="font-mono text-ink-subtle">{{ b.payout_date || '-' }}</td>
+              <td class="text-right"><router-link :to="`/settlements/${b.id}/statement`" class="btn-secondary btn-sm">명세서 보기</router-link></td>
             </tr>
           </tbody>
         </table>

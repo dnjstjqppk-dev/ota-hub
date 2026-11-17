@@ -1,9 +1,13 @@
 export const useApiUrl = (path: string = ''): string => {
   const config = useRuntimeConfig()
-  const base = config.public.apiBase || '/api/v1'
+  // TG-15: SSR fetches need an absolute API origin (relative URLs fail on the
+  // ota-user worker). Browsers keep the relative base (same-origin + apex).
+  const base = import.meta.server && (config as any).apiBaseServer
+    ? (config as any).apiBaseServer as string
+    : config.public.apiBase || '/api/v1'
   if (!path) return base
   const cleanPath = path.startsWith('/') ? path : `/${path}`
-  return `${base}${cleanPath}`
+  return `${base.replace(/\/+$/, '')}${cleanPath}`
 }
 
 export interface ApiResult<T = any> {

@@ -13,7 +13,14 @@ assert.deepEqual(errors, [])
 const script = compileScript(descriptor, { id: 'deals-test' })
 const template = compileTemplate({ source: descriptor.template.content, filename, id: 'deals-test', compilerOptions: { bindingMetadata: script.bindings } })
 assert.deepEqual(template.errors, [])
-const code = transformSync(descriptor.scriptSetup.content.replace(/^import .*$/gm, '') + '\n;globalThis.page = { benefitText, boundText, discountTypeLabel };', { loader: 'ts', format: 'cjs' }).code
+// TG-15: the page SSR-loads via top-level await (unsupported by this cjs harness).
+// This test pins the pure formatting fns only, so the SSR lines are stripped;
+// SSR itself is covered by the build + ISR smoke.
+const setupBody = descriptor.scriptSetup.content
+  .replace(/^import .*$/gm, '')
+  .replace(/^await useAsyncData.*$/gm, '')
+  .replace(/^if \(state\.value.*$/gm, '')
+const code = transformSync(setupBody + '\n;globalThis.page = { benefitText, boundText, discountTypeLabel };', { loader: 'ts', format: 'cjs' }).code
 
 function setup() {
   const context = { ref, onMounted: () => {}, useHead: () => {}, apiFetch: async () => ({ ok: true, data: { promotions: [] } }) }

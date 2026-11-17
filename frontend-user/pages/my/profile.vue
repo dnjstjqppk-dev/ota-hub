@@ -14,6 +14,10 @@ const fullName = ref('')
 const phone = ref('')
 const email = ref('')
 const marketing = ref(false)
+// CR-06: social-only members have no password yet; they set one and withdraw by typed phrase.
+const hasPassword = ref(true)
+const socialProviders = ref<string[]>([])
+const PROVIDER_LABEL: Record<string, string> = { KAKAO: "카카오", GOOGLE: "Google", NAVER: "네이버" }
 const saving = ref(false)
 const msg = ref<{ ok: boolean; text: string } | null>(null)
 
@@ -24,6 +28,8 @@ async function load() {
   phone.value = u?.phoneNumber || ''
   email.value = u?.email || ''
   marketing.value = u?.marketingConsent === true
+  hasPassword.value = u?.hasPassword !== false
+  socialProviders.value = Array.isArray(u?.socialProviders) ? u.socialProviders : []
 }
 async function save() {
   msg.value = null; saving.value = true
@@ -43,10 +49,10 @@ const pwBusy = ref(false)
 const pwMsg = ref<{ ok: boolean; text: string } | null>(null)
 async function changePassword() {
   pwMsg.value = null
-  if (!curPw.value) { pwMsg.value = { ok: false, text: '현재 비밀번호를 입력해 주세요.' }; return }
+  if (hasPassword.value && !curPw.value) { pwMsg.value = { ok: false, text: '현재 비밀번호를 입력해 주세요.' }; return }
   if (newPw.value !== newPw2.value) { pwMsg.value = { ok: false, text: '새 비밀번호가 일치하지 않아요.' }; return }
   pwBusy.value = true
-  const r = await apiFetch('/auth/me/password', { method: 'POST', body: { currentPassword: curPw.value, newPassword: newPw.value } })
+  const r = await apiFetch('/auth/me/password', { method: 'POST', body: { currentPassword: hasPassword.value ? curPw.value : undefined, newPassword: newPw.value } })
   pwBusy.value = false
   if (!r.ok) { pwMsg.value = { ok: false, text: r.data.error || '변경하지 못했어요.' }; return }
   auth.logout()
@@ -60,9 +66,9 @@ const withdrawError = ref('')
 async function withdraw() {
   withdrawError.value = ''
   if (confirmText.value.trim() !== '탈퇴합니다') { withdrawError.value = '확인을 위해 "탈퇴합니다"를 입력해 주세요.'; return }
-  if (!withdrawPw.value) { withdrawError.value = '비밀번호를 입력해 주세요.'; return }
+  if (hasPassword.value && !withdrawPw.value) { withdrawError.value = '비밀번호를 입력해 주세요.'; return }
   withdrawing.value = true
-  const r = await apiFetch('/auth/me/withdraw', { method: 'POST', body: { password: withdrawPw.value, reason: 'USER_REQUEST_PROFILE' } })
+  const r = await apiFetch('/auth/me/withdraw', { method: 'POST', body: hasPassword.value ? { password: withdrawPw.value, reason: 'USER_REQUEST_PROFILE' } : { confirm: confirmText.value.trim(), reason: 'USER_REQUEST_PROFILE' } })
   withdrawing.value = false
   if (!r.ok) { withdrawError.value = r.data.error || '탈퇴하지 못했어요.'; return }
   auth.logout()
@@ -86,7 +92,8 @@ const FIELD = 'w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 tex
     <form class="card mt-6 max-w-xl space-y-4 p-5 sm:p-6" novalidate @submit.prevent="changePassword">
       <h2 class="text-sm font-bold text-ink">비밀번호 변경</h2>
       <p class="text-xs text-ink-subtle">변경하면 모든 기기에서 로그아웃되고 새 비밀번호로 다시 로그인해야 해요.</p>
-      <label class="block"><span class="field-label">현재 비밀번호</span><input v-model="curPw" type="password" autocomplete="current-password" :class="FIELD" data-testid="pw-current" /></label>
+      <p v-if="!hasPassword" class="rounded-xl bg-surface-sunken px-4 py-2.5 text-ink-muted">{{ socialProviders.map((p) => PROVIDER_LABEL[p] || p).join(", ") }} 계정으로 가입했어요. 비밀번호를 설정하면 이메일로도 로그인할 수 있어요.</p>
+      <label v-if="hasPassword" class="block"><span class="field-label">현재 비밀번호</span><input v-model="curPw" type="password" autocomplete="current-password" :class="FIELD" data-testid="pw-current" /></label>
       <label class="block"><span class="field-label">새 비밀번호 (10자 이상, 영문+숫자)</span><input v-model="newPw" type="password" autocomplete="new-password" :class="FIELD" data-testid="pw-new" /></label>
       <label class="block"><span class="field-label">새 비밀번호 확인</span><input v-model="newPw2" type="password" autocomplete="new-password" :class="FIELD" data-testid="pw-new2" /></label>
       <p v-if="pwMsg" :class="['rounded-xl px-4 py-2.5 text-sm font-medium', pwMsg.ok ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger']" :role="pwMsg.ok ? 'status' : 'alert'">{{ pwMsg.text }}</p>
@@ -99,7 +106,7 @@ const FIELD = 'w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 tex
         <p>탈퇴하면 이름·이메일·전화번호·여권정보 등 개인식별정보가 즉시 파기되고, 보유한 코인·쿠폰·찜·알림은 모두 사라져요. 계약·결제·분쟁 기록은 전자상거래법 제6조에 따라 5년간 별도 보관돼요.</p>
         <p>진행 중인 예약이나 미처리 환불이 있으면 탈퇴할 수 없어요.</p>
         <label class="block"><span class="field-label">"탈퇴합니다" 입력</span><input v-model="confirmText" placeholder="탈퇴합니다" :class="FIELD" data-testid="withdraw-confirm" /></label>
-        <label class="block"><span class="field-label">비밀번호 확인</span><input v-model="withdrawPw" type="password" autocomplete="current-password" :class="FIELD" data-testid="withdraw-password" /></label>
+        <label v-if="hasPassword" class="block"><span class="field-label">비밀번호 확인</span><input v-model="withdrawPw" type="password" autocomplete="current-password" :class="FIELD" data-testid="withdraw-password" /></label>
         <p v-if="withdrawError" role="alert" class="rounded-xl bg-danger-soft px-4 py-2.5 font-medium text-danger">{{ withdrawError }}</p>
         <button type="button" :disabled="withdrawing" class="rounded-xl bg-danger px-5 py-2.5 font-bold text-white disabled:opacity-40" data-testid="withdraw-submit" @click="withdraw">{{ withdrawing ? '처리 중…' : '탈퇴하기' }}</button>
       </div>

@@ -112,6 +112,7 @@ const handleRegister = async () => {
       <p v-if="successMessage" class="flex items-start gap-2 rounded-xl bg-success-soft px-3.5 py-2.5 text-sm font-medium text-success" role="status"><AppIcon name="check" :size="16" class="mt-0.5" />{{ successMessage }}</p>
       <button type="submit" :disabled="isSubmitting" class="btn-primary w-full py-3 text-base">{{ isSubmitting ? '가입 중…' : '가입하기' }}</button>
     </form>
+    <SocialLoginButtons :redirect="redirectPath" />
     <p class="mt-6 text-center text-sm text-ink-muted">이미 계정이 있으신가요? <NuxtLink :to="{ path: '/login', query: route.query.redirect ? { redirect: route.query.redirect } : {} }" class="font-semibold text-primary hover:underline">로그인</NuxtLink></p>
   </AuthCard>
 </template>

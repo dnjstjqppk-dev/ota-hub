@@ -56,7 +56,7 @@ function portTable(name, sql) {
 
 function fkAlterTable() {
   // Deferred FK enforcement (creation order can't satisfy forward references).
-  if (fkPairs.length !== 31) throw new Error(`REFERENCES drift: want 31, got ${fkPairs.length}`);
+  if (fkPairs.length !== 35) throw new Error(`REFERENCES drift: want 35 (0053 +1), got ${fkPairs.length}`);
   return fkPairs.map(([ct, cc, pt, pc, actions]) =>
     `ALTER TABLE ${ct} ADD FOREIGN KEY (${cc}) REFERENCES ${pt}(${pc})${actions};`).join('\n');
 }
@@ -73,17 +73,62 @@ const problems = [];
 const tables = [];
 const indexes = [];
 const seenTriggers = [];
+// TG-16: FTS5 virtual table + shadow tables + sync triggers become a tsvector
+// table with PG-native sync triggers (emitted post-check: plpgsql trips the
+// leftover-word guard the same way the ledger guard would).
+const FTS_TABLES = ['hotels', 'flights', 'trains', 'cars', 'transfers', 'activities', 'packages'];
+const FTS_SYNC = {
+  hotels: { domain: 'HOTEL', title: `NEW.name_ko || ' ' || NEW.name_en`, city: 'NEW.city', body: `COALESCE(NEW.neighborhood,'') || ' ' || COALESCE(NEW.address,'') || ' ' || COALESCE(NEW.property_type,'')`, active: 'NEW.is_active', price: 'NEW.base_price_krw', rating: 'NEW.review_score', supplier: 'NEW.partner_id' },
+  flights: { domain: 'FLIGHT', title: `NEW.airline_name || ' ' || NEW.flight_number`, city: `NEW.departure_city || ' ' || NEW.arrival_city`, body: `NEW.airline_code || ' ' || NEW.departure_airport || ' ' || NEW.arrival_airport || ' ' || COALESCE(NEW.cabin_class,'')`, active: 'NEW.is_active', price: 'NEW.base_price_krw', rating: 'NULL', supplier: 'NEW.partner_id' },
+  trains: { domain: 'TRAIN', title: `NEW.train_type || ' ' || NEW.train_number`, city: `NEW.departure_station || ' ' || NEW.arrival_station`, body: `COALESCE(NEW.seat_class,'')`, active: 'NEW.is_active', price: 'NEW.price_krw', rating: 'NULL', supplier: 'NULL' },
+  cars: { domain: 'CAR', title: `NEW.company_name || ' ' || NEW.vehicle_model`, city: 'NEW.pickup_location', body: `COALESCE(NEW.vehicle_type,'') || ' ' || COALESCE(NEW.transmission,'')`, active: 'NEW.is_active', price: 'NEW.daily_price_krw', rating: 'NULL', supplier: 'NEW.partner_id' },
+  transfers: { domain: 'TRANSFER', title: 'NEW.service_title', city: 'NEW.destination_area', body: `NEW.airport_code || ' ' || COALESCE(NEW.vehicle_class,'')`, active: 'NEW.is_active', price: 'NEW.price_krw', rating: 'NULL', supplier: 'NEW.partner_id' },
+  activities: { domain: 'ACTIVITY', title: 'NEW.title', city: 'NEW.city', body: `COALESCE(NEW.category,'') || ' ' || COALESCE(NEW.country,'') || ' ' || COALESCE(NEW.description,'')`, active: 'NEW.is_active', price: 'NEW.price_krw', rating: 'NEW.review_score', supplier: 'NEW.partner_id' },
+  packages: { domain: 'PACKAGE', title: 'NEW.title', city: 'NEW.destination_city', body: `''`, active: 'NEW.is_active', price: 'NEW.total_package_krw', rating: 'NULL', supplier: 'NULL' },
+};
+const ftsShadow = [];
+const ftsTriggers = [];
+const FTS_PG_TABLE = `-- table catalog_fts (TG-16: FTS5 virtual table ported to tsvector)
+CREATE TABLE catalog_fts (
+  domain TEXT, item_id TEXT, title TEXT, city TEXT, body TEXT,
+  active INTEGER, price_krw REAL, rating REAL, supplier_id TEXT,
+  fts tsvector GENERATED ALWAYS AS (to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(city,'') || ' ' || coalesce(body,''))) STORED
+);`;
 for (const r of rows) {
   // D1-internal tables (bindings metadata) have no PG meaning.
   if (r.name.startsWith('_cf_')) continue;
+  if (r.name === 'catalog_fts' && r.type === 'table') { tables.push(FTS_PG_TABLE); continue; }
+  if (r.name.startsWith('catalog_fts_')) { ftsShadow.push(r.name); continue; }
   if (r.type === 'table') tables.push(`-- table ${r.name}\n${portTable(r.name, r.sql)};`);
   else if (r.type === 'index') indexes.push(`-- index ${r.name}\n${r.sql};`);
-  else if (r.type === 'trigger') seenTriggers.push(r.name);
+  else if (r.type === 'trigger') {
+    if (/^trg_(hotels|flights|trains|cars|transfers|activities|packages)_fts_a[idu]$/.test(r.name)) ftsTriggers.push(r.name);
+    else seenTriggers.push(r.name);
+  }
   else problems.push(`unknown sqlite_master type: ${r.type} ${r.name}`);
 }
 if (seenTriggers.sort().join(',') !== 'trg_ledger_no_delete,trg_ledger_no_update') {
   problems.push(`unexpected trigger set: ${seenTriggers.join(',')}`);
 }
+{
+  const wantShadow = ['catalog_fts_config', 'catalog_fts_content', 'catalog_fts_data', 'catalog_fts_docsize', 'catalog_fts_idx'].sort().join(',');
+  if (ftsShadow.sort().join(',') !== wantShadow) problems.push(`unexpected fts shadow set: ${ftsShadow.join(',')}`);
+  const wantTrig = FTS_TABLES.flatMap((t) => [`trg_${t}_fts_ai`, `trg_${t}_fts_ad`, `trg_${t}_fts_au`]).sort().join(',');
+  if (ftsTriggers.sort().join(',') !== wantTrig) problems.push(`unexpected fts trigger set: ${ftsTriggers.join(',')}`);
+}
+indexes.push('-- index idx_catalog_fts\nCREATE INDEX idx_catalog_fts ON catalog_fts USING gin (fts);');
+const ftsSyncSql = `-- TG-16 FTS sync (ported from the 21 D1 triggers: one sync trigger per table).\n` + FTS_TABLES.map((t) => {
+  const m = FTS_SYNC[t];
+  return `CREATE OR REPLACE FUNCTION sync_catalog_fts_${t}() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN DELETE FROM catalog_fts WHERE domain = '${m.domain}' AND item_id = OLD.id; RETURN OLD; END IF;
+  DELETE FROM catalog_fts WHERE domain = '${m.domain}' AND item_id = CASE WHEN TG_OP = 'UPDATE' THEN OLD.id ELSE NEW.id END;
+  INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  VALUES ('${m.domain}', NEW.id, ${m.title}, ${m.city}, ${m.body}, ${m.active}, ${m.price}, ${m.rating}, ${m.supplier});
+  RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER trg_${t}_fts_sync AFTER INSERT OR UPDATE OR DELETE ON ${t} FOR EACH ROW EXECUTE FUNCTION sync_catalog_fts_${t}();`;
+}).join('\n');
 const body = tables.join('\n\n') + '\n\n' + indexes.join('\n\n');
 // REFERENCES must be fully extracted into deferred ALTERs (none left inline).
 for (const bad of ['AUTOINCREMENT', 'REFERENCES', 'strftime', 'PRAGMA', 'VACUUM', 'WITHOUT ROWID', 'rowid', 'GLOB', 'OR REPLACE', 'OR IGNORE']) {
@@ -99,5 +144,5 @@ const header = `-- TG-09 ported schema: D1 sqlite_master -> Postgres. Regenerate
 --   node scripts/pg-harness/port-schema.mjs C:\\tmp\\pg-schema-dump.json
 -- Tables: ${tables.length}, indexes: ${indexes.length}. Do not hand-edit.
 `;
-writeFileSync(outPath, header + '\n' + compat + '\n' + body + '\n\n-- deferred FK enforcement\n' + fkAlterTable() + '\n\n' + fkAuditView() + '\n\n' + LEDGER_GUARD);
+writeFileSync(outPath, header + '\n' + compat + '\n' + body + '\n\n-- deferred FK enforcement\n' + fkAlterTable() + '\n\n' + fkAuditView() + '\n\n' + LEDGER_GUARD + '\n\n' + ftsSyncSql + '\n');
 console.log(`ported ${tables.length} tables, ${indexes.length} indexes -> ${outPath}`);

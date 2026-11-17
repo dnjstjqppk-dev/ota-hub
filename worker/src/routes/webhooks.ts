@@ -23,6 +23,7 @@ import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { rateLimit } from "../lib/auth.ts";
 import { newId } from "../lib/crypto.ts";
 import { getPaymentProvider } from "../payments/provider.ts";
+import { stripeDispute, verifyStripeSignature } from "../payments/stripe.ts";
 import { applyExternalCancel, getBooking, reconcilePaymentByLookup } from "../services/booking-service.ts";
 
 async function record(env: Env, eventId: string, eventType: string, body: unknown, outcome: string): Promise<void> {
@@ -31,6 +32,7 @@ async function record(env: Env, eventId: string, eventType: string, body: unknow
 }
 
 export async function handleWebhooks(request: Request, env: Env, url: URL): Promise<Response | null> {
+  if (url.pathname === "/api/v1/webhooks/stripe" && request.method === "POST") return stripeWebhook(request, env, url);
   if (url.pathname !== "/api/v1/webhooks/toss" || request.method !== "POST") return null;
   // Shared-secret check on the registered URL (?key=...). Toss calls the exact
   // URL registered in its console, so the secret rides along on real events.
@@ -92,4 +94,81 @@ export async function handleWebhooks(request: Request, env: Env, url: URL): Prom
   const outcome = externalApplied ? "RECONCILED_EXTERNAL_CANCEL" : reconciled ? "RECONCILED" : "NO_UNKNOWN_PAYMENT";
   await record(env, eventId, eventType, body, outcome);
   return json({ success: true, duplicate: false, reconciled: reconciled > 0 || externalApplied > 0, action: outcome, bookingId: b.id });
+}
+
+/**
+ * TG-17 Stripe webhooks. Same money rules as Toss (lookup-verified, generic
+ * responses, deduped), but Stripe SIGNS payloads — verification is real:
+ * STRIPE_WEBHOOK_SECRET must verify whenever it is set; production without
+ * a secret rejects everything (fail-closed where money moves).
+ */
+async function stripeRecord(env: Env, eventId: string, eventType: string, body: unknown, outcome: string): Promise<void> {
+  await env.DB.prepare("INSERT OR IGNORE INTO payment_events (id, provider, event_id, event_type, payload, outcome) VALUES (?, 'stripe', ?, ?, ?, ?)")
+    .bind(newId("pev"), eventId, eventType, JSON.stringify(body).slice(0, 8000), outcome).run();
+}
+
+async function stripeWebhook(request: Request, env: Env, url: URL): Promise<Response> {
+  await rateLimit(request, env, "stripe_webhook", 120, 60);
+  const raw = await request.text();
+  if (raw.length > 64 * 1024) throw new HttpError(413, "PAYLOAD_TOO_LARGE", "요청 본문이 너무 큽니다.");
+  const secret = (env.STRIPE_WEBHOOK_SECRET || "").trim();
+  if (secret) {
+    if (!(await verifyStripeSignature(raw, request.headers.get("Stripe-Signature"), secret))) {
+      throw new HttpError(403, "INVALID_WEBHOOK_SIGNATURE", "웹훅 서명 검증에 실패했습니다.");
+    }
+  } else if (env.APP_ENV !== "development" && env.APP_ENV !== "test") {
+    throw new HttpError(403, "WEBHOOK_NOT_CONFIGURED", "웹훅 시크릿이 등록되지 않았습니다.");
+  }
+  let body: any = null;
+  try {
+    body = raw ? JSON.parse(raw) : null;
+  } catch {
+    throw new HttpError(400, "MALFORMED_JSON", "요청 본문이 올바른 JSON이 아닙니다.");
+  }
+  const eventId = str(body?.id, 200);
+  const eventType = str(body?.type, 100);
+  if (!eventId || !eventType) throw new HttpError(400, "INVALID_WEBHOOK", "Stripe event id/type이 필요합니다.");
+  const dup = await env.DB.prepare("SELECT outcome FROM payment_events WHERE provider = 'stripe' AND event_id = ?").bind(eventId).first<{ outcome: string | null }>();
+  if (dup) return json({ success: true, duplicate: true, reconciled: dup.outcome === "RECONCILED", action: dup.outcome });
+  const provider = getPaymentProvider(env);
+  if (!provider || provider.name !== "stripe") {
+    await stripeRecord(env, eventId, eventType, body, "IGNORED_NO_PROVIDER");
+    return json({ success: true, reconciled: false, action: "IGNORED_NO_PROVIDER" });
+  }
+  const obj = (body?.data?.object && typeof body.data.object === "object" ? body.data.object : {}) as any;
+
+  if (eventType === "charge.dispute.created") {
+    const disputeId = str(obj.id, 100);
+    const d = disputeId ? await stripeDispute(env, disputeId) : null;
+    if (!d || !d.paymentIntentId) {
+      await stripeRecord(env, eventId, eventType, body, "UNVERIFIED_DISPUTE");
+      return json({ success: true, reconciled: false, action: "UNVERIFIED_DISPUTE" });
+    }
+    const pay = await env.DB.prepare("SELECT id, booking_id FROM payments WHERE provider = 'stripe' AND provider_payment_key = ?").bind(d.paymentIntentId).first<any>();
+    if (!pay) {
+      await stripeRecord(env, eventId, eventType, body, "IGNORED_UNKNOWN_ORDER");
+      return json({ success: true, duplicate: false, reconciled: false, action: "NO_UNKNOWN_PAYMENT" });
+    }
+    const applied = await applyExternalCancel(env, pay.booking_id, {
+      paymentId: pay.id, canceledMinor: d.amountMinor, cancelReason: `CHARGEBACK:${d.reason}`.slice(0, 200), transactionKey: d.id,
+    });
+    const outcome = applied === "APPLIED" ? "RECONCILED_EXTERNAL_CANCEL" : applied;
+    await stripeRecord(env, eventId, eventType, body, outcome);
+    return json({ success: true, duplicate: false, reconciled: applied === "APPLIED", action: outcome, bookingId: pay.booking_id });
+  }
+
+  if (eventType === "payment_intent.succeeded") {
+    const pi = str(obj.id, 100);
+    const pay = pi ? await env.DB.prepare("SELECT id, booking_id FROM payments WHERE provider = 'stripe' AND provider_payment_key = ? AND status = 'UNKNOWN'").bind(pi).first<any>() : null;
+    if (!pay) {
+      await stripeRecord(env, eventId, eventType, body, "NO_UNKNOWN_PAYMENT");
+      return json({ success: true, duplicate: false, reconciled: false, action: "NO_UNKNOWN_PAYMENT" });
+    }
+    const out = await reconcilePaymentByLookup(env, pay.id);
+    await stripeRecord(env, eventId, eventType, body, out === "RECONCILED" ? "RECONCILED" : "SKIPPED");
+    return json({ success: true, duplicate: false, reconciled: out === "RECONCILED", action: out, bookingId: pay.booking_id });
+  }
+
+  await stripeRecord(env, eventId, eventType, body, "IGNORED_TYPE");
+  return json({ success: true, duplicate: false, reconciled: false, action: "IGNORED_TYPE" });
 }

@@ -6,7 +6,7 @@ import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
-const { item: t, state, reload } = useCatalogDetail('/transfers', id, generatedFallback('TRANSFER', id))
+const { item: t, state, reload } = await useCatalogDetail('/transfers', id, generatedFallback('TRANSFER', id))
 
 const facts = computed(() => {
   const x = t.value
@@ -45,6 +45,7 @@ useHead(() => {
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">차량 1대 편도 요금이에요. 탑승 인원이 최대 인원을 넘으면 예약할 수 없어요.</p>
         </DetailHero>
         <ReviewsSection domain="TRANSFER" :target-id="t.id" />
+        <RecoRail domain="TRANSFER" :item-id="t.id" />
       </div>
       <DetailBookingCard :item="t" domain="TRANSFER" :price-krw="t.price_krw" unit-label="차량 1대 편도" cancellation="FREE" people :max-people="Number(t.max_passengers) || 9" :alert-label="t.airport_code + ' ' + t.service_title" />
     </div>

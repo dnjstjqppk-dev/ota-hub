@@ -13,7 +13,7 @@ assert.deepEqual(errors, [])
 const script = compileScript(descriptor, { id: 'help-test' })
 const template = compileTemplate({ source: descriptor.template.content, filename, id: 'help-test', compilerOptions: { bindingMetadata: script.bindings } })
 assert.deepEqual(template.errors, [])
-const code = transformSync(descriptor.scriptSetup.content.replace(/^import .*$/gm, '') + '\n;globalThis.page = { inquiries, listState, category, subject, body, bookingId, myBookings, submitting, submitError, submitted, fetchMine, submitInquiry };', { loader: 'ts', format: 'cjs' }).code
+const code = transformSync(descriptor.scriptSetup.content.replace(/^import .*$/gm, '') + '\n;globalThis.page = { inquiries, listState, category, subject, body, bookingId, myBookings, submitting, submitError, submitted, fetchMine, submitInquiry, STATUS_LABEL };', { loader: 'ts', format: 'cjs' }).code
 
 function setup({ loggedIn = true } = {}) {
   const calls = []
@@ -58,4 +58,9 @@ test('#154: no selection sends no booking link', async () => {
   await p.submitInquiry()
   const post = p.calls.find((c) => c.opts?.method === 'POST')
   assert.ok(!('bookingId' in post.opts.body))
+})
+
+test('TG-21: handoff status renders its label', () => {
+  const p = setup()
+  assert.equal(p.STATUS_LABEL.NEEDS_HUMAN, '상담원 연결됨')
 })

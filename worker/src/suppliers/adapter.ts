@@ -6,10 +6,15 @@
  * - direct_contract: inventory contracted directly with a partner and held in
  *   our database. Confirmation is performed by an operator / partner in the
  *   admin OMS (book() returns PENDING), never automatically.
- * - api: placeholder for real supplier APIs (GDS/NDC/bed-banks). No such
+ * - api: placeholder for real supplier APIs (bed-banks etc.). No such
  *   integration exists today; calls return FAILED rather than fake success.
+ * - ndc: airline direct-connect fulfilment (TG-18). Needs env (base + key);
+ *   without it, calls fail honestly as SUPPLIER_NOT_CONFIGURED.
+ * - gds: aggregator fulfilment (TG-18). Same configuration rule as ndc.
  */
+import type { Env } from "../env.ts";
 import { newId } from "../lib/crypto.ts";
+import { liveSupplierAdapter, resolveLiveConfig } from "./live-adapter.ts";
 
 export type BookResult =
   | { outcome: "CONFIRMED"; reference: string; pnr: string | null }
@@ -42,11 +47,38 @@ export interface SupplierContext {
   simulation: Simulation;
 }
 
+export interface FlightOffer {
+  offerId: string;
+  airline: string;
+  flightNo: string;
+  from: string;
+  to: string;
+  date: string;
+  amountMinor: number;
+  currency: string;
+  expiresAt: string;
+}
+
+export interface OfferQuery {
+  origin: string;
+  destination: string;
+  date: string;
+  adults: number;
+  airline?: string;
+}
+
+export type OfferResult =
+  | { outcome: "OK"; offers: FlightOffer[] }
+  | { outcome: "FAILED"; code: string; message: string }
+  | { outcome: "UNKNOWN"; message: string };
+
 export interface SupplierAdapter {
   name: string;
   book(c: SupplierContext): Promise<BookResult>;
   ticket(c: SupplierContext): Promise<TicketResult>;
   cancel(c: SupplierContext): Promise<CancelResult>;
+  /** Live offer shopping (TG-18). Absent on adapters without offer support. */
+  offers?(q: OfferQuery): Promise<OfferResult>;
 }
 
 function ref(prefix: string): string {
@@ -112,8 +144,34 @@ const notIntegrated: SupplierAdapter = {
   },
 };
 
-export function adapterFor(name: string): SupplierAdapter {
+const notConfigured: SupplierAdapter = {
+  name: "none",
+  async book() {
+    return { outcome: "FAILED", code: "SUPPLIER_NOT_CONFIGURED", message: "공급사 API 설정이 없어 예약할 수 없습니다." };
+  },
+  async ticket() {
+    return { outcome: "FAILED", code: "SUPPLIER_NOT_CONFIGURED", message: "공급사 API 설정이 없어 발권할 수 없습니다." };
+  },
+  async cancel() {
+    // Never unwind blindly: without a configured API the cancel cannot be
+    // verified at the supplier, so it parks for manual review.
+    return { outcome: "UNKNOWN", message: "공급사 API 설정이 없어 취소를 자동 처리할 수 없습니다." };
+  },
+};
+
+/**
+ * TG-18: ndc/gds need env (API base + key + DB manifest). Without env — or
+ * without a usable base/key pair — they resolve to the honest notConfigured
+ * adapter instead of throwing, so every caller keeps working.
+ */
+export function adapterFor(name: string, env?: Env): SupplierAdapter {
   if (name === "simulator") return simulatorAdapter;
   if (name === "direct_contract") return directContractAdapter;
+  if (name === "ndc" || name === "gds") {
+    if (!env) return notConfigured;
+    const cfg = resolveLiveConfig(env, name);
+    if (!cfg) return notConfigured;
+    return liveSupplierAdapter(env, cfg);
+  }
   return notIntegrated;
 }

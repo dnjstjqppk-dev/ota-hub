@@ -1,0 +1,23 @@
+{
+  // TG-15: user portal SSR worker (Nitro cloudflare-module preset + ISR). Serves the
+  // apex (getfortrip.com); /api/* stays on ota-hub via Cloudflare Routes.
+  // Local: `nuxt dev` (:3000) against the hub API, or `wrangler dev` here.
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "ota-user",
+  "main": ".output/server/index.mjs",
+  "compatibility_date": "2024-10-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": ".output/public",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    "run_worker_first": true
+  },
+  "vars": {
+    "NUXT_PUBLIC_API_BASE": "https://ota-hub.dnjstjqppk.workers.dev/api/v1",
+    "NUXT_API_BASE_SERVER": "https://ota-hub.dnjstjqppk.workers.dev/api/v1"
+  }
+}

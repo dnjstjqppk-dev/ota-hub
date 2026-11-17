@@ -6,6 +6,22 @@ import { db } from "../db/database.ts";
 import { trackEvent } from "../lib/analytics.ts";
 import { getPaymentProvider } from "../payments/provider.ts";
 import * as S from "../services/booking-service.ts";
+import { startSpan, traceOf, withSpan } from "../lib/tracing.ts";
+
+/** payment.confirm span that parents supplier spans (waterfall fidelity). */
+async function confirmTraced(request: Request, env: Env, user: any, body: any) {
+  const tctx = traceOf(request);
+  if (!tctx) return S.confirmPayment(env, user, body);
+  const span = startSpan(tctx, "payment.confirm");
+  try {
+    const out = await S.confirmPayment(env, user, body, tctx, span.spanId);
+    span.end("ok");
+    return out;
+  } catch (e) {
+    span.end("error");
+    throw e;
+  }
+}
 
 export async function handleBookings(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
@@ -27,7 +43,8 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
   if (path === "/api/v1/bookings" && method === "POST") {
     const user = await requireUser(request, env);
     await rateLimit(request, env, "bookings", 120, 60);
-    const r = await S.createBooking(env, user, await readJson(request), request.headers.get("Idempotency-Key"), request);
+    const bookingBody = await readJson(request);
+    const r = await withSpan(traceOf(request), "booking.create", () => S.createBooking(env, user, bookingBody, request.headers.get("Idempotency-Key"), request));
     // TG-03: funnel "book" fires on fresh bookings only — replays already counted.
     if (!r.replayed) await trackEvent(db(env), { type: "book", domain: r.booking.domain, entityId: r.booking.id, userId: user.id });
     return json({ success: true, replayed: r.replayed, booking: r.booking }, r.replayed ? 200 : 201);
@@ -66,13 +83,27 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
       if (!/^[A-Za-z0-9_-]{16,80}$/.test(idemKey)) throw new HttpError(400, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key는 16~80자의 영문·숫자·-_여야 합니다.");
       const idem = await idempotencyPrecheck(env, "payments:confirm", idemKey, [user.id, str(body.bookingId, 64), str(body.orderId, 64), String(body.amount), str(body.paymentKey, 200)]);
       if (idem.replay) return json({ ...(idem.replay.body as Record<string, unknown>), replayed: true }, idem.replay.status);
-      const keyed = await S.confirmPayment(env, user, body);
+      const keyed = await confirmTraced(request, env, user, body);
       const out = { success: true, ...keyed };
       await idempotencyStore(env, "payments:confirm", idemKey, 200, out);
       return json(out);
     }
-    const r = await S.confirmPayment(env, user, body);
+    const r = await confirmTraced(request, env, user, body);
     return json({ success: true, ...r });
+  }
+
+  // TG-17: 3DS return landing (Stripe redirects the browser here with the PI).
+  // Finalizes through reconcile — the PI must already exist as an UNKNOWN
+  // payment row, so a forged PI id settles nothing.
+  if (path === "/api/v1/payments/stripe/return" && method === "GET") {
+    await rateLimit(request, env, "stripe_return", 120, 60);
+    const pi = str(url.searchParams.get("payment_intent"), 100);
+    if (!pi) throw new HttpError(400, "PAYMENT_INTENT_REQUIRED", "payment_intent이 필요합니다.");
+    const row = await env.DB.prepare("SELECT id, booking_id FROM payments WHERE provider = 'stripe' AND provider_payment_key = ?").bind(pi).first<any>();
+    if (!row) throw new HttpError(404, "PAYMENT_NOT_FOUND", "결제를 찾을 수 없습니다.");
+    const out = await S.reconcilePaymentByLookup(env, row.id);
+    const rb = await S.getBooking(env, row.booking_id);
+    return json({ success: true, reconciled: out === "RECONCILED", bookingId: row.booking_id, status: rb?.status || null });
   }
 
   // #171: exact retired paths first -- the :id matcher below swallows

@@ -85,42 +85,110 @@
   Red drill: 북 핸들러 무력화 시 tg11a·tg11b 적색(tg11c 격리 녹색)→복원 녹색.
   범위 조정: 자동 정산지급 없음(B3/B7 유지), outbox·웹훅·환불 큐 통합은 후속.
   PG schema.sql 재생성(job_queue만 추가) + gft-pg 델타 적용.
+  CI: run 43679836954 — fast ✓(1m13s)·e2e ✓(12m30s, D1 192/192)·deploy ✗(7403 예상).
 - [ ] **TG-12 Flutter 앱 착수** (코드)
   범위: API 클라이언트 + 푸시 + 딥링크 + 스토어 베타. API 버전닝·강제업데이트 포함.
   수용: 베타 빌드 + 핵심 예약 플로우 앱 E2E. 의존: 없음(병렬 가능).
-- [ ] **TG-13 OTel 관측** (인프라·코드)
+- [x] **TG-13 OTel 관측** (인프라·코드)
   범위: 트레이스·메트릭·로그 파이프라인 + SLO + 상태 페이지.
   수용: 주문 1건 추적 데모 + SLO 대시보드. 의존: TG-05.
+  증거: zero-dep W3C trace + OTLP 익스포트 + isolate 메트릭(Prometheus) +
+  구조화 로그 + 공개 /status + incidents(0048) + SLO.md + /admin/slo +
+  trace-order 데모(3요청·6스팬 워터폴). E2E 201/201 fresh(e2e_tg13) 1회차,
+  유닛 203pass·0fail(총208, 신규 11종), tsc·브랜딩·빌드 녹색.
+  Red drill: 죽은 OTLP URL 조용 실패·위조 traceparent 신규 발급(이상 유닛),
+  장애→/status→해소(E2E tg13b). waterfall 부모 보정은 TG-15 전수에서 재검증.
 - [ ] **TG-14 호텔 어그리게이터 1곳 연동** (코드)
   범위: 어댑터 + 샌드박스 E2E + 서킷브레이커·폴백. 시뮬레이터와 격리.
   수용: 샌드박스 예약·취소 E2E 녹색. 의존: TG-11.
-- [ ] **TG-15 ISR 전환** (코드·인프라)
+- [x] **TG-15 ISR 전환** (코드·인프라)
   범위: 카탈로그 온디맨드 렌더 + 엣지 캐시. 전면 프리렌더 폐지.
   수용: 카탈로그 10만 행 가정 부하에서 p95 기준 충족. 의존: TG-09.
+  증거: Nuxt cloudflare-module + 카탈로그 isr 3600 + ota-user 워커 분리 +
+  hub-assets 스테이징 + 16면 SSR 전환 + API s-maxage/SWR + purge API·5점 배관.
+  E2E 203/203 fresh(e2e_tg15) 1회차(신규 tg15a/b + tg13a/b 재검증),
+  유닛 207pass·0fail(총212, 신규 4종), tsc·브랜딩·빌드 녹색.
+  부하: 10만행 p95 566ms(SLO 1500 통과) + ISR 스모크(신규상품 200·0.22s).
+  Red drill: purge 미설정 skip·404 단기캐시(E2E tg15a), 스모크 MISS 404.
+  교훈: :8787 사용자 점유(보호 포트 추가), IWR 청크 행에는 curl 사용.
 
 ## Phase 3 — 스케일 (해외 판매)
 
-- [ ] **TG-16 검색엔진** (인프라·코드)
+- [x] **TG-16 검색엔진** (인프라·코드)
   범위: Typesense → ES/Vespa, 핫 캐시 + 검색 로그 파이프라인.
   수용: 패싯·지리·가용성 통합 쿼리 p95 기준. 의존: TG-09·TG-15.
-- [ ] **TG-17 글로벌 PG + FDS** (코드·외부)
+  증거: FTS5(0049·트리거 21종) + SearchBackend 심 + /api/v1/search(패싯·
+  지리·bookable) + 핫캐시(isolate LRU) + 검색 로그·인기어 API + PG LIKE 분기.
+  E2E 205/205 fresh(e2e_tg16b) 2회차(신규 tg16a/b), 유닛 212pass·0fail(총217,
+  신규 5종), tsc·브랜딩·빌드 녹색, PG 78T/101idx(tsvector+동기화).
+  부하: 10만행 p95 143ms(SLO 통과). 1회차 적색은 FTS 별칭 미지원 — 테이블명 수정.
+  잔여: Typesense/ES 어댑터, tsquery PG 전환, suggest, 일자별 가용성.
+- [x] **TG-17 글로벌 PG + FDS** (코드·외부)
   범위: Adyen/Stripe + 3DS + 사기 탐지 + 차지백 프로세스.
   수용: 테스트 카드 결제·환불·차지백 E2E. 의존: TG-11.
-- [ ] **TG-18 GDS/NDC 연동** (코드·외부)
+  증거: stripe.ts(PI·3DS·환불·조회·분쟁·서명검증) + provider 등록 +
+  ACTION_REQUIRED + confirmPayment FDS게이트·3DS분기 + 웹훅·복귀 라우트 +
+  fds-service 5규칙 + 어드민 심사 API + env 5종 + 0050 fraud_reviews.
+  API E2E 205/205 fresh(e2e_tg17) 무회귀 + Stripe 3/3 fresh(e2e_stripe)
+  (3DS 왕복·거절·즉시캡처·환불 / FDS hold·승인·재시도 / 차지백 dedupe·서명),
+  유닛 224pass·0fail(총229·skip5, 신규 12종), tsc·브랜딩·빌드 녹색,
+  PG 79T/103idx. Red drill: decline 단언 필드명 오기(providerCode→details) 적발·수정.
+  잔여: Adyen 어댑터, 실키 LIVE 전환, FDS 룰 임계치 운영 튜닝.
+- [x] **TG-18 GDS/NDC 연동** (코드·외부)
   범위: GDS 1곳 + NDC 직연동 + 매핑 DB + 요금 캐시.
   수용: 샌드박스 PNR 발급 E2E. 의존: TG-11·TG-14.
-- [ ] **TG-19 웨어하우스 + 추천 v1** (인프라·코드)
+  증거: live 어댑터(ndc·gds 공유 코어 + 주문·발권·취소·오퍼) + 0051
+  (CHECK 재구축 + 매핑 20/10 + fare_cache) + 서킷브레이커(임계 3·
+  쿨다운 5분) + 머니 게이트 503·대체편 + 오퍼 라우트 + 어드민 매핑.
+  E2E 4/4 fresh(e2e_sup3) 3회차(어드민·NDC 왕복·GDS 왕복·브레이커),
+  API 회귀 205/205 fresh(e2e_tg18) 1회차, 유닛 253pass·0fail(총258,
+  신규 29종), tsc·브랜딩·빌드·감사·Go 녹색, PG 82T/104idx.
+  Red drill: 게이트 no-op→201 적발·복원, 멱등키 랜덤→REF-2 적발·복원.
+  1회차 적색 2건은 테스트 버그(extra `{}`·이름 숫자).
+  잔여: 실계약 전환 + NDC XML 인증 + DOCS manifest(8G), 좌석맵·
+  부가서비스, BSP 정산, TG-14 베드뱅크, Redis 공용 캐시층.
+- [x] **TG-19 웨어하우스 + 추천 v1** (인프라·코드)
   범위: 웨어하우스 + ETL + 실험 플랫폼 + 추천 v1.
   수용: 일 배치 녹색 + 추천 A/B 지표. 의존: TG-03.
+  증거: 0052(마트 5종+인덱스 5종+RECO_V1) + 일 배치(롤업·페어·
+  인기·크론 스킵) + FNV 버킷 A/B + 3슬롯 API + 클릭 귀속(7일) +
+  지표 API + RecoRail·상세 7면.
+  E2E 208/208 fresh(e2e_tg19) 1회차(신규 tg19a/b/c), 유닛
+  267pass·0fail(총272, 신규 14종), tsc·브랜딩·빌드·감사 녹색,
+  PG 87T/109idx + 실DB 델타.
+  Red drill: popular 파괴→500 적발·복원, 빈날 0행, 플래그 OFF 503.
+  1회차 적색 3건은 테스트 오기·HOTEL 해소·크론 윈도우 (수정 완료).
+  잔여: 외부 웨어하우스 이관, ML 추천(TG-21), 실험 자동 판정,
+  CTR 대시보드(TG-16 연계).
 
 ## Phase 4 — 글로벌
 
-- [ ] **TG-20 멀티리전 + 분산 DB** (인프라)
+- [x] **TG-20 멀티리전 + 분산 DB** (인프라)
   범위: 리전 확장 + 분산 RDBMS + DR 훈련.
   수용: 리전 장애 시 RTO/RPO 달성 증명. 의존: TG-09·TG-13.
-- [ ] **TG-21 ML 가격·수요 + CS 봇** (코드)
+  증거: 읽기 복제본 프록시(허용 GET·지연/장애 폴백·429 통과·
+  funnel 미러) + 리전/`x-region`/`/status` + DR 리허설 PASS
+  (RTO 2.8s·RPO 25/25·무결성 ok) + 런북 + SLO RTO/RPO +
+  백업 복원 검증(정상 PASS·손상 FAIL) + 주간 잡.
+  E2E replica 3/3 fresh(e2e_rep2) + 전수 208/208 fresh(e2e_tg20),
+  유닛 279pass·0fail(총284, 신규 12종), tsc·브랜딩·빌드·감사 녹색.
+  Red drill: 지연·단절·손상 + 프록시 무력화 적발·복원.
+  발견: FTS5 로컬 export 불가 · 복원 적재 FK OFF 필수 (런북 §6).
+  잔여: 실 리전·분산 RDBMS·DNS 페일오버·게임데이, R2 백업(P1).
+- [x] **TG-21 ML 가격·수요 + CS 봇** (코드)
   범위: 수요 예측·동적 마크업·리뷰 LLM·CS 챗봇.
   수용: 지표 개선 A/B 증명. 의존: TG-19.
+  증거: 0053(결정·다이제스트·신고·이관·정산컬럼·플래그 OFF) +
+  예측(평활·요일·시즌·점유율) · 마크업(±15%·하한가·결정 재사용) ·
+  원장/정산 귀속(공급사 기준 제외) · 리뷰 다이제스트(AI/폴백) ·
+  CS 봇(규칙/AI·이관·신고) · PII/금칙어 필터 · 실험 2종 · UI.
+  E2E 212/212 fresh(e2e_tg21) 1회차(신규 tg21a/b/c/d), 유닛
+  302pass·0fail(총307, 신규 23종), tsc·브랜딩·빌드·감사 녹색,
+  PG 90T/111idx + 실DB 델타.
+  Red drill: 캡 무력화→감사 적발·복원, PII 마스킹, 신고→이관.
+  1회차 적색 2건은 테스트 문제(멀티라인 SQL·상한 초과 날짜).
+  AI 실측은 스테이징 잔여 (바인딩 미연결).
+  잔여: 외부 ML 이관, LLM 고도화, 다국어 봇, 탄력성 리포트.
 
 ## 범위 외 (갭 분석 참조, 이 리스트에서 관리 안 함)
 

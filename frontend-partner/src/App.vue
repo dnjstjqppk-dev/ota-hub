@@ -11,6 +11,8 @@ const navItems = [
   { path: '/products', label: '공급 상품 관리', icon: 'package' },
   { path: '/inventory', label: '가격/재고 캘린더', icon: 'calendar' },
   { path: '/orders', label: '주문/예약 접수', icon: 'bookings' },
+  { path: '/messages', label: '고객 메시지', icon: 'mail' },
+  { path: '/reviews', label: '리뷰 관리', icon: 'star' },
   { path: '/settlements', label: '정산 명세서', icon: 'ledger' },
   { path: '/profile', label: '회사/계좌 정보', icon: 'building' },
   { path: '/staff', label: '직원 계정 관리', icon: 'users' },

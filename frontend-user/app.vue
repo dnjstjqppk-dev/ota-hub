@@ -54,5 +54,7 @@ onMounted(() => {
     <GlobalFooter />
     <MobileBottomNav />
     <OnboardingModal :open="showOnboarding" @close="dismissOnboarding" />
+    <MarketingPopup v-if="!showOnboarding" />
+    <ToastHost />
   </div>
 </template>

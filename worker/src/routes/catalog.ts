@@ -5,13 +5,14 @@
  * `price_notice` because catalog prices are not supplier-verified.
  */
 import type { Env } from "../env.ts";
-import { json, str } from "../lib/http.ts";
+import { HttpError, json, str } from "../lib/http.ts";
 import { optionalUser, rateLimit } from "../lib/auth.ts";
 import { hotelRatePlans, supplierBookabilityMap, type Bookability } from "../services/catalog.ts";
 import { airportsForCityCode, airportsForPlaceName, likeEscape, parseDomain, suggest } from "../services/suggest-service.ts";
 import { catalogSnapshot } from "./seo.ts";
 import { db } from "../db/database.ts";
 import { trackEvent } from "../lib/analytics.ts";
+import { SEARCH_DOMAINS, unifiedSearch } from "../services/search-service.ts";
 
 /** User text for a LIKE '%...%' pattern: `%`/`_`/`\` become literals, never wildcards. */
 const contains = (s: string): string => `%${likeEscape(s)}%`;
@@ -52,7 +53,7 @@ function annotate(rows: any[], map: Map<string, Bookability>, fallbackSupplier: 
   });
 }
 
-export async function handleCatalog(request: Request, env: Env, url: URL): Promise<Response | null> {
+async function handleCatalogInner(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
   if (request.method !== "GET") return null;
   // #141: the whole public read surface (suggest, 7 lists + details, slots,
@@ -105,6 +106,49 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
   }
 
   const bmap = await supplierBookabilityMap(env);
+
+  // TG-16: unified cross-domain search (FTS5 + LIKE fallback + facets + geo).
+  if (path === "/api/v1/search") {
+    const q = str(url.searchParams.get("q"), 101);
+    if (q.length > 100) throw new HttpError(400, "QUERY_TOO_LONG", "검색어는 100자 이내로 입력해주세요.");
+    const domainRaw = str(url.searchParams.get("domain"), 20).toUpperCase();
+    const domain = domainRaw ? (domainRaw as (typeof SEARCH_DOMAINS)[number]) : undefined;
+    if (domainRaw && !(SEARCH_DOMAINS as readonly string[]).includes(domainRaw)) {
+      throw new HttpError(400, "INVALID_DOMAIN", "domain은 7개 카테고리 중 하나여야 합니다.");
+    }
+    const num = (v: string | null): number | undefined => {
+      if (v === null || v === "") return undefined;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const minPrice = num(url.searchParams.get("minPrice"));
+    const maxPrice = num(url.searchParams.get("maxPrice"));
+    if ((minPrice !== undefined && minPrice < 0) || (maxPrice !== undefined && maxPrice < 0) || (minPrice !== undefined && maxPrice !== undefined && minPrice > maxPrice)) {
+      throw new HttpError(400, "INVALID_RANGE", "가격 범위가 올바르지 않습니다.");
+    }
+    const minRating = num(url.searchParams.get("minRating"));
+    if (minRating !== undefined && (minRating < 0 || minRating > 5)) throw new HttpError(400, "INVALID_RATING", "평점은 0~5 사이여야 합니다.");
+    const sortRaw = str(url.searchParams.get("sort"), 20);
+    const sort = (sortRaw === "price_asc" || sortRaw === "price_desc" || sortRaw === "rating" ? sortRaw : "rank") as "rank" | "price_asc" | "price_desc" | "rating";
+    let bbox: [number, number, number, number] | undefined;
+    const bboxRaw = str(url.searchParams.get("bbox"), 100);
+    if (bboxRaw) {
+      const parts = bboxRaw.split(",").map(Number);
+      if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) throw new HttpError(400, "INVALID_BBOX", "bbox는 minLat,minLng,maxLat,maxLng 숫자 4개여야 합니다.");
+      const [minLat, minLng, maxLat, maxLng] = parts;
+      if (minLat < -90 || maxLat > 90 || minLng < -180 || maxLng > 180 || minLat > maxLat || minLng > maxLng) {
+        throw new HttpError(400, "INVALID_BBOX", "bbox 범위가 올바르지 않습니다.");
+      }
+      bbox = [minLat, minLng, maxLat, maxLng];
+    }
+    const out = await unifiedSearch(env, {
+      q, domain, city: str(url.searchParams.get("city"), 60) || undefined,
+      minPrice, maxPrice, minRating, bbox, sort,
+      limit: clampLimit(url.searchParams.get("limit"), 20, 50),
+      offset: Math.max(0, Math.min(500, parseInt(url.searchParams.get("offset") || "0", 10) || 0)),
+    }, viewer?.id);
+    return json({ success: true, ...out });
+  }
 
     // Helper to format hotel json columns
     const formatHotel = (row: any) => {
@@ -589,4 +633,21 @@ export async function handleCatalog(request: Request, env: Env, url: URL): Promi
     // GET /api/v1/admin/suppliers/registry. The public surface must not
     // advertise vendor integrations the platform has not contracted.
   return null;
+}
+
+// TG-15: the 7 product list/detail surfaces are public and user-independent,
+// so the edge may serve them (5-min freshness + 1h stale-while-revalidate).
+// Slot availability stays uncached (time-sensitive), 404s cache 30s (crawl
+// kindness without freezing delists). Edge HITs skip trackEvent — funnel
+// figures are a lower bound, see docs/SLO.md.
+const CACHEABLE_CATALOG = /^\/api\/v1\/(hotels|flights|trains|cars|transfers|activities|packages)(\/|$)|^\/api\/v1\/search$/;
+
+export async function handleCatalog(request: Request, env: Env, url: URL): Promise<Response | null> {
+  const res = await handleCatalogInner(request, env, url);
+  if (!res || !CACHEABLE_CATALOG.test(url.pathname) || url.pathname.endsWith("/slots")) return res;
+  const h = new Headers(res.headers);
+  h.set("Cache-Control", res.status === 404
+    ? "public, max-age=30"
+    : "public, max-age=60, s-maxage=300, stale-while-revalidate=3600");
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
 }

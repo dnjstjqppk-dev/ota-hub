@@ -111,6 +111,73 @@ npx wrangler d1 execute ota_production --remote --command "SELECT id, adapter, i
 > npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT name FROM sqlite_master WHERE name = 'job_queue') AS q, (SELECT COUNT(*) FROM job_queue WHERE status = 'DEAD') AS dead;"
 > # 기대: q job_queue, dead 0 (누적 시 어드민 /admin/jobs로 확인)
 > ```
+>
+> 0047(상용화 감사) 주의: reviews 컬럼 6종 + 신규 테이블 5종(문의 스레드·
+> 예약 메시지·읽음 상태·마케팅 슬롯·소셜 계정 연결). 가산형이라 기존 행 영향
+> 없음. 적용 후 확인:
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT name FROM sqlite_master WHERE name = 'marketing_slots') AS mkt, (SELECT name FROM sqlite_master WHERE name = 'booking_messages') AS msg, (SELECT name FROM sqlite_master WHERE name = 'support_ticket_messages') AS tkt;"
+> # 기대: mkt marketing_slots, msg booking_messages, tkt support_ticket_messages
+> ```
+>
+> 0048(장애 기록) 주의: `incidents` 테이블+인덱스가 생긴다. 공개 `/status`와
+> SLO 대시보드가 읽는다. 기존 행 영향 없음. 적용 후 확인:
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT name FROM sqlite_master WHERE name = 'incidents') AS i, (SELECT COUNT(*) FROM incidents WHERE status = 'OPEN') AS open;"
+> # 기대: i incidents, open 0 (OPEN이 있으면 /status가 degraded/outage)
+> ```
+>
+> 0049(검색 FTS) 주의: `catalog_fts` 가상 테이블 + 도메인별 동기화 트리거
+> 21종이 생기고 기존 상품이 백필된다. 이후 상품 CUD는 트리거가 자동 반영.
+> 적용 후 확인:
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT COUNT(*) FROM catalog_fts) AS fts, (SELECT COUNT(*) FROM (SELECT id FROM hotels UNION ALL SELECT id FROM flights UNION ALL SELECT id FROM trains UNION ALL SELECT id FROM cars UNION ALL SELECT id FROM transfers UNION ALL SELECT id FROM activities UNION ALL SELECT id FROM packages)) AS base;"
+> # 기대: fts == base (행수 일치 — 불일치 시 트리거 누락 의심)
+> ```
+>
+> 0050(사기심사) 주의: `fraud_reviews` 테이블+인덱스 2종이 생긴다(가산형).
+> `FRAUD_REVIEW=1`을 켜기 전에는 행이 쌓이지 않는다.
+>
+> 0051(NDC·GDS 기반) 주의: `suppliers` 테이블이 재구축된다(adapter CHECK에
+> ndc·gds 추가 — 0034와 동일한 방식). 행 복사가 포함되니 적용 전후 행수를
+> 대조한다. 신규 `airport_mappings`(20행)·`airline_mappings`(10행)·
+> `fare_cache`+인덱스는 가산형. 적용 후 확인:
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT COUNT(*) FROM suppliers) AS sup, (SELECT COUNT(*) FROM airport_mappings) AS ap, (SELECT COUNT(*) FROM airline_mappings) AS al, (SELECT name FROM sqlite_master WHERE name = 'fare_cache') AS fc;"
+> # 기대: sup 적용 전과 동일, ap 20, al 10, fc fare_cache
+> ```
+>
+> 롤백 시: 재구축 전 백업에서 `suppliers` 복원 (단순 DROP 불가).
+>
+> 0052(웨어하우스·추천) 주의: `fact_daily`·`reco_pairs`·`reco_popular`·
+> `experiment_assignments`·`reco_exposures` 5종 + 인덱스 5종이 생기고
+> `RECO_V1` 플래그가 ON으로 시드된다(가산형). 기존 행 영향 없음.
+> 첫 배치는 크론이 자정 후 자동 수행(어제분) — 당일 확인이 필요하면
+> 어드민 `POST /api/v1/admin/warehouse/rollup {"date":"YYYY-MM-DD"}`.
+> 적용 후 확인:
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT name FROM sqlite_master WHERE name = 'fact_daily') AS f, (SELECT is_enabled FROM feature_flags WHERE key = 'RECO_V1') AS reco;"
+> # 기대: f fact_daily, reco 1
+> ```
+>
+> 0053(마크업·봇·다이제스트) 주의: `pricing_decisions`·`review_digests`·
+> `bot_reports` 3종 + `support_tickets.handoff_at` +
+> `settlements.markup_minor` + 플래그 2종(`DYNAMIC_MARKUP`·`CS_BOT`,
+> OFF 시드). 전부 가산형. 플래그를 켜기 전에는 가격·응대 동작이
+> 기존과 동일하다. 켤 때는 DYNAMIC_MARKUP부터 1개씩, 지표 API로
+> 양팔을 확인하면서 올린다. AI 바인딩(`wrangler.jsonc`에
+> `"ai": { "binding": "AI" }`)은 스테이징 실측 후 운영자가 추가한다.
+> 적용 후 확인:
+>
+> ```powershell
+> npx wrangler d1 execute ota_production --remote --command "SELECT (SELECT COUNT(*) FROM pricing_decisions) AS pd, (SELECT is_enabled FROM feature_flags WHERE key = 'DYNAMIC_MARKUP') AS mk, (SELECT is_enabled FROM feature_flags WHERE key = 'CS_BOT') AS bot;"
+> # 기대: pd 0, mk 0, bot 0
+> ```
 
 ## 1. 판매주체 ACTIVE (사업자 정보 필요)
 
@@ -233,6 +300,67 @@ npx wrangler secret put TOSS_SECRET_KEY   # test_sk_... 입력
 확인(어드민 토큰): `/api/v1/health?verbose=1` → `paymentProvider: toss:LIVE`. 첫 실결제 1건은 소액 테스트
 상품으로 결제→확정→취소·환불 풀루프를 돌리고, 토스 상점관리자 입금/취소 내역과
 대사한 뒤 정상 상품 판매를 연다.
+
+## 7S. 글로벌 PG — Stripe 테스트 (해외카드 판매 시)
+
+대시보드에서 테스트키(`sk_test_`, `pk_test_`) 발급. `wrangler.jsonc` vars의
+`PAYMENT_PROVIDER`를 `stripe`로 바꾸고 재배포 (토스와 stripe 중 하나만 활성 —
+동시 운영은 후속 과제).
+
+```powershell
+npx wrangler secret put STRIPE_SECRET_KEY   # sk_test_... 입력
+```
+
+`STRIPE_PUBLISHABLE_KEY`(`pk_test_...`)는 공개키라 vars에 넣고 재배포.
+확인: `/api/v1/health?verbose=1` → `paymentProvider: stripe:SANDBOX`,
+3DS 테스트 카드로 인증 리다이렉트→복귀→확정 풀루프 1건.
+
+## 8S. Stripe 실키 + 사기심사 + 웹훅 (장사 시작)
+
+```powershell
+npx wrangler secret put STRIPE_SECRET_KEY   # sk_live_... 로 교체
+npx wrangler secret put STRIPE_WEBHOOK_SECRET  # whsec_... (대시보드 웹훅 등록 후)
+```
+
+대시보드 웹훅 URL에 `https://<API 호스트>/api/v1/webhooks/stripe` 등록
+(이벤트: `charge.dispute.created`, `payment_intent.succeeded`).
+사기심사 켜기: vars에 `"FRAUD_REVIEW": "1"` 추가 후 재배포 — 임계(60점) 초과
+시도는 결제 없이 심사 대기(PENDING)로 보류되고 어드민이
+`/api/v1/admin/fraud/reviews`에서 승인·거부한다. 첫 실결제 1건은
+소액 테스트 상품으로 3DS 풀루프 + 차지백 시뮬레이션(대시보드 테스트 분쟁)까지
+수행하고 대시보드와 대사한다.
+
+## 7G. NDC·GDS 샌드박스 검증 (항공사 직판·GDS 판매 시)
+
+항공사 NDC 게이트웨이 또는 GDS(Travelport 등) 샌드박스 자격 발급 후
+스테이징 워커에 등록한다. 베이스 URL은 vars, 키는 시크릿:
+
+```powershell
+# wrangler.jsonc vars (스테이징): "NDC_API_BASE": "https://ndc-sandbox.<항공사>",
+# 또는 "GDS_API_BASE": "https://sandbox.<GDS>" — 실연동 1곳만 활성.
+npx wrangler secret put NDC_API_KEY   # 샌드박스 키 입력
+# npx wrangler secret put GDS_API_KEY # GDS 택1 시
+```
+
+어드민에서 공급사 행의 adapter를 `ndc`/`gds`로 바꾸고 계약(ACTIVE) 연결 후
+LIVE 전환 → `/api/v1/flights/offers` 실조회 1건 + 테스트 PNR 발급·발권·취소
+풀루프 1건 (테스트 여정). 확인: `supplier_api_calls`에 BOOK:CONFIRMED →
+TICKET:ISSUED → CANCEL:CANCELLED 순서대로 적재.
+
+## 8G. NDC·GDS 실계약 전환 + 인증 (장사 시작)
+
+1. 실계약 체결 후 운영 키로 교체 (`wrangler secret put NDC_API_KEY` /
+   `GDS_API_KEY`) + 실 베이스로 vars 변경 후 재배포.
+2. 항공사별 NDC 인증: v1 와이어 포맷은 JSON 스텁 계약이라 항공사 NDC XML
+   프로파일(Offer/Order servicing) 인증이 별도로 필요하다. 인증 전에는
+   샌드박스 PNR만 발급하고 실재고 판매를 열지 않는다.
+3. DOCS/여권 manifest: v1은 여권번호를 암호화 보관만 하고 공급사에
+   전송하지 않는다. 실발권에 DOCS 전송이 필요하면 별도 보안 검토 후
+   manifest 항목을 확장한다 (PII 전송 범위·보관 로그 포함).
+4. BSP 정산 연동 전까지는 기존 원장(정산 경로)으로 대사한다.
+5. 장애 주입 리허설: 스텁 장애 시나리오로 서킷브레이커 OPEN(503+대체편)→
+   복구를 스테이징에서 1회 재현하고 `SUPPLIER_BREAKER_COOLDOWN_MS`
+   (기본 5분)를 운영값으로 확정한다.
 
 ## 9. 토스 웹훅 등록 (선택이나 권장)
 

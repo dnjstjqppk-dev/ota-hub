@@ -50,6 +50,27 @@ export function renderOutboxEmail(template: string, payloadJson: string, site: s
       html: `<p>${esc(what)} 상품이 목표가(${tgt.toLocaleString("ko-KR")}원) 이하로 내려갔어요. 현재가: <b>${cur.toLocaleString("ko-KR")}원</b></p><p>가격은 변동될 수 있으니 서둘러 예약하세요.</p>`,
     };
   }
+  // CR-02/CR-03: reply notifications carry a link only — the message body stays
+  // behind login so a forwarded mail never leaks the conversation.
+  if (template === "SUPPORT_REPLY") {
+    const subject = String(p.subject || "");
+    if (!subject) return null;
+    const url = `${site.replace(/\/+$/, "")}/help#inquiries`;
+    return {
+      subject: `[${brand}] 문의에 답변이 등록됐어요 — ${subject.slice(0, 60)}`,
+      html: `<p>문의하신 「${esc(subject)}」에 고객센터 답변이 등록됐어요.</p><p><a href="${esc(url)}">답변 확인하기</a></p>`,
+    };
+  }
+  if (template === "BOOKING_MESSAGE") {
+    const num = String(p.bookingNumber || "");
+    const from = String(p.from || "");
+    if (!num || !from) return null;
+    const url = `${site.replace(/\/+$/, "")}/my/bookings`;
+    return {
+      subject: `[${brand}] 예약 ${num}에 새 메시지가 도착했어요`,
+      html: `<p>${esc(from)}에서 예약 <b>${esc(num)}</b>에 메시지를 보냈어요.</p><p><a href="${esc(url)}">내 예약에서 확인하기</a></p>`,
+    };
+  }
   if (template === "BOOKING_CONFIRMED" || template === "FLIGHT_TICKETED") {
     const num = String(p.bookingNumber || p.bookingId || "");
     if (!num) return null;

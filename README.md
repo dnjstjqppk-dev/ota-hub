@@ -48,7 +48,7 @@ npx wrangler dev -c wrangler.local.jsonc --port 8799   # E2E 기본 포트
 ```powershell
 cd frontend-user
 npm run dev        # http://localhost:3000
-npm run generate   # 정적 프리렌더 빌드
+npm run build     # SSR 워커 빌드 (TG-15: ota-user, ISR)
 ```
 
 주요 경로: `/`(홈·7도메인 위젯), `/hotels/list`, `/hotels/detail/[id]`,

@@ -7,7 +7,7 @@ import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
-const { item: p, state, reload } = useCatalogDetail('/packages', id, generatedFallback('PACKAGE', id))
+const { item: p, state, reload } = await useCatalogDetail('/packages', id, generatedFallback('PACKAGE', id))
 
 const details = computed<any>(() => {
   try { return JSON.parse(p.value?.details_json || '{}') || {} } catch { return {} }
@@ -53,6 +53,7 @@ useHead(() => {
           <p class="mt-6 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">1인 기준 요금이에요. 패키지는 환불할 수 없는 상품이고, 예약 단계에서 여행자 전원의 영문 성명이 필요해요.</p>
         </DetailHero>
         <ReviewsSection domain="PACKAGE" :target-id="p.id" />
+        <RecoRail domain="PACKAGE" :item-id="p.id" />
       </div>
       <DetailBookingCard :item="p" domain="PACKAGE" :price-krw="price" unit-label="1인" cancellation="NON_REFUNDABLE" start-label="출발일" people :alert-label="p.title" />
     </div>

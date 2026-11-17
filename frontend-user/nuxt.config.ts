@@ -3,11 +3,12 @@ declare const process: {
   env: Record<string, string | undefined>
 }
 
-// C7: product detail routes come from the build-time D1 snapshot
-// (scripts/gen-seo-snapshot.mjs) — never a hardcoded ID list.
-import generatedRoutes from './prerender-routes.json'
-const SEO_DETAIL_ROUTES: string[] = Array.isArray(generatedRoutes) ? generatedRoutes : []
-
+// TG-15: the user portal renders on demand (Nitro cloudflare-module preset + ISR).
+// Only product-independent marketing pages prerender — catalog routes render
+// at first request and revalidate hourly (isr: 3600). The build-time D1
+// snapshot (gen-seo-snapshot.mjs / prerender-routes.json, C7-era) is gone:
+// new products are reachable without a rebuild, and /sitemap.xml already
+// reads D1 live (worker/src/routes/seo.ts).
 export default defineNuxtConfig({
   ssr: true,
   // Private, query-driven pages render client-side only. A prerendered copy would hydrate with the
@@ -20,53 +21,34 @@ export default defineNuxtConfig({
     '/my/**': { ssr: false },
     '/reset-password': { ssr: false },
     '/login': { ssr: false },
-    '/register': { ssr: false }
+    '/register': { ssr: false },
+    '/status': { ssr: false },
+    // TG-15: catalog renders on demand, cached at the edge for 1h (SWR).
+    '/hotels': { isr: 3600 },
+    '/hotels/**': { isr: 3600 },
+    '/flights': { isr: 3600 },
+    '/flights/**': { isr: 3600 },
+    '/trains': { isr: 3600 },
+    '/trains/**': { isr: 3600 },
+    '/cars': { isr: 3600 },
+    '/cars/**': { isr: 3600 },
+    '/transfers': { isr: 3600 },
+    '/transfers/**': { isr: 3600 },
+    '/things-to-do': { isr: 3600 },
+    '/things-to-do/**': { isr: 3600 },
+    '/packages': { isr: 3600 },
+    '/packages/**': { isr: 3600 },
+    '/deals': { isr: 3600 },
+    '/trip-best': { isr: 3600 }
   },
   nitro: {
-    preset: 'static',
+    // cloudflare-module (ES modules + nodejs_compat). The plain 'cloudflare'
+    // preset emits service-worker syntax, which wrangler 4 rejects for builds
+    // with node: imports (observed 2026-11-16).
+    preset: 'cloudflare-module',
     prerender: {
-      crawlLinks: true,
-      routes: [
-        '/',
-        '/hotels',
-        '/hotels/list',
-        '/hotels/detail',
-        '/flights',
-        '/flights/search',
-        '/flights/detail',
-        '/trains',
-        '/trains/search',
-        '/trains/detail',
-        '/cars',
-        '/cars/list',
-        '/cars/detail',
-        '/transfers',
-        '/transfers/list',
-        '/transfers/detail',
-        '/things-to-do',
-        '/things-to-do/list',
-        '/things-to-do/detail',
-        '/packages',
-        '/packages/list',
-        '/packages/detail',
-        '/deals',
-        '/rewards',
-        '/login',
-        '/help',
-        '/moments',
-        '/trip-best',
-        '/booking/success',
-        '/booking/complete',
-        '/hotels/booking',
-        '/flights/booking',
-        '/trains/booking',
-        '/cars/booking',
-        '/transfers/booking',
-        '/things-to-do/booking',
-        '/packages/booking',
-        '/my/bookings',
-        ...SEO_DETAIL_ROUTES,
-      ]
+      crawlLinks: false,
+      routes: ['/', '/help', '/moments', '/rewards']
     }
   },
   modules: ['@nuxtjs/i18n'],
@@ -103,6 +85,10 @@ export default defineNuxtConfig({
     },
   },
   runtimeConfig: {
+    // TG-15: absolute API base for SSR fetches (server-only, never shipped to
+    // browsers). Overridden at runtime by NUXT_API_BASE_SERVER (wrangler vars);
+    // the baked default points at the hub dev server.
+    apiBaseServer: 'http://127.0.0.1:8799/api/v1',
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE || '/api/v1',
       sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { apiFetch } from '~/composables/useApi'
 
@@ -32,9 +32,9 @@ const fetchBest = async () => {
   }
 }
 
-onMounted(() => {
-  fetchBest()
-})
+// TG-15: SSR the first paint (ISR caches it).
+await useAsyncData('tg15-trip-best', () => fetchBest())
+if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 </script>
 
 <template>
@@ -58,15 +58,15 @@ onMounted(() => {
     >
       <div class="space-y-4">
         <div v-for="(h, idx) in hotels" :key="h.id" class="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm hover:shadow-xl transition">
-          <div class="flex items-center gap-6">
+          <div class="flex w-full min-w-0 items-center gap-3 md:w-auto md:gap-6">
             <div :class="['w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl text-white shadow-md shrink-0', idx === 0 ? 'bg-amber-500' : idx === 1 ? 'bg-slate-400' : 'bg-amber-700']">
               {{ idx + 1 }}
             </div>
-            <SmartImg :src="h.thumbnail_url" class="w-28 h-20 rounded-2xl object-cover" :alt="h.name_ko" />
-            <div>
+            <SmartImg :src="h.thumbnail_url" class="h-16 w-20 shrink-0 rounded-2xl object-cover md:h-20 md:w-28" :alt="h.name_ko" />
+            <div class="min-w-0">
               <div class="text-xs text-slate-400 font-semibold">{{ h.city }}, {{ h.country }}</div>
-              <h3 class="text-lg font-black text-slate-900">{{ h.name_ko }}</h3>
-              <div class="flex items-center gap-2 mt-1">
+              <h3 class="break-words text-base font-black text-slate-900 md:text-lg">{{ h.name_ko }}</h3>
+              <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span v-if="h.review_score != null" class="px-2 py-0.5 bg-trip-blue text-white rounded text-[11px] font-bold">{{ h.review_score }}점</span>
                 <span v-else class="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[11px] font-bold">신규</span>
                 <span class="text-xs text-slate-500 font-medium">(인증 후기 {{ Number(h.review_count || 0).toLocaleString() }}개)</span>

@@ -6,7 +6,7 @@ import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
-const { item: t, state, reload } = useCatalogDetail('/trains', id, generatedFallback('TRAIN', id))
+const { item: t, state, reload } = await useCatalogDetail('/trains', id, generatedFallback('TRAIN', id))
 const hm = (m: number) => `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ''}`
 
 const facts = computed(() => {
@@ -46,6 +46,7 @@ useHead(() => {
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">{{ t.seat_class }} 좌석으로 판매돼요. 아동도 성인과 같은 요금이 적용되고, 예약 단계에서 탑승객 전원의 영문 성명이 필요해요.</p>
         </DetailHero>
         <ReviewsSection domain="TRAIN" :target-id="t.id" />
+        <RecoRail domain="TRAIN" :item-id="t.id" />
       </div>
       <DetailBookingCard :item="t" domain="TRAIN" :price-krw="t.price_krw" unit-label="1인 편도" cancellation="FREE" start-label="탑승일" people :alert-label="t.departure_station + '-' + t.arrival_station + ' ' + t.train_number" />
     </div>

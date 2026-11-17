@@ -6,7 +6,7 @@ import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
-const { item: f, state, reload } = useCatalogDetail('/flights', id, generatedFallback('FLIGHT', id))
+const { item: f, state, reload } = await useCatalogDetail('/flights', id, generatedFallback('FLIGHT', id))
 
 const CABIN_KO: Record<string, string> = { ECONOMY: '일반석', PREMIUM_ECONOMY: '프리미엄 일반석', BUSINESS: '비즈니스석', FIRST: '일등석' }
 const hm = (m: number) => `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ''}`
@@ -50,6 +50,7 @@ useHead(() => {
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">발권 후에는 환불할 수 없는 운임이에요. 예약 단계에서 탑승객 전원의 여권 정보(영문 성명·여권번호·만료일)가 필요해요. 왕복은 항공권 검색에서 가는 편과 오는 편을 차례로 고르면 한 번에 예약돼요.</p>
         </DetailHero>
         <ReviewsSection domain="FLIGHT" :target-id="f.id" />
+        <RecoRail domain="FLIGHT" :item-id="f.id" />
       </div>
       <DetailBookingCard :item="f" domain="FLIGHT" :price-krw="f.base_price_krw" unit-label="성인 1명 편도" cancellation="NON_REFUNDABLE" start-label="가는 날" people :alert-label="f.departure_airport + '-' + f.arrival_airport + ' ' + f.flight_number" />
     </div>

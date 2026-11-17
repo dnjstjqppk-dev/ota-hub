@@ -86,6 +86,10 @@ const routes: RouteRecordRaw[] = [
     component: SettlementsView,
     meta: { requiresAuth: true }
   },
+  // CR-07 / CR-01 / CR-03
+  { path: '/settlements/:id/statement', name: 'Statement', component: () => import('../views/StatementView.vue'), meta: { requiresAuth: true } },
+  { path: '/reviews', name: 'Reviews', component: () => import('../views/ReviewsView.vue'), meta: { requiresAuth: true } },
+  { path: '/messages', name: 'Messages', component: () => import('../views/MessagesView.vue'), meta: { requiresAuth: true } },
   {
     path: '/profile',
     name: 'Profile',
@@ -115,7 +119,13 @@ const basePath = typeof window !== 'undefined' && window.location.pathname.start
 
 const router = createRouter({
   history: createWebHistory(basePath),
-  routes
+  routes,
+  // Deep links such as /orders/:id#messages land on the section (messages load async, so wait a beat).
+  scrollBehavior(to, _from, saved) {
+    if (saved) return saved
+    if (to.hash) return new Promise((resolve) => setTimeout(() => resolve({ el: to.hash, top: 72, behavior: 'smooth' }), 400))
+    return { top: 0 }
+  }
 })
 
 // Authentication Route Guard (#35: verified against the cookie jar, not a stored token).

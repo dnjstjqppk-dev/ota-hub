@@ -2,6 +2,12 @@ import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { audit, rateLimit, requireAdmin, resetSubjectSessions } from "../lib/auth.ts";
 import * as S from "../services/booking-service.ts";
+import { rollupDailyJob } from "../services/warehouse.ts";
+import { recoMetrics } from "../services/reco-service.ts";
+import { capacityFor, forecastDemand, markupMetrics } from "../services/forecast-service.ts";
+import { csBotMetrics } from "../services/csbot-service.ts";
+import { digestBatch } from "../services/review-digest.ts";
+import { db as portableDb } from "../db/database.ts";
 import { BOOKING_STATUSES } from "../domain/state-machine.ts";
 import { decryptPiiField, newId, newTotpSecret, verifyTotp } from "../lib/crypto.ts";
 import { invalidateSupplierCache } from "../services/catalog.ts";
@@ -9,13 +15,15 @@ import { likeEscape } from "../services/suggest-service.ts";
 import { verifyBusinessNumber } from "../services/business-verify.ts";
 import { pageMeta, pageParams } from "../lib/pagination.ts";
 import { idempotencyPrecheck, idempotencyStore } from "../lib/idempotency.ts";
+import { bareListUrls, channelPurgeUrls, productPurgeUrls, purgeForMutation } from "../lib/cache-purge.ts";
+import { invalidateSearchCache } from "../services/search-service.ts";
 import { listJobs, type JobStatus } from "../services/queue-service.ts";
 
 const PARTNER_STATUSES = ["ACTIVE", "REJECTED", "SUSPENDED", "PENDING_APPROVAL"] as const;
 const USER_ROLES = ["USER", "ADMIN"] as const;
 const MAX_COIN_ADJUSTMENT = 10_000_000;
 // Mirrors the CHECK constraints on `suppliers` (migrations/0002_ota_core.sql).
-const SUPPLIER_ADAPTERS = ["none", "direct_contract", "simulator", "api"] as const;
+const SUPPLIER_ADAPTERS = ["none", "direct_contract", "simulator", "api", "ndc", "gds"] as const;
 const SUPPLIER_STATUSES = ["LIVE", "SANDBOX_VERIFIED", "DEV_DONE_CONTRACT_PENDING", "CONTRACTED_IN_DEV", "EXTERNAL_LINK_ONLY", "NOT_INTEGRATED", "BLOCKED"] as const;
 // Mirrors the CHECK constraint on `business_entities` (migrations/0002_ota_core.sql).
 const ENTITY_STATUSES = ["DRAFT", "ACTIVE", "SUSPENDED", "RETIRED"] as const;
@@ -271,6 +279,60 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     return json({ success: true, stats });
   }
 
+  // TG-19: warehouse batch (manual trigger; explicit date forces a rebuild,
+  // omitted date rolls yesterday with the cron staleness guard).
+  if (path === "/api/v1/admin/warehouse/rollup" && method === "POST") {
+    const b = await readJson(request);
+    const date = b.date === undefined || b.date === null || b.date === "" ? null : str(b.date, 10);
+    const stats = await S.runMaintenanceWithHeartbeat(env, "rollup_daily", () => rollupDailyJob(env, date));
+    await audit(env, admin.id, "RUN_WAREHOUSE_ROLLUP", "SYSTEM", "rollup_daily", { date, ...stats });
+    return json({ success: true, date, stats });
+  }
+  if (path === "/api/v1/admin/warehouse/fact" && method === "GET") {
+    const date = str(url.searchParams.get("date"), 10) || new Date().toISOString().slice(0, 10);
+    const domain = str(url.searchParams.get("domain"), 20).toUpperCase();
+    const rows = domain
+      ? await db.prepare("SELECT * FROM fact_daily WHERE date = ? AND domain = ?").bind(date, domain).all()
+      : await db.prepare("SELECT * FROM fact_daily WHERE date = ? ORDER BY domain").bind(date).all();
+    return json({ success: true, date, facts: rows.results || [] });
+  }
+  // TG-19: reco-v1 A/B readout (exposures, CTR, attributed bookings).
+  if (path === "/api/v1/admin/experiments/reco-v1" && method === "GET") {
+    return json({ success: true, experiment: "reco-v1", variants: await recoMetrics(portableDb(env)) });
+  }
+  // TG-21: markup-v1 A/B readout (quotes → bookings → revenue per arm).
+  if (path === "/api/v1/admin/experiments/markup-v1" && method === "GET") {
+    return json({ success: true, experiment: "markup-v1", variants: await markupMetrics(portableDb(env)) });
+  }
+  // TG-21: cs-bot-v1 A/B readout (tickets, bot replies, handoffs, reports).
+  if (path === "/api/v1/admin/experiments/cs-bot-v1" && method === "GET") {
+    return json({ success: true, experiment: "cs-bot-v1", variants: await csBotMetrics(portableDb(env)) });
+  }
+  // TG-21: demand forecast readout (interpretable factors included).
+  if (path === "/api/v1/admin/forecast" && method === "GET") {
+    const domain = str(url.searchParams.get("domain"), 20).toUpperCase();
+    const itemId = str(url.searchParams.get("itemId") || url.searchParams.get("item_id"), 100);
+    const date = str(url.searchParams.get("date"), 10);
+    if (!domain || !itemId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new HttpError(400, "FORECAST_INPUT_REQUIRED", "domain·itemId·date(YYYY-MM-DD)가 필요합니다.");
+    }
+    const cap = await capacityFor(env, domain, itemId);
+    return json({ success: true, ...(await forecastDemand(portableDb(env), { domain, itemId, date }, new Date().toISOString().slice(0, 10), cap)) });
+  }
+  // TG-21: review digest batch (manual trigger; optional scope).
+  if (path === "/api/v1/admin/reviews/digest/run" && method === "POST") {
+    const b = await readJson(request);
+    const scope = b.domain || b.itemId || b.item_id
+      ? { domain: b.domain ? str(b.domain, 20) : undefined, itemId: str(b.itemId || b.item_id, 100) || undefined }
+      : undefined;
+    if (scope && (!scope.domain || !scope.itemId)) {
+      throw new HttpError(400, "SCOPE_REQUIRES_BOTH", "범위 지정 시 domain과 itemId가 모두 필요합니다.");
+    }
+    const stats = await digestBatch(env, scope);
+    await audit(env, admin.id, "RUN_REVIEW_DIGEST", "SYSTEM", "review_digest", { ...scope, ...stats });
+    return json({ success: true, stats });
+  }
+
   // TG-11: saga queue visibility — depth and dead letters without DB access.
   // No customer PII in projection (mirrors the #74 refunds queue).
   if (path === "/api/v1/admin/jobs" && method === "GET") {
@@ -332,6 +394,12 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     }));
     return json({ success: true, suppliers: list });
   }
+  // TG-18: IATA airport/airline reference mappings (admin-only reference data).
+  if (path === "/api/v1/admin/suppliers/mappings" && method === "GET") {
+    const { listMappings } = await import("../suppliers/mappings.ts");
+    const maps = await listMappings(db);
+    return json({ success: true, ...maps });
+  }
   m = path.match(/^\/api\/v1\/admin\/suppliers\/([A-Za-z0-9_-]+)$/);
   if (m && method === "PATCH") {
     const b = await readJson(request);
@@ -356,7 +424,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       if (c?.status !== "ACTIVE") throw new HttpError(409, "CONTRACT_NOT_ACTIVE", "LIVE 전환에는 유효(ACTIVE) 상태의 공급사 계약이 필요합니다.");
       // LIVE+api is allowed as a contract state, but bookabilityOf() keeps it
       // unsellable (SUPPLIER_API_NOT_IMPLEMENTED) until a real adapter exists.
-      if (adapter !== "direct_contract" && adapter !== "api") throw new HttpError(409, "ADAPTER_NOT_LIVE", "LIVE 전환은 direct_contract 또는 api 어댑터에서만 가능합니다.");
+      if (adapter !== "direct_contract" && adapter !== "api" && adapter !== "ndc" && adapter !== "gds") throw new HttpError(409, "ADAPTER_NOT_LIVE", "LIVE 전환은 direct_contract·api·ndc·gds 어댑터에서만 가능합니다.");
     }
     // #27: affiliate outlink mapping. Must reference a registered partner (the
     // catalog only emits the link while the partner stays active + https).
@@ -372,7 +440,10 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       .bind(adapter, status, b.contractId ? str(b.contractId, 64) : null, b.notes ? str(b.notes, 500) : null, outlink, m[1]).run();
     invalidateSupplierCache();
     await audit(env, admin.id, "UPDATE_SUPPLIER", "SUPPLIER", m[1], { before: { adapter: before.adapter, status: before.integration_status }, after: { adapter, status, outlink } });
-    return json({ success: true });
+    // TG-15: bookability flips ride the bare lists; details converge on TTL.
+    invalidateSearchCache(); // TG-16: bookability is baked into hits.
+    const purgedSupplier = await purgeForMutation(env, channelPurgeUrls(request));
+    return json({ success: true }, 200, { "X-Cache-Purged": String(purgedSupplier) });
   }
 
   if (path === "/api/v1/admin/entities" && method === "GET") {
@@ -556,7 +627,10 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     }
     await db.prepare(`INSERT INTO ${spec.table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`).bind(...vals).run();
     await audit(env, admin.id, "CREATE_PRODUCT", m[1], id, { table: spec.table });
-    return json({ success: true, id, domain: m[1] }, 201);
+    // TG-15: new products must be reachable without waiting out the edge TTL.
+    invalidateSearchCache(); // TG-16: hot cache follows the same write.
+    const purgedCreate = await purgeForMutation(env, productPurgeUrls(request, m[1], id));
+    return json({ success: true, id, domain: m[1] }, 201, { "X-Cache-Purged": String(purgedCreate) });
   }
 
   // Admin product update (partial; id/domain immutable).
@@ -578,7 +652,9 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const r = await db.prepare(`UPDATE ${spec.table} SET ${sets.join(", ")} WHERE id = ?`).bind(...vals, m[2]).run();
     if (!r.meta.changes) throw new HttpError(404, "PRODUCT_NOT_FOUND", "상품을 찾을 수 없습니다.");
     await audit(env, admin.id, "UPDATE_PRODUCT", m[1], m[2], { fields: Object.keys(b) });
-    return json({ success: true });
+    invalidateSearchCache();
+    const purgedUpdate = await purgeForMutation(env, productPurgeUrls(request, m[1], m[2]));
+    return json({ success: true }, 200, { "X-Cache-Purged": String(purgedUpdate) });
   }
 
   // Admin product delete: blocked while bookings (or package components) reference it.
@@ -599,7 +675,9 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     const r = await db.prepare(`DELETE FROM ${spec.table} WHERE id = ?`).bind(m[2]).run();
     if (!r.meta.changes) throw new HttpError(404, "PRODUCT_NOT_FOUND", "상품을 찾을 수 없습니다.");
     await audit(env, admin.id, "DELETE_PRODUCT", m[1], m[2], { table: spec.table });
-    return json({ success: true });
+    invalidateSearchCache();
+    const purgedDelete = await purgeForMutation(env, productPurgeUrls(request, m[1], m[2]));
+    return json({ success: true }, 200, { "X-Cache-Purged": String(purgedDelete) });
   }
 
   // Admin bulk upsert: { domain, rows: [{...fields, id?}] }. Re-running the same
@@ -684,7 +762,9 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       if (stmts.length) await db.batch(stmts);
     }
     await audit(env, admin.id, "BULK_UPSERT_PRODUCT", spec.table, `${created + updated}/${rows.length}`, { domain: str(b.domain, 20).toUpperCase(), created, updated, failed: failed.length });
-    return json({ success: true, created, updated, failed });
+    invalidateSearchCache();
+    const purgedBulk = await purgeForMutation(env, bareListUrls(request, str(b.domain, 20).toUpperCase()));
+    return json({ success: true, created, updated, failed }, 200, { "X-Cache-Purged": String(purgedBulk) });
   }
 
   // Affiliate click log (outlink tracking). Reads only; rows are written by /out/* redirects.

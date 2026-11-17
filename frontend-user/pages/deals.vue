@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { apiFetch } from '~/composables/useApi'
 
 useHead({
@@ -64,9 +64,9 @@ const fetchPromotions = async () => {
   }
 }
 
-onMounted(() => {
-  fetchPromotions()
-})
+// TG-15: SSR the first paint (ISR caches it).
+await useAsyncData('tg15-deals', () => fetchPromotions())
+if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 </script>
 
 <template>
@@ -106,7 +106,7 @@ onMounted(() => {
             <div class="px-4 py-2 bg-slate-100 border border-dashed border-slate-300 rounded-xl font-mono font-bold text-trip-blue text-sm">
               {{ p.code }}
             </div>
-            <button type="button" @click="copyCouponCode(p.code)" class="text-xs text-slate-500 hover:text-trip-blue font-bold cursor-pointer">
+            <button type="button" @click="copyCouponCode(p.code)" class="-my-3 inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-2 text-xs text-slate-500 hover:text-trip-blue font-bold cursor-pointer">
               {{ copiedCode === p.code ? '✓ 복사완료' : '코드 복사' }}
             </button>
           </div>

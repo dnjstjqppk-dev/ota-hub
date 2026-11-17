@@ -41,6 +41,8 @@ export interface OrderSettlementRecord {
   commission_amount_minor: number;
   seller_payout_minor: number;
   net_platform_profit_minor: number;
+  /** TG-21: platform markup excluded from the supplier basis (audit trail). */
+  markup_minor: number;
   fulfillment_status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'FAILED';
   settlement_status: 'PENDING' | 'HELD' | 'SETTLED' | 'REFUNDED';
   payout_batch_id: string | null;
@@ -114,7 +116,8 @@ export async function planOrderSettlement(
   bookingId: string,
   domainType: string,
   itemId: string,
-  grossAmountMinor: number
+  grossAmountMinor: number,
+  markupMinor = 0
 ): Promise<PlannedSettlement> {
   const attr = await getMarketplaceAttribution(env, domainType, itemId);
   const now = new Date().toISOString();
@@ -150,7 +153,8 @@ export async function planOrderSettlement(
     const share = Number(sup?.settlement_rate_bps);
     commissionRateBps = Number.isSafeInteger(share) ? Math.min(10000, Math.max(0, 10000 - share)) : 1000;
   }
-  const split = splitForModel(model, grossAmountMinor, supplyCostMinor, commissionRateBps);
+  // TG-21: the supplier basis excludes platform markup (gross stays actual).
+  const split = splitForModel(model, grossAmountMinor - markupMinor, supplyCostMinor, commissionRateBps);
 
   // Link the real booking item when one exists; never fabricate an id.
   const item = await env.DB.prepare('SELECT id FROM booking_items WHERE booking_id = ? AND item_id = ? LIMIT 1')
@@ -171,6 +175,7 @@ export async function planOrderSettlement(
     commission_amount_minor: split.commission,
     seller_payout_minor: split.payout,
     net_platform_profit_minor: split.profit,
+    markup_minor: markupMinor,
     fulfillment_status: 'CONFIRMED',
     settlement_status: 'PENDING',
     payout_batch_id: null,
@@ -182,7 +187,7 @@ export async function planOrderSettlement(
     record.merchant_model, record.attribution_source, record.seller_id, record.seller_name,
     record.supplier_id, record.gross_amount_minor, record.supply_cost_minor,
     record.commission_amount_minor, record.seller_payout_minor, record.net_platform_profit_minor,
-    record.fulfillment_status, record.settlement_status, record.created_at,
+    record.markup_minor, record.fulfillment_status, record.settlement_status, record.created_at,
   ];
   return {
     record,
@@ -190,8 +195,8 @@ export async function planOrderSettlement(
       id, booking_id, booking_item_id, domain_type, merchant_model, attribution_source,
       seller_id, seller_name, supplier_id, gross_amount_minor, supply_cost_minor,
       commission_amount_minor, seller_payout_minor, net_platform_profit_minor,
-      fulfillment_status, settlement_status, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(...values),
+      markup_minor, fulfillment_status, settlement_status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(...values),
   };
 }
 

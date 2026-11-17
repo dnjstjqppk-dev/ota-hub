@@ -4,6 +4,7 @@ import { rateLimit, requireUser } from "../lib/auth.ts";
 import { decryptField, encryptField, maskName, maskPassport, newId } from "../lib/crypto.ts";
 import { DOMAINS } from "../domain/pricing.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
+import { assertOwnReviewPhotos, parsePhotos, photoUploadIds, ratingDistribution, rescoreStatement } from "../services/review-service.ts";
 
 const NAME_EN = /^[A-Z][A-Z' -]{0,48}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -184,17 +185,34 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     await rateLimit(request, env, "user_read", 600, 60);
     const targetId = str(url.searchParams.get("targetId") || url.searchParams.get("target_id"), 100);
     const domain = str(url.searchParams.get("domain") || "HOTEL", 20).toUpperCase();
+    // CR-01: blinded reviews never leave the server; photo-only filter and sort are server-side.
+    const sort = str(url.searchParams.get("sort") || "recommended", 20);
+    const order = sort === "latest" ? "created_at DESC"
+      : sort === "rating_high" ? "rating DESC, created_at DESC"
+      : sort === "rating_low" ? "rating ASC, created_at DESC"
+      : "verified_stay DESC, (photos_json IS NOT NULL AND photos_json <> '[]') DESC, created_at DESC";
+    const photoOnly = url.searchParams.get("withPhotos") === "1" ? " AND photos_json IS NOT NULL AND photos_json <> '[]'" : "";
+    const cols = "id, user_name, domain_type, target_id, rating, comment, verified_stay, photos_json, partner_reply, partner_replied_at, created_at";
     const rows = targetId
-      ? await db.prepare("SELECT id, user_name, domain_type, target_id, rating, comment, verified_stay, created_at FROM reviews WHERE target_id = ? AND domain_type = ? ORDER BY verified_stay DESC, created_at DESC LIMIT 50").bind(targetId, domain).all<any>()
-      : await db.prepare("SELECT id, user_name, domain_type, target_id, rating, comment, verified_stay, created_at FROM reviews ORDER BY created_at DESC LIMIT 50").all<any>();
+      ? await db.prepare(`SELECT ${cols} FROM reviews WHERE target_id = ? AND domain_type = ? AND is_blinded = 0${photoOnly} ORDER BY ${order} LIMIT 50`).bind(targetId, domain).all<any>()
+      : await db.prepare(`SELECT ${cols} FROM reviews WHERE is_blinded = 0${photoOnly} ORDER BY created_at DESC LIMIT 50`).all<any>();
     const summary = targetId
-      ? await db.prepare("SELECT COUNT(*) AS count, ROUND(AVG(rating) * 10) / 10 AS average, SUM(CASE WHEN verified_stay = 1 THEN 1 ELSE 0 END) AS verified FROM reviews WHERE target_id = ? AND domain_type = ?").bind(targetId, domain).first<any>()
+      ? await db.prepare("SELECT COUNT(*) AS count, ROUND(AVG(rating) * 10) / 10 AS average, SUM(CASE WHEN verified_stay = 1 THEN 1 ELSE 0 END) AS verified, SUM(CASE WHEN photos_json IS NOT NULL AND photos_json <> '[]' THEN 1 ELSE 0 END) AS photos FROM reviews WHERE target_id = ? AND domain_type = ? AND is_blinded = 0").bind(targetId, domain).first<any>()
+      : null;
+    const dist = targetId
+      ? await db.prepare("SELECT rating, COUNT(*) AS c FROM reviews WHERE target_id = ? AND domain_type = ? AND is_blinded = 0 GROUP BY rating").bind(targetId, domain).all<{ rating: number; c: number }>()
       : null;
     // Reviewer names are public: show a masked name only.
-    const reviews = (rows.results || []).map((r: any) => ({ ...r, user_name: maskName(r.user_name), verified_stay: r.verified_stay === 1 }));
+    const reviews = (rows.results || []).map(({ photos_json, ...r }: any) => ({
+      ...r, user_name: maskName(r.user_name), verified_stay: r.verified_stay === 1, photos: parsePhotos(photos_json),
+    }));
     return json({
       success: true, reviews, count: reviews.length,
-      summary: summary ? { count: Number(summary.count || 0), average: summary.average === null ? null : Number(summary.average), verifiedCount: Number(summary.verified || 0) } : null,
+      summary: summary ? {
+        count: Number(summary.count || 0), average: summary.average === null ? null : Number(summary.average),
+        verifiedCount: Number(summary.verified || 0), photoCount: Number(summary.photos || 0),
+        distribution: ratingDistribution(dist?.results || []),
+      } : null,
     });
   }
   if (path === "/api/v1/reviews" && method === "POST") {
@@ -209,23 +227,22 @@ export async function handleUser(request: Request, env: Env, url: URL): Promise<
     // Only verified reviews are accepted: each must be backed by the customer's own fulfilled booking of this product.
     const bookingId = str(b.bookingId || b.booking_id, 64);
     if (!bookingId) throw new HttpError(400, "REVIEW_BOOKING_REQUIRED", "이용 완료된 예약을 선택해야 후기를 작성할 수 있습니다.");
-    const bk = await db.prepare("SELECT user_id, item_id, domain_type, status FROM bookings WHERE id = ?").bind(bookingId).first<any>();
+    const bk = await db.prepare("SELECT user_id, item_id, domain_type, status, partner_id FROM bookings WHERE id = ?").bind(bookingId).first<any>();
     const eligible = bk && bk.user_id === u.id && bk.item_id === targetId && bk.domain_type === domain && ["VOUCHER_ISSUED", "TICKETED", "COMPLETED"].includes(bk.status);
     if (!eligible) throw new HttpError(400, "REVIEW_BOOKING_NOT_ELIGIBLE", "이용 완료된 본인 예약에 대해서만 인증 후기를 작성할 수 있습니다.");
     // A booking may back exactly one review.
     if (await db.prepare("SELECT id FROM reviews WHERE booking_id = ?").bind(bookingId).first()) {
       throw new HttpError(409, "ALREADY_REVIEWED", "이 예약에 대한 후기를 이미 작성했습니다.");
     }
+    // CR-01: photos must be the reviewer's own REVIEW_PHOTO uploads (max 5).
+    const photos = await assertOwnReviewPhotos(db, u.id, photoUploadIds(b.photos));
     const id = newId("rev");
-    await db.prepare("INSERT INTO reviews (id, user_id, user_name, domain_type, target_id, booking_id, rating, comment, verified_stay) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)")
-      .bind(id, u.id, u.fullName || "여행자", domain, targetId, bookingId, rating, comment).run();
-    // C8: product scores are always recomputed from verified reviews — never stored claims.
-    const scoreTable = domain === "HOTEL" ? "hotels" : domain === "ACTIVITY" ? "activities" : null;
-    if (scoreTable) {
-      await db.prepare(`UPDATE ${scoreTable} SET review_count = (SELECT COUNT(*) FROM reviews WHERE domain_type = ? AND target_id = ?), review_score = (SELECT ROUND(AVG(rating) * 10) / 10 FROM reviews WHERE domain_type = ? AND target_id = ?) WHERE id = ?`)
-        .bind(domain, targetId, domain, targetId, targetId).run();
-    }
-    return json({ success: true, reviewId: id, verifiedStay: true }, 201);
+    const insert = db.prepare("INSERT INTO reviews (id, user_id, user_name, domain_type, target_id, booking_id, rating, comment, verified_stay, photos_json, partner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)")
+      .bind(id, u.id, u.fullName || "여행자", domain, targetId, bookingId, rating, comment, photos.length ? JSON.stringify(photos) : null, bk.partner_id || null);
+    // C8: product scores are always recomputed from visible verified reviews — never stored claims.
+    const rescore = rescoreStatement(db, domain, targetId);
+    await db.batch(rescore ? [insert, rescore] : [insert]);
+    return json({ success: true, reviewId: id, verifiedStay: true, photos }, 201);
   }
 
   // ---------------- Moments ----------------

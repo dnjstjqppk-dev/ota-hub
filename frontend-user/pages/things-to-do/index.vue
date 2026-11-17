@@ -55,7 +55,9 @@ const activeCount = computed(() => (q.value.category ? 1 : 0) + (q.value.instant
 const RESET = { category: '', instant: '', freeCancel: '' }
 
 watch(() => route.fullPath, () => { if (isSelf()) load() })
-onMounted(load)
+// TG-15: SSR the first paint (ISR caches it); the watcher re-loads on client query changes.
+await useAsyncData('tg15-things-list', () => load())
+if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onBeforeUnmount(() => ctrl?.abort())
 useHead(() => ({
   title: q.value.text ? `${q.value.text} 투어·티켓` : '투어·티켓·체험',

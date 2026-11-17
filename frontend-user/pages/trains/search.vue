@@ -78,7 +78,10 @@ function book(t: any) { router.push({ path: '/checkout', query: { domain: 'TRAIN
 const sheet = ref(false)
 watch(() => route.fullPath, () => { if (isSelf()) syncDraft() })
 watch(() => [q.value.dep, q.value.arr], () => { if (isSelf()) load() })
-onMounted(() => { today.value = todayIso(); load() })
+// TG-15: SSR the first paint (ISR caches it); the watcher re-loads on client query changes.
+await useAsyncData('tg15-trains-list', () => load())
+if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
+onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
 useHead(() => ({ title: q.value.dep && q.value.arr ? `${q.value.dep}→${q.value.arr} 기차표` : '기차표 검색' }))
 </script>

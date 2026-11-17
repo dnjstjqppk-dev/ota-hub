@@ -63,9 +63,12 @@ export interface RecognitionSplit {
  * amount at the supplier's settlement rate; the discount is a platform
  * promotion expense.
  */
-export function recognitionSplit(paidMinor: number, discountMinor: number, settlementRateBps: number): RecognitionSplit {
+export function recognitionSplit(paidMinor: number, discountMinor: number, settlementRateBps: number, markupMinor = 0): RecognitionSplit {
   const gross = paidMinor + discountMinor;
-  const payable = percentOf(gross, settlementRateBps);
+  // TG-21: platform markup never enters the supplier basis — the seller is
+  // paid on the unmarked price and the platform keeps (or funds) the delta.
+  const basis = gross - markupMinor;
+  const payable = percentOf(basis, settlementRateBps);
   return { supplierPayableMinor: payable, commissionMinor: gross - payable, promotionMinor: discountMinor };
 }
 

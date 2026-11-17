@@ -16,9 +16,14 @@ import { convertMinor } from "../domain/money.ts";
 import { HttpError, clientIp, str } from "../lib/http.ts";
 import { consentStmts, currentVersions, validateTxConsents } from "../lib/consents.ts";
 import { newBookingNumber, newId, encryptField, decryptField, randomToken } from "../lib/crypto.ts";
+import { withSpan, type TraceContext } from "../lib/tracing.ts";
+import { fdsEnforced, scoreAttempt } from "./fds-service.ts";
 import type { AuthUser } from "../lib/auth.ts";
 import { loadProduct, loadStructuredPolicy, loadSupplier, bookabilityOf, assertTicketable, assertQuotableDomain, assertInventoryConfigured, type SupplierRow } from "./catalog.ts";
 import { adapterFor, type Simulation, type SupplierContext } from "../suppliers/adapter.ts";
+import { assertSupplierAvailable } from "../suppliers/live-adapter.ts";
+import { loadMarkupForBooking, loadMarkupForQuote, quoteMarkup } from "./forecast-service.ts";
+import { logEvent } from "../lib/log.ts";
 import { getPaymentProvider, requirePaymentProvider } from "../payments/provider.ts";
 import { planOrderSettlement } from "./marketplace-service.ts";
 import { flushOutbox, outboxInsert } from "./email-service.ts";
@@ -217,7 +222,7 @@ async function recognitionReversalStmts(env: Env, db: D1Database, b: Pick<Bookin
   const take = Math.min(takeMinor, Math.max(remaining, 0));
   if (take <= 0) return [];
   const supplier = await loadSupplier(env, b.supplier_id).catch(() => null);
-  const split = L.recognitionSplit(paid, Math.round(Number(b.discount_amount_krw || 0)), (supplier as any)?.settlement_rate_bps ?? 9000);
+  const split = L.recognitionSplit(paid, Math.round(Number(b.discount_amount_krw || 0)), (supplier as any)?.settlement_rate_bps ?? 9000, await loadMarkupForBooking(db, b.id));
   // The reference is per-refund (not per-booking): repeated partial reversals
   // on a live order must not collide on idx_ledger_event_once.
   return journalStmts(db, L.fulfilmentReversedPartial(b.id, take, split, paid, referenceId || b.id), b);
@@ -528,6 +533,7 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
     throw new HttpError(409, "NOT_DIRECTLY_BOOKABLE", "이 상품은 현재 GetForTrip에서 직접 예약·결제할 수 없습니다. (공급사 연동 대기)", { reason: b.reason });
   }
   assertTicketable(domain, supplier);
+  await assertSupplierAvailable(env, supplier?.adapter ?? null, product.route ?? null);
   assertInventoryConfigured(domain, product);
   const entity = await activeEntity(env);
   if (!entity) throw new HttpError(503, "SALES_NOT_ENABLED", "판매 주체(사업자) 정보가 활성화되지 않아 결제를 받을 수 없습니다.");
@@ -547,6 +553,13 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
   const slotQty = Number(params.travelers?.adults || 0) + Number(params.travelers?.children || 0);
   const slot = await resolveSlotPricing(env, domain, itemId, params.startDate, params.slotStart, slotQty);
   const q = priceOrder(product, inbound, params, promo, nightly, slot?.slot || null);
+  // TG-21: dynamic markup rides the final computed total as its own line
+  // (round-trips mark the combined fare once, on the outbound leg's date).
+  const markup = await quoteMarkup(env, { userId: user.id, domain, itemId, startDate: q.serviceStart, baseMinor: q.totalMinor });
+  if (markup.amountMinor !== 0) {
+    q.lines.push({ code: "DYNAMIC_MARKUP", label: markup.label, quantity: 1, unitMinor: markup.amountMinor, amountMinor: markup.amountMinor });
+    q.totalMinor += markup.amountMinor;
+  }
   const coinRaw = body.coinAmount === undefined || body.coinAmount === null || body.coinAmount === "" ? 0 : Number(body.coinAmount);
   if (!Number.isSafeInteger(coinRaw) || coinRaw < 0) throw new HttpError(400, "INVALID_COIN_AMOUNT", "코인 사용 금액이 올바르지 않습니다.");
   let coinsMinor = 0;
@@ -589,7 +602,7 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
 
   const id = newId("qt");
   const expiresAt = new Date(Date.now() + QUOTE_TTL_MS).toISOString();
-  await env.DB.prepare(
+  const quoteInsert = env.DB.prepare(
     `INSERT INTO quotes (id, user_id, domain_type, item_id, unit_id, supplier_id, title, currency, base_minor, tax_minor, fee_minor, discount_minor, total_minor, coins_minor,
       display_currency, display_total_minor, fx_rate_snapshot, promotion_code, lines_json, params_json, cancellation_policy_json, service_start, service_end, priced_units, expires_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'KRW', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -597,7 +610,21 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
     id, user.id, domain, itemId, product.unitId, product.supplierId, title, q.baseMinor, q.taxMinor, q.feeMinor, discountMinor, cashDueMinor, coinsMinor,
     fxRate ? displayCurrency : "KRW", displayTotal, fxRate, q.promotionCode, JSON.stringify(q.lines), JSON.stringify(params), JSON.stringify(q.cancellationPolicy),
     q.serviceStart, q.serviceEnd, q.pricedUnits, expiresAt,
-  ).run();
+  );
+  if (markup.enabled && markup.variant) {
+    // The decision row is atomic with the quote: a marked total without its
+    // stored decision would PRICE_CHANGED at booking time.
+    await env.DB.batch([quoteInsert, env.DB.prepare(
+      `INSERT OR IGNORE INTO pricing_decisions (quote_id, user_id, domain_type, item_id, variant, markup_bps, markup_minor, forecast, occupancy, clamped_to_floor, reasons_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id, user.id, domain, itemId, markup.variant, markup.bps, markup.amountMinor,
+      markup.forecast?.forecast ?? null, markup.forecast?.occupancy ?? null, markup.clampedToFloor ? 1 : 0,
+      JSON.stringify({ bps: markup.bps, forecast: markup.forecast?.forecast ?? null, occupancy: markup.forecast?.occupancy ?? null, clamped: markup.clampedToFloor }),
+    )]);
+  } else {
+    await quoteInsert.run();
+  }
 
   return {
     quoteId: id, expiresAt, domain, itemId, unitId: product.unitId, title, currency: "KRW",
@@ -758,6 +785,7 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   const bk = bookabilityOf(env, supplier);
   if (!bk.bookable) throw new HttpError(409, "NOT_DIRECTLY_BOOKABLE", "이 상품은 현재 직접 예약할 수 없습니다.", { reason: bk.reason });
   assertTicketable(quote.domain_type, supplier);
+  await assertSupplierAvailable(env, supplier?.adapter ?? null, product.route ?? null);
   assertInventoryConfigured(quote.domain_type, product);
   const freshDates = [params.startDate, params.endDate, params.returnDate].filter((d): d is string => !!d).sort();
   const freshNightly = nightlyResolver(freshDates.length
@@ -769,7 +797,15 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   const freshSlot = await resolveSlotPricing(env, quote.domain_type, quote.item_id, quote.service_start, params.slotStart, slotQty);
   const fresh = priceOrder(product, inbound, params, await loadPromotion(env, quote.promotion_code, user.id), freshNightly, freshSlot?.slot || null);
   const coinsMinor = Number(quote.coins_minor || 0);
-  const freshCashDue = fresh.totalMinor - coinsMinor;
+  // TG-21: the stored markup decision replays verbatim (never recomputed —
+  // forecast and inventory move between quote and booking). Missing rows
+  // predate the flag and read as zero; missing rows WHILE flagged warn.
+  const stored = await loadMarkupForQuote(env.DB, quote.id);
+  if (!stored.found) {
+    const { isFeatureEnabled } = await import("./feature-flag-service.ts");
+    if (await isFeatureEnabled(env, "DYNAMIC_MARKUP")) logEvent("warn", "pricing.decision_missing", { quoteId: quote.id });
+  }
+  const freshCashDue = fresh.totalMinor + stored.amount - coinsMinor;
   await assertAboveFloor(env, quote.domain_type, quote.item_id, freshCashDue);
   if (freshCashDue !== quote.total_minor) {
     await env.DB.prepare("UPDATE quotes SET status = 'EXPIRED' WHERE id = ?").bind(quote.id).run();
@@ -950,7 +986,7 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
 // ---------------------------------------------------------------------------
 // 3. Payment confirmation (server-to-server with the PG)
 // ---------------------------------------------------------------------------
-export async function confirmPayment(env: Env, user: AuthUser, body: any) {
+export async function confirmPayment(env: Env, user: AuthUser, body: any, tctx: TraceContext | null = null, parentSpanId: string | null = null) {
   const provider = requirePaymentProvider(env);
   const b = await mustGet(env, str(body.bookingId, 64));
   assertOwner(b, user);
@@ -986,6 +1022,26 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
   // Real money must never be taken for a booking fulfilled by a simulated supplier.
   if (b.payment_mode === "SANDBOX" && provider.mode === "LIVE") {
     throw new HttpError(409, "MODE_MISMATCH", "테스트(시뮬레이션) 예약에는 실결제를 진행할 수 없습니다.");
+  }
+  // TG-17: fraud screen before any provider call (enforced only with
+  // FRAUD_REVIEW=1). A hold parks the attempt WITHOUT a state transition —
+  // the booking stays AWAITING_PAYMENT, so an approved review lets the very
+  // next attempt through with no reopen ceremony.
+  if (fdsEnforced(env)) {
+    const approved = await env.DB.prepare("SELECT id FROM fraud_reviews WHERE booking_id = ? AND status = 'APPROVED'").bind(b.id).first();
+    if (!approved) {
+      const fds = await scoreAttempt(env, user.id, b.id, b.total_minor);
+      if (fds.held) {
+        const prior = await env.DB.prepare("SELECT id FROM fraud_reviews WHERE booking_id = ? AND status = 'PENDING'").bind(b.id).first<{ id: string }>();
+        const reviewId = prior?.id || newId("frd");
+        if (!prior) {
+          await env.DB.prepare("INSERT INTO fraud_reviews (id, booking_id, user_id, score, reasons_json) VALUES (?, ?, ?, ?, ?)")
+            .bind(reviewId, b.id, user.id, fds.score, JSON.stringify(fds.reasons)).run();
+        }
+        moneyLog("payment.fds_hold", { bookingId: b.id, reviewId, score: fds.score, provider: provider.name });
+        return { alreadyProcessed: false, heldForReview: true, reviewId, booking: await serializeBooking(env, b, user) };
+      }
+    }
   }
 
   // Claim the booking for payment (only one request can win) and extend the holds.
@@ -1030,7 +1086,7 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
       ...hookEnqueueStmts(db, hook, "booking.created", hookSnapshot(b, "PAYMENT_AUTHORIZED", { paid_minor: r.amountMinor, payment_id: paymentId })),
       outboxInsert(db, "EMAIL", b.customer_email, "PAYMENT_COMPLETED", { bookingId: b.id, bookingNumber: b.booking_number, amountMinor: r.amountMinor }),
     ]);
-    cur = await fulfil(env, await mustGet(env, b.id));
+    cur = await fulfil(env, await mustGet(env, b.id), tctx, parentSpanId);
     moneyLog("payment.captured", { bookingId: b.id, paymentId, amountMinor: r.amountMinor, provider: provider.name });
     return { alreadyProcessed: false, booking: await serializeBooking(env, cur, user) };
   }
@@ -1042,6 +1098,19 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any) {
     ]);
     moneyLog("payment.failed", { bookingId: b.id, paymentId, providerCode: r.code, provider: provider.name });
     throw new HttpError(402, "PAYMENT_FAILED", r.message, { providerCode: r.code });
+  }
+
+  if (r.outcome === "ACTION_REQUIRED") {
+    // TG-17 3DS: park as UNKNOWN (reconcilable) and hand the action URL out.
+    // Completion lands on /api/v1/payments/stripe/return and finalizes through
+    // the normal reconcile path — never a second money movement.
+    await runBatch(db, [
+      ...transition(db, cur, "MANUAL_REVIEW_REQUIRED", { type: "PAYMENT_PROVIDER", id: provider.name }, "PAYMENT_3DS_REQUIRED"),
+      db.prepare("UPDATE payments SET status = 'UNKNOWN', provider_payment_key = ?, raw_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(r.paymentKey, JSON.stringify({ actionUrl: r.actionUrl }).slice(0, 8000), paymentId),
+    ]);
+    moneyLog("payment.action_required", { bookingId: b.id, paymentId, provider: provider.name });
+    return { alreadyProcessed: false, actionRequired: true, actionUrl: r.actionUrl, paymentId, booking: await serializeBooking(env, await mustGet(env, b.id), user) };
   }
 
   // UNKNOWN: we do not know whether money moved. Never assume either way.
@@ -1103,11 +1172,11 @@ async function applySupplierConfirmed(env: Env, b: BookingRow, reference: string
 async function applyTicketIssued(env: Env, b: BookingRow, ticketNumbers: string[]): Promise<void> {
   const db = env.DB;
   const supplier = await loadSupplier(env, b.supplier_id);
-  const split = L.recognitionSplit(b.paid_minor, Math.round(Number(b.discount_amount_krw || 0)), supplier?.settlement_rate_bps ?? 9000);
+  const split = L.recognitionSplit(b.paid_minor, Math.round(Number(b.discount_amount_krw || 0)), supplier?.settlement_rate_bps ?? 9000, await loadMarkupForBooking(env.DB, b.id));
   const grossMinor = Number(b.paid_minor || 0) + Math.round(Number(b.discount_amount_krw || 0));
   // Planned first (reads only), written in the same batch: a ticketed
   // booking can never lack its settlement row (2026-11-09 audit [M]).
-  const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, grossMinor);
+  const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, grossMinor, await loadMarkupForBooking(env.DB, b.id));
   await runBatch(db, [
     ...transition(db, b, "TICKETED", { type: "SUPPLIER", id: b.supplier_id }, null, { supplier_status: "TICKETED" }),
     db.prepare("UPDATE booking_items SET ticket_numbers_json = ?, supplier_status = 'TICKETED', updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(JSON.stringify(ticketNumbers), b.id),
@@ -1126,7 +1195,7 @@ async function applyTicketIssued(env: Env, b: BookingRow, ticketNumbers: string[
 async function refundAfterTicketFailure(env: Env, b: BookingRow, code: string): Promise<boolean> {
   const db = env.DB;
   const supplier = await loadSupplier(env, b.supplier_id);
-  const cx = await adapterFor(supplier?.adapter || "none").cancel(supplierCtx(b, 1));
+  const cx = await adapterFor(supplier?.adapter || "none", env).cancel(supplierCtx(b, 1));
   if (cx.outcome !== "CANCELLED") return false;
   await runBatch(db, [
     ...transition(db, b, "REFUND_PENDING", { type: "SUPPLIER", id: b.supplier_id }, `TICKETING_FAILED:${code}`, { supplier_status: "CANCELLED" }),
@@ -1150,19 +1219,19 @@ async function ticketIssueEnqueue(db: D1Database, bookingId: string): Promise<St
   return [jobEnqueueStmt(db, "TICKET_ISSUE", bookingId, nowIso())];
 }
 
-export async function fulfil(env: Env, b: BookingRow): Promise<BookingRow> {
+export async function fulfil(env: Env, b: BookingRow, tctx: TraceContext | null = null, parentSpanId: string | null = null): Promise<BookingRow> {
   const db = env.DB;
   const supplier = await loadSupplier(env, b.supplier_id);
-  const adapter = adapterFor(supplier?.adapter || "none");
+  const adapter = adapterFor(supplier?.adapter || "none", env);
   await runBatch(db, transition(db, b, "SUPPLIER_BOOKING_PENDING", { type: "SYSTEM", id: null }, null, { supplier_status: "REQUESTED" }));
   let cur = await mustGet(env, b.id);
   const t0 = Date.now();
-  const r = await adapter.book(supplierCtx(cur, await travelerCount(env, b.id)));
+  const r = await withSpan(tctx, "supplier.book", async () => adapter.book(supplierCtx(cur, await travelerCount(env, b.id))), { "supplier.id": String(b.supplier_id || "none") }, parentSpanId || undefined);
   await logSupplierCall(env, b.supplier_id, b.id, "BOOK", r.outcome, Date.now() - t0, JSON.stringify(r));
 
   if (r.outcome === "CONFIRMED") {
     await applySupplierConfirmed(env, cur, r.reference, r.pnr);
-    return issue(env, await mustGet(env, b.id));
+    return issue(env, await mustGet(env, b.id), tctx, parentSpanId);
   }
   if (r.outcome === "PENDING") {
     // #106: the reference rides the version guard — a concurrent fulfil that
@@ -1195,10 +1264,10 @@ export function voucherCode(): string {
 }
 
 /** Ticket (flights) or voucher (others) issuance after supplier confirmation. */
-export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
+export async function issue(env: Env, b: BookingRow, tctx: TraceContext | null = null, parentSpanId: string | null = null): Promise<BookingRow> {
   const db = env.DB;
   const supplier = await loadSupplier(env, b.supplier_id);
-  const split = L.recognitionSplit(b.paid_minor, Math.round(Number(b.discount_amount_krw || 0)), supplier?.settlement_rate_bps ?? 9000);
+  const split = L.recognitionSplit(b.paid_minor, Math.round(Number(b.discount_amount_krw || 0)), supplier?.settlement_rate_bps ?? 9000, await loadMarkupForBooking(env.DB, b.id));
   // #71: the ledger recognizes on gross (paid + platform-borne discount, with
   // a PROMOTION_EXPENSE leg), so the settlement basis must be gross too —
   // paying the seller on net-paid shorted every discounted order.
@@ -1210,9 +1279,9 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
   if (b.domain_type === "FLIGHT") {
     await runBatch(db, transition(db, b, "TICKETING_PENDING", { type: "SYSTEM", id: null }, null));
     let cur = await mustGet(env, b.id);
-    const adapter = adapterFor(supplier?.adapter || "none");
+    const adapter = adapterFor(supplier?.adapter || "none", env);
     const t0 = Date.now();
-    const r = await adapter.ticket(supplierCtx(cur, await travelerCount(env, b.id)));
+    const r = await withSpan(tctx, "supplier.ticket", async () => adapter.ticket(supplierCtx(cur, await travelerCount(env, b.id))), { "supplier.id": String(b.supplier_id || "none") }, parentSpanId || undefined);
     await logSupplierCall(env, b.supplier_id, b.id, "TICKET", r.outcome, Date.now() - t0, JSON.stringify(r));
     if (r.outcome === "ISSUED") {
       await applyTicketIssued(env, cur, r.ticketNumbers);
@@ -1234,7 +1303,7 @@ export async function issue(env: Env, b: BookingRow): Promise<BookingRow> {
   // instead of failing a paid booking. Re-planned per attempt so a retried
   // batch never reuses spent journal/settlement ids.
   for (let attempt = 0; ; attempt++) {
-    const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, grossMinor);
+    const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, grossMinor, await loadMarkupForBooking(env.DB, b.id));
     try {
       await runBatch(db, [
         ...transition(db, b, "VOUCHER_ISSUED", { type: "SYSTEM", id: null }, null, { voucher_code: voucherCode() }),
@@ -1431,7 +1500,7 @@ export async function cancelByCustomer(env: Env, user: AuthUser, bookingId: stri
   await runBatch(db, transition(db, b, "CANCELLATION_REQUESTED", actor, null, { cancellation_fee_minor: feeMinor }));
   let cur = await mustGet(env, b.id);
   const supplier = await loadSupplier(env, b.supplier_id);
-  const adapter = adapterFor(supplier?.adapter || "none");
+  const adapter = adapterFor(supplier?.adapter || "none", env);
   const t0 = Date.now();
   const cx = await adapter.cancel(supplierCtx(cur, 1));
   await logSupplierCall(env, b.supplier_id, b.id, "CANCEL", cx.outcome, Date.now() - t0, JSON.stringify(cx));
@@ -1623,7 +1692,7 @@ export async function applyExternalCancel(env: Env, bookingId: string, ext: Exte
     try {
       const supplier = await loadSupplier(env, b.supplier_id);
       const t0 = Date.now();
-      const cx = await adapterFor(supplier?.adapter || "none").cancel(supplierCtx(b, 1));
+      const cx = await adapterFor(supplier?.adapter || "none", env).cancel(supplierCtx(b, 1));
       await logSupplierCall(env, b.supplier_id, b.id, "CANCEL", cx.outcome, Date.now() - t0, JSON.stringify(cx).slice(0, 2000));
       supplierCancelled = cx.outcome !== "REJECTED";
     } catch {
@@ -1818,7 +1887,7 @@ async function runFulfilBookJob(env: Env, job: JobRow): Promise<JobRunResult> {
   const b = await loadRetryableBooking(env, job.booking_id, "SUPPLIER_RESPONSE_UNKNOWN");
   if (!b) return { action: "done" }; // decided, compensated, or gone meanwhile
   const supplier = await loadSupplier(env, b.supplier_id);
-  const adapter = adapterFor(supplier?.adapter || "none");
+  const adapter = adapterFor(supplier?.adapter || "none", env);
   const t0 = Date.now();
   const r = await adapter.book(supplierCtx(b, await travelerCount(env, b.id)));
   await logSupplierCall(env, b.supplier_id, b.id, "BOOK", r.outcome, Date.now() - t0, JSON.stringify(r));
@@ -1858,7 +1927,7 @@ async function runTicketIssueJob(env: Env, job: JobRow): Promise<JobRunResult> {
   const b = await loadRetryableBooking(env, job.booking_id, "TICKETING_FAILED_PNR_NOT_VOIDED");
   if (!b) return { action: "done" };
   const supplier = await loadSupplier(env, b.supplier_id);
-  const adapter = adapterFor(supplier?.adapter || "none");
+  const adapter = adapterFor(supplier?.adapter || "none", env);
   const t0 = Date.now();
   const r = await adapter.ticket(supplierCtx(b, await travelerCount(env, b.id)));
   await logSupplierCall(env, b.supplier_id, b.id, "TICKET", r.outcome, Date.now() - t0, JSON.stringify(r));
@@ -1933,6 +2002,8 @@ export async function runMaintenance(env: Env): Promise<Record<string, number>> 
     env.DB.prepare("DELETE FROM idempotency_keys WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')"),
     // TG-03: analytics retention — 90 days of funnel events, then purged.
     env.DB.prepare("DELETE FROM analytics_events WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-90 days')"),
+    // TG-21: pricing decisions back the markup A/B for 90 days, then purged.
+    env.DB.prepare("DELETE FROM pricing_decisions WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-90 days')"),
     env.DB.prepare("DELETE FROM revoked_tokens WHERE expires_at < ?").bind(epoch),
     env.DB.prepare("DELETE FROM quotes WHERE status = 'EXPIRED' AND created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')"),
     env.DB.prepare("DELETE FROM inventory_holds WHERE status = 'RELEASED' AND created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')"),
@@ -1970,11 +2041,22 @@ export async function recordHeartbeat(env: Env, job: string, ok: boolean, stats:
 }
 
 /** #56: runMaintenance with a heartbeat on both outcomes; rethrows failures. */
-export async function runMaintenanceWithHeartbeat(env: Env, job = 'maintenance'): Promise<Record<string, number>> {
+export async function runMaintenanceWithHeartbeat(env: Env, job = 'maintenance', run?: () => Promise<Record<string, number>>): Promise<Record<string, number>> {
+  const exec = run || (() => runMaintenance(env));
   try {
-    const stats = await runMaintenance(env);
-    await recordHeartbeat(env, job, true, stats);
-    return stats;
+    try {
+      const stats = await exec();
+      await recordHeartbeat(env, job, true, stats);
+      return stats;
+    } catch (e) {
+      // TG-19: injected batch jobs retry once; the maintenance path below
+      // keeps its exact behavior (no retry — a half-swept pass must not run
+      // twice inside one tick).
+      if (!run) throw e;
+      const stats = await exec();
+      await recordHeartbeat(env, job, true, { ...stats, retried: 1 });
+      return stats;
+    }
   } catch (e: any) {
     await recordHeartbeat(env, job, false, {}, e?.message ? String(e.message) : String(e));
     throw e;
@@ -2102,7 +2184,7 @@ export async function adminForceCancel(env: Env, admin: AuthUser, bookingId: str
   try {
     const supplier = await loadSupplier(env, b.supplier_id);
     const t0 = Date.now();
-    const cx = await adapterFor(supplier?.adapter || "none").cancel(supplierCtx(b, 1));
+    const cx = await adapterFor(supplier?.adapter || "none", env).cancel(supplierCtx(b, 1));
     await logSupplierCall(env, b.supplier_id, b.id, "CANCEL", cx.outcome, Date.now() - t0, JSON.stringify(cx).slice(0, 2000));
     supplierCancelled = cx.outcome !== "REJECTED";
   } catch { supplierCancelled = false; }

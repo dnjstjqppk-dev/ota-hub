@@ -721,4 +721,140 @@ UPDATE bookings SET partner_id = NULL
 -- discount_amount_krw stays as the single functional discount store).
 UPDATE bookings SET total_minor = CAST(ROUND(total_price) AS INTEGER) WHERE total_minor IS NULL;
 
+-- 0047_commercial_readiness.sql
+UPDATE reviews SET partner_id = (SELECT b.partner_id FROM bookings b WHERE b.id = reviews.booking_id)
+ WHERE booking_id IS NOT NULL AND partner_id IS NULL;
+
+-- 0047_commercial_readiness.sql
+INSERT INTO support_ticket_messages (id, ticket_id, author_type, author_id, body, created_at)
+  SELECT 'tmsg_legacy_' || id, id, 'ADMIN', 'legacy', admin_note, updated_at
+  FROM support_tickets WHERE admin_note IS NOT NULL AND admin_note <> '';
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  VALUES ('HOTEL', NEW.id, NEW.name_ko || ' ' || NEW.name_en, NEW.city,
+    COALESCE(NEW.neighborhood, '') || ' ' || COALESCE(NEW.address, '') || ' ' || COALESCE(NEW.property_type, ''),
+    NEW.is_active, NEW.base_price_krw, NEW.review_score, NEW.partner_id);
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  VALUES ('FLIGHT', NEW.id, NEW.airline_name || ' ' || NEW.flight_number, NEW.departure_city || ' ' || NEW.arrival_city,
+    NEW.airline_code || ' ' || NEW.departure_airport || ' ' || NEW.arrival_airport || ' ' || COALESCE(NEW.cabin_class, ''),
+    NEW.is_active, NEW.base_price_krw, NULL, NEW.partner_id);
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  VALUES ('TRAIN', NEW.id, NEW.train_type || ' ' || NEW.train_number, NEW.departure_station || ' ' || NEW.arrival_station,
+    COALESCE(NEW.seat_class, ''), NEW.is_active, NEW.price_krw, NULL, NULL);
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  VALUES ('CAR', NEW.id, NEW.company_name || ' ' || NEW.vehicle_model, NEW.pickup_location,
+    COALESCE(NEW.vehicle_type, '') || ' ' || COALESCE(NEW.transmission, ''), NEW.is_active, NEW.daily_price_krw, NULL, NEW.partner_id);
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  VALUES ('TRANSFER', NEW.id, NEW.service_title, NEW.destination_area,
+    NEW.airport_code || ' ' || COALESCE(NEW.vehicle_class, ''), NEW.is_active, NEW.price_krw, NULL, NEW.partner_id);
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  VALUES ('ACTIVITY', NEW.id, NEW.title, NEW.city,
+    COALESCE(NEW.category, '') || ' ' || COALESCE(NEW.country, '') || ' ' || COALESCE(NEW.description, ''),
+    NEW.is_active, NEW.price_krw, NEW.review_score, NEW.partner_id);
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  VALUES ('PACKAGE', NEW.id, NEW.title, NEW.destination_city, '',
+    NEW.is_active, NEW.total_package_krw, NULL, NULL);
+
+-- 0049_search_fts.sql
+-- Backfill current rows (triggers cover future writes).
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  SELECT 'HOTEL', id, name_ko || ' ' || name_en, city,
+    COALESCE(neighborhood, '') || ' ' || COALESCE(address, '') || ' ' || COALESCE(property_type, ''),
+    is_active, base_price_krw, review_score, partner_id FROM hotels;
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  SELECT 'FLIGHT', id, airline_name || ' ' || flight_number, departure_city || ' ' || arrival_city,
+    airline_code || ' ' || departure_airport || ' ' || arrival_airport || ' ' || COALESCE(cabin_class, ''),
+    is_active, base_price_krw, NULL, partner_id FROM flights;
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  SELECT 'TRAIN', id, train_type || ' ' || train_number, departure_station || ' ' || arrival_station,
+    COALESCE(seat_class, ''), is_active, price_krw, NULL, NULL FROM trains;
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  SELECT 'CAR', id, company_name || ' ' || vehicle_model, pickup_location,
+    COALESCE(vehicle_type, '') || ' ' || COALESCE(transmission, ''), is_active, daily_price_krw, NULL, partner_id FROM cars;
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  SELECT 'TRANSFER', id, service_title, destination_area,
+    airport_code || ' ' || COALESCE(vehicle_class, ''), is_active, price_krw, NULL, partner_id FROM transfers;
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  SELECT 'ACTIVITY', id, title, city,
+    COALESCE(category, '') || ' ' || COALESCE(country, '') || ' ' || COALESCE(description, ''),
+    is_active, price_krw, review_score, partner_id FROM activities;
+
+-- 0049_search_fts.sql
+INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
+  SELECT 'PACKAGE', id, title, destination_city, '', is_active, total_package_krw, NULL, NULL FROM packages;
+
+-- 0051_ndc_gds_groundwork.sql
+INSERT INTO airport_mappings (code, city_ko, city_en, country_code) VALUES
+  ('ICN', '서울/인천', 'Seoul/Incheon', 'KR'),
+  ('GMP', '서울/김포', 'Seoul/Gimpo', 'KR'),
+  ('PUS', '부산/김해', 'Busan/Gimhae', 'KR'),
+  ('CJU', '제주', 'Jeju', 'KR'),
+  ('NRT', '도쿄/나리타', 'Tokyo/Narita', 'JP'),
+  ('HND', '도쿄/하네다', 'Tokyo/Haneda', 'JP'),
+  ('KIX', '오사카/간사이', 'Osaka/Kansai', 'JP'),
+  ('FUK', '후쿠오카', 'Fukuoka', 'JP'),
+  ('CTS', '삿포로', 'Sapporo/Chitose', 'JP'),
+  ('TPE', '타이베이', 'Taipei/Taoyuan', 'TW'),
+  ('HKG', '홍콩', 'Hong Kong', 'HK'),
+  ('SIN', '싱가포르', 'Singapore', 'SG'),
+  ('BKK', '방콕', 'Bangkok/Suvarnabhumi', 'TH'),
+  ('HAN', '하노이', 'Hanoi/Noi Bai', 'VN'),
+  ('SGN', '호치민', 'Ho Chi Minh City', 'VN'),
+  ('KUL', '쿠알라룸푸르', 'Kuala Lumpur', 'MY'),
+  ('SYD', '시드니', 'Sydney', 'AU'),
+  ('HNL', '호놀룰루', 'Honolulu', 'US'),
+  ('LAX', '로스앤젤레스', 'Los Angeles', 'US'),
+  ('JFK', '뉴욕', 'New York/Kennedy', 'US');
+
+-- 0051_ndc_gds_groundwork.sql
+INSERT INTO airline_mappings (code, name_ko, name_en) VALUES
+  ('KE', '대한항공', 'Korean Air'),
+  ('OZ', '아시아나항공', 'Asiana Airlines'),
+  ('7C', '제주항공', 'Jeju Air'),
+  ('BX', '에어부산', 'Air Busan'),
+  ('TW', '티웨이항공', 'T''way Air'),
+  ('LJ', '진에어', 'Jin Air'),
+  ('NH', '전일본공수', 'ANA'),
+  ('JL', '일본항공', 'JAL'),
+  ('CX', '캐세이퍼시픽', 'Cathay Pacific'),
+  ('SQ', '싱가포르항공', 'Singapore Airlines');
+
+-- 0052_warehouse_reco.sql
+INSERT INTO feature_flags (key, category, display_name, description, is_enabled, default_enabled, requires_flags, is_external_dependent, external_contract_status, updated_by)
+SELECT 'RECO_V1', 'SYSTEM', '추천 v1 (규칙 기반)', '상품 상세의 함께 본·인기·최근 본 슬롯 + 추천 A/B 실험. OFF면 API 503 + UI 미노출.', 1, 1, '[]', 0, 'NOT_REQUIRED', 'migration_0052'
+WHERE NOT EXISTS (SELECT 1 FROM feature_flags WHERE key = 'RECO_V1');
+
+-- 0053_markup_bot_digest.sql
+INSERT INTO feature_flags (key, category, display_name, description, is_enabled, default_enabled, requires_flags, is_external_dependent, external_contract_status, updated_by)
+SELECT 'DYNAMIC_MARKUP', 'FINANCIAL', '동적 마크업 v1', '수요 예측 기반 ±15% 가격 조정 (하한가 클램프, 결정 로그, A/B). OFF면 기존가 그대로.', 0, 0, '[]', 0, 'NOT_REQUIRED', 'migration_0053'
+WHERE NOT EXISTS (SELECT 1 FROM feature_flags WHERE key = 'DYNAMIC_MARKUP');
+
+-- 0053_markup_bot_digest.sql
+INSERT INTO feature_flags (key, category, display_name, description, is_enabled, default_enabled, requires_flags, is_external_dependent, external_contract_status, updated_by)
+SELECT 'CS_BOT', 'SYSTEM', 'CS 봇 v1', '1:1 문의 1차 자동 응답 + 1클릭 사람 이관. OFF면 전량 사람 응대.', 0, 0, '[]', 0, 'NOT_REQUIRED', 'migration_0053'
+WHERE NOT EXISTS (SELECT 1 FROM feature_flags WHERE key = 'CS_BOT');
+
 COMMIT;

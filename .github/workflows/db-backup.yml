@@ -35,3 +35,31 @@ jobs:
           name: ota-production-sql
           path: backups/*.sql
           retention-days: 30
+
+  # TG-20 A3: every backup is restored into scratch SQLite and integrity-
+  # checked while still in the same run. A failure here fails the workflow
+  # (the alert) before anyone needs the dump for real.
+  restore-verify:
+    runs-on: ubuntu-latest
+    needs: backup
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Download dump artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ota-production-sql
+          path: restores
+
+      - name: Restore into scratch and verify integrity
+        run: node scripts/verify-backup-restore.mjs --dump "$(ls restores/*.sql | head -1)"

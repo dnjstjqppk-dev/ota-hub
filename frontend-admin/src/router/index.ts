@@ -103,6 +103,12 @@ const routes: RouteRecordRaw[] = [
     component: SupportView,
     meta: { requiresAuth: true }
   },
+  // CR-01 / CR-04 / CR-05
+  { path: '/insights', name: 'Insights', component: () => import('../views/InsightsView.vue'), meta: { requiresAuth: true } },
+  // TG-13
+  { path: '/slo', name: 'Slo', component: () => import('../views/SloView.vue'), meta: { requiresAuth: true } },
+  { path: '/reviews', name: 'Reviews', component: () => import('../views/ReviewsView.vue'), meta: { requiresAuth: true } },
+  { path: '/marketing', name: 'Marketing', component: () => import('../views/MarketingView.vue'), meta: { requiresAuth: true } },
   {
     path: '/tickets',
     name: 'Tickets',

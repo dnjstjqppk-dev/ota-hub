@@ -8,10 +8,13 @@
  * DB, missing assets, dead routes) fails here with exit 1, while a healthy
  * one passes in seconds without touching any data.
  *
- *   BASE_URL / ADMIN_URL / PARTNER_URL override the three portal roots.
+ *   BASE_URL / USER_URL / ADMIN_URL / PARTNER_URL override the portal roots.
+ *   TG-15: the user portal rides ota-user (SSR+ISR); the hub root is an API
+ *   landing and the hub keeps the /admin/ + /partner/ fallbacks.
  */
 
 const HUB = (process.env.BASE_URL || 'https://ota-hub.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+const USER = (process.env.USER_URL || 'https://ota-user.dnjstjqppk.workers.dev').replace(/\/+$/, '');
 const ADMIN = (process.env.ADMIN_URL || 'https://ota-admin.dnjstjqppk.workers.dev').replace(/\/+$/, '');
 const PARTNER = (process.env.PARTNER_URL || 'https://ota-partner.dnjstjqppk.workers.dev').replace(/\/+$/, '');
 
@@ -45,9 +48,14 @@ async function main() {
     if (data.checks?.jwtSecret !== true) throw new Error('jwtSecret missing: auth cannot work');
   });
 
-  for (const [label, url] of [['hub root', HUB], ['admin root', ADMIN], ['partner root', PARTNER], ['hub /admin/ fallback', `${HUB}/admin/`], ['hub /partner/ fallback', `${HUB}/partner/`]]) {
+  for (const [label, url] of [['hub root (API landing)', HUB], ['user root (SSR)', USER], ['admin root', ADMIN], ['partner root', PARTNER], ['hub /admin/ fallback', `${HUB}/admin/`], ['hub /partner/ fallback', `${HUB}/partner/`]]) {
     await check(`${label} serves HTTP 200`, async () => { await get(url); });
   }
+
+  await check('user catalog renders on demand (ISR)', async () => {
+    const html = await (await get(`${USER}/hotels`)).text();
+    if (!html.includes('getfortrip')) throw new Error('SSR shell missing brand marker');
+  });
 
   await check('GET /sitemap.xml renders the catalog index', async () => {
     const xml = await (await get(`${HUB}/sitemap.xml`)).text();

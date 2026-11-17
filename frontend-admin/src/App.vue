@@ -14,6 +14,8 @@ const router = useRouter()
 const NAV = [
   { group: '운영', items: [
     { path: '/dashboard', label: '대시보드', icon: 'dashboard' },
+    { path: '/insights', label: '비즈니스 분석', icon: 'coins' },
+    { path: '/slo', label: 'SLO·장애', icon: 'shield' },
     { path: '/bookings', label: '예약 관리', icon: 'bookings' },
     { path: '/catalog', label: '상품', icon: 'package' },
     { path: '/suppliers', label: '공급사 연동', icon: 'server' },
@@ -26,6 +28,8 @@ const NAV = [
   { group: '콘텐츠', items: [
     { path: '/url-ingest', label: 'URL 상품 수집', icon: 'link' },
     { path: '/community', label: '커뮤니티', icon: 'chat' },
+    { path: '/reviews', label: '리뷰 검수', icon: 'star' },
+    { path: '/marketing', label: '배너·기획전', icon: 'megaphone' },
     { path: '/support', label: '공지사항', icon: 'megaphone' },
     { path: '/tickets', label: '1:1 문의', icon: 'support' },
     { path: '/promotions', label: '프로모션', icon: 'gift' }

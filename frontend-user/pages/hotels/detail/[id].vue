@@ -128,8 +128,7 @@ useHead(() => {
   }
 })
 
-onMounted(async () => {
-  const d = new Date(); today.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+async function loadLive() {
   if (!hotelId) { loading.value = false; notFound.value = true; return }
   try {
     const res = await fetch(useApiUrl(`/hotels/${encodeURIComponent(hotelId)}`), { signal: AbortSignal.timeout(8000) })
@@ -146,6 +145,16 @@ onMounted(async () => {
   if (ratesState.value !== 'ok') ratesState.value = 'unavailable'
   if (!hotel.value) notFound.value = true
   loading.value = false
+}
+// TG-15: SSR the first paint (ISR caches it). Server-side misses 404 and
+// server-side failures 503 — a stale shell must never bake into the edge cache.
+await useAsyncData(`tg15-hotel-${hotelId}`, () => loadLive())
+if (import.meta.server) {
+  if (notFound.value) throw createError({ statusCode: 404, statusMessage: 'Product not found' })
+  if (ratesState.value !== 'ok') throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
+}
+onMounted(() => {
+  const d = new Date(); today.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 })
 
 const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.value?.city ? { city: hotel.value.city } : {}), ...route.query } }))
@@ -287,6 +296,7 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
         </section>
 
         <ReviewsSection domain="HOTEL" :target-id="hotel.id" />
+        <RecoRail domain="HOTEL" :item-id="hotel.id" />
 
         <!-- Policies that the platform actually enforces -->
         <section aria-labelledby="h-policy" class="rounded-card border border-line bg-surface p-5 sm:p-6">

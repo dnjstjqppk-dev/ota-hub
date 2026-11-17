@@ -70,7 +70,10 @@ function detailLink(c: any) { return { path: `/cars/detail/${c.id}`, query: stay
 function book(c: any) { router.push({ path: '/checkout', query: { domain: 'CAR', itemId: c.id, ...stayQuery() } }) }
 
 watch(() => route.fullPath, () => { if (!isSelf()) return; syncDraft(); load() })
-onMounted(() => { today.value = todayIso(); load() })
+// TG-15: SSR the first paint (ISR caches it); the watcher re-loads on client query changes.
+await useAsyncData('tg15-cars-list', () => load())
+if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
+onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
 useHead(() => ({ title: q.value.city ? `${q.value.city} 렌터카` : '렌터카 검색' }))
 </script>

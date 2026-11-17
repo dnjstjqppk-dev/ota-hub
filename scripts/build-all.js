@@ -4,9 +4,8 @@
  * ==============================================================================
  * 1. Builds Vue 3 Admin Console (frontend-admin/dist)
  * 2. Builds Vue 3 Partner Extranet (frontend-partner/dist)
- * 3. Prerenders Nuxt 3 User App (frontend-user/.output/public)
- * 4. Integrates Admin SPA into public/admin
- * 5. Integrates Partner SPA into public/partner
+ * 3. Builds Nuxt User App SSR worker (frontend-user/.output: server + public)
+ * 4. Stages Admin SPA into hub-assets/admin + Partner SPA into hub-assets/partner
  * ==============================================================================
  */
 
@@ -38,32 +37,31 @@ try {
     : 'npm --prefix frontend-partner install && npm --prefix frontend-partner run build';
   execSync(partnerCmd, { cwd: rootDir, stdio: 'inherit' });
 
-  // 3. Build User App (C7: refresh the SEO snapshot first; best-effort — the
-  // committed files are kept when no API answers, so the build never blocks).
-  console.log('\n📦 [3/4] Generating frontend-user (Nuxt 3 SPA / Prerender)...');
-  try {
-    execSync('node scripts/gen-seo-snapshot.mjs', { cwd: rootDir, stdio: 'inherit' });
-  } catch (e) {
-    console.log('⚠️ SEO snapshot refresh failed; building with the committed files.');
-  }
-  execSync('npm --prefix frontend-user run generate', { cwd: rootDir, stdio: 'inherit' });
+  // 3. Build User App (TG-15: Nitro cloudflare preset + ISR — `nuxt build`
+  // emits .output/server (ota-user worker) + .output/public. No SEO snapshot:
+  // catalog renders on demand, and /sitemap.xml already reads D1 live.)
+  console.log('\n📦 [3/4] Building frontend-user (Nuxt SSR / ISR)...');
+  execSync('npm --prefix frontend-user run build', { cwd: rootDir, stdio: 'inherit' });
 
-  // 4. Merge Admin dist into user public/admin & Partner dist into user public/partner
-  console.log('\n🔄 [4/4] Integrating SPAs into public/admin & public/partner for fallback routing...');
+  // 4. Stage the hub assets: admin + partner SPAs under hub-assets/ for the
+  // ota-hub /admin/ + /partner/ fallbacks (TG-15: the hub no longer serves the
+  // user portal — apex moves to ota-user). hub-assets/index.html is committed.
+  console.log('\n🔄 [4/4] Staging console SPAs into hub-assets/ for fallback routing...');
   const adminDist = path.join(rootDir, 'frontend-admin', 'dist');
   const partnerDist = path.join(rootDir, 'frontend-partner', 'dist');
-  const targetAdmin = path.join(rootDir, 'frontend-user', '.output', 'public', 'admin');
-  const targetPartner = path.join(rootDir, 'frontend-user', '.output', 'public', 'partner');
-  
+  const hubAssets = path.join(rootDir, 'hub-assets');
+  const targetAdmin = path.join(hubAssets, 'admin');
+  const targetPartner = path.join(hubAssets, 'partner');
+
   if (!fs.existsSync(adminDist)) throw new Error(`Admin build artifact not found at: ${adminDist}`);
   if (!fs.existsSync(partnerDist)) throw new Error(`Partner build artifact not found at: ${partnerDist}`);
+  if (!fs.existsSync(path.join(hubAssets, 'index.html'))) throw new Error(`Hub landing missing at: ${hubAssets}/index.html`);
 
+  fs.rmSync(targetAdmin, { recursive: true, force: true });
+  fs.rmSync(targetPartner, { recursive: true, force: true });
   fs.cpSync(adminDist, targetAdmin, { recursive: true });
   fs.cpSync(partnerDist, targetPartner, { recursive: true });
-  console.log('  ✅ Admin & Partner SPAs integrated into public/ successfully.\n');
-  
-  // Ensure .gitkeep is preserved
-  fs.writeFileSync(path.join(rootDir, 'frontend-user', '.output', 'public', '.gitkeep'), '');
+  console.log('  ✅ Admin & Partner SPAs staged into hub-assets/ successfully.\n');
 
   console.log('✨ All 3 portals ready for Cloudflare deployment!\n');
 } catch (err) {

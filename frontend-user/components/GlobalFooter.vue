@@ -17,34 +17,34 @@ const co = useCompany()
             <img src="/logo-white.svg" alt="getfortrip" class="hidden h-8 w-auto dark:block" width="132" height="32" />
           </NuxtLink>
           <p class="text-sm leading-relaxed text-ink-muted">항공권부터 호텔, 현지 이동까지. 결제 전 최종 금액을 확정하고, 공급사 확정이 끝난 예약만 확정으로 안내합니다.</p>
-          <a :href="`mailto:${BRAND.supportEmail}`" class="inline-flex items-center gap-2 text-sm font-semibold text-ink hover:text-primary">
+          <a :href="`mailto:${BRAND.supportEmail}`" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-semibold text-ink hover:text-primary">
             <AppIcon name="mail" :size="18" />{{ BRAND.supportEmail }}
           </a>
         </div>
 
         <nav aria-label="여행 상품">
           <h2 class="mb-4 text-sm font-bold text-ink">여행 상품</h2>
-          <ul class="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm text-ink-muted md:grid-cols-1">
-            <li v-for="c in CATEGORIES" :key="c.key"><NuxtLink :to="c.to" class="hover:text-primary">{{ c.label }}</NuxtLink></li>
+          <ul class="grid grid-cols-2 gap-x-4 gap-y-0 text-sm md:gap-y-2.5 text-ink-muted md:grid-cols-1">
+            <li v-for="c in CATEGORIES" :key="c.key"><NuxtLink :to="c.to" class="inline-flex min-h-[44px] items-center md:min-h-0 hover:text-primary">{{ c.label }}</NuxtLink></li>
           </ul>
         </nav>
 
         <nav aria-label="고객 지원">
           <h2 class="mb-4 text-sm font-bold text-ink">고객 지원</h2>
           <ul class="space-y-2.5 text-sm text-ink-muted">
-            <li v-for="l in SUPPORT_LINKS" :key="l.to"><NuxtLink :to="l.to" class="hover:text-primary">{{ l.label }}</NuxtLink></li>
-            <li><NuxtLink to="/my/bookings" class="hover:text-primary">예약 조회</NuxtLink></li>
-            <li><NuxtLink to="/safety" class="hover:text-primary">안전 여행 가이드</NuxtLink></li>
+            <li v-for="l in SUPPORT_LINKS" :key="l.to"><NuxtLink :to="l.to" class="inline-flex min-h-[44px] items-center md:min-h-0 hover:text-primary">{{ l.label }}</NuxtLink></li>
+            <li><NuxtLink to="/my/bookings" class="inline-flex min-h-[44px] items-center md:min-h-0 hover:text-primary">예약 조회</NuxtLink></li>
+            <li><NuxtLink to="/safety" class="inline-flex min-h-[44px] items-center md:min-h-0 hover:text-primary">안전 여행 가이드</NuxtLink></li>
           </ul>
         </nav>
 
         <nav aria-label="회사">
           <h2 class="mb-4 text-sm font-bold text-ink">getfortrip</h2>
           <ul class="space-y-2.5 text-sm text-ink-muted">
-            <li><NuxtLink to="/about" class="hover:text-primary">회사 소개</NuxtLink></li>
-            <li><NuxtLink to="/news" class="hover:text-primary">뉴스룸</NuxtLink></li>
-            <li><NuxtLink to="/careers" class="hover:text-primary">채용</NuxtLink></li>
-            <li><a :href="BRAND.partnerConsoleUrl" class="inline-flex items-center gap-1 hover:text-primary">파트너 콘솔 <AppIcon name="external" :size="14" /></a></li>
+            <li><NuxtLink to="/about" class="inline-flex min-h-[44px] items-center md:min-h-0 hover:text-primary">회사 소개</NuxtLink></li>
+            <li><NuxtLink to="/news" class="inline-flex min-h-[44px] items-center md:min-h-0 hover:text-primary">뉴스룸</NuxtLink></li>
+            <li><NuxtLink to="/careers" class="inline-flex min-h-[44px] items-center md:min-h-0 hover:text-primary">채용</NuxtLink></li>
+            <li><a :href="BRAND.partnerConsoleUrl" class="inline-flex min-h-[44px] items-center gap-1 hover:text-primary md:min-h-0">파트너 콘솔 <AppIcon name="external" :size="14" /></a></li>
           </ul>
         </nav>
       </div>
@@ -60,9 +60,10 @@ const co = useCompany()
           <p>© {{ year }} {{ co.orPending(co.name || BRAND.companyName) }}</p>
         </div>
         <div class="flex shrink-0 gap-5 font-medium text-ink-muted">
-          <NuxtLink to="/terms" class="hover:text-ink">이용약관</NuxtLink>
-          <NuxtLink to="/privacy" class="font-bold text-ink hover:text-primary">개인정보 처리방침</NuxtLink>
-          <NuxtLink to="/cookies" class="hover:text-ink">쿠키 설정</NuxtLink>
+          <NuxtLink to="/terms" class="inline-flex min-h-[44px] items-center md:min-h-0 hover:text-ink">이용약관</NuxtLink>
+          <NuxtLink to="/privacy" class="inline-flex min-h-[44px] items-center md:min-h-0 font-bold text-ink hover:text-primary">개인정보 처리방침</NuxtLink>
+          <NuxtLink to="/cookies" class="inline-flex min-h-[44px] items-center md:min-h-0 hover:text-ink">쿠키 설정</NuxtLink>
+          <NuxtLink to="/status" class="inline-flex min-h-[44px] items-center md:min-h-0 hover:text-ink">서비스 상태</NuxtLink>
         </div>
       </div>
     </div>

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<!-- TG-15: ota-hub serves the API + console fallbacks; the user portal lives
+     on ota-user (apex). This landing keeps the hub root an honest 200. -->
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>getfortrip API hub</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:3rem auto;padding:0 1rem;line-height:1.6}</style>
+</head>
+<body>
+  <h1>getfortrip API hub</h1>
+  <p>이 호스트는 API와 운영 콘솔을 서빙해요.</p>
+  <ul>
+    <li><a href="/api/v1/health">API 상태</a></li>
+    <li><a href="/status">서비스 상태</a></li>
+    <li><a href="/admin/">관리자 콘솔</a></li>
+    <li><a href="/partner/">파트너 콘솔</a></li>
+  </ul>
+</body>
+</html>

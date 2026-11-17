@@ -6,7 +6,7 @@ import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.activityId || route.query.id || '')
-const { item: a, state, reload } = useCatalogDetail('/activities', id, generatedFallback('ACTIVITY', id))
+const { item: a, state, reload } = await useCatalogDetail('/activities', id, generatedFallback('ACTIVITY', id))
 
 const CATEGORY_KO: Record<string, string> = { THEME_PARK: '테마파크', DAY_TOUR: '일일 투어', TICKET: '입장권', EXPERIENCE: '체험', CRUISE: '크루즈', SHOW: '공연' }
 const DURATION_KO: Record<string, string> = { FULL_DAY: '종일', HALF_DAY: '반나절', FLEXIBLE: '자유 이용', HOURS: '몇 시간' }
@@ -66,6 +66,7 @@ useHead(() => {
           <p class="mt-6 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">아동도 성인과 같은 요금이 적용돼요.</p>
         </DetailHero>
         <ReviewsSection domain="ACTIVITY" :target-id="a.id" />
+        <RecoRail domain="ACTIVITY" :item-id="a.id" />
       </div>
       <DetailBookingCard :item="a" domain="ACTIVITY" :price-krw="a.price_krw" unit-label="1인" :cancellation="a.free_cancellation ? 'FREE' : 'NON_REFUNDABLE'" people :alert-label="a.title" />
     </div>
