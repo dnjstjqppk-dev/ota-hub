@@ -144,7 +144,8 @@ jobs:
         run: |
           source scripts/ci-e2e-server.sh
           ci_boot_server sandbox /tmp/wrangler-suppliers.log -- -c wrangler.local.jsonc --port 8799 --var NDC_API_BASE:http://127.0.0.1:18899 --var NDC_API_KEY:ndc_e2e --var GDS_API_BASE:http://127.0.0.1:18899 --var GDS_API_KEY:gds_e2e --var SUPPLIER_BREAKER_COOLDOWN_MS:3000
-          ADMIN_PASSWORD='LocalAdmin2026!x' npm run test:e2e:suppliers
+          # BASE is 8798 by default in this suite (local runs); CI serves :8799.
+          BASE='http://127.0.0.1:8799' ADMIN_PASSWORD='LocalAdmin2026!x' npm run test:e2e:suppliers
           ci_stop_server
 
       # TG-20: the replica suite needs READ_REPLICA_URL aimed at the in-file
@@ -153,7 +154,8 @@ jobs:
         run: |
           source scripts/ci-e2e-server.sh
           ci_boot_server sandbox /tmp/wrangler-replica.log -- -c wrangler.local.jsonc --port 8799 --var READ_REPLICA_URL:http://127.0.0.1:18999 --var REPLICA_MAX_LAG_MS:1000 --var PRIMARY_REGION:ICN
-          ADMIN_PASSWORD='LocalAdmin2026!x' npm run test:e2e:replica
+          # BASE is 8798 by default in this suite (local runs); CI serves :8799.
+          BASE='http://127.0.0.1:8799' ADMIN_PASSWORD='LocalAdmin2026!x' npm run test:e2e:replica
           ci_stop_server
 
   deploy:
