@@ -120,57 +120,37 @@ jobs:
           # Ephemeral CI-only secrets (never committed; .dev.vars is git-ignored).
           node -e "console.log('JWT_SECRET=ci-ephemeral-jwt-secret-0123456789abcdef\nPII_ENC_KEY=' + require('crypto').randomBytes(32).toString('base64'))" > .dev.vars
           node scripts/dev-seed.mjs 'LocalAdmin2026!x'
-          npx wrangler dev -c wrangler.local.jsonc --port 8799 > /tmp/wrangler.log 2>&1 &
-          echo $! > /tmp/wrangler.pid
-          for i in $(seq 1 36); do
-            curl -sf http://127.0.0.1:8799/api/v1/health && break
-            sleep 5
-          done
-          curl -sf http://127.0.0.1:8799/api/v1/health
+          source scripts/ci-e2e-server.sh
+          ci_boot_server sandbox /tmp/wrangler.log -- -c wrangler.local.jsonc --port 8799
           ADMIN_PASSWORD='LocalAdmin2026!x' npm run test:e2e
-          kill $(cat /tmp/wrangler.pid) || true
+          ci_stop_server
 
       # TG-17: the Stripe suite needs PAYMENT_PROVIDER=stripe + FDS on, so it
       # runs as a second pass on the same runner (the stub boots in-file).
       - name: Run Stripe E2E suite against local wrangler dev
         run: |
-          npx wrangler dev -c wrangler.local.jsonc --port 8799 --var PAYMENT_PROVIDER:stripe --var STRIPE_SECRET_KEY:sk_test_ci --var STRIPE_API_BASE:http://127.0.0.1:18799 --var STRIPE_WEBHOOK_SECRET:whsec_ci --var FRAUD_REVIEW:1 > /tmp/wrangler-stripe.log 2>&1 &
-          echo $! > /tmp/wrangler.pid
-          for i in $(seq 1 36); do
-            curl -sf http://127.0.0.1:8799/api/v1/health && break
-            sleep 5
-          done
-          curl -sf http://127.0.0.1:8799/api/v1/health
+          source scripts/ci-e2e-server.sh
+          ci_boot_server stripe /tmp/wrangler-stripe.log -- -c wrangler.local.jsonc --port 8799 --var PAYMENT_PROVIDER:stripe --var STRIPE_SECRET_KEY:sk_test_ci --var STRIPE_API_BASE:http://127.0.0.1:18799 --var STRIPE_WEBHOOK_SECRET:whsec_ci --var FRAUD_REVIEW:1
           ADMIN_PASSWORD='LocalAdmin2026!x' npm run test:e2e:stripe
-          kill $(cat /tmp/wrangler.pid) || true
+          ci_stop_server
 
       # TG-18: the suppliers suite needs NDC/GDS stub vars + a short breaker
       # cooldown, so it runs as a third pass on the same runner.
       - name: Run suppliers E2E suite against local wrangler dev
         run: |
-          npx wrangler dev -c wrangler.local.jsonc --port 8799 --var NDC_API_BASE:http://127.0.0.1:18899 --var NDC_API_KEY:ndc_e2e --var GDS_API_BASE:http://127.0.0.1:18899 --var GDS_API_KEY:gds_e2e --var SUPPLIER_BREAKER_COOLDOWN_MS:3000 > /tmp/wrangler-suppliers.log 2>&1 &
-          echo $! > /tmp/wrangler.pid
-          for i in $(seq 1 36); do
-            curl -sf http://127.0.0.1:8799/api/v1/health && break
-            sleep 5
-          done
-          curl -sf http://127.0.0.1:8799/api/v1/health
+          source scripts/ci-e2e-server.sh
+          ci_boot_server sandbox /tmp/wrangler-suppliers.log -- -c wrangler.local.jsonc --port 8799 --var NDC_API_BASE:http://127.0.0.1:18899 --var NDC_API_KEY:ndc_e2e --var GDS_API_BASE:http://127.0.0.1:18899 --var GDS_API_KEY:gds_e2e --var SUPPLIER_BREAKER_COOLDOWN_MS:3000
           ADMIN_PASSWORD='LocalAdmin2026!x' npm run test:e2e:suppliers
-          kill $(cat /tmp/wrangler.pid) || true
+          ci_stop_server
 
       # TG-20: the replica suite needs READ_REPLICA_URL aimed at the in-file
       # stub, so it runs as a fourth pass on the same runner.
       - name: Run replica E2E suite against local wrangler dev
         run: |
-          npx wrangler dev -c wrangler.local.jsonc --port 8799 --var READ_REPLICA_URL:http://127.0.0.1:18999 --var REPLICA_MAX_LAG_MS:1000 --var PRIMARY_REGION:ICN > /tmp/wrangler-replica.log 2>&1 &
-          echo $! > /tmp/wrangler.pid
-          for i in $(seq 1 36); do
-            curl -sf http://127.0.0.1:8799/api/v1/health && break
-            sleep 5
-          done
-          curl -sf http://127.0.0.1:8799/api/v1/health
+          source scripts/ci-e2e-server.sh
+          ci_boot_server sandbox /tmp/wrangler-replica.log -- -c wrangler.local.jsonc --port 8799 --var READ_REPLICA_URL:http://127.0.0.1:18999 --var REPLICA_MAX_LAG_MS:1000 --var PRIMARY_REGION:ICN
           ADMIN_PASSWORD='LocalAdmin2026!x' npm run test:e2e:replica
-          kill $(cat /tmp/wrangler.pid) || true
+          ci_stop_server
 
   deploy:
     runs-on: ubuntu-latest
