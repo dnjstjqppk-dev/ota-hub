@@ -506,11 +506,13 @@ async function runVerificationSuite() {
   // ---------------------------------------------------------------------------
   // 21. STATIC ASSETS & ADMIN SPA ROUTING
   // ---------------------------------------------------------------------------
-  await test('SPA & Routing: Admin SPA (/admin/) & Nuxt Register (/register/) Served (200)', async () => {
+  await test('SPA & Routing: Admin SPA (/admin/) served by hub (user routes moved, TG-15)', async () => {
     const adminRes = await fetch(`${BASE_URL}/admin/`);
     if (adminRes.status !== 200) throw new Error(`Admin SPA returned HTTP ${adminRes.status}`);
-    const regRes = await fetch(`${BASE_URL}/register/`);
-    if (regRes.status !== 200) throw new Error(`Register route returned HTTP ${regRes.status}`);
+    // TG-15 split the user portal (Nuxt SSR) into the ota-user worker, so
+    // /register/ (frontend-user/pages/register.vue) is no longer served by
+    // the hub — a hub 404 there is correct, not a regression (observed
+    // 2026-11-18, was asserted 200 before the split).
   });
 
   // ---------------------------------------------------------------------------
@@ -832,7 +834,9 @@ async function runVerificationSuite() {
     }
     // #50 (0038): the registry must hold exactly the enforced set — no
     // theater flags. Any future flag addition updates this list deliberately.
-    const enforced = ['ACTIVITY_BOOKING', 'AUTO_PRODUCT_PUBLISH', 'CAR_RENTAL', 'CONSIGNMENT_SALES', 'FLIGHT_BOOKING', 'HOTEL_BOOKING', 'MARKETPLACE_1P_DIRECT', 'MARKETPLACE_3P_PARTNER', 'PACKAGE_TOUR', 'PARTNER_SELF_PRODUCT_REGISTRATION', 'PARTNER_URL_INGESTION', 'TRANSIT_TICKETS', 'URL_PRODUCT_INGESTION'].sort();
+    // TG-19/21 additions (all wired: RECO_FLAG→recommendations, MARKUP_FLAG→
+    // forecast-service, CS_BOT_FLAG→csbot-service — verified 2026-11-18).
+    const enforced = ['ACTIVITY_BOOKING', 'AUTO_PRODUCT_PUBLISH', 'CAR_RENTAL', 'CONSIGNMENT_SALES', 'CS_BOT', 'DYNAMIC_MARKUP', 'FLIGHT_BOOKING', 'HOTEL_BOOKING', 'MARKETPLACE_1P_DIRECT', 'MARKETPLACE_3P_PARTNER', 'PACKAGE_TOUR', 'PARTNER_SELF_PRODUCT_REGISTRATION', 'PARTNER_URL_INGESTION', 'RECO_V1', 'TRANSIT_TICKETS', 'URL_PRODUCT_INGESTION'].sort();
     const actual = json.flags.map((f) => f.key).sort();
     if (JSON.stringify(actual) !== JSON.stringify(enforced)) {
       throw new Error(`Admin registry is not the enforced set. Extra/missing: ${JSON.stringify(actual.filter((k) => !enforced.includes(k)).concat(enforced.filter((k) => !actual.includes(k))))}`);

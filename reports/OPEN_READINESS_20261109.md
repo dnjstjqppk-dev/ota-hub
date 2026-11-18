@@ -25,7 +25,7 @@
 | 브랜딩 가드 | PASS | 11-18 `npm run check:branding` (606 파일 스캔) |
 | 3포털 빌드 | exit 0 | 11-17 `node scripts/build-all.js` (이후 제품코드 변경 없음) |
 | 의존성 감사 | critical 0 | 11-17 `npm audit --omit=dev --audit-level=critical` (4 패키지) |
-| 운영 검증 | 43/47 (11-13 측정, 재측정 필요) | `scripts/verify-production.js` 로컬 격리DB. 잔여 4종(T11·T13·T14·T20)은 prod-진실·환경조건부로 로컬 적색이 정상 (§5-0). TG-13~21 이후 미재실행 — 베타 검수 항목. |
+| 운영 검증 | 43/47 + live-settle 1 skip | 11-18 `scripts/verify-production.js` fresh 격리DB(verify_1118) 재측정. 잔여 4종(T11·T13·T14·T20)은 prod-진실·환경조건부로 로컬 적색이 정상 (§5-0). T21(register 분리)·T33(신규 플래그 3종) 기대치 수리済. |
 | CI | fast·e2e 녹색, deploy 차단 | run 44257914473 (11-18): fast ✓(1m34s)·e2e ✓(13m41s, D1 212/212 + stripe 3/3 + suppliers 4/4 + replica 3/3). deploy잡은 `CLOUDFLARE_API_TOKEN` 7403 만료로 실패 — 시크릿 교체 필요 (§5-0). |
 | 레드드릴 | RED→GREEN (매 TG) | TG-11~TG-21 각 증거에 기재 ([TG 백로그](TRIP_GRADE_BACKLOG.md)). CI 배선도 3회 적색→수정→녹색으로 검증됨. |
 | 마이그레이션 | D1 0053 · PG 90T/111idx | 11-17 덤프·델타 적용済 (gft-pg). 운영은 0027~0044만 적용 (§5-0). |
@@ -103,7 +103,7 @@ E2E 표기 "205+3" = 메인 205 + 별도 스위트 3 (합산 아님).
    0027~0044는 11-14 사고로 적용된 상태 — 아래 6번 결정과 함께 확인할 것.
 2. **verify 로컬 잔여 4종** (T11·T13·T14·T20): prod-진실·환경조건부
    테스트로 로컬 적색이 정상. 운영 실행에서 판정한다.
-   TG-13~21 이후 verify 미재실행 — 베타 검수에서 로컬 재측정 후 운영 실행.
+   11-18 로컬 재측정 43/47 확정 (신규 적색 2종은 기대치 수리로 해소).
 3. **wrangler 인증 만료** (Cloudflare 7403): `npx wrangler login` 필요.
 4. **운영 verify+T41**: `TEST_ADMIN_PASSWORD` 필요 (에이전트 미보유).
 5. **`temp_master_prompt.md` 구 해시**: 사용자 파일 — 직접 삭제.
