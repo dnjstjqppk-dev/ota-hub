@@ -128,9 +128,13 @@ jobs:
       # TG-17: the Stripe suite needs PAYMENT_PROVIDER=stripe + FDS on, so it
       # runs as a second pass on the same runner (the stub boots in-file).
       - name: Run Stripe E2E suite against local wrangler dev
+        env:
+          # Single source for both sides of the webhook HMAC: the server var
+          # below and the suite's signer (STRIPE_E2E_WEBHOOK_SECRET).
+          STRIPE_E2E_WEBHOOK_SECRET: whsec_ci
         run: |
           source scripts/ci-e2e-server.sh
-          ci_boot_server stripe /tmp/wrangler-stripe.log -- -c wrangler.local.jsonc --port 8799 --var PAYMENT_PROVIDER:stripe --var STRIPE_SECRET_KEY:sk_test_ci --var STRIPE_API_BASE:http://127.0.0.1:18799 --var STRIPE_WEBHOOK_SECRET:whsec_ci --var FRAUD_REVIEW:1
+          ci_boot_server stripe /tmp/wrangler-stripe.log -- -c wrangler.local.jsonc --port 8799 --var PAYMENT_PROVIDER:stripe --var STRIPE_SECRET_KEY:sk_test_ci --var STRIPE_API_BASE:http://127.0.0.1:18799 --var STRIPE_WEBHOOK_SECRET:$STRIPE_E2E_WEBHOOK_SECRET --var FRAUD_REVIEW:1
           ADMIN_PASSWORD='LocalAdmin2026!x' npm run test:e2e:stripe
           ci_stop_server
 

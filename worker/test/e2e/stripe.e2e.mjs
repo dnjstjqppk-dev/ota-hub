@@ -7,6 +7,9 @@
  *        --var PAYMENT_PROVIDER:stripe --var STRIPE_SECRET_KEY:sk_test_e2e
  *        --var STRIPE_API_BASE:http://127.0.0.1:18799 --var STRIPE_WEBHOOK_SECRET:whsec_e2e --var FRAUD_REVIEW:1
  *   3. BASE=http://127.0.0.1:8799 E2E_PERSIST_TO=C:\tmp\e2e_stripe ADMIN_PASSWORD=LocalAdmin2026!x npm run test:e2e:stripe
+ *   (STRIPE_E2E_WEBHOOK_SECRET overrides the "whsec_e2e" default — it must
+ *   equal the server's STRIPE_WEBHOOK_SECRET or tg17c 403s. CI sets both
+ *   from the step env; observed 2026-11-18, run 44244951440.)
  *
  * The Stripe stub (contract shapes from unit tests) boots inside before() on
  * 127.0.0.1:18799 (STRIPE_E2E_STUB_PORT to move it) and fails loudly when the
@@ -22,7 +25,7 @@ const BASE = process.env.BASE || "http://127.0.0.1:8799";
 const ADMIN_EMAIL = "admin@local.test";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "LocalAdmin2026!x";
 const STUB_PORT = Number(process.env.STRIPE_E2E_STUB_PORT || 18799);
-const WEBHOOK_SECRET = "whsec_e2e";
+const WEBHOOK_SECRET = process.env.STRIPE_E2E_WEBHOOK_SECRET || "whsec_e2e";
 if (!/127\.0\.0\.1|localhost/.test(BASE)) throw new Error("Stripe E2E runs against localhost only");
 
 const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
