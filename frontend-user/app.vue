@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useAuthStore } from '~/stores/auth'
+import { orgWebsiteLd } from '~/composables/useJsonLd'
 
 const authStore = useAuthStore()
 
@@ -16,22 +17,8 @@ useHead({
   script: [
     {
       type: 'application/ld+json',
-      children: JSON.stringify({
-        '@context': 'https://schema.org',
-        '@type': 'TravelAgency',
-        'name': 'getfortrip',
-        'url': 'https://getfortrip.com',
-        'logo': 'https://getfortrip.com/logo.svg',
-        'description': '스마트한 전 세계 여행의 시작, getfortrip. 항공권, 호텔, 기차표, 렌터카, 공항픽업, 투어·티켓 예약.',
-        'priceRange': '₩₩',
-        'currenciesAccepted': 'KRW',
-        'paymentAccepted': 'Credit Card',
-        'address': {
-          '@type': 'PostalAddress',
-          'addressCountry': 'KR',
-          'addressLocality': 'Seoul'
-        }
-      })
+      // P5: Organization + WebSite/SearchAction graph (single source: useJsonLd).
+      children: JSON.stringify(orgWebsiteLd('https://getfortrip.com')),
     }
   ]
 })

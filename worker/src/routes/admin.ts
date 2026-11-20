@@ -18,6 +18,8 @@ import { idempotencyPrecheck, idempotencyStore } from "../lib/idempotency.ts";
 import { bareListUrls, channelPurgeUrls, productPurgeUrls, purgeForMutation } from "../lib/cache-purge.ts";
 import { invalidateSearchCache } from "../services/search-service.ts";
 import { listJobs, type JobStatus } from "../services/queue-service.ts";
+import { affiliateDashboard } from "../affiliate/dashboard.ts";
+import { enqueueIndexNow, productPageUrl } from "../seo/indexnow.ts";
 
 const PARTNER_STATUSES = ["ACTIVE", "REJECTED", "SUSPENDED", "PENDING_APPROVAL"] as const;
 const USER_ROLES = ["USER", "ADMIN"] as const;
@@ -630,6 +632,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     // TG-15: new products must be reachable without waiting out the edge TTL.
     invalidateSearchCache(); // TG-16: hot cache follows the same write.
     const purgedCreate = await purgeForMutation(env, productPurgeUrls(request, m[1], id));
+    await enqueueIndexNow(env, [productPageUrl(env, m[1], id)]).catch(() => 0);
     return json({ success: true, id, domain: m[1] }, 201, { "X-Cache-Purged": String(purgedCreate) });
   }
 
@@ -654,6 +657,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     await audit(env, admin.id, "UPDATE_PRODUCT", m[1], m[2], { fields: Object.keys(b) });
     invalidateSearchCache();
     const purgedUpdate = await purgeForMutation(env, productPurgeUrls(request, m[1], m[2]));
+    await enqueueIndexNow(env, [productPageUrl(env, m[1], m[2])]).catch(() => 0);
     return json({ success: true }, 200, { "X-Cache-Purged": String(purgedUpdate) });
   }
 
@@ -810,6 +814,17 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       (SELECT COALESCE(SUM(amount), 0) FROM affiliate_conversions c WHERE c.partner_name = k.partner_name) AS gmv
       FROM affiliate_clicks k GROUP BY partner_name ORDER BY clicks DESC LIMIT 50`).all();
     return json({ success: true, summary: { clicks: clicks?.c || 0, conversions: conv?.c || 0, gmv: conv?.gmv || 0, commission: conv?.commission || 0 }, byPartner: byPartner.results || [] });
+  }
+
+  // Phase 3: CVR + expected-settlement dashboard (click-attributed funnels).
+  if (path === "/api/v1/admin/affiliate/dashboard" && method === "GET") {
+    const dash = await affiliateDashboard(env, {
+      from: str(url.searchParams.get("from"), 10),
+      to: str(url.searchParams.get("to"), 10),
+      partner: str(url.searchParams.get("partner"), 64),
+      domain: str(url.searchParams.get("domain"), 20),
+    });
+    return json({ success: true, dashboard: dash });
   }
 
   // Affiliate partner registry. /out/* redirects and postbacks read this table

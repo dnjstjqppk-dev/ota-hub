@@ -31,6 +31,8 @@ export interface CatalogProduct {
   maxOccupancy: number | null;
   freeCancellation: boolean;
   instantConfirmation: boolean;
+  /** ACTIVITY only: the tour sells its own instant voucher (else partner-owned sale). */
+  isVoucherOnly?: boolean | null;
   /** Structured policy row when the admin set one; drives the cancellation snapshot. */
   structuredPolicy?: StructuredPolicy | null;
   /** Clock time "HH:MM" for scheduled products (flights / trains). */

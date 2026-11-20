@@ -9,6 +9,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { apiFetch, formatKrw, useApiUrl } from '~/composables/useApi'
 import { BOOKABLE_REASON_KO } from '~/composables/useCatalogDetail'
 import { daysBetween, fmtDay, qDate, qInt, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
+import { appendOutlinkContext } from '~/composables/useOutlinkQuery'
 
 const props = withDefaults(defineProps<{
   item: any
@@ -73,7 +74,24 @@ const query = computed(() => ({
 const reason = computed(() => (props.item.bookable_reason && BOOKABLE_REASON_KO[props.item.bookable_reason]) || '지금은 직접 예약할 수 없는 상품이에요.')
 /** #27: affiliate outlink supplied by the catalog API (path under the API base). Rendered only when the server emits a real link. */
 const outlinkPath = computed(() => (typeof props.item.outlink_path === 'string' && props.item.outlink_path.startsWith('/out/') ? props.item.outlink_path : ''))
-const outlinkUrl = computed(() => (outlinkPath.value ? useApiUrl(outlinkPath.value) : ''))
+/** Phase 3: carry picked dates/party plus results-page context into the click so the partner deeplink keeps them. */
+const outlinkUrl = computed(() => {
+  if (!outlinkPath.value) return ''
+  const q = route.query as Record<string, unknown>
+  const one = (v: unknown) => (typeof v === 'string' ? v : '')
+  return useApiUrl(appendOutlinkContext(outlinkPath.value, {
+    dest: one(q.dest), origin: one(q.origin),
+    startDate: startDate.value, ...(props.dateMode === 'range' && endDate.value ? { endDate: endDate.value } : {}),
+    ...(props.people ? { adults: adults.value, ...(children.value ? { children: children.value } : {}) } : {}),
+    rooms: one(q.rooms), cabin: one(q.cabin),
+  }))
+})
+/** Phase 1 trade type: server-computed bookability decides, never client guesses. */
+const tradeType = computed<'DIRECT' | 'AFFILIATE' | null>(() => {
+  if (outlinkPath.value) return 'AFFILIATE'
+  if (props.item.bookable) return 'DIRECT'
+  return null
+})
 
 const highlight = ref(false)
 const card = ref<HTMLElement | null>(null)
@@ -89,13 +107,14 @@ defineExpose({ askDates })
 <template>
   <aside class="lg:sticky lg:top-24 lg:h-fit" data-testid="booking-card">
     <div ref="card" :class="['card space-y-4 p-5 shadow-card transition-colors', highlight ? 'border-primary shadow-focus' : '']">
+      <TradeTypeBadge v-if="tradeType" :trade-type="tradeType" />
       <div>
         <p class="text-xs text-ink-subtle">{{ unitLabel }} 기준 참고가</p>
         <p class="text-2xl font-extrabold text-ink tabular" data-testid="ref-price">{{ priceKrw ? formatKrw(priceKrw) : '가격 정보 없음' }}</p>
         <p class="mt-1 text-xs text-ink-subtle">{{ item.price_notice || '참고 가격' }} · 세금·수수료를 포함한 최종 금액은 결제 전 확인 화면에서 확정돼요.</p>
       </div>
 
-      <template v-if="item.bookable">
+      <template v-if="item.bookable || outlinkPath">
         <DateRangePicker v-if="dateMode === 'range'" v-model:start="startDate" v-model:end="endDate" :start-label="startLabel" :end-label="endLabel" unit="day" :min="today" :max-range="60" :invalid="highlight" />
         <DateRangePicker v-else-if="dateMode === 'single'" v-model:start="startDate" mode="single" :start-label="startLabel" :min="today" :invalid="highlight" />
         <GuestPicker v-if="people" v-model:adults="adults" v-model:children="children" :show-rooms="false" label="인원" />

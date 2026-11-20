@@ -13,6 +13,7 @@ import type {
 } from "./adapter.ts";
 import { breakerAllows, breakerCooldownMs, breakerStatus, recordBreakerFailure, recordBreakerSuccess } from "./circuit.ts";
 import { recentCachedOffers } from "./fare-cache.ts";
+import { wholesaleBreakerKey, wholesaleConfigured, type WholesaleVendor } from "./wholesale-config.ts";
 
 /**
  * TG-18: live NDC/GDS supplier fulfilment over a JSON-over-HTTP stub contract.
@@ -260,7 +261,20 @@ export async function assertSupplierAvailable(
   env: Env,
   adapterName: string | null,
   route: { from: string; to: string } | null,
+  vendor?: string | null,
 ): Promise<void> {
+  if (adapterName === "wholesale") {
+    // Unconfigured vendors are owned by bookabilityOf (409); this gates the breaker only.
+    if (!vendor || !wholesaleConfigured(env, vendor)) return;
+    const wst = breakerStatus(wholesaleBreakerKey(vendor as WholesaleVendor), { cooldownMs: breakerCooldownMs(env) });
+    if (wst.state !== "OPEN") return;
+    throw new HttpError(
+      503,
+      "SUPPLIER_CIRCUIT_OPEN",
+      "공급사 연결에 일시적 문제가 있어 예약을 받을 수 없습니다. 잠시 후 다시 시도해주세요.",
+      { adapter: adapterName, vendor, retryAfterSec: wst.retryAfterSec, alternates: [] },
+    );
+  }
   if (adapterName !== "ndc" && adapterName !== "gds") return;
   const st = breakerStatus(adapterName, { cooldownMs: breakerCooldownMs(env) });
   if (st.state !== "OPEN") return;

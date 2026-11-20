@@ -83,6 +83,14 @@ const subline = computed(() => {
 const deadlineText = computed(() => booking.value?.paymentDeadline ? new Date(booking.value.paymentDeadline).toLocaleString('ko-KR') : '')
 const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString('ko-KR') : '-')
 
+// Phase 2 wholesale: supplier-issued credentials arrive server-parsed
+// (item.artefacts); raw typed strings are never shown. PDF QR carries the
+// scannable code; LPA/QR payloads render as copyable text (no QR lib yet).
+const copied = ref('')
+async function copyText(v: string) {
+  try { await navigator.clipboard.writeText(v); copied.value = v } catch { copied.value = '' }
+}
+
 async function load() {
   const r = await apiFetch(`/bookings/${encodeURIComponent(props.bookingId)}`)
   loading.value = false
@@ -167,7 +175,16 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
           <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
             <template v-if="it.voucher_code"><dt class="text-ink-subtle">바우처</dt><dd class="font-mono font-bold text-ink" data-testid="voucher-code">{{ it.voucher_code }}</dd></template>
             <template v-if="it.pnr"><dt class="text-ink-subtle">예약번호(PNR)</dt><dd class="font-mono font-bold text-ink">{{ it.pnr }}</dd></template>
-            <template v-if="it.ticket_numbers?.length"><dt class="text-ink-subtle">항공권 번호</dt><dd class="font-mono text-ink">{{ it.ticket_numbers.join(', ') }}</dd></template>
+            <template v-if="it.ticket_numbers?.length && !it.artefacts"><dt class="text-ink-subtle">항공권 번호</dt><dd class="font-mono text-ink">{{ it.ticket_numbers.join(', ') }}</dd></template>
+            <template v-if="it.artefacts">
+              <dt class="text-ink-subtle">공급사 이용권</dt>
+              <dd class="space-y-1" data-testid="wholesale-artefacts">
+                <p v-if="it.artefacts.lpa">eSIM 활성화 코드: <span class="font-mono font-bold">{{ it.artefacts.lpa }}</span> <button type="button" class="ml-1 rounded border border-line px-1.5 py-0.5 text-xs" @click="copyText(it.artefacts.lpa)">{{ copied === it.artefacts.lpa ? '복사됨' : '복사' }}</button></p>
+                <p v-if="it.artefacts.qr">eSIM QR 정보: <span class="font-mono break-all">{{ it.artefacts.qr }}</span></p>
+                <p v-for="(c, ci) in it.artefacts.codes" :key="ci">이용권 번호: <span class="font-mono font-bold">{{ c }}</span></p>
+                <p v-for="(u, ui) in it.artefacts.pdfUrls" :key="ui"><a :href="u" target="_blank" rel="noopener" class="font-semibold text-primary underline">이용권 PDF 열기</a></p>
+              </dd>
+            </template>
             <template v-if="it.supplier_reference"><dt class="text-ink-subtle">공급사 확인번호</dt><dd class="font-mono text-ink">{{ it.supplier_reference }}</dd></template>
             <dt class="text-ink-subtle">공급사 상태</dt><dd class="text-ink">{{ it.supplier_status || '-' }}</dd>
           </dl>

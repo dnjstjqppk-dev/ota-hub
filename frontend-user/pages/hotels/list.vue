@@ -9,6 +9,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { seoHead } from '~/composables/useSeoPage'
 
 const route = useRoute()
 const router = useRouter()
@@ -170,10 +171,14 @@ const sheet = ref(false)
 watch(sheet, (v) => { document.documentElement.style.overflow = v ? 'hidden' : '' })
 onBeforeUnmount(() => { document.documentElement.style.overflow = '' })
 
-useHead(() => ({
+// P5: dynamic city title/meta + canonical (bare path; filter combos don't index) + hreflang + OG.
+const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
+useHead(() => seoHead({
+  site: seoSite,
+  path: '/hotels/list',
   title: q.value.city ? `${q.value.city} 호텔·숙소` : '호텔·숙소 검색',
-  meta: [{ name: 'description', content: `${q.value.city || '전 세계'} 호텔과 리조트를 평점, 성급, 요금으로 비교하고 예약하세요.` }]
-}))
+  description: `${q.value.city || '전 세계'} 호텔과 리조트를 평점, 성급, 요금으로 비교하고 예약하세요.`,
+}) as any)
 
 const CHIP = 'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-semibold transition-colors'
 const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-primary' : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink']

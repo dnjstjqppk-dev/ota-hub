@@ -11,6 +11,7 @@ import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { getHotelById } from '~/data/hotelCatalog'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
+import { breadcrumbLd, jsonLdScript } from '~/composables/useJsonLd'
 
 const route = useRoute()
 const router = useRouter()
@@ -108,6 +109,7 @@ function askForDates() {
 watch(nights, (n) => { if (n) needDates.value = false })
 
 // ------------------------------------------------------------------ SEO (catalogue facts only; ratings must come from verified reviews)
+const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 useHead(() => {
   const h = hotel.value
   if (!h) return {}
@@ -121,10 +123,18 @@ useHead(() => {
     ...(Number(h.star_rating) > 0 ? { starRating: { '@type': 'Rating', ratingValue: Number(h.star_rating) } } : {}),
     ...(minRoomPrice.value ? { priceRange: `₩${minRoomPrice.value.toLocaleString('ko-KR')}~ (1박, 세금 별도)` } : {}),
   }
+  const detailPath = `/hotels/detail/${hotelId}`
   return {
     title: h.name_ko || h.name,
-    meta: [{ name: 'description', content: [h.name_ko, h.city, h.neighborhood, '객실과 요금을 비교하고 예약하세요.'].filter(Boolean).join(' · ') }],
-    script: [{ type: 'application/ld+json', innerHTML: JSON.stringify(ld).replace(/</g, '\\u003c') }],
+    meta: [
+      { name: 'description', content: [h.name_ko, h.city, h.neighborhood, '객실과 요금을 비교하고 예약하세요.'].filter(Boolean).join(' · ') },
+      { property: 'og:url', content: `${seoSite}${detailPath}` },
+    ],
+    link: [{ rel: 'canonical', href: `${seoSite}${detailPath}` }],
+    script: [
+      { type: 'application/ld+json', innerHTML: JSON.stringify(ld).replace(/</g, '\\u003c') },
+      jsonLdScript(breadcrumbLd(seoSite, [{ name: '홈', path: '/' }, { name: '호텔', path: '/hotels' }, { name: h.name_ko || h.name, path: detailPath }])),
+    ],
   }
 })
 

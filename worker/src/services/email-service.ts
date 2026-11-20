@@ -119,6 +119,26 @@ export function renderOutboxEmail(template: string, payloadJson: string, site: s
       html: `<p>예약번호 <b>${esc(num)}</b>에 대해 공급사가 예약을 확정하지 못했어요. 결제한 금액은 전액 환불해 드려요.</p><p><a href="${esc(url)}">내 예약 보기</a></p>`,
     };
   }
+  // Phase 2 wholesale: supplier-issued credentials only (LPA/QR/codes/PDF).
+  // Every value below arrived from the supplier API; nothing is composed here.
+  if (template === "WHOLESALE_ISSUED") {
+    const num = String(p.bookingNumber || p.bookingId || "");
+    const codes = Array.isArray(p.codes) ? p.codes.filter((c: unknown) => typeof c === "string" && c) : [];
+    const pdfs = Array.isArray(p.pdfUrls) ? p.pdfUrls.filter((u: unknown) => typeof u === "string" && u.startsWith("https://")) : [];
+    const lpa = typeof p.lpa === "string" && p.lpa ? p.lpa : "";
+    const qr = typeof p.qr === "string" && p.qr ? p.qr : "";
+    if (!num || (!lpa && !qr && codes.length === 0)) return null;
+    const url = `${site.replace(/\/+$/, "")}/my/bookings`;
+    const rows: string[] = [];
+    if (lpa) rows.push(`<p>eSIM 활성화 코드(LPA): <b>${esc(lpa)}</b></p>`);
+    if (qr) rows.push(`<p>eSIM QR 정보: <b>${esc(qr)}</b></p>`);
+    for (const c of codes.slice(0, 20)) rows.push(`<p>이용권 번호: <b>${esc(c)}</b></p>`);
+    for (const u of pdfs.slice(0, 20)) rows.push(`<p><a href="${esc(u)}">이용권 PDF 열기</a></p>`);
+    return {
+      subject: `[${brand}] 이용권이 발급됐어요 — ${num}`,
+      html: `<p>예약번호 <b>${esc(num)}</b> 이용권이 발급됐어요.</p>${rows.join("")}<p><a href="${esc(url)}">내 예약에서 확인하기</a></p>`,
+    };
+  }
   return null;
 }
 

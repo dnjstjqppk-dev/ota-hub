@@ -92,10 +92,8 @@ function clear() { notFound.value = ''; picked.value = null; draft.value = ''; p
 
 const dataLabel = (mb: number) => mb < 0 ? '데이터 무제한' : mb >= 1024 ? `${+(mb / 1024).toFixed(1)}GB` : `${mb}MB`
 
-useHead({
-  title: '해외 eSIM',
-  meta: [{ name: 'description', content: '여행할 국가의 eSIM 데이터 요금제를 데이터 용량과 사용 기간으로 비교해 보세요.' }]
-})
+// P5: canonical + hreflang + OG via the shared builder (affiliate landing: no checkout, no QR issuance).
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/esim', title: '해외 eSIM', description: '여행할 국가의 eSIM 데이터 요금제를 데이터 용량과 사용 기간으로 비교해 보세요.' })
 </script>
 
 <template>

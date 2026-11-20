@@ -71,10 +71,8 @@ function won(n: number) {
 }
 const tripLabel = computed(() => `${destination.value.trim() ? `${destination.value.trim()} ` : ''}${days.value}일 여행 기준`)
 
-useHead({
-  title: '해외 여행자보험',
-  meta: [{ name: 'description', content: '여행 기간에 맞춰 해외 여행자보험 플랜의 보장 내용과 보험료를 비교해 보세요.' }]
-})
+// P5: canonical + hreflang + OG via the shared builder (affiliate landing: no direct issuance).
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/insurance', title: '해외 여행자보험', description: '여행 기간에 맞춰 해외 여행자보험 플랜의 보장 내용과 보험료를 비교해 보세요.' })
 </script>
 
 <template>

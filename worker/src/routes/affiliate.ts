@@ -7,8 +7,10 @@ import type { Env } from "../env.ts";
 import { HttpError, SECURITY_HEADERS, json } from "../lib/http.ts";
 import { constantTimeEqual, hmacSha256Hex, newId } from "../lib/crypto.ts";
 import { rateLimit } from "../lib/auth.ts";
+import { extractDeeplinkParams } from "../affiliate/deeplink-params.ts";
+import { buildPartnerUrl, isSubIdShape, mintSubId } from "../affiliate/partner-links.ts";
 
-const CLICK_DOMAINS = ["HOTEL", "FLIGHT", "ACTIVITY", "CAR", "TRAIN", "TRANSFER", "PACKAGE"] as const;
+const CLICK_DOMAINS = ["HOTEL", "FLIGHT", "ACTIVITY", "CAR", "TRAIN", "TRANSFER", "PACKAGE", "INSURANCE"] as const;
 // #44: conversion currencies mirror the fx_rates universe (0001 seed).
 const POSTBACK_CURRENCIES = new Set(["KRW", "USD", "JPY", "EUR", "CNY", "GBP"]);
 
@@ -46,6 +48,10 @@ async function resolveClickTitle(env: Env, domain: string, itemId: string): Prom
         const r = await db.prepare("SELECT title FROM packages WHERE id = ?").bind(itemId).first<{ title: string }>();
         return r?.title || null;
       }
+      case "INSURANCE": {
+        const r = await db.prepare("SELECT plan_name FROM travel_insurance_plans WHERE id = ?").bind(itemId).first<{ plan_name: string }>();
+        return r?.plan_name || null;
+      }
       default:
         return null;
     }
@@ -69,12 +75,22 @@ export async function handleAffiliate(request: Request, env: Env, url: URL): Pro
     const partner = (seg[1] || "").toLowerCase();
     const itemId = (seg[2] || "").slice(0, 100);
     if (!itemId) throw new HttpError(400, "ITEM_REQUIRED", "상품 식별자가 없는 제휴 링크입니다.");
-    const cfg = await env.DB.prepare("SELECT partner_id, deep_link_template, is_active FROM affiliate_partners_config WHERE partner_id = ?").bind(partner).first<any>();
+    const cfg = await env.DB.prepare("SELECT partner_id, deep_link_template, affiliate_id, secret_key, is_active FROM affiliate_partners_config WHERE partner_id = ?").bind(partner).first<any>();
     if (!cfg || cfg.is_active !== 1 || !/^https:\/\//.test(cfg.deep_link_template || "")) {
       throw new HttpError(404, "PARTNER_LINK_UNAVAILABLE", "해당 제휴 링크는 현재 제공되지 않습니다.");
     }
     const clickId = newId("clk");
-    const target = String(cfg.deep_link_template).replace("{click_id}", encodeURIComponent(clickId)).replace("{item_id}", encodeURIComponent(itemId));
+    // Phase 3: server-minted HMAC sub-id (recorded, postback-matchable). When
+    // the postback secret is not configured yet the click still redirects —
+    // the token is NULL and postbacks match by click_id instead.
+    let subId: string | null = null;
+    try {
+      subId = await mintSubId(String(cfg.secret_key || ""), clickId);
+    } catch { subId = null; }
+    const target = buildPartnerUrl({
+      template: String(cfg.deep_link_template), partner, clickId, subId: subId || "",
+      itemId, affiliateId: String(cfg.affiliate_id || ""), params: extractDeeplinkParams(url.searchParams),
+    });
     // #47: record what is known, nothing invented — real client IP
     // (CF-Connecting-IP, else first XFF hop, else NULL), allowlisted domain,
     // catalog-resolved title (NULL when the item cannot be resolved).
@@ -85,7 +101,7 @@ export async function handleAffiliate(request: Request, env: Env, url: URL): Pro
     const title = await resolveClickTitle(env, domain, itemId);
     await env.DB.prepare(
       "INSERT INTO affiliate_clicks (click_id, domain_type, item_id, item_title, partner_name, outlink_url, sub_id, ip_address, user_agent, referrer, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'REDIRECTED')",
-    ).bind(clickId, domain, itemId, title, partner, target, (url.searchParams.get("sub_id") || "web").slice(0, 50), ip, (request.headers.get("User-Agent") || "").slice(0, 200), (request.headers.get("Referer") || "").slice(0, 300)).run();
+    ).bind(clickId, domain, itemId, title, partner, target.slice(0, 2000), subId, ip, (request.headers.get("User-Agent") || "").slice(0, 200), (request.headers.get("Referer") || "").slice(0, 300)).run();
     return new Response(null, { status: 302, headers: { Location: target, ...SECURITY_HEADERS } });
   }
 
@@ -109,14 +125,19 @@ export async function handleAffiliate(request: Request, env: Env, url: URL): Pro
     // No hardcoded fallback secrets: an unconfigured partner can never post conversions.
     if (!cfg || cfg.is_active !== 1 || !cfg.secret_key || String(cfg.secret_key).length < 24) throw new HttpError(404, "UNKNOWN_PARTNER", "등록되지 않은 제휴사입니다.");
     if (!constantTimeEqual(sig, await hmacSha256Hex(cfg.secret_key, `${ts}.${raw}`))) throw new HttpError(403, "INVALID_SIGNATURE", "서명 검증 실패");
-    const clickId = String(p.click_id || "");
+    const clickRef = String(p.click_id || p.sub_id || "");
     const orderId = String(p.order_id || "");
     const amount = Number(p.amount);
-    if (!clickId || !orderId) throw new HttpError(400, "INVALID_PAYLOAD", "click_id, order_id가 필요합니다.");
+    if (!clickRef || !orderId) throw new HttpError(400, "INVALID_PAYLOAD", "click_id(또는 sub_id)와 order_id가 필요합니다.");
+    if (p.sub_id !== undefined && p.click_id === undefined && !isSubIdShape(p.sub_id)) {
+      throw new HttpError(400, "INVALID_SUB_ID", "sub_id 형식이 올바르지 않습니다.");
+    }
     // #44: a conversion must reference a real click from the same partner —
-    // unclicked order_ids can no longer book commission.
-    const click = await env.DB.prepare("SELECT click_id FROM affiliate_clicks WHERE click_id = ? AND partner_name = ?").bind(clickId, partner).first<{ click_id: string }>();
+    // unclicked order_ids can no longer book commission. Partners echo either
+    // the click_id or the HMAC sub-id minted for it (Phase 3).
+    const click = await env.DB.prepare("SELECT click_id FROM affiliate_clicks WHERE (click_id = ? OR sub_id = ?) AND partner_name = ?").bind(clickRef, clickRef, partner).first<{ click_id: string }>();
     if (!click) throw new HttpError(404, "UNKNOWN_CLICK", "기록되지 않은 click_id입니다. /out/ 클릭을 먼저 발생시켜주세요.");
+    const clickId = click.click_id;
     // #44: integer major units only (no float money) + allowlisted currency.
     if (!Number.isSafeInteger(amount) || amount <= 0) throw new HttpError(400, "INVALID_AMOUNT", "amount는 1 이상의 정수(원 단위)여야 합니다.");
     const currency = String(p.currency || "KRW").trim().toUpperCase();

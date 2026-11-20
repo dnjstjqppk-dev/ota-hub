@@ -15,6 +15,9 @@
 import type { Env } from "../env.ts";
 import { newId } from "../lib/crypto.ts";
 import { liveSupplierAdapter, resolveLiveConfig } from "./live-adapter.ts";
+import { resolveWholesaleConfig } from "./wholesale-config.ts";
+import { esimWholesaleAdapter } from "./wholesale-esim.ts";
+import { voucherWholesaleAdapter } from "./wholesale-voucher.ts";
 
 export type BookResult =
   | { outcome: "CONFIRMED"; reference: string; pnr: string | null }
@@ -164,7 +167,7 @@ const notConfigured: SupplierAdapter = {
  * without a usable base/key pair — they resolve to the honest notConfigured
  * adapter instead of throwing, so every caller keeps working.
  */
-export function adapterFor(name: string, env?: Env): SupplierAdapter {
+export function adapterFor(name: string, env?: Env, vendor?: string | null): SupplierAdapter {
   if (name === "simulator") return simulatorAdapter;
   if (name === "direct_contract") return directContractAdapter;
   if (name === "ndc" || name === "gds") {
@@ -172,6 +175,11 @@ export function adapterFor(name: string, env?: Env): SupplierAdapter {
     const cfg = resolveLiveConfig(env, name);
     if (!cfg) return notConfigured;
     return liveSupplierAdapter(env, cfg);
+  }
+  if (name === "wholesale") {
+    const cfg = env && vendor ? resolveWholesaleConfig(env, vendor) : null;
+    if (!env || !cfg) return notConfigured;
+    return cfg.kind === "ESIM" ? esimWholesaleAdapter(env, cfg) : voucherWholesaleAdapter(env, cfg);
   }
   return notIntegrated;
 }

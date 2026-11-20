@@ -1,10 +1,42 @@
+# getfortrip robots.txt — public catalog is crawlable; private/state-changing paths are not.
+User-Agent: Googlebot
+Allow: /
+
+User-Agent: Yeti
+Allow: /
+
+User-Agent: Bingbot
+Allow: /
+
+User-Agent: GPTBot
+Allow: /
+
+User-Agent: OAI-SearchBot
+Allow: /
+
+User-Agent: PerplexityBot
+Allow: /
+
+User-Agent: ClaudeBot
+Allow: /
+
+User-Agent: Google-Extended
+Allow: /
+
 User-Agent: *
+Allow: /
 Disallow: /my/
+Disallow: /my
+Disallow: /login
+Disallow: /register
+Disallow: /reset-password
+Disallow: /forgot-password
 Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
-Disallow: /reset-password
 Disallow: /api/
+Disallow: /oauth/
 
+Sitemap: https://getfortrip.com/sitemap-index.xml
 Sitemap: https://getfortrip.com/sitemap.xml

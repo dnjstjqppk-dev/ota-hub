@@ -39,7 +39,12 @@ export default defineNuxtConfig({
     '/packages': { isr: 3600 },
     '/packages/**': { isr: 3600 },
     '/deals': { isr: 3600 },
-    '/trip-best': { isr: 3600 }
+    '/trip-best': { isr: 3600 },
+    // P5: affiliate landings + help content are public and cacheable (hourly SWR).
+    '/esim': { isr: 3600 },
+    '/insurance': { isr: 3600 },
+    '/faq': { isr: 3600 },
+    '/help': { isr: 3600 }
   },
   nitro: {
     // cloudflare-module (ES modules + nodejs_compat). The plain 'cloudflare'
@@ -104,8 +109,6 @@ export default defineNuxtConfig({
         address: process.env.NUXT_PUBLIC_COMPANY_ADDRESS || '',
         bizNo: process.env.NUXT_PUBLIC_COMPANY_BIZ_NO || '',
         mailOrderNo: process.env.NUXT_PUBLIC_COMPANY_MAILORDER_NO || '',
-        travelNo: process.env.NUXT_PUBLIC_COMPANY_TRAVEL_NO || '',
-        insurance: process.env.NUXT_PUBLIC_COMPANY_INSURANCE || '',
         csPhone: process.env.NUXT_PUBLIC_COMPANY_CS_PHONE || '',
         csHours: process.env.NUXT_PUBLIC_COMPANY_CS_HOURS || '',
         cpoName: process.env.NUXT_PUBLIC_COMPANY_CPO_NAME || '',

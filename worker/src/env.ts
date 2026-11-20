@@ -86,10 +86,27 @@ export interface Env {
   GDS_API_BASE?: string;
   /** TG-18: GDS API key/secret. Unset = gds adapter unconfigured (honest FAILED, unsellable). */
   GDS_API_KEY?: string;
+  /** Phase 2 wholesale connectors: base + key per vendor. Unset = that vendor unsellable (fail-closed). */
+  WHOLESALE_ROAMIFY_API_BASE?: string;
+  WHOLESALE_ROAMIFY_API_KEY?: string;
+  WHOLESALE_REDTEAGO_API_BASE?: string;
+  WHOLESALE_REDTEAGO_API_KEY?: string;
+  WHOLESALE_AIRALO_API_BASE?: string;
+  WHOLESALE_AIRALO_API_KEY?: string;
+  WHOLESALE_TIQETS_API_BASE?: string;
+  WHOLESALE_TIQETS_API_KEY?: string;
+  WHOLESALE_BEMY_GUEST_API_BASE?: string;
+  WHOLESALE_BEMY_GUEST_API_KEY?: string;
+  WHOLESALE_KLOOK_API_BASE?: string;
+  WHOLESALE_KLOOK_API_KEY?: string;
+  WHOLESALE_KKDAY_API_BASE?: string;
+  WHOLESALE_KKDAY_API_KEY?: string;
   /** TG-18: supplier circuit-breaker OPEN cooldown in ms (default 300000, clamped 1000–3600000). */
   SUPPLIER_BREAKER_COOLDOWN_MS?: string;
   /** TG-20: read-replica worker base URL (https, or loopback http in development/test only). Unset = all reads serve locally. */
   READ_REPLICA_URL?: string;
+  /** P6: IndexNow API key (Bing/Yandex instant indexing). Unset = pumpIndexNow is an honest no-op. */
+  INDEXNOW_KEY?: string;
   /** TG-20: replica lag ceiling in ms (default 5000, clamped 100–60000). Above it reads fall back to primary. */
   REPLICA_MAX_LAG_MS?: string;
   /** TG-20: operator-declared primary region code (e.g. "ICN"). Surfaced on /status; no routing behavior in v1. */

@@ -198,6 +198,7 @@ CREATE TABLE IF NOT EXISTS activities (
     duration_type TEXT DEFAULT 'FULL_DAY',
     guide_language TEXT DEFAULT 'KO',
     voucher_type TEXT DEFAULT 'QR_CODE',
+    is_voucher_only INTEGER DEFAULT 1,
     thumbnail_url TEXT,
     description TEXT,
     packages_json TEXT DEFAULT '[]',

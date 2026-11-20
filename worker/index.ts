@@ -52,6 +52,9 @@ import { runMaintenanceWithHeartbeat } from "./src/services/booking-service.ts";
 import { rollupDailyJob } from "./src/services/warehouse.ts";
 import { reviewDigestJob } from "./src/services/review-digest.ts";
 import { sitemap } from "./src/routes/seo.ts";
+import { sitemapIndex, childSitemap } from "./src/seo/sitemap-index.ts";
+import { llmsTxt, llmsFull } from "./src/seo/llms.ts";
+import { pumpIndexNow } from "./src/seo/indexnow.ts";
 
 export type { Env };
 
@@ -356,6 +359,13 @@ export default {
     const isApi = url.pathname.startsWith("/api/") || url.pathname.startsWith("/out/");
     if (!isApi) {
       if (url.pathname === "/sitemap.xml") return sitemap(env);
+      if (url.pathname === "/sitemap-index.xml") return sitemapIndex(env);
+      if (url.pathname === "/llms.txt") return llmsTxt(env);
+      if (url.pathname === "/llms-full.txt") return llmsFull(env);
+      if (/^\/sitemap-[a-z-]+\.xml$/.test(url.pathname)) {
+        const child = await childSitemap(env, url.pathname.slice(1));
+        if (child) return child;
+      }
       if (url.pathname === "/status") return observeApi(request, env, ctx, () => status(request, env));
       return serveAssets(request, env, url);
     }
@@ -377,8 +387,12 @@ export default {
         console.log("rollup_daily", JSON.stringify(s));
         return runMaintenanceWithHeartbeat(env, "review_digest", () => reviewDigestJob(env));
       })
+      .then((s) => {
+        console.log("review_digest", JSON.stringify(s));
+        return pumpIndexNow(env);
+      })
       .then(
-        (s) => console.log("review_digest", JSON.stringify(s)),
+        (s) => console.log("indexnow", JSON.stringify(s)),
         (e) => { captureException(env, ctx, e, { url: "cron:runMaintenance" }); throw e; },
       );
     ctx.waitUntil(run);

@@ -20,10 +20,8 @@ const FACTS = [
     body: '객실마다 최대 인원이 정해져 있어요. 인원이 정원을 넘으면 객실 수를 늘려야 예약할 수 있어요. 한 번에 최대 30박까지 예약돼요.'
   }
 ]
-useHead({
-  title: '호텔·숙소 예약',
-  meta: [{ name: 'description', content: '전 세계 호텔과 리조트를 평점, 성급, 요금으로 비교하고 예약하세요.' }]
-})
+// P5: canonical + hreflang + OG via the shared builder.
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/hotels', title: '호텔·숙소 예약', description: '전 세계 호텔과 리조트를 평점, 성급, 요금으로 비교하고 예약하세요.' })
 </script>
 
 <template>

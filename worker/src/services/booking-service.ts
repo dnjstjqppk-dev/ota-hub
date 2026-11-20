@@ -19,12 +19,16 @@ import { newBookingNumber, newId, encryptField, decryptField, randomToken } from
 import { withSpan, type TraceContext } from "../lib/tracing.ts";
 import { fdsEnforced, scoreAttempt } from "./fds-service.ts";
 import type { AuthUser } from "../lib/auth.ts";
-import { loadProduct, loadStructuredPolicy, loadSupplier, bookabilityOf, assertTicketable, assertQuotableDomain, assertInventoryConfigured, type SupplierRow } from "./catalog.ts";
+import { loadProduct, loadStructuredPolicy, loadSupplier, bookabilityOf, assertTicketable, assertQuotableDomain, assertInventoryConfigured, assertWholesaleDomain, type SupplierRow } from "./catalog.ts";
+import { verifyWholesaleQuote } from "./wholesale-verify.ts";
+import { tryParseWholesaleArtefacts, type WholesaleArtefacts } from "../domain/wholesale-artefacts.ts";
 import { adapterFor, type Simulation, type SupplierContext } from "../suppliers/adapter.ts";
 import { assertSupplierAvailable } from "../suppliers/live-adapter.ts";
 import { loadMarkupForBooking, loadMarkupForQuote, quoteMarkup } from "./forecast-service.ts";
 import { logEvent } from "../lib/log.ts";
 import { getPaymentProvider, requirePaymentProvider } from "../payments/provider.ts";
+import { checkoutDisclosure, routeCheckout } from "../payments/strategies/router.ts";
+import { affiliateRefusal } from "../payments/strategies/affiliate-redirect.ts";
 import { planOrderSettlement } from "./marketplace-service.ts";
 import { flushOutbox, outboxInsert } from "./email-service.ts";
 import { flushPartnerWebhooks, hookEnqueueStmts, loadPartnerHook } from "./webhook-service.ts";
@@ -532,8 +536,18 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
   if (!b.bookable) {
     throw new HttpError(409, "NOT_DIRECTLY_BOOKABLE", "이 상품은 현재 GetForTrip에서 직접 예약·결제할 수 없습니다. (공급사 연동 대기)", { reason: b.reason });
   }
+  // Phase 1 checkout routing: affiliate-mode products never reach our PG.
+  // AFFILIATE suppliers are already blocked above; this enforces the
+  // remaining redirect rules (tours without their own instant voucher).
+  const checkoutInput = { domain, transactionModel: supplier?.transaction_model ?? null, isVoucherOnly: product.isVoucherOnly ?? null };
+  const checkout = routeCheckout(checkoutInput);
+  if (checkout.action === "REDIRECT_OUTLINK") {
+    const refusal = affiliateRefusal(checkout.reason);
+    throw new HttpError(409, refusal.code, refusal.message, { reason: refusal.reason });
+  }
   assertTicketable(domain, supplier);
-  await assertSupplierAvailable(env, supplier?.adapter ?? null, product.route ?? null);
+  assertWholesaleDomain(domain, supplier);
+  await assertSupplierAvailable(env, supplier?.adapter ?? null, product.route ?? null, supplier?.wholesale_vendor ?? null);
   assertInventoryConfigured(domain, product);
   const entity = await activeEntity(env);
   if (!entity) throw new HttpError(503, "SALES_NOT_ENABLED", "판매 주체(사업자) 정보가 활성화되지 않아 결제를 받을 수 없습니다.");
@@ -638,6 +652,8 @@ export async function createQuote(env: Env, user: AuthUser, body: any) {
     slot: slot ? { start: slot.slot.start, end: slot.slot.end } : null,
     requiresPassport: domain === "FLIGHT",
     fulfilmentMode: b.mode,
+    checkoutMode: checkout.mode,
+    sellerDisclosure: checkoutDisclosure(checkoutInput),
   };
 }
 
@@ -785,7 +801,8 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   const bk = bookabilityOf(env, supplier);
   if (!bk.bookable) throw new HttpError(409, "NOT_DIRECTLY_BOOKABLE", "이 상품은 현재 직접 예약할 수 없습니다.", { reason: bk.reason });
   assertTicketable(quote.domain_type, supplier);
-  await assertSupplierAvailable(env, supplier?.adapter ?? null, product.route ?? null);
+  assertWholesaleDomain(quote.domain_type, supplier);
+  await assertSupplierAvailable(env, supplier?.adapter ?? null, product.route ?? null, supplier?.wholesale_vendor ?? null);
   assertInventoryConfigured(quote.domain_type, product);
   const freshDates = [params.startDate, params.endDate, params.returnDate].filter((d): d is string => !!d).sort();
   const freshNightly = nightlyResolver(freshDates.length
@@ -810,6 +827,18 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   if (freshCashDue !== quote.total_minor) {
     await env.DB.prepare("UPDATE quotes SET status = 'EXPIRED' WHERE id = ?").bind(quote.id).run();
     throw new HttpError(409, "PRICE_CHANGED", "가격이 변경되었습니다. 변경된 금액을 확인해주세요.", { previousTotalMinor: quote.total_minor, newTotalMinor: freshCashDue });
+  }
+  // Phase 2 wholesale: live stock + Net-price re-verification (500 ms) before
+  // anything is consumed. Drift expires the quote, exactly like catalog drift.
+  if (supplier.adapter === "wholesale") {
+    await verifyWholesaleQuote(env, supplier, {
+      domain: quote.domain_type,
+      itemId: quote.item_id,
+      serviceDate: String(quote.service_start).slice(0, 10),
+      quantity: holdQuantity(quote.domain_type, params),
+      expectedTotalMinor: quote.total_minor,
+      quoteId: quote.id,
+    });
   }
   // #38: the quote-time availability check is stale by now — the partner may
   // have closed the date or cut the allotment since. Re-check against the
@@ -1195,7 +1224,7 @@ async function applyTicketIssued(env: Env, b: BookingRow, ticketNumbers: string[
 async function refundAfterTicketFailure(env: Env, b: BookingRow, code: string): Promise<boolean> {
   const db = env.DB;
   const supplier = await loadSupplier(env, b.supplier_id);
-  const cx = await adapterFor(supplier?.adapter || "none", env).cancel(supplierCtx(b, 1));
+  const cx = await adapterFor(supplier?.adapter || "none", env, supplier?.wholesale_vendor ?? null).cancel(supplierCtx(b, 1));
   if (cx.outcome !== "CANCELLED") return false;
   await runBatch(db, [
     ...transition(db, b, "REFUND_PENDING", { type: "SUPPLIER", id: b.supplier_id }, `TICKETING_FAILED:${code}`, { supplier_status: "CANCELLED" }),
@@ -1219,10 +1248,16 @@ async function ticketIssueEnqueue(db: D1Database, bookingId: string): Promise<St
   return [jobEnqueueStmt(db, "TICKET_ISSUE", bookingId, nowIso())];
 }
 
+/** Phase 2: enqueue-once voucher-artefact retry for a confirmed wholesale order. */
+async function voucherIssueEnqueue(db: D1Database, bookingId: string): Promise<Stmt[]> {
+  if (await findLiveJob(db, "VOUCHER_ISSUE", bookingId)) return [];
+  return [jobEnqueueStmt(db, "VOUCHER_ISSUE", bookingId, nowIso())];
+}
+
 export async function fulfil(env: Env, b: BookingRow, tctx: TraceContext | null = null, parentSpanId: string | null = null): Promise<BookingRow> {
   const db = env.DB;
   const supplier = await loadSupplier(env, b.supplier_id);
-  const adapter = adapterFor(supplier?.adapter || "none", env);
+  const adapter = adapterFor(supplier?.adapter || "none", env, supplier?.wholesale_vendor ?? null);
   await runBatch(db, transition(db, b, "SUPPLIER_BOOKING_PENDING", { type: "SYSTEM", id: null }, null, { supplier_status: "REQUESTED" }));
   let cur = await mustGet(env, b.id);
   const t0 = Date.now();
@@ -1263,6 +1298,14 @@ export function voucherCode(): string {
   return `GFV-${randomToken(8).toUpperCase()}`;
 }
 
+/** Phase 2 wholesale issuance email: structured artefacts, never raw blobs. */
+function wholesaleNotifyStmt(db: D1Database, b: BookingRow, w: WholesaleArtefacts): Stmt {
+  return outboxInsert(db, "EMAIL", b.customer_email, "WHOLESALE_ISSUED", {
+    bookingId: b.id, bookingNumber: b.booking_number, lpa: w.lpa, qr: w.qr,
+    codes: w.codes, barcodes: w.barcodes, pdfUrls: w.pdfUrls,
+  });
+}
+
 /** Ticket (flights) or voucher (others) issuance after supplier confirmation. */
 export async function issue(env: Env, b: BookingRow, tctx: TraceContext | null = null, parentSpanId: string | null = null): Promise<BookingRow> {
   const db = env.DB;
@@ -1279,7 +1322,7 @@ export async function issue(env: Env, b: BookingRow, tctx: TraceContext | null =
   if (b.domain_type === "FLIGHT") {
     await runBatch(db, transition(db, b, "TICKETING_PENDING", { type: "SYSTEM", id: null }, null));
     let cur = await mustGet(env, b.id);
-    const adapter = adapterFor(supplier?.adapter || "none", env);
+    const adapter = adapterFor(supplier?.adapter || "none", env, supplier?.wholesale_vendor ?? null);
     const t0 = Date.now();
     const r = await withSpan(tctx, "supplier.ticket", async () => adapter.ticket(supplierCtx(cur, await travelerCount(env, b.id))), { "supplier.id": String(b.supplier_id || "none") }, parentSpanId || undefined);
     await logSupplierCall(env, b.supplier_id, b.id, "TICKET", r.outcome, Date.now() - t0, JSON.stringify(r));
@@ -1299,6 +1342,26 @@ export async function issue(env: Env, b: BookingRow, tctx: TraceContext | null =
     return mustGet(env, b.id);
   }
 
+  // Phase 2 wholesale: supplier-issued artefacts (voucher QR/barcode/PDF, eSIM
+  // LPA) are pulled live after confirmation — never minted locally. A
+  // confirmed order whose artefacts cannot be pulled parks for retry; it never
+  // auto-refunds, because the supplier already holds the order.
+  let wholesale: WholesaleArtefacts | null = null;
+  if (supplier?.adapter === "wholesale") {
+    const wadapter = adapterFor("wholesale", env, supplier.wholesale_vendor);
+    const wt0 = Date.now();
+    const wr = await withSpan(tctx, "supplier.ticket", async () => wadapter.ticket(supplierCtx(b, await travelerCount(env, b.id))), { "supplier.id": String(b.supplier_id || "none") }, parentSpanId || undefined);
+    await logSupplierCall(env, b.supplier_id, b.id, "TICKET", wr.outcome, Date.now() - wt0, JSON.stringify(wr));
+    const parsed = wr.outcome === "ISSUED" ? tryParseWholesaleArtefacts(wr.ticketNumbers) : null;
+    if (!parsed) {
+      const refused = wr.outcome === "FAILED";
+      const reason = refused ? `VOUCHER_ISSUE_FAILED:${(wr as any).code || "UNKNOWN"}` : "VOUCHER_ISSUE_PENDING";
+      await runBatch(db, [...transition(db, b, "MANUAL_REVIEW_REQUIRED", { type: "SUPPLIER", id: b.supplier_id }, reason), ...(!refused ? await voucherIssueEnqueue(db, b.id) : [])]);
+      return mustGet(env, b.id);
+    }
+    wholesale = parsed;
+  }
+
   // #105: on a voucher collision (unique index), mint a fresh code and retry
   // instead of failing a paid booking. Re-planned per attempt so a retried
   // batch never reuses spent journal/settlement ids.
@@ -1308,8 +1371,9 @@ export async function issue(env: Env, b: BookingRow, tctx: TraceContext | null =
       await runBatch(db, [
         ...transition(db, b, "VOUCHER_ISSUED", { type: "SYSTEM", id: null }, null, { voucher_code: voucherCode() }),
         db.prepare("UPDATE booking_items SET voucher_code = (SELECT voucher_code FROM bookings WHERE id = ?), updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(b.id, b.id),
+        ...(wholesale ? [db.prepare("UPDATE booking_items SET ticket_numbers_json = ?, updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(JSON.stringify(wholesale.raw), b.id)] : []),
         ...journalStmts(db, L.fulfilmentRecognized(b.id, b.paid_minor, split), b),
-        notify("BOOKING_CONFIRMED"),
+        wholesale ? wholesaleNotifyStmt(db, b, wholesale) : notify("BOOKING_CONFIRMED"),
         settlement.stmt(db),
       ]);
       break;
@@ -1500,7 +1564,7 @@ export async function cancelByCustomer(env: Env, user: AuthUser, bookingId: stri
   await runBatch(db, transition(db, b, "CANCELLATION_REQUESTED", actor, null, { cancellation_fee_minor: feeMinor }));
   let cur = await mustGet(env, b.id);
   const supplier = await loadSupplier(env, b.supplier_id);
-  const adapter = adapterFor(supplier?.adapter || "none", env);
+  const adapter = adapterFor(supplier?.adapter || "none", env, supplier?.wholesale_vendor ?? null);
   const t0 = Date.now();
   const cx = await adapter.cancel(supplierCtx(cur, 1));
   await logSupplierCall(env, b.supplier_id, b.id, "CANCEL", cx.outcome, Date.now() - t0, JSON.stringify(cx));
@@ -1692,7 +1756,7 @@ export async function applyExternalCancel(env: Env, bookingId: string, ext: Exte
     try {
       const supplier = await loadSupplier(env, b.supplier_id);
       const t0 = Date.now();
-      const cx = await adapterFor(supplier?.adapter || "none", env).cancel(supplierCtx(b, 1));
+      const cx = await adapterFor(supplier?.adapter || "none", env, supplier?.wholesale_vendor ?? null).cancel(supplierCtx(b, 1));
       await logSupplierCall(env, b.supplier_id, b.id, "CANCEL", cx.outcome, Date.now() - t0, JSON.stringify(cx).slice(0, 2000));
       supplierCancelled = cx.outcome !== "REJECTED";
     } catch {
@@ -1887,7 +1951,7 @@ async function runFulfilBookJob(env: Env, job: JobRow): Promise<JobRunResult> {
   const b = await loadRetryableBooking(env, job.booking_id, "SUPPLIER_RESPONSE_UNKNOWN");
   if (!b) return { action: "done" }; // decided, compensated, or gone meanwhile
   const supplier = await loadSupplier(env, b.supplier_id);
-  const adapter = adapterFor(supplier?.adapter || "none", env);
+  const adapter = adapterFor(supplier?.adapter || "none", env, supplier?.wholesale_vendor ?? null);
   const t0 = Date.now();
   const r = await adapter.book(supplierCtx(b, await travelerCount(env, b.id)));
   await logSupplierCall(env, b.supplier_id, b.id, "BOOK", r.outcome, Date.now() - t0, JSON.stringify(r));
@@ -1927,7 +1991,7 @@ async function runTicketIssueJob(env: Env, job: JobRow): Promise<JobRunResult> {
   const b = await loadRetryableBooking(env, job.booking_id, "TICKETING_FAILED_PNR_NOT_VOIDED");
   if (!b) return { action: "done" };
   const supplier = await loadSupplier(env, b.supplier_id);
-  const adapter = adapterFor(supplier?.adapter || "none", env);
+  const adapter = adapterFor(supplier?.adapter || "none", env, supplier?.wholesale_vendor ?? null);
   const t0 = Date.now();
   const r = await adapter.ticket(supplierCtx(b, await travelerCount(env, b.id)));
   await logSupplierCall(env, b.supplier_id, b.id, "TICKET", r.outcome, Date.now() - t0, JSON.stringify(r));
@@ -1950,9 +2014,53 @@ async function exhaustTicketIssueJob(env: Env, job: JobRow): Promise<void> {
   await refundAfterTicketFailure(env, await mustGet(env, b.id), "RETRIES_EXHAUSTED");
 }
 
+/** Phase 2: shared wholesale issuance writer (queue-retry path). A voucher-code collision throws and the pump retries it like any transient. */
+async function applyVoucherIssued(env: Env, b: BookingRow, w: WholesaleArtefacts): Promise<void> {
+  const db = env.DB;
+  const supplier = await loadSupplier(env, b.supplier_id);
+  const split = L.recognitionSplit(b.paid_minor, Math.round(Number(b.discount_amount_krw || 0)), supplier?.settlement_rate_bps ?? 9000, await loadMarkupForBooking(env.DB, b.id));
+  const grossMinor = Number(b.paid_minor || 0) + Math.round(Number(b.discount_amount_krw || 0));
+  const settlement = await planOrderSettlement(env, b.id, b.domain_type, b.item_id, grossMinor, await loadMarkupForBooking(env.DB, b.id));
+  await runBatch(db, [
+    ...transition(db, b, "VOUCHER_ISSUED", { type: "SUPPLIER", id: b.supplier_id }, null, { voucher_code: voucherCode() }),
+    db.prepare("UPDATE booking_items SET voucher_code = (SELECT voucher_code FROM bookings WHERE id = ?), ticket_numbers_json = ?, updated_at = CURRENT_TIMESTAMP WHERE booking_id = ?").bind(b.id, JSON.stringify(w.raw), b.id),
+    ...journalStmts(db, L.fulfilmentRecognized(b.id, b.paid_minor, split), b),
+    wholesaleNotifyStmt(db, b, w),
+    settlement.stmt(db),
+  ]);
+}
+
+async function runVoucherIssueJob(env: Env, job: JobRow): Promise<JobRunResult> {
+  const b = await loadRetryableBooking(env, job.booking_id, "VOUCHER_ISSUE_PENDING");
+  if (!b) return { action: "done" };
+  const supplier = await loadSupplier(env, b.supplier_id);
+  const adapter = adapterFor(supplier?.adapter || "none", env, supplier?.wholesale_vendor ?? null);
+  const t0 = Date.now();
+  const r = await adapter.ticket(supplierCtx(b, await travelerCount(env, b.id)));
+  await logSupplierCall(env, b.supplier_id, b.id, "TICKET", r.outcome, Date.now() - t0, JSON.stringify(r));
+  if (r.outcome === "ISSUED") {
+    const parsed = tryParseWholesaleArtefacts(r.ticketNumbers);
+    if (!parsed) return { action: "retry", error: "VOUCHER_ARTEFACT_MALFORMED" };
+    await applyVoucherIssued(env, await mustGet(env, b.id), parsed);
+    return { action: "done" };
+  }
+  // A refusal is an operator decision point, not a retry: the booking stays in
+  // review with the supplier answer in supplier_api_calls.
+  if (r.outcome === "FAILED") return { action: "done" };
+  return { action: "retry", error: r.message.slice(0, 300) };
+}
+
+async function exhaustVoucherIssueJob(env: Env, job: JobRow): Promise<void> {
+  const b = await loadRetryableBooking(env, job.booking_id, "VOUCHER_ISSUE_PENDING");
+  if (!b) return;
+  // The supplier holds a confirmed order: never auto-refund, never fake the
+  // artefacts. The booking stays in manual review for the operator.
+}
+
 const JOB_HANDLERS: Record<string, JobHandler> = {
   FULFIL_BOOK: { run: runFulfilBookJob, exhausted: exhaustFulfilBookJob },
   TICKET_ISSUE: { run: runTicketIssueJob, exhausted: exhaustTicketIssueJob },
+  VOUCHER_ISSUE: { run: runVoucherIssueJob, exhausted: exhaustVoucherIssueJob },
 };
 
 export async function runMaintenance(env: Env): Promise<Record<string, number>> {
@@ -2184,7 +2292,7 @@ export async function adminForceCancel(env: Env, admin: AuthUser, bookingId: str
   try {
     const supplier = await loadSupplier(env, b.supplier_id);
     const t0 = Date.now();
-    const cx = await adapterFor(supplier?.adapter || "none", env).cancel(supplierCtx(b, 1));
+    const cx = await adapterFor(supplier?.adapter || "none", env, supplier?.wholesale_vendor ?? null).cancel(supplierCtx(b, 1));
     await logSupplierCall(env, b.supplier_id, b.id, "CANCEL", cx.outcome, Date.now() - t0, JSON.stringify(cx).slice(0, 2000));
     supplierCancelled = cx.outcome !== "REJECTED";
   } catch { supplierCancelled = false; }
@@ -2301,13 +2409,18 @@ export async function serializeBooking(env: Env, b: BookingRow, viewer: AuthUser
     canCancel: CUSTOMER_CANCELLABLE.includes(b.status),
     contact: { name: b.customer_name, email: b.customer_email, phone: b.customer_phone },
     travelersRequested: details.travelers || null,
-    items: (items.results || []).map((i: any) => ({
-      ...i,
+    items: (items.results || []).map((i: any) => {
       // Voucher / ticket numbers are only exposed once actually issued.
-      voucher_code: fulfilled ? i.voucher_code : null,
-      ticket_numbers: fulfilled && i.ticket_numbers_json ? JSON.parse(i.ticket_numbers_json) : [],
-      ticket_numbers_json: undefined,
-    })),
+      const ticket_numbers = fulfilled && i.ticket_numbers_json ? JSON.parse(i.ticket_numbers_json) : [];
+      return {
+        ...i,
+        voucher_code: fulfilled ? i.voucher_code : null,
+        ticket_numbers,
+        // Phase 2 wholesale: parsed supplier artefacts (LPA/QR/codes/PDF); null for airline numbers.
+        artefacts: ticket_numbers.length ? tryParseWholesaleArtefacts(ticket_numbers) : null,
+        ticket_numbers_json: undefined,
+      };
+    }),
     travelers: (travelers.results || []).map((t: any) => ({
       type: t.traveler_type, lastNameEn: t.last_name_en, firstNameEn: t.first_name_en, birthDate: t.birth_date, nationality: t.nationality,
       passport: t.passport_enc ? "등록됨 (암호화 저장)" : null, passportExpiry: t.passport_expiry, isLead: t.is_lead === 1,

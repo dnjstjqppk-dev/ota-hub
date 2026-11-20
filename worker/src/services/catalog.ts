@@ -3,14 +3,19 @@ import { flag } from "../env.ts";
 import type { CatalogProduct, Domain, StructuredPolicy } from "../domain/pricing.ts";
 import { HttpError } from "../lib/http.ts";
 import { supplierApiConfigured } from "../suppliers/live-adapter.ts";
+import { wholesaleConfigured } from "../suppliers/wholesale-config.ts";
 
 export interface SupplierRow {
   id: string;
   name: string;
-  adapter: "none" | "direct_contract" | "simulator" | "api" | "ndc" | "gds";
+  adapter: "none" | "direct_contract" | "simulator" | "api" | "ndc" | "gds" | "wholesale";
   integration_status: string;
   transaction_model: "MERCHANT_OF_RECORD" | "AGENCY" | "AFFILIATE";
   settlement_rate_bps: number;
+  /** Phase 2 wholesale connector code (0055), null unless adapter is wholesale. */
+  wholesale_vendor: string | null;
+  /** Contracted margin in basis points; validated against the kind band at verify time. */
+  wholesale_margin_bps: number | null;
 }
 
 function parseJson<T>(s: unknown, fallback: T): T {
@@ -170,7 +175,7 @@ export async function loadProduct(env: Env, domain: Domain, itemId: string, unit
 }
 
 export async function loadSupplier(env: Env, supplierId: string): Promise<SupplierRow | null> {
-  return env.DB.prepare("SELECT id, name, adapter, integration_status, transaction_model, settlement_rate_bps FROM suppliers WHERE id = ?")
+  return env.DB.prepare("SELECT id, name, adapter, integration_status, transaction_model, settlement_rate_bps, wholesale_vendor, wholesale_margin_bps FROM suppliers WHERE id = ?")
     .bind(supplierId)
     .first<SupplierRow>();
 }
@@ -224,6 +229,13 @@ export function bookabilityOf(env: Env, supplier: SupplierRow | null): Bookabili
       ? { bookable: true, reason: null, mode: "LIVE", adapter: supplier.adapter, outlinkPartner: null }
       : { bookable: false, reason: "SUPPLIER_API_NOT_CONFIGURED", mode: null, adapter: supplier.adapter, outlinkPartner: null };
   }
+  // Phase 2 wholesale: LIVE + contracted vendor credentials. Margin band and
+  // SKU wiring are enforced again at pre-checkout verify (fail-closed twice).
+  if (supplier.adapter === "wholesale" && supplier.integration_status === "LIVE") {
+    return wholesaleConfigured(env, supplier.wholesale_vendor)
+      ? { bookable: true, reason: null, mode: "LIVE", adapter: supplier.adapter, outlinkPartner: null }
+      : { bookable: false, reason: "SUPPLIER_API_NOT_CONFIGURED", mode: null, adapter: supplier.adapter, outlinkPartner: null };
+  }
   return { bookable: false, reason: "SUPPLIER_NOT_INTEGRATED", mode: null, adapter: supplier.adapter, outlinkPartner: null };
 }
 
@@ -236,6 +248,17 @@ export function bookabilityOf(env: Env, supplier: SupplierRow | null): Bookabili
 export function assertTicketable(domain: string, supplier: SupplierRow | null): void {
   if (domain === "FLIGHT" && supplier?.adapter === "direct_contract") {
     throw new HttpError(409, "FLIGHT_TICKETING_UNSUPPORTED", "직계약 공급사 상품은 항공 발권이 지원되지 않습니다. 발권 가능 공급사의 상품을 선택해주세요.");
+  }
+}
+
+/**
+ * Phase 2 wholesale serves vouchers (ACTIVITY) and eSIM plans (ESIM) only.
+ * Anything else on a wholesale supplier is a catalog miswire: refuse at the
+ * money gates instead of capturing and auto-refunding after fulfil fails.
+ */
+export function assertWholesaleDomain(domain: string, supplier: SupplierRow | null): void {
+  if (supplier?.adapter === "wholesale" && domain !== "ACTIVITY" && domain !== "ESIM") {
+    throw new HttpError(409, "WHOLESALE_DOMAIN_UNSUPPORTED", "해당 공급사는 투어·티켓과 eSIM 상품만 처리합니다.", { domain });
   }
 }
 
@@ -280,7 +303,7 @@ export function invalidateSupplierCache(): void {
 export async function supplierBookabilityMap(env: Env): Promise<Map<string, Bookability>> {
   const now = Date.now();
   if (!supplierCache || supplierCache.db !== env.DB || now - supplierCache.at > SUPPLIER_CACHE_TTL_MS) {
-    const res = await env.DB.prepare("SELECT id, name, adapter, integration_status, transaction_model, settlement_rate_bps FROM suppliers").all<SupplierRow>();
+    const res = await env.DB.prepare("SELECT id, name, adapter, integration_status, transaction_model, settlement_rate_bps, wholesale_vendor, wholesale_margin_bps FROM suppliers").all<SupplierRow>();
     supplierCache = { db: env.DB, at: now, rows: res.results || [] };
   }
   const m = new Map<string, Bookability>();

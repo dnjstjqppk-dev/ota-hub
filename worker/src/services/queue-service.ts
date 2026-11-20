@@ -16,7 +16,7 @@ export const JOB_MAX_DELAY_MIN = 60;
 export const JOB_LEASE_MIN = 5;
 export const JOB_BATCH = 20;
 
-export type JobType = "FULFIL_BOOK" | "TICKET_ISSUE";
+export type JobType = "FULFIL_BOOK" | "TICKET_ISSUE" | "VOUCHER_ISSUE";
 export type JobStatus = "PENDING" | "CLAIMED" | "DONE" | "DEAD";
 
 export interface JobRow {
