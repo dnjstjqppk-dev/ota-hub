@@ -63,6 +63,8 @@ useHead(() => ({
   title: q.value.text ? `${q.value.text} 투어·티켓` : '투어·티켓·체험',
   meta: [{ name: 'description', content: '테마파크 입장권, 현지 투어, 체험 상품을 비교하고 예약하세요.' }]
 }))
+// P5: canonical + hreflang via the shared builder (bare path; query filters excluded from the canonical).
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/things-to-do', title: '투어·티켓·체험', description: '테마파크 입장권, 현지 투어, 체험 상품을 비교하고 예약하세요.' })
 </script>
 
 <template>

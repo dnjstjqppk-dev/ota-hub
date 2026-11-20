@@ -36,9 +36,23 @@
 - GOVERNANCE.md·BRANDING.md는 루트에 실존 (조사 보고의 `부존재` 서술은 오기).
 
 ## 3. 미완료·후속 (사업·운영 결정 필요)
-- E2E(`api.e2e.mjs`, wrangler+D1 필요) 미실행, curl 실렌더 검증 미실행.
+- E2E·curl 검증은 §4에서 완료 (아래).
 - eSIM 직판 게이트 유지 (사업 결정 후 전환), 도매·제휴 실계약값 미입력
   (벤더 base/key·SKU·마진, 파트너 marker/secret → 전부 unsellable/BLOCKED).
 - 알림톡 sender 미구축(이메일만), QR은 텍스트+PDF 링크 표시.
 - `EntitiesView`의 `travel_agency_license_no` 필수 요구 2건 잔존 (정책 결정 필요).
 - 사업자 실값(상호·대표·사업자번호·통신판매업번호) 미확정.
+
+## 4. §4 검증 완료 (2026-11-21, 로컬 wrangler+D1+Nuxt)
+- E2E `api.e2e.mjs`: 212/212 통과 (#149 포함). 초회 211/212에서 #149 실패는
+  기존 로컬 D1 잔여 데이터(`sup_airalo_01` 오염) 원인으로 판명 — 코드·시드·
+  마이그레이션에 해당 갱신 없음 확인 후 D1 초기화·재적용으로 전건 통과.
+- SSR curl 프로브 33/33 통과: `/`, `/hotels/list?city=Seoul`, `/esim`,
+  `/things-to-do` 모두 canonical·hreflang(x-default 포함)·JSON-LD·OG·실데이터
+  본문(스켈레톤 0) 확인. `/things-to-do` 누락 2건은 `useSeoPage` 1줄 추가로
+  수정 후 재통과.
+- 색인 엔드포인트: `/sitemap-index.xml`(7분할)·`/sitemap.xml`·자식맵·
+  `/llms.txt`·`/llms-full.txt`·`/robots.txt` 모두 200. 정적맵에 `/esim`·
+  `/insurance` 포함, 호텔 자식맵 실상품 16건.
+- 주의: `:3000`의 `127.0.0.1`은 타 프로젝트(video) 서버가 점유 중 — 본 검증은
+  자 프로젝트 서버(`[::1]:3000`, PID 5576)로 수행, 타 프로세스는 untouched.
