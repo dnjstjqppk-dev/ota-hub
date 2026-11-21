@@ -26,7 +26,7 @@
 | 3포털 빌드 | exit 0 | 11-17 `node scripts/build-all.js` (이후 제품코드 변경 없음) |
 | 의존성 감사 | critical 0 | 11-17 `npm audit --omit=dev --audit-level=critical` (4 패키지) |
 | 운영 검증 | 43/47 + live-settle 1 skip | 11-18 `scripts/verify-production.js` fresh 격리DB(verify_1118) 재측정. 잔여 4종(T11·T13·T14·T20)은 prod-진실·환경조건부로 로컬 적색이 정상 (§5-0). T21(register 분리)·T33(신규 플래그 3종) 기대치 수리済. |
-| CI | fast·e2e 녹색, deploy 차단 | run 44257914473 (11-18): fast ✓(1m34s)·e2e ✓(13m41s, D1 212/212 + stripe 3/3 + suppliers 4/4 + replica 3/3). deploy잡은 `CLOUDFLARE_API_TOKEN` 7403 만료로 실패 — 시크릿 교체 필요 (§5-0). |
+| CI | fast·e2e 녹색, deploy 차단 | run 44257914473 (11-18): fast ✓(1m34s)·e2e ✓(13m41s, D1 212/212 + stripe 3/3 + suppliers 4/4 + replica 3/3). deploy잡은 `CLOUDFLARE_API_TOKEN` 7403 만료로 실패 — 시크릿 교체 필요 (§5-0). 11-21 추기: run 44751802699·44762641944(HEAD) fast ✓·e2e 211/212(131번 fetch 실패 플레이크 6·7회째, 코드 회귀 아님)·deploy 스킵 — 토큰 상태 미확인. |
 | 레드드릴 | RED→GREEN (매 TG) | TG-11~TG-21 각 증거에 기재 ([TG 백로그](TRIP_GRADE_BACKLOG.md)). CI 배선도 3회 적색→수정→녹색으로 검증됨. |
 | 마이그레이션 | D1 0053 · PG 90T/111idx | 11-17 덤프·델타 적용済 (gft-pg). 운영은 0027~0044만 적용 (§5-0). |
 
@@ -98,13 +98,17 @@ E2E 표기 "205+3" = 메인 205 + 별도 스위트 3 (합산 아님).
 0. **CI 시크릿 만료**: GitHub `CLOUDFLARE_API_TOKEN`이 7403으로 거부돼
    deploy잡이 실패한다 (11-18 run 44257914473 재확인). 주간 D1 백업도
    같은 인증 오류로 미동작 중. Cloudflare 토큰 재발급 후 시크릿 교체가 먼저다.
-1. **운영 D1 0045~0053 미적용** (0047 CR 가산형 + TG-11·TG-13~TG-21분).
+   11-21: 최신 실행(run 44762641944)은 E2E 플레이크로 deploy잡 미도달이라
+   토큰 상태 미확인 — 실패 잡 재실행 후 판정.
+1. **운영 D1 0045~0057 미적용** (0047 CR 가산형 + TG-11·TG-13~TG-21분 + 하이브리드 0054~0057).
    배포 파이프라인 0단계 또는 `docs/GO_LIVE_CHECKLIST.md` 0단계 수동 적용.
    0027~0044는 11-14 사고로 적용된 상태 — 아래 6번 결정과 함께 확인할 것.
 2. **verify 로컬 잔여 4종** (T11·T13·T14·T20): prod-진실·환경조건부
    테스트로 로컬 적색이 정상. 운영 실행에서 판정한다.
    11-18 로컬 재측정 43/47 확정 (신규 적색 2종은 기대치 수리로 해소).
-3. **wrangler 인증 만료** (Cloudflare 7403): `npx wrangler login` 필요.
+3. ~~wrangler 인증 만료~~ → **해소 (11-21 확인)**:
+   `whoami` OAuth 로그인 + `d1 list` 실호출 정상 (운영·스테이징 DB 조회).
+   재로그인 불요.
 4. **운영 verify+T41**: `TEST_ADMIN_PASSWORD` 필요 (에이전트 미보유).
 5. **`temp_master_prompt.md` 구 해시**: 사용자 파일 — 직접 삭제.
 6. **11-14 사고 keep/rollback 미결정**: 미승인 운영 변경(D1 0027~0044 +
@@ -143,10 +147,10 @@ E2E 표기 "205+3" = 메인 205 + 별도 스위트 3 (합산 아님).
 
 상세 순서는 [개통 체크리스트](../docs/GO_LIVE_CHECKLIST.md) 0→10단계.
 
-0. 11-14 사고 keep/rollback 결정 → 운영 D1 0045~0053 적용 + NULL·DROP 확인 (§5-0).
+0. 11-14 사고 keep/rollback 결정 → 운영 D1 0045~0057 적용 + NULL·DROP 확인 (§5-0).
 1. Toss 실가맹 + `PII_ENC_KEY` + 실사업자 ACTIVE → 결제/여권/정산 파일럿.
 2. Sentry DSN 2곳 등록 → verbose `/health` errorReporting: SENTRY 확인.
 3. Resend + 도메인 + 법무 확정 → 정식 오픈 게이트 재측정.
 4. verify 로컬 재측정 후 운영 verify 47/47 + T41 실정산 (`TEST_ADMIN_PASSWORD` 필요).
-5. `temp_master_prompt.md` 구 해시 직접 삭제 + wrangler 재로그인 + CI 시크릿 교체.
+5. `temp_master_prompt.md` 구 해시 직접 삭제 + CI 실패 잡 재실행(토큰 판정) + 필요 시 CI 시크릿 교체 (wrangler 재로그인은 11-21 해소 확인).
 6. 파트너 동의 저장 여부·방식 결정 (법무 검토 후).
