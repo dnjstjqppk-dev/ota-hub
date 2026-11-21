@@ -29,10 +29,24 @@ const bizNo = () => { const d = String(1000000000 + Math.floor(Math.random() * 9
 async function api(method, path, { token, body, headers = {} } = {}) {
   const h = { "Content-Type": "application/json", ...headers };
   if (token) h.Authorization = `Bearer ${token}`;
-  const res = await fetch(BASE + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
-  let data = null;
-  try { data = await res.json(); } catch {}
-  return { status: res.status, data };
+  // CI runners intermittently drop localhost connections (#81 flake ×11:
+  // undici 'fetch failed' with no HTTP response). Retry the identical
+  // request on fetch-level throws only; HTTP responses are never retried.
+  let lastErr = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let res;
+    try {
+      res = await fetch(BASE + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      continue;
+    }
+    let data = null;
+    try { data = await res.json(); } catch {}
+    return { status: res.status, data };
+  }
+  throw lastErr;
 }
 
 function sql(command) {

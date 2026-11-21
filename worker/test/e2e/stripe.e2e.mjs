@@ -35,10 +35,22 @@ const idem = () => `idem_${rnd()}${rnd()}`;
 async function api(method, path, { token, body, headers = {} } = {}) {
   const h = { "Content-Type": "application/json", ...headers };
   if (token) h.Authorization = `Bearer ${token}`;
-  const res = await fetch(BASE + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
-  let data = null;
-  try { data = await res.json(); } catch {}
-  return { status: res.status, data };
+  // Same transient-localhost retry as api.e2e.mjs (#81 flake hardening).
+  let lastErr = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let res;
+    try {
+      res = await fetch(BASE + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      continue;
+    }
+    let data = null;
+    try { data = await res.json(); } catch {}
+    return { status: res.status, data };
+  }
+  throw lastErr;
 }
 
 function sql(command) {
