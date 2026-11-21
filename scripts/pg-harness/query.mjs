@@ -43,7 +43,7 @@ async function main() {
   for await (const chunk of process.stdin) sql += chunk;
   sql = sql.trim();
   if (!sql) throw new Error('query.mjs: empty input');
-  const pool = new pg.Pool({ connectionString: process.env.E2E_PG_URL || 'postgres://postgres:LocalPg2026%21x@127.0.0.1:15433/ota_pg' });
+  const pool = new pg.Pool({ connectionString: process.env.E2E_PG_URL || process.env.DATABASE_URL || 'postgres://postgres:LocalPg2026%21x@127.0.0.1:15433/ota_pg' });
   try {
     const r = await pool.query(translateSQL(rewriteE2E(sql)));
     const rows = Array.isArray(r) ? r[r.length - 1].rows ?? [] : r.rows ?? [];

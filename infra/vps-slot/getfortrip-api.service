@@ -1,0 +1,27 @@
+# getfortrip dev slot — systemd unit.
+# Install: copy to /etc/systemd/system/getfortrip-api.service (adjust User and
+# the node path first), then daemon-reload + enable --now. See
+# docs/VPS_SLOT_RUNBOOK.md. Compare with the sample the slot provides
+# (getfortrip-api.service.sample) and keep THEIR hardening lines if stricter.
+[Unit]
+Description=getfortrip dev API (pg harness on 127.0.0.1:9103)
+After=network.target postgresql.service redis-server.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+# Account the slot admin creates for the pushed public key.
+User=getfortrip
+WorkingDirectory=/srv/getfortrip/app
+EnvironmentFile=/srv/getfortrip/app/.env
+# PORT comes from the EnvironmentFile (9103). argv port would override it.
+ExecStart=/usr/bin/node scripts/pg-harness/server.mjs
+Restart=always
+RestartSec=5
+# Logs go to the journal (journalctl -u getfortrip-api), not to files.
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

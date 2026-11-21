@@ -1,0 +1,46 @@
+# gft VPS dev database (development only — never production).
+# Postgres + Redis for the local harnesses (pg-harness, redis-store).
+# Ports bind to 127.0.0.1 ONLY: reach them through an SSH tunnel, never
+# directly. See docs/VPS_DEV_RUNBOOK.md. Passwords live in .env (not committed).
+name: gft-vps-dev
+
+services:
+  pg:
+    image: postgres:16
+    container_name: gft-vps-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ota_pg
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:15433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ota_pg"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: gft-vps-redis
+    restart: unless-stopped
+    # Ephemeral dev cache: no disk writes (reboot loses counters — fine for
+    # dev, the harness falls back to D1). No password by design: loopback-only
+    # + SSH tunnel, same trust level as today's local docker setup.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:16381:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:

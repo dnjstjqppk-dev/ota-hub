@@ -1,6 +1,22 @@
 import { strict as assert } from 'node:assert'
 import { test, before, after } from 'node:test'
-import { redisEphemeral } from './redis-ephemeral.mjs'
+import { parseRedisUrl, redisEphemeral } from './redis-ephemeral.mjs'
+
+test('redis: URL parse keeps legacy plain URLs on db 0 without auth', () => {
+  assert.deepEqual(parseRedisUrl('redis://127.0.0.1:16381'), { host: '127.0.0.1', port: 16381, database: 0 })
+  assert.deepEqual(parseRedisUrl('redis://127.0.0.1/'), { host: '127.0.0.1', port: 6379, database: 0 })
+})
+
+test('redis: URL parse takes db index, password and user from the URL', () => {
+  assert.deepEqual(parseRedisUrl('redis://127.0.0.1:6379/2'), { host: '127.0.0.1', port: 6379, database: 2 })
+  assert.deepEqual(parseRedisUrl('redis://:p%40ss@127.0.0.1:6379/2'), { host: '127.0.0.1', port: 6379, database: 2, password: 'p@ss' })
+  assert.deepEqual(parseRedisUrl('redis://u:pw@h:6380/5'), { host: 'h', port: 6380, database: 5, username: 'u', password: 'pw' })
+})
+
+test('redis: explicit dbIndex wins over the URL path', () => {
+  assert.equal(parseRedisUrl('redis://127.0.0.1:6379/2', 15).database, 15)
+  assert.equal(parseRedisUrl('redis://127.0.0.1:6379/2').database, 2)
+})
 
 // TG-10: Redis implementation against a live server (docker locally, CI
 // service in the fast job). Skips honestly when no server answers.

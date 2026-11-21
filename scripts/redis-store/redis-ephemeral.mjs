@@ -19,13 +19,32 @@ const idemKey = (scope, key) => `gft:idem:${scope}:${key}`;
  * reconnect (3 quick retries, then give up so the D1 fallback engages
  * instead of hanging requests; managed step may add re-probing).
  */
-export async function connectRedis(url, dbIndex = 0) {
+/**
+ * URL shape: redis://[user:pass@]host[:port][/db]. Explicit dbIndex wins,
+ * then the URL path, then 0 — so plain `redis://host:port` behaves exactly
+ * as before (db 0, no auth). Passwords may be URL-encoded.
+ */
+export function parseRedisUrl(url, dbIndex) {
   const u = new URL(url);
+  const pathDb = u.pathname && u.pathname.length > 1 ? Number(u.pathname.slice(1)) : NaN;
+  return {
+    host: u.hostname,
+    port: Number(u.port || 6379),
+    database: Number.isSafeInteger(dbIndex) ? dbIndex : (Number.isSafeInteger(pathDb) ? pathDb : 0),
+    ...(u.username ? { username: decodeURIComponent(u.username) } : {}),
+    ...(u.password ? { password: decodeURIComponent(u.password) } : {}),
+  };
+}
+
+export async function connectRedis(url, dbIndex) {
+  const opts = parseRedisUrl(url, dbIndex);
   const client = createClient({
-    database: dbIndex,
+    database: opts.database,
+    ...(opts.username ? { username: opts.username } : {}),
+    ...(opts.password ? { password: opts.password } : {}),
     socket: {
-      host: u.hostname,
-      port: Number(u.port || 6379),
+      host: opts.host,
+      port: opts.port,
       reconnectStrategy: (retries) => (retries > 3 ? false : 100),
     },
   });
@@ -34,7 +53,7 @@ export async function connectRedis(url, dbIndex = 0) {
   return client;
 }
 
-export async function redisEphemeral(url, dbIndex = 0) {
+export async function redisEphemeral(url, dbIndex) {
   const client = await connectRedis(url, dbIndex);
   const member = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
   return {

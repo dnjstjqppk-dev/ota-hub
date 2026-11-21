@@ -4,6 +4,8 @@
 // behind it (D1 shim), static files for ASSETS, and a scratch dir for R2.
 // The E2E suite runs unmodified against this server (BASE=... + E2E_PG_URL).
 // Usage: E2E_PG_URL=... node scripts/pg-harness/server.mjs [port]
+// Slot aliases: DATABASE_URL (= E2E_PG_URL), REDIS_URL (= E2E_REDIS_URL),
+// PORT (= argv port). Binds 127.0.0.1 only.
 // Env parity with CI/local E2E: sandbox payments, simulator suppliers, draft
 // entity, ephemeral JWT + PII keys, 127.0.0.1 ingest allowlist.
 import http from 'node:http';
@@ -30,7 +32,7 @@ mkdirSync(UPLOADS_ROOT, { recursive: true });
 // Single connection: advisory inventory locks are session-level, so the proof
 // pool must not multiplex. statement_timeout fails loud instead of hanging.
 const pool = new pg.Pool({
-  connectionString: process.env.E2E_PG_URL || 'postgres://postgres:LocalPg2026%21x@127.0.0.1:15433/ota_pg',
+  connectionString: process.env.E2E_PG_URL || process.env.DATABASE_URL || 'postgres://postgres:LocalPg2026%21x@127.0.0.1:15433/ota_pg',
   max: 1,
   statement_timeout: 15000,
 });
@@ -86,12 +88,14 @@ const UPLOADS = {
 };
 
 const shim = createD1Shim(pool);
-// TG-10: E2E_REDIS_URL injects Redis-first ephemeral state (D1 fallback);
-// unset keeps the production-default D1 path. Both run the full suite.
+// TG-10: E2E_REDIS_URL (or slot REDIS_URL) injects Redis-first ephemeral
+// state (D1 fallback); unset keeps the production-default D1 path.
+// DB index and password come from the URL path/auth (db 0 when absent).
+const SLOT_REDIS_URL = process.env.E2E_REDIS_URL || process.env.REDIS_URL;
 let ephemeralStore = d1Ephemeral(shim);
-if (process.env.E2E_REDIS_URL) {
+if (SLOT_REDIS_URL) {
   try {
-    ephemeralStore = withFallback(await redisEphemeral(process.env.E2E_REDIS_URL), d1Ephemeral(shim));
+    ephemeralStore = withFallback(await redisEphemeral(SLOT_REDIS_URL), d1Ephemeral(shim));
     console.log('ephemeral store: redis (d1 fallback)');
   } catch {
     console.log('ephemeral store: redis unreachable at boot, d1 only (fallback proof mode)');
@@ -107,18 +111,18 @@ const env = {
   UPLOADS,
   APP_ENV: 'test',
   DB_DIALECT: 'pg',
-  JWT_SECRET: randomBytes(32).toString('base64'),
-  PII_ENC_KEY: randomBytes(32).toString('base64'),
+  JWT_SECRET: process.env.JWT_SECRET || randomBytes(32).toString('base64'),
+  PII_ENC_KEY: process.env.PII_ENC_KEY || randomBytes(32).toString('base64'),
   PAYMENT_PROVIDER: 'sandbox',
   ALLOW_SIMULATED_SUPPLIERS: 'true',
   ALLOW_DRAFT_ENTITY: 'true',
   ALLOWED_ORIGINS: '*',
-  PUBLIC_SITE_URL: 'http://127.0.0.1:8798',
+  PUBLIC_SITE_URL: process.env.PUBLIC_SITE_URL || 'http://127.0.0.1:8798',
   PARTNER_SITE_URL: 'http://127.0.0.1:8798/partner/',
   INGEST_ALLOW_HOSTS: '127.0.0.1',
 };
 
-const port = parseInt(process.argv[2] || '8798', 10);
+const port = parseInt(process.argv[2] || process.env.PORT || '8798', 10);
 const server = http.createServer(async (req, res) => {
   try {
     const chunks = [];
