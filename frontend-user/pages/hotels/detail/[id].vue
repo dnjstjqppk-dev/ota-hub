@@ -53,7 +53,7 @@ const today = ref('')
 const nights = computed(() => (stay.value.checkIn && stay.value.checkOut ? Math.round((Date.parse(stay.value.checkOut) - Date.parse(stay.value.checkIn)) / 86400000) : 0))
 const guests = computed(() => stay.value.adults + stay.value.children)
 const WEEK = ['일', '월', '화', '수', '목', '금', '토']
-function fmt(s: string) { const [y, m, d] = s.split('-').map(Number); return `${m}월 ${d}일 (${WEEK[new Date(y, m - 1, d).getDay()]})` }
+function fmt(s: string) { const [y = NaN, m = NaN, d = NaN] = s.split('-').map(Number); return `${m}월 ${d}일 (${WEEK[new Date(y, m - 1, d).getDay()] ?? ''})` }
 /**
  * Mirrors the server rule (worker/src/domain/pricing.ts cancellationPolicyFor): free until 24h before
  * 00:00 UTC of the check-in date. Shown in the viewer's local time; checkout shows the binding deadline.
@@ -68,7 +68,7 @@ const freeCancelLabel = computed(() => {
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null)
 const score = computed(() => num(Number(hotel.value?.review_score)) ?? num(hotel.value?.score_overall))
 const subScores = computed(() =>
-  [['청결도', 'score_cleanliness'], ['위치', 'score_location'], ['서비스', 'score_service'], ['부대시설', 'score_facilities']]
+  ([['청결도', 'score_cleanliness'], ['위치', 'score_location'], ['서비스', 'score_service'], ['부대시설', 'score_facilities']] as [string, string][])
     .map(([label, k]) => ({ label, value: num(hotel.value?.[k]) }))
     .filter((x): x is { label: string; value: number } => x.value !== null)
 )

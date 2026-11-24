@@ -21,7 +21,7 @@ async function refresh() {
     status.value = { enrolled: Boolean(r.enrolled), pending: Boolean(r.pending) }
   } catch {
     status.value = null
-    toast('보안 상태를 불러오지 못했어요.', 'error')
+    toast('보안 상태를 불러오지 못했어요.', 'danger')
   } finally {
     loading.value = false
   }
@@ -37,14 +37,14 @@ async function enroll() {
     status.value = { enrolled: false, pending: true }
     toast('인증 앱에 시크릿을 등록한 뒤 아래에서 확인해 주세요.')
   } catch (e: any) {
-    toast(e.message || '등록에 실패했어요.', 'error')
+    toast(e.message || '등록에 실패했어요.', 'danger')
   } finally {
     busy.value = false
   }
 }
 
 async function confirm() {
-  if (!code.value.trim()) { toast('인증 코드를 입력해 주세요.', 'error'); return }
+  if (!code.value.trim()) { toast('인증 코드를 입력해 주세요.', 'danger'); return }
   busy.value = true
   try {
     await api('/admin/mfa/confirm', { method: 'POST', json: { code: code.value.trim() } })
@@ -54,7 +54,7 @@ async function confirm() {
     status.value = { enrolled: true, pending: false }
     toast('2단계 인증을 켰어요. 다음 로그인부터 코드가 필요해요.')
   } catch (e: any) {
-    toast(e.message || '코드가 올바르지 않아요.', 'error')
+    toast(e.message || '코드가 올바르지 않아요.', 'danger')
   } finally {
     busy.value = false
   }
@@ -69,7 +69,7 @@ async function disable() {
     otpauthUrl.value = ''
     toast('2단계 인증을 껐어요.')
   } catch (e: any) {
-    toast(e.message || '해제에 실패했어요.', 'error')
+    toast(e.message || '해제에 실패했어요.', 'danger')
   } finally {
     busy.value = false
   }
@@ -80,7 +80,7 @@ async function copy(text: string) {
     await navigator.clipboard.writeText(text)
     toast('복사했어요.')
   } catch {
-    toast('복사에 실패했어요. 직접 선택해 주세요.', 'error')
+    toast('복사에 실패했어요. 직접 선택해 주세요.', 'danger')
   }
 }
 

@@ -2,7 +2,8 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
-import { useCatalogDetail, jsonLdScript } from '~/composables/useCatalogDetail'
+import { useCatalogDetail } from '~/composables/useCatalogDetail'
+import { jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()

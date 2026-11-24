@@ -15,14 +15,17 @@ export default defineNuxtConfig({
   // build-time route (no query string), so e.g. /checkout?domain=... or the PG return URL lost its params.
   routeRules: {
     // P1-1 (2026-11-22 audit): ota-user sent zero security headers. Mirrors
-    // worker SECURITY_HEADERS (no CSP: it would break the SSR shell — same
-    // rationale as hub serveAssets in worker/src/lib/http.ts).
+    // worker SECURITY_HEADERS, plus the GAP-02 page CSP below (SSR-compatible:
+    // inline scripts allowed, remote code is Toss SDK only).
     '/**': {
       headers: {
         'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
         'X-Content-Type-Options': 'nosniff',
         'X-Frame-Options': 'SAMEORIGIN',
-        'Referrer-Policy': 'strict-origin-when-cross-origin'
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        // GAP-02 (2026-11-24 audit): page CSP. Inline scripts stay allowed
+        // (Nuxt SSR payload + theme boot); remote code is Toss SDK only.
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.tosspayments.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data: blob:; font-src 'self' https://cdn.jsdelivr.net data:; connect-src 'self' https://ota-hub.dnjstjqppk.workers.dev https://getfortrip.com https://api.tosspayments.com https://log.tosspayments.com https://*.sentry.io https://*.ingest.sentry.io; frame-src https://pay.tosspayments.com; form-action 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
       }
     },
     '/checkout': { ssr: false },
@@ -69,14 +72,13 @@ export default defineNuxtConfig({
   },
   modules: ['@nuxtjs/i18n'],
   i18n: {
+    // GAP-01 short-term: ko only — /en /ja /zh prefixes served Korean content
+    // (false-multilingual SEO). Restore the entries when Phase B translates.
     locales: [
       { code: 'ko', iso: 'ko-KR', name: '한국어', file: 'ko.json' },
-      { code: 'en', iso: 'en-US', name: 'English', file: 'en.json' },
-      { code: 'ja', iso: 'ja-JP', name: '日本語', file: 'ja.json' },
-      { code: 'zh', iso: 'zh-CN', name: '中文', file: 'zh.json' }
     ],
     defaultLocale: 'ko',
-    lazy: true,
+    // v10: `lazy` was removed — locale `file`s are always lazy-loaded.
     langDir: 'locales',
     strategy: 'prefix_except_default',
     detectBrowserLanguage: {

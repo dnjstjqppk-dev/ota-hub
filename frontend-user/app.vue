@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useAuthStore } from '~/stores/auth'
-import { orgWebsiteLd } from '~/composables/useJsonLd'
+import { jsonLdScript, orgWebsiteLd } from '~/composables/useJsonLd'
 
 const authStore = useAuthStore()
 
@@ -15,11 +15,8 @@ function dismissOnboarding() {
 useHead({
   titleTemplate: (titleChunk) => titleChunk ? `${titleChunk} - getfortrip` : 'getfortrip - 스마트한 전 세계 여행의 시작',
   script: [
-    {
-      type: 'application/ld+json',
-      // P5: Organization + WebSite/SearchAction graph (single source: useJsonLd).
-      children: JSON.stringify(orgWebsiteLd('https://getfortrip.com')),
-    }
+    // P5: Organization + WebSite/SearchAction graph (single source: useJsonLd).
+    jsonLdScript(orgWebsiteLd('https://getfortrip.com')),
   ]
 })
 

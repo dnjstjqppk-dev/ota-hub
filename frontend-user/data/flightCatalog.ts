@@ -445,7 +445,7 @@ export function generateDynamicDateStrip(baseDateStr?: string): Array<{
     const dateStr = `${yyyy}-${mm}-${dd}`
     const isToday = dateStr === todayStr
     const isSelected = offset === 0
-    const dow = daysOfWeek[d.getDay()]
+    const dow = daysOfWeek[d.getDay()] ?? ''
 
     // Base price fluctuation simulation
     const baseP = 210000 + Math.abs(offset) * 12000 + (d.getDay() === 0 || d.getDay() === 6 ? 28000 : 0)

@@ -76,7 +76,7 @@ const activeFilters = computed(() => {
   const list: { key: string; label: string; clear: Partial<Q> }[] = []
   if (x.star) list.push({ key: 'star', label: `${x.star}성급${x.star < 5 ? ' 이상' : ''}`, clear: { star: 0 } })
   if (x.score) list.push({ key: 'score', label: `평점 ${x.score}+`, clear: { score: 0 } })
-  if (x.type) list.push({ key: 'type', label: TYPE_LABEL[x.type], clear: { type: '' } })
+  if (x.type) list.push({ key: 'type', label: TYPE_LABEL[x.type] ?? x.type, clear: { type: '' } })
   if (x.maxPrice) list.push({ key: 'price', label: `1박 ${currency.formatKRW(x.maxPrice)} 이하`, clear: { maxPrice: PRICE_ANY } })
   if (x.freeCancel) list.push({ key: 'fc', label: '무료 취소', clear: { freeCancel: false } })
   if (x.breakfast) list.push({ key: 'bf', label: '조식 포함', clear: { breakfast: false } })
@@ -96,7 +96,7 @@ function submitSearch() {
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const WEEK = ['일', '월', '화', '수', '목', '금', '토']
-function shortDate(s: string) { const [y, m, d] = s.split('-').map(Number); const dt = new Date(y, m - 1, d); return `${m}.${pad(d)}(${WEEK[dt.getDay()]})` }
+function shortDate(s: string) { const [y = NaN, m = NaN, d = NaN] = s.split('-').map(Number); const dt = new Date(y, m - 1, d); return `${m}.${pad(d)}(${WEEK[dt.getDay()] ?? ''})` }
 const nights = computed(() => (q.value.checkIn && q.value.checkOut ? Math.round((Date.parse(q.value.checkOut) - Date.parse(q.value.checkIn)) / 86400000) : 0))
 const summaryLine = computed(() => {
   const x = q.value

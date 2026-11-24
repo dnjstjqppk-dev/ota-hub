@@ -76,6 +76,7 @@ export const useWishlistStore = defineStore('wishlist', {
       const existingIdx = this.items.findIndex((i) => i.itemId === item.itemId)
       if (existingIdx >= 0) {
         const removed = this.items.splice(existingIdx, 1)[0]
+        if (!removed) return false
         if (typeof window !== 'undefined') {
           localStorage.setItem('getfortrip_wishlist', JSON.stringify(this.items))
         }

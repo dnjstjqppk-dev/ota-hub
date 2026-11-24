@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useCatalogDetail, jsonLdScript } from '~/composables/useCatalogDetail'
+import { useCatalogDetail } from '~/composables/useCatalogDetail'
+import { jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
@@ -23,7 +24,7 @@ const facts = computed(() => {
     ['가이드', x.guide_language],
     ['바우처', VOUCHER_KO[x.voucher_type] || x.voucher_type],
     ['확정 방식', x.instant_confirmed ? '즉시 확정' : '공급사 확인 후 확정']
-  ] as [string, string | null][]).filter(([, v]) => v)
+  ] as [string, string | null][]).filter((f): f is [string, string] => !!f[1])
 })
 
 useHead(() => {

@@ -697,7 +697,7 @@ export function searchHotelCatalog(params: {
   }
 
   if (params.minScore && params.minScore > 0) {
-    list = list.filter(h => h.review_score >= params.minScore!)
+    list = list.filter(h => (h.review_score ?? 0) >= params.minScore!)
   }
 
   if (params.maxPrice && params.maxPrice < 1000000) {

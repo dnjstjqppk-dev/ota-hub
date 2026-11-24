@@ -46,7 +46,7 @@ async function confirmProdTarget() {
     process.exit(2);
   }
   const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await new Promise((resolve) => rl.question(`Type PROCEED to run 47 live tests against PRODUCTION (${BASE_URL}): `, resolve));
+  const answer = await new Promise((resolve) => rl.question(`Type PROCEED to run 50 live tests against PRODUCTION (${BASE_URL}): `, resolve));
   rl.close();
   if (String(answer).trim() !== 'PROCEED') {
     console.error('Aborted: production run not confirmed.');
@@ -1375,18 +1375,29 @@ async function runVerificationSuite() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     });
-    if (badHook.status !== 400) throw new Error(`Expected 400 for field-less webhook, got ${badHook.status}`);
+    const badJson = await badHook.json().catch(() => ({}));
+    // GAP-05: prod-like targets without TOSS_WEBHOOK_SECRET fail closed (403
+    // WEBHOOK_NOT_CONFIGURED); targets with a secret reject the missing key
+    // (403 INVALID_WEBHOOK_SECRET); open dev/test targets validate the body (400).
+    const hookOpen = badHook.status === 400;
+    if (!hookOpen && !(badHook.status === 403 && (badJson.code === 'WEBHOOK_NOT_CONFIGURED' || badJson.code === 'INVALID_WEBHOOK_SECRET'))) {
+      throw new Error(`Expected 400 (open) or 403 fail-closed for field-less webhook, got ${badHook.status} ${JSON.stringify(badJson)}`);
+    }
     if (!ALLOW_MUTATION) {
       console.log('(read-only: live ticket/webhook cycle runs on mutating targets)');
       return;
     }
-    const ghost = await fetch(`${BASE_URL}/api/v1/webhooks/toss`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventType: 'PAYMENT_STATUS_CHANGED', data: { orderId: `verify144_${rand}`, status: 'DONE' } }),
-    });
-    const ghostJson = await ghost.json();
-    if (!ghost.ok || ghostJson.action !== 'NO_UNKNOWN_PAYMENT') throw new Error(`Unknown-order webhook mishandled: HTTP ${ghost.status} ${JSON.stringify(ghostJson)}`);
+    if (!hookOpen) {
+      console.log(`(webhook auth-gated on this target [${badJson.code}]: ghost-order cycle skipped)`);
+    } else {
+      const ghost = await fetch(`${BASE_URL}/api/v1/webhooks/toss`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventType: 'PAYMENT_STATUS_CHANGED', data: { orderId: `verify144_${rand}`, status: 'DONE' } }),
+      });
+      const ghostJson = await ghost.json();
+      if (!ghost.ok || ghostJson.action !== 'NO_UNKNOWN_PAYMENT') throw new Error(`Unknown-order webhook mishandled: HTTP ${ghost.status} ${JSON.stringify(ghostJson)}`);
+    }
     const opened = await fetch(`${BASE_URL}/api/v1/inquiries`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userAToken}` },
@@ -1446,6 +1457,68 @@ async function runVerificationSuite() {
       body: JSON.stringify({ contactPhone: before || '010-0000-0000' }),
     });
     if (!restored.ok) throw new Error(`Partner profile restore failed: HTTP ${restored.status}`);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 48. PORTAL SECURITY HEADERS + CSP (GAP-10)
+  // ---------------------------------------------------------------------------
+  await test('GAP-10: hub API + 3 portals send security headers incl CSP', async () => {
+    const hub = (process.env.BASE_URL || 'https://ota-hub.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+    const userRoot = (process.env.USER_URL || 'https://ota-user.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+    const adminRoot = (process.env.ADMIN_URL || 'https://ota-admin.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+    const partnerRoot = (process.env.PARTNER_URL || 'https://ota-partner.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+    const api = await fetch(`${hub}/api/v1/health`);
+    const apiCsp = api.headers.get('content-security-policy') || '';
+    if (!apiCsp.includes("default-src 'none'")) throw new Error(`hub API CSP missing: ${apiCsp}`);
+    for (const [label, root, wantToss] of [['user', userRoot, true], ['admin', adminRoot, false], ['partner', partnerRoot, false]]) {
+      const r = await fetch(root);
+      if (!r.ok) throw new Error(`${label} root HTTP ${r.status}`);
+      for (const h of ['strict-transport-security', 'x-content-type-options', 'x-frame-options', 'referrer-policy', 'content-security-policy']) {
+        if (!r.headers.get(h)) throw new Error(`${label} root missing ${h}`);
+      }
+      const csp = r.headers.get('content-security-policy') || '';
+      if (wantToss && !csp.includes('js.tosspayments.com')) throw new Error('user CSP lost the Toss SDK host');
+      if (!wantToss && csp.includes('tosspayments')) throw new Error(`${label} CSP must not carry Toss hosts`);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 49. USER PORTAL SSR CATALOG (GAP-10)
+  // ---------------------------------------------------------------------------
+  await test('GAP-10: user portal SSR catalog renders 200 HTML', async () => {
+    const userRoot = (process.env.USER_URL || 'https://ota-user.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+    for (const p of ['/hotels/list', '/cars/list', '/hotels/detail/htl_seoul_01']) {
+      const r = await fetch(`${userRoot}${p}`);
+      if (r.status !== 200) throw new Error(`${p} HTTP ${r.status}`);
+      const ct = r.headers.get('content-type') || '';
+      if (!ct.includes('text/html')) throw new Error(`${p} is not HTML: ${ct}`);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 50. TG-11..21 READ-ONLY SMOKE (GAP-10)
+  // ---------------------------------------------------------------------------
+  await test('GAP-10: TG surfaces answer read-only probes', async () => {
+    const ah = { Authorization: `Bearer ${adminToken}` };
+    const jobs = await (await fetch(`${BASE_URL}/api/v1/admin/jobs`, { headers: ah })).json();
+    if (!Array.isArray(jobs.jobs)) throw new Error(`jobs shape: ${JSON.stringify(jobs).slice(0, 120)}`);
+    const slo = await fetch(`${BASE_URL}/api/v1/admin/slo/summary`, { headers: ah });
+    if (!slo.ok) throw new Error(`slo HTTP ${slo.status}`);
+    const st = await (await fetch(`${BASE_URL}/status`)).json();
+    if (typeof st?.replica?.enabled !== 'boolean') throw new Error('status replica shape');
+    const fds = await (await fetch(`${BASE_URL}/api/v1/admin/fraud/reviews`, { headers: ah })).json();
+    if (!Array.isArray(fds.reviews)) throw new Error('fds shape');
+    const sw = await fetch(`${BASE_URL}/api/v1/webhooks/stripe`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    if (sw.status !== 400 && sw.status !== 403) throw new Error(`stripe webhook gate HTTP ${sw.status}`);
+    const reco = await fetch(`${BASE_URL}/api/v1/recommendations?domain=HOTEL&itemId=htl_seoul_01`);
+    const recoJson = await reco.json().catch(() => ({}));
+    if (!(reco.ok || (reco.status === 503 && recoJson.code === 'RECO_DISABLED'))) throw new Error(`reco HTTP ${reco.status}`);
+    for (const ex of ['reco-v1', 'markup-v1', 'cs-bot-v1']) {
+      const r = await fetch(`${BASE_URL}/api/v1/admin/experiments/${ex}`, { headers: ah });
+      if (!r.ok) throw new Error(`${ex} HTTP ${r.status}`);
+    }
   });
 
   // ---------------------------------------------------------------------------

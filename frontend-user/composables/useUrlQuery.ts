@@ -30,7 +30,7 @@ export function todayIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 export function addDaysIso(s: string, n: number): string {
-  const [y, m, d] = s.split('-').map(Number)
+  const [y = NaN, m = NaN, d = NaN] = s.split('-').map(Number)
   const dt = new Date(y, m - 1, d + n)
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
 }
@@ -40,7 +40,7 @@ export function daysBetween(a: string, b: string): number {
 const WEEK = ['일', '월', '화', '수', '목', '금', '토']
 export function fmtDay(s: string, long = false): string {
   if (!s) return ''
-  const [y, m, d] = s.split('-').map(Number)
+  const [y = NaN, m = NaN, d = NaN] = s.split('-').map(Number)
   const w = WEEK[new Date(y, m - 1, d).getDay()]
   return long ? `${m}월 ${d}일 (${w})` : `${m}.${String(d).padStart(2, '0')}(${w})`
 }

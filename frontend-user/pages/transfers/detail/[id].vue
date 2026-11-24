@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useCatalogDetail, jsonLdScript } from '~/composables/useCatalogDetail'
+import { useCatalogDetail } from '~/composables/useCatalogDetail'
+import { jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
@@ -18,7 +19,7 @@ const facts = computed(() => {
     ['최대 탑승 인원', x.max_passengers ? `${x.max_passengers}명` : null],
     ['최대 수하물', x.max_luggage ? `${x.max_luggage}개` : null],
     ['항공편 추적', x.flight_tracking ? '지원 (예약 시 요청사항에 항공편명을 적어주세요)' : null]
-  ] as [string, string | null][]).filter(([, v]) => v)
+  ] as [string, string | null][]).filter((f): f is [string, string] => !!f[1])
 })
 
 useHead(() => {

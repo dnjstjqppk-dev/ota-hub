@@ -320,7 +320,7 @@ onBeforeUnmount(() => clearInterval(timer))
           </div>
 
           <div class="mt-5 flex flex-wrap gap-2">
-            <button v-if="!quote" type="button" :disabled="busy" class="btn-primary px-6 py-3" data-testid="get-quote" @click="getQuote">{{ busy ? '확인 중…' : '금액 확인' }}</button>
+            <button v-if="!quote" type="button" :disabled="busy" class="btn-primary px-6 py-3" data-testid="get-quote" @click="() => getQuote()">{{ busy ? '확인 중…' : '금액 확인' }}</button>
             <template v-else-if="step === 'details'">
               <button type="button" class="btn-secondary" @click="quote = null">일정·인원 변경</button>
               <button type="button" class="btn-primary px-6" data-testid="to-travelers" @click="step = 'travelers'">다음: 예약자 정보<AppIcon name="arrow-right" :size="16" /></button>

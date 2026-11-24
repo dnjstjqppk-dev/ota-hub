@@ -22,7 +22,7 @@ const CONTRACT: Record<string, { label: string; tone: any }> = {
 }
 const category = ref('')
 const query = ref('')
-const byKey = computed(() => new Map(list.data.value.map((f: any) => [f.key, f])))
+const byKey = computed(() => new Map<string, any>(list.data.value.map((f: any) => [f.key, f])))
 const shown = computed(() => {
   const t = query.value.trim().toLowerCase()
   return list.data.value.filter((f: any) =>

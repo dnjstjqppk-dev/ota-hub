@@ -40,7 +40,7 @@ const viewMonth = ref('') // YYYY-MM-01 of the first visible month (desktop)
 // ------------------------------------------------------------------ date helpers (local time, ISO strings)
 const pad = (n: number) => String(n).padStart(2, '0')
 const toIso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-const fromIso = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d) }
+const fromIso = (s: string) => { const [y = NaN, m = NaN, d = NaN] = s.split('-').map(Number); return new Date(y, m - 1, d) }
 const addDays = (s: string, n: number) => { const d = fromIso(s); d.setDate(d.getDate() + n); return toIso(d) }
 const addMonths = (s: string, n: number) => { const d = fromIso(s); return toIso(new Date(d.getFullYear(), d.getMonth() + n, 1)) }
 const diff = (x: string, y: string) => Math.round((fromIso(y).getTime() - fromIso(x).getTime()) / 86400000)
@@ -135,7 +135,7 @@ function onKey(e: KeyboardEvent) {
   const moves: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }
   if (e.key in moves && focusDay.value) {
     e.preventDefault()
-    const next = addDays(focusDay.value, moves[e.key])
+    const next = addDays(focusDay.value, moves[e.key] ?? 0)
     if (next < minDay.value || next > maxDay.value) return
     focusDay.value = next
     if (!isPhone.value) {

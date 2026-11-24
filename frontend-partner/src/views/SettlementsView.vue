@@ -88,7 +88,7 @@ function csvCell(v: unknown): string {
 
 /** Real CSV export of the currently visible ledger (no server round-trip needed). Prepends a U+FEFF BOM so Excel opens UTF-8 correctly. */
 const handleDownload = () => {
-  const rows: string[][] = activeTab.value === 'realtime'
+  const rows: unknown[][] = activeTab.value === 'realtime'
     ? [
         ['정산ID', '일시', '예약번호', '도메인', '고객결제액', '수수료', '입금액', '이행상태', '정산상태'],
         ...orderSettlements.value.map(s => [s.id, s.created_at, s.booking_id, s.domain_type, s.gross_amount_minor, s.commission_amount_minor, s.seller_payout_minor, s.fulfillment_status, s.settlement_status])

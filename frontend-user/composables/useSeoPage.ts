@@ -11,11 +11,10 @@ export interface SeoPageInput {
   type?: 'website' | 'article'
 }
 
+// GAP-01 short-term: ko only. Restore /en /ja /zh entries when Phase B ships
+// real translations — until then no alternate may point at untranslated URLs.
 export const SEO_LOCALES = [
   { code: 'ko', prefix: '' },
-  { code: 'en', prefix: '/en' },
-  { code: 'ja', prefix: '/ja' },
-  { code: 'zh', prefix: '/zh' },
 ] as const
 
 /** "도쿄 호텔·숙소 예약" — city/country prefix the base phrase for list/landing pages. */

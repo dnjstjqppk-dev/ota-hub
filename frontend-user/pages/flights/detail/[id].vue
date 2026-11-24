@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useCatalogDetail, jsonLdScript } from '~/composables/useCatalogDetail'
+import { useCatalogDetail } from '~/composables/useCatalogDetail'
+import { jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
@@ -22,7 +23,7 @@ const facts = computed(() => {
     ['좌석 등급', CABIN_KO[x.cabin_class] || x.cabin_class],
     ['무료 위탁 수하물', x.free_baggage_kg ? `${x.free_baggage_kg}kg` : null],
     ['잔여 좌석(참고)', Number.isFinite(x.available_seats) ? `${x.available_seats}석` : null]
-  ] as [string, string | null][]).filter(([, v]) => v)
+  ] as [string, string | null][]).filter((f): f is [string, string] => !!f[1])
 })
 
 useHead(() => {

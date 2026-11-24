@@ -73,6 +73,13 @@ jobs:
       - name: Typecheck worker
         run: npm run typecheck
 
+      # GAP-04: the 3 portals (57% of all LOC) shipped without any type gate.
+      - name: Typecheck portals
+        run: |
+          npm --prefix frontend-user run typecheck
+          npm --prefix frontend-admin run typecheck
+          npm --prefix frontend-partner run typecheck
+
       - name: Validate D1 migrations on a fresh local DB
         run: npx wrangler d1 migrations apply ota_local --local -c wrangler.local.jsonc
 

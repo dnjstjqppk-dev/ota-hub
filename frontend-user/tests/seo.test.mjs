@@ -18,7 +18,10 @@ test('seo head carries canonical, hreflang set, and OG/Twitter', () => {
   const h = seoHead({ site: SITE, path: '/hotels/list', title: '호텔·숙소', description: '비교하고 예약하세요.', city: '도쿄' })
   assert.equal(h.title, '도쿄 호텔·숙소')
   assert.ok(h.link.some((l) => l.rel === 'canonical' && l.href === `${SITE}/hotels/list`))
-  for (const lang of ['ko', 'en', 'ja', 'zh', 'x-default']) assert.ok(h.link.some((l) => l.rel === 'alternate' && l.hreflang === lang), lang)
+  // GAP-01 short-term: ko + x-default only. Untranslated /en /ja /zh alternates
+  // must stay out until Phase B ships real translations (no false-multilingual SEO).
+  for (const lang of ['ko', 'x-default']) assert.ok(h.link.some((l) => l.rel === 'alternate' && l.hreflang === lang), lang)
+  for (const lang of ['en', 'ja', 'zh']) assert.ok(!h.link.some((l) => l.rel === 'alternate' && l.hreflang === lang), `no ${lang}`)
   assert.ok(h.meta.some((m) => m.property === 'og:url' && m.content === `${SITE}/hotels/list`))
   assert.ok(h.meta.some((m) => m.name === 'twitter:card'))
 })

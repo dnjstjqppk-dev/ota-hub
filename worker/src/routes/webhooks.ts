@@ -10,18 +10,21 @@
  *    holds released, coins restored, and payouts voided or claimed back (B1).
  * Duplicate deliveries are acknowledged without re-processing.
  *
- * Authentication (B1): Toss signs no webhook payload, so the PG lookup IS the
- * verification, and the registered webhook URL should carry an unguessable
- * `?key=` query: when TOSS_WEBHOOK_SECRET is set, calls without it are
- * rejected before any lookup. Forged events can at most enqueue a lookup
- * that the PG then rejects. Responses are deliberately generic: unknown
- * order IDs get the same shape as known-but-settled ones, so the endpoint
- * is not an order-existence oracle.
+ * Authentication (B1, GAP-05): Toss signs no webhook payload, so the PG
+ * lookup IS the verification, and the registered webhook URL should carry
+ * an unguessable `?key=` query: when TOSS_WEBHOOK_SECRET is set, calls
+ * without a matching key are rejected before any lookup (constant-time
+ * compare). Production without a registered secret rejects everything
+ * (fail-closed, same as Stripe); development/test stay open for the suites.
+ * Forged events can at most enqueue a lookup that the PG then rejects.
+ * Responses are deliberately generic: unknown order IDs get the same shape
+ * as known-but-settled ones, so the endpoint is not an order-existence
+ * oracle.
  */
-import type { Env } from "../env.ts";
+import { type Env, isNonProduction } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { rateLimit } from "../lib/auth.ts";
-import { newId } from "../lib/crypto.ts";
+import { constantTimeEqual, newId } from "../lib/crypto.ts";
 import { getPaymentProvider } from "../payments/provider.ts";
 import { stripeDispute, verifyStripeSignature } from "../payments/stripe.ts";
 import { applyExternalCancel, getBooking, reconcilePaymentByLookup } from "../services/booking-service.ts";
@@ -36,8 +39,16 @@ export async function handleWebhooks(request: Request, env: Env, url: URL): Prom
   if (url.pathname !== "/api/v1/webhooks/toss" || request.method !== "POST") return null;
   // Shared-secret check on the registered URL (?key=...). Toss calls the exact
   // URL registered in its console, so the secret rides along on real events.
-  if (env.TOSS_WEBHOOK_SECRET && url.searchParams.get("key") !== env.TOSS_WEBHOOK_SECRET) {
-    throw new HttpError(403, "INVALID_WEBHOOK_SECRET", "웹훅 인증에 실패했습니다.");
+  // GAP-05: constant-time compare (no early-exit oracle), and production
+  // without a registered secret rejects everything — same fail-closed rule
+  // as the Stripe branch below. Development/test stay open for the suites.
+  const hookSecret = (env.TOSS_WEBHOOK_SECRET || "").trim();
+  if (hookSecret) {
+    if (!constantTimeEqual(url.searchParams.get("key") || "", hookSecret)) {
+      throw new HttpError(403, "INVALID_WEBHOOK_SECRET", "웹훅 인증에 실패했습니다.");
+    }
+  } else if (!isNonProduction(env)) {
+    throw new HttpError(403, "WEBHOOK_NOT_CONFIGURED", "웹훅 시크릿이 등록되지 않았습니다.");
   }
   // #99: PG callbacks are low-volume; 2/s sustained is plenty and a 5x
   // tighter bound against quota-filling floods than the old 600/min.

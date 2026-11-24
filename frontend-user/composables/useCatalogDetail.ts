@@ -27,10 +27,7 @@ export async function useCatalogDetail(apiPath: string, id: string, fallback: Re
   return { item, state, reload: load }
 }
 
-/** JSON-LD script entry with "<" escaped so catalog text can never close the script tag. */
-export function jsonLdScript(data: Record<string, unknown>) {
-  return { type: 'application/ld+json' as const, innerHTML: JSON.stringify(data).replace(/</g, '\\u003c') }
-}
+// NOTE: jsonLdScript lives in useJsonLd.ts (single source; removed a duplicate export here).
 
 export const BOOKABLE_REASON_KO: Record<string, string> = {
   SUPPLIER_NOT_REGISTERED: '공급사 정보가 등록되지 않은 상품입니다.',

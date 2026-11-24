@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useCatalogDetail, jsonLdScript } from '~/composables/useCatalogDetail'
+import { useCatalogDetail } from '~/composables/useCatalogDetail'
+import { jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
@@ -18,7 +19,7 @@ const facts = computed(() => {
     ['소요 시간', x.duration_minutes ? hm(Number(x.duration_minutes)) : null],
     ['좌석 등급', x.seat_class],
     ['잔여 좌석(참고)', Number.isFinite(x.available_seats) ? `${x.available_seats}석` : null]
-  ] as [string, string | null][]).filter(([, v]) => v)
+  ] as [string, string | null][]).filter((f): f is [string, string] => !!f[1])
 })
 
 useHead(() => {

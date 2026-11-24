@@ -9,7 +9,7 @@
  *   fallback list.
  * - WAI-ARIA combobox: aria-expanded / aria-controls / aria-activedescendant, role=listbox/option.
  */
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 
 const props = withDefaults(defineProps<{
   modelValue: string
@@ -32,7 +32,9 @@ const inputId = computed(() => props.inputId || `${uid}-input`)
 const text = ref(props.modelValue)
 watch(() => props.modelValue, (v) => { if (v !== text.value) text.value = v })
 
-const items = ref<T[]>([]) as { value: T[] }
+// Ref (not UnwrapRef): T is opaque row data, replaced wholesale — template
+// auto-unwrap then yields T, and itemKey/select keep their declared types.
+const items = ref<T[]>([]) as Ref<T[]>
 const open = ref(false)
 const active = ref(-1)
 const state = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')

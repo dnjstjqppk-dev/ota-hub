@@ -1,4 +1,5 @@
 import type { Env } from "../env.ts";
+import { constantTimeEqual } from "../lib/crypto.ts";
 import type { ConfirmResult, LookupResult, PaymentProvider, RefundResult } from "./provider.ts";
 
 /**
@@ -179,7 +180,7 @@ export async function verifyStripeSignature(rawBody: string, header: string | nu
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
     const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${rawBody}`));
     const hex = Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, "0")).join("");
-    return hex === v1.toLowerCase() && v1.length === 64;
+    return v1.length === 64 && constantTimeEqual(hex, v1.toLowerCase());
   } catch {
     return false;
   }

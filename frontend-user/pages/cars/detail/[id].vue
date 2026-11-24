@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useCatalogDetail, jsonLdScript } from '~/composables/useCatalogDetail'
+import { useCatalogDetail } from '~/composables/useCatalogDetail'
+import { jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
@@ -19,7 +20,7 @@ const facts = computed(() => {
     ['변속기', x.transmission === 'AUTO' ? '자동' : x.transmission === 'MANUAL' ? '수동' : x.transmission],
     ['인수 장소', x.pickup_location],
     ['보험', x.insurance_included ? '기본 보험 포함' : '보험 불포함 (현장 가입 필요 여부는 렌터카 회사 규정을 따름)']
-  ] as [string, string | null][]).filter(([, v]) => v)
+  ] as [string, string | null][]).filter((f): f is [string, string] => !!f[1])
 })
 
 useHead(() => {

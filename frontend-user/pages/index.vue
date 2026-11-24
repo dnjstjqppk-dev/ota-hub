@@ -6,28 +6,26 @@
  * promotions that are active and not expired are advertised.
  */
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { CATEGORIES } from '~/config/navigation'
 
-const route = useRoute()
 const currency = useCurrencyStore()
-const currentLocale = (route.query.locale as string) || 'ko-kr'
 
+// GAP-01 short-term: single ko canonical. The old ?locale= alternates pointed
+// at dead kr./www. hosts; restore locale variants when Phase B translates.
 useHead({
   title: '항공권·호텔·기차·렌터카 예약',
-  htmlAttrs: { lang: currentLocale === 'ko-kr' ? 'ko-KR' : 'en-US' },
+  htmlAttrs: { lang: 'ko-KR' },
   meta: [
     { name: 'description', content: '항공권, 호텔, 기차표, 렌터카, 공항 이동과 투어·티켓을 getfortrip에서 예약하세요. 결제 전 최종 금액을 확정하고, 공급사 확정 후에만 예약 확정을 안내합니다.' },
     { property: 'og:site_name', content: 'getfortrip' },
-    { property: 'og:url', content: `https://kr.getfortrip.com/?locale=${currentLocale}` }
+    { property: 'og:url', content: 'https://getfortrip.com/' }
   ],
   link: [
-    { rel: 'canonical', href: `https://kr.getfortrip.com/?locale=${currentLocale}` },
-    { rel: 'alternate', hreflang: 'ko-kr', href: 'https://kr.getfortrip.com/?locale=ko-kr' },
-    { rel: 'alternate', hreflang: 'en-us', href: 'https://www.getfortrip.com/?locale=en-us' },
-    { rel: 'alternate', hreflang: 'x-default', href: 'https://kr.getfortrip.com/?locale=ko-kr' }
+    { rel: 'canonical', href: 'https://getfortrip.com/' },
+    { rel: 'alternate', hreflang: 'ko', href: 'https://getfortrip.com/' },
+    { rel: 'alternate', hreflang: 'x-default', href: 'https://getfortrip.com/' }
   ]
 })
 

@@ -1,8 +1,9 @@
 # P1-1 (2026-11-22 audit): ota-partner had zero security headers. Mirrors
-# worker SECURITY_HEADERS (no CSP: default-src 'none' would break the SPA
-# shell — same rationale as hub serveAssets in worker/src/lib/http.ts).
+# worker SECURITY_HEADERS, plus the GAP-02 page CSP (CSR shell: strict
+# scripts, no PG hosts — the console never loads Toss).
 /*
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: SAMEORIGIN
   Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' https://cdn.jsdelivr.net; img-src 'self' https: data: blob:; font-src 'self' https://cdn.jsdelivr.net data:; connect-src 'self' https://ota-hub.dnjstjqppk.workers.dev https://getfortrip.com https://*.sentry.io https://*.ingest.sentry.io; form-action 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none'
