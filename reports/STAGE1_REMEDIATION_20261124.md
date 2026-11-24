@@ -62,10 +62,14 @@
 - 운영 원격 백업(읽기전용): 93/93 테이블·799행 덤프 + **RESTORE-VERIFY PASS**
 - 위생 SQL: 로컬 D1 전건 성공 + 효과 확인 (수용량 NULL 0건)
 
-## 5. 남은 승인 필요 항목 (미실행)
+## 5. 승인 항목 실행 결과 (2026-11-24 후반 — 전건 완료)
 
-1. **위생 SQL 운영 실행**: `npx wrangler d1 execute ota_production --remote --file scripts/prod-hygiene-20261122.sql`
-   (실행 전 `node scripts/backup-d1.js --out backups` 선행).
-2. **배포**: P0-1·P1-1·P1-4는 배포 후 운영에서 200/헤더 재측정 필요
-   (목록/상세 200, 3포털 보안 헤더 4종).
-3. 배포 후 `Weekly D1 Backup` 워크플로우 수동 실행 1회로 녹색 확인 권장.
+1. **위생 SQL 운영 실행**: 사전 백업 후 실행, 사후 확인 전건 일치
+   (제휴 3사 `is_active=0`·키 삭제, 수용량 NULL 0건, 호텔 14/14 좌표, 활성 파트너 3건).
+2. **배포**: [`5eb9583`](https://github.com/dnjstjqppk-dev/ota-hub/commit/5eb9583) 푸시 →
+   CI [#45321459120](https://github.com/dnjstjqppk-dev/ota-hub/actions/runs/45321459120) 성공 후 배포.
+   운영 재측정: 목록 6종·상세 3종 **전부 200** (P0-1 해소), 3포털 보안 헤더 4종 송출 (P1-1 해소).
+3. **`Weekly D1 Backup` 수동 실행**: [#45324043667](https://github.com/dnjstjqppk-dev/ota-hub/actions/runs/45324043667)
+   **success** — 덤프 93/93 테이블·820행, `RESTORE-VERIFY PASS` (P0-2 해소).
+
+Stage 1 코드·운영 조치는 종료. 정식 상용화는 Stage 2~3(도메인·시크릿·사업자·계약·법무) 완료 후 재판정.
