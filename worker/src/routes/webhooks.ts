@@ -25,7 +25,7 @@ import { type Env, isNonProduction } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { rateLimit } from "../lib/auth.ts";
 import { constantTimeEqual, newId } from "../lib/crypto.ts";
-import { getPaymentProviderFor } from "../payments/provider.ts";
+import { getPaymentProvider, getPaymentProviderFor } from "../payments/provider.ts";
 import { stripeDispute, verifyStripeSignature } from "../payments/stripe.ts";
 import { applyExternalCancel, getBooking, reconcilePaymentByLookup } from "../services/booking-service.ts";
 
@@ -70,11 +70,8 @@ export async function handleWebhooks(request: Request, env: Env, url: URL): Prom
     return json({ success: true, duplicate: true, reconciled: dup.outcome === "RECONCILED", action, outcome: action });
   }
 
-  const provider = getPaymentProviderFor(env, "toss");
-  if (!provider) {
-    await record(env, eventId, eventType, body, "IGNORED_NO_PROVIDER");
-    return json({ success: true, reconciled: false, action: "IGNORED_NO_PROVIDER" });
-  }
+  // Unknown orders answer generically WITHOUT needing any provider: there is
+  // nothing to look up, and the response must not reveal config either.
   const b = await getBooking(env, orderId);
   if (!b) {
     // Recorded distinctly server-side, answered generically: same shape as a
@@ -94,8 +91,12 @@ export async function handleWebhooks(request: Request, env: Env, url: URL): Prom
   const cancelHint = /CANCEL|CHARGEBACK|ABORTED|EXPIRED/.test(hint);
   if (cancelHint) {
     const captured = await env.DB.prepare("SELECT id, provider, provider_payment_key, amount_minor FROM payments WHERE booking_id = ? AND status IN ('CAPTURED', 'PARTIALLY_REFUNDED') ORDER BY created_at").bind(b.id).all<any>();
+    // Multi-PG: each payment is re-queried through its OWN provider; rows with
+    // an unresolvable provider fall back to the default, then skip quietly.
+    const fallback = getPaymentProvider(env);
     for (const p of captured.results || []) {
-      const pp = getPaymentProviderFor(env, p.provider) || provider;
+      const pp = getPaymentProviderFor(env, p.provider) || fallback;
+      if (!pp) continue;
       const r = await pp.lookup({ orderId: b.id, paymentKey: p.provider_payment_key, amountMinor: p.amount_minor });
       if (r.outcome === "CANCELED" || r.outcome === "PARTIAL_CANCELED") {
         const applied = await applyExternalCancel(env, b.id, { paymentId: p.id, canceledMinor: r.canceledMinor, cancelReason: r.cancelReason, transactionKey: r.transactionKey });
