@@ -237,18 +237,29 @@ npx wrangler secret put PII_ENC_KEY
 
 ```powershell
 # Cloudflare 대시보드 → 각 워커 → Settings → Domains & Routes → Add Custom Domain:
-#   ota-hub     → getfortrip.com (+ www)
+#   ota-user    → getfortrip.com (+ www)   # TG-15: SSR 포털이 apex 담당
 #   ota-admin   → admin.getfortrip.com
 #   ota-partner → partner.getfortrip.com
+# 같은 화면 → Add Route (apex의 API 경로만 hub로):
+#   getfortrip.com/api/* → ota-hub
+# (구 절차의 "apex → ota-hub"는 TG-15 이전 토폴로지라 폐기 — 2026-11-24.
+#  SSR 포털을 apex에 두지 않으면 검색·공유·브랜드 URL이 workers.dev에 남는다.)
 ```
 
-그 뒤 `wrangler.jsonc` vars가 실도메인을 가리키는지 확인하고 재배포
-(`PUBLIC_SITE_URL=https://getfortrip.com`,
-`PARTNER_SITE_URL`을 `https://partner.getfortrip.com`으로 변경
-(현재 선언값은 `ota-partner` workers.dev),
-`ALLOWED_ORIGINS`에 실도메인 포함 확인).
+그 뒤 vars가 실도메인을 가리키는지 확인하고 재배포:
+- 루트 `wrangler.jsonc`: `PUBLIC_SITE_URL=https://getfortrip.com` (이미 선언됨),
+  `PARTNER_SITE_URL`을 `https://partner.getfortrip.com`으로 변경
+  (현재 선언값은 `ota-partner` workers.dev),
+  `ALLOWED_ORIGINS`에 실도메인 4종 포함 확인 (이미 선언됨).
+- `frontend-user/wrangler.jsonc`: `NUXT_PUBLIC_API_BASE`를 `/api/v1`로 변경
+  (브라우저는 apex route 경유 same-origin 호출. SSR은 서비스 바인딩 그대로 —
+  `00.hub-binding.server.ts`, P0-1).
+- admin/partner 포털은 `VITE_API_BASE_URL` 미설정 시 workers.dev hub를 계속
+  호출한다 (CORS 허용済). 실도메인 API로 옮기려면 빌드 시
+  `VITE_API_BASE_URL=https://getfortrip.com/api/v1` 주입 후 재배포.
 
-확인: 3개 실도메인 루트 200 + `/api/v1/health` 200.
+확인: 3개 실도메인 루트 200 + `https://getfortrip.com/api/v1/health` 200
++ 카탈로그 목록/상세 200 (route 경유 확인).
 
 ## 5. 메일 발송 (Resend)
 

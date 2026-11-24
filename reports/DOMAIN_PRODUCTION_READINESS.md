@@ -1,5 +1,11 @@
 # getforTrip — 자체 도메인(getfortrip.com) 연동 및 Production 인프라 준비도 보고서
 
+> **SUPERSEDED (2026-11-24):** 이 문서의 토폴로지(apex → `ota-hub`,
+> `api.getfortrip.com` → Cloud Run Go 백엔드, Pages)는 TG-15 이전 구상이라
+> 현실과 다르다. 현행 정본은 [`docs/GO_LIVE_CHECKLIST.md`](../docs/GO_LIVE_CHECKLIST.md)
+> 4단계이다: apex → `ota-user`(SSR), `getfortrip.com/api/*` route → `ota-hub`,
+> 브라우저는 same-origin `/api/v1`, SSR은 서비스 바인딩. 아래 내용은 참고용으로만 보관한다.
+
 **문서 코드:** INFRA-AUDIT-2026-DOM01  
 **작성자:** DevOps / SRE 리드 & CTO  
 **대상 도메인:** `getfortrip.com` (Apex), `www.getfortrip.com`, `admin.getfortrip.com`, `api.getfortrip.com`  
