@@ -14,6 +14,17 @@ export default defineNuxtConfig({
   // Private, query-driven pages render client-side only. A prerendered copy would hydrate with the
   // build-time route (no query string), so e.g. /checkout?domain=... or the PG return URL lost its params.
   routeRules: {
+    // P1-1 (2026-11-22 audit): ota-user sent zero security headers. Mirrors
+    // worker SECURITY_HEADERS (no CSP: it would break the SSR shell — same
+    // rationale as hub serveAssets in worker/src/lib/http.ts).
+    '/**': {
+      headers: {
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'SAMEORIGIN',
+        'Referrer-Policy': 'strict-origin-when-cross-origin'
+      }
+    },
     '/checkout': { ssr: false },
     '/checkout/**': { ssr: false },
     '/booking/**': { ssr: false },

@@ -134,7 +134,9 @@ function main() {
   const st = fs.statSync(dumpPath);
   if (st.size === 0) fail("dump is empty");
   const dump = fs.readFileSync(dumpPath, "utf8");
-  const dumpedTables = new Set([...dump.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?["`[]?(\w+)/gi)].map((m) => m[1].toLowerCase()));
+  // P0-2: the dump carries the FTS5 virtual table (CREATE VIRTUAL TABLE) —
+  // it must count as a dumped table or every verify fails on catalog_fts.
+  const dumpedTables = new Set([...dump.matchAll(/CREATE (?:VIRTUAL )?TABLE (?:IF NOT EXISTS )?["`[]?(\w+)/gi)].map((m) => m[1].toLowerCase()));
   const dumpedUser = [...dumpedTables].filter((t) => !t.startsWith("_cf_") && !t.startsWith("d1_") && !t.startsWith("sqlite_"));
   console.log(`[restore-verify] dump ${(st.size / 1024).toFixed(1)} KiB, ${dumpedUser.length} user tables`);
   if (!dumpedUser.length) fail("no CREATE TABLE statements in dump");

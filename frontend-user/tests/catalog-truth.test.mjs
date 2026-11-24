@@ -13,3 +13,18 @@ test('hotel catalogue carries no fixture scores or reviews', () => {
     assert.deepEqual(h.reviews, [], `${h.id}: no fixture review copy`)
   }
 })
+
+// P1-2 (2026-11-22 audit): the seed fallback stamped every hotel with one
+// Roppongi point. Each property keeps real, distinct coordinates.
+test('hotel catalogue carries real distinct coordinates', () => {
+  const seen = new Set()
+  for (const h of MASTER_HOTEL_CATALOG) {
+    assert.equal(typeof h.latitude, 'number', `${h.id}: latitude present`)
+    assert.equal(typeof h.longitude, 'number', `${h.id}: longitude present`)
+    assert.ok(h.latitude >= -90 && h.latitude <= 90, `${h.id}: latitude in range`)
+    assert.ok(h.longitude >= -180 && h.longitude <= 180, `${h.id}: longitude in range`)
+    const key = `${h.latitude},${h.longitude}`
+    assert.ok(!seen.has(key), `${h.id}: coordinates distinct`)
+    seen.add(key)
+  }
+})

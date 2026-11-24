@@ -476,8 +476,11 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       if (!(ENTITY_STATUSES as readonly string[]).includes(status)) {
         throw new HttpError(400, "INVALID_STATUS", `status는 ${ENTITY_STATUSES.join(" | ")} 중 하나여야 합니다.`);
       }
-      if (status === "ACTIVE" && (!next.business_registration_no || !next.travel_agency_license_no || !next.ecommerce_registration_no || !next.representative_name || !next.cs_phone)) {
-        throw new HttpError(409, "ENTITY_INCOMPLETE", "ACTIVE 전환에는 사업자등록번호, 관광사업(여행업) 등록번호, 통신판매업 신고번호, 대표자, 고객센터 연락처가 필요합니다.");
+      // P1-4 (2026-11-22 audit): the storefront discloses mail-order
+      // (통신판매업) registration only (GlobalFooter) — the travel-agency
+      // license stays an optional field, never an ACTIVE gate.
+      if (status === "ACTIVE" && (!next.business_registration_no || !next.ecommerce_registration_no || !next.representative_name || !next.cs_phone)) {
+        throw new HttpError(409, "ENTITY_INCOMPLETE", "ACTIVE 전환에는 사업자등록번호, 통신판매업 신고번호, 대표자, 고객센터 연락처가 필요합니다.");
       }
     }
     await db.batch([

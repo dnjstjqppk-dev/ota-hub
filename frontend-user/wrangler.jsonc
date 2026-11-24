@@ -16,6 +16,9 @@
     "not_found_handling": "none",
     "run_worker_first": true
   },
+  // P0-1 (2026-11-22 audit): SSR must NOT fetch the hub over workers.dev
+  // (Error 1042). 00.hub-binding.server.ts forwards those calls here.
+  "services": [{ "binding": "API", "service": "ota-hub" }],
   "vars": {
     "NUXT_PUBLIC_API_BASE": "https://ota-hub.dnjstjqppk.workers.dev/api/v1",
     "NUXT_API_BASE_SERVER": "https://ota-hub.dnjstjqppk.workers.dev/api/v1"

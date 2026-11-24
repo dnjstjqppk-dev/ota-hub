@@ -536,9 +536,11 @@ test("#24/#25: admin registry APIs — affiliate partners, entities, contracts",
   const ents = (await api("GET", "/api/v1/admin/entities", { token: ADMIN })).data.entities;
   assert.ok(ents.length >= 1);
   const ent = ents.find((e) => e.status !== "ACTIVE") || ents[0];
-  assert.equal((await api("PATCH", `/api/v1/admin/entities/${ent.id}`, { token: ADMIN, body: { status: "ACTIVE", business_registration_no: "", travel_agency_license_no: "", ecommerce_registration_no: "", representative_name: "", cs_phone: "" } })).data.code, "ENTITY_INCOMPLETE");
-  const full = await api("PATCH", `/api/v1/admin/entities/${ent.id}`, { token: ADMIN, body: { status: "ACTIVE", legal_name: "E2E 법인", business_registration_no: "000-00-00000", travel_agency_license_no: "제2026-000호", ecommerce_registration_no: "제2026-서울-0000호", representative_name: "김대표", cs_phone: "02-0000-0000" } });
+  assert.equal((await api("PATCH", `/api/v1/admin/entities/${ent.id}`, { token: ADMIN, body: { status: "ACTIVE", business_registration_no: "", ecommerce_registration_no: "", representative_name: "", cs_phone: "" } })).data.code, "ENTITY_INCOMPLETE");
+  // P1-4: the travel-agency license is optional — ACTIVE without it, then it stores when given.
+  const full = await api("PATCH", `/api/v1/admin/entities/${ent.id}`, { token: ADMIN, body: { status: "ACTIVE", legal_name: "E2E 법인", business_registration_no: "000-00-00000", ecommerce_registration_no: "제2026-서울-0000호", representative_name: "김대표", cs_phone: "02-0000-0000" } });
   assert.equal(full.status, 200, JSON.stringify(full.data));
+  assert.equal((await api("PATCH", `/api/v1/admin/entities/${ent.id}`, { token: ADMIN, body: { travel_agency_license_no: "제2026-000호" } })).status, 200);
   const cc = await api("POST", "/api/v1/admin/contracts", { token: ADMIN, body: { entityId: ent.id, contractType: "SUPPLIER", counterparty: "E2E 상대방" } });
   assert.equal(cc.status, 201, JSON.stringify(cc.data));
   assert.equal((await api("PATCH", `/api/v1/admin/contracts/${cc.data.id}`, { token: ADMIN, body: { status: "ACTIVE" } })).status, 200);
@@ -1938,7 +1940,7 @@ test("entities: go-live gate transitions are validated and logged", async () => 
   sql(`INSERT INTO business_entities (id, entity_type, legal_name, status) VALUES ('${eid}', 'CORPORATION', 'E2E 법인', 'DRAFT')`);
   try {
     assert.equal((await api("PATCH", `/api/v1/admin/entities/${eid}`, { token: ADMIN, body: { status: "ACTIVE" } })).data.code, "ENTITY_INCOMPLETE");
-    const full = { status: "ACTIVE", business_registration_no: "111-22-33333", travel_agency_license_no: "제2026-1호", ecommerce_registration_no: "제2026-서울-1호", representative_name: "김대표", cs_phone: "02-111-2222" };
+    const full = { status: "ACTIVE", business_registration_no: "111-22-33333", ecommerce_registration_no: "제2026-서울-1호", representative_name: "김대표", cs_phone: "02-111-2222" };
     assert.equal((await api("PATCH", `/api/v1/admin/entities/${eid}`, { token: ADMIN, body: full })).status, 200);
     const after = (await api("GET", "/api/v1/admin/entities", { token: ADMIN })).data.entities.find((e) => e.id === eid);
     assert.equal(after.status, "ACTIVE");

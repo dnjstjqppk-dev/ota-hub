@@ -100,7 +100,7 @@
 - [M] `scripts/verify-production.js:973-979` T41이 **실운영 payout을 settle**.
   dry-run 플래그 없음.
 - (m) [M] `scripts/verify-production.js:192` 운영 어드민 비번 폴백 하드코딩
-  (`AdminProdPass#2026_SecureKey`, Go `handlers.go:564`와 동일 문자열). 미설정 시 실로그인 시도.
+  (구체 문자열은 2026-11-24 redacted — 코드는 이미 정리되어 리포트 인용만 남아 있었음). 미설정 시 실로그인 시도.
 - [M] `scripts/verify-production.js:294-301` T12의 2xx 성공 분기가 assert 없음.
   운영이 예기치 판매해도 통과.
 - [M] notices 표면 커버리지 0: `admin.ts:354,357,883-891`, `catalog.ts:471`.

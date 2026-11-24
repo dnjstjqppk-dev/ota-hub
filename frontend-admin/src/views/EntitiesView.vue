@@ -22,7 +22,7 @@ const ENTITY_FIELDS: Array<{ key: string; label: string; required?: boolean }> =
   { key: 'business_registration_no', label: '사업자등록번호', required: true },
   { key: 'corporate_registration_no', label: '법인등록번호' },
   { key: 'tax_id', label: '세무 ID' },
-  { key: 'travel_agency_license_no', label: '여행업 등록번호', required: true },
+  { key: 'travel_agency_license_no', label: '여행업 등록번호(선택)' },
   { key: 'ecommerce_registration_no', label: '통신판매업 신고번호', required: true },
   { key: 'address', label: '사업장 주소' },
   { key: 'cs_phone', label: '고객센터 전화', required: true },

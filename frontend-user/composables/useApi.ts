@@ -2,6 +2,9 @@ export const useApiUrl = (path: string = ''): string => {
   const config = useRuntimeConfig()
   // TG-15: SSR fetches need an absolute API origin (relative URLs fail on the
   // ota-user worker). Browsers keep the relative base (same-origin + apex).
+  // P0-1 (2026-11-22 audit): on the worker these absolute hub URLs never hit
+  // the network — plugins/00.hub-binding.server.ts forwards them to ota-hub
+  // via the API service binding (workers.dev subrequests are blocked).
   const base = import.meta.server && (config as any).apiBaseServer
     ? (config as any).apiBaseServer as string
     : config.public.apiBase || '/api/v1'
