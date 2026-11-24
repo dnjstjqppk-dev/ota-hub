@@ -251,10 +251,20 @@ export async function markupMetrics(db: Db): Promise<MarkupMetrics[]> {
 
 /** Stored markup for a booking (joins through its quote). */
 export async function loadMarkupForBooking(db: FirstOnlyDb, bookingId: string): Promise<number> {
-  const row = await db.prepare(
-    "SELECT d.markup_minor AS m FROM pricing_decisions d JOIN bookings b ON b.quote_id = d.quote_id WHERE b.id = ?",
-  ).bind(bookingId).first<{ m: number }>();
-  return row ? Number(row.m || 0) : 0;
+  const b = await db.prepare("SELECT quote_id, details_json FROM bookings WHERE id = ?").bind(bookingId).first<{ quote_id: string; details_json: string }>();
+  if (!b) return 0;
+  // GAP-07: carts sum every leg's stored decision; single bookings read one row (unchanged).
+  let quoteIds = [b.quote_id];
+  try {
+    const cart = JSON.parse(b.details_json || "{}").cartQuoteIds;
+    if (Array.isArray(cart) && cart.length > 1) quoteIds = cart;
+  } catch { /* legacy shape: single quote */ }
+  let total = 0;
+  for (const qid of quoteIds) {
+    const row = await db.prepare("SELECT markup_minor AS m FROM pricing_decisions WHERE quote_id = ?").bind(qid).first<{ m: number }>();
+    total += row ? Number(row.m || 0) : 0;
+  }
+  return total;
 }
 
 /** Floor minor or null (mirrors assertAboveFloor's lookup without throwing). */

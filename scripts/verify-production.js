@@ -107,7 +107,7 @@ async function runVerificationSuite() {
     if (data.status !== 'healthy' && data.status !== 'ok') throw new Error(`Status is not healthy: ${data.status}`);
     if (data.checks && !data.checks.database) throw new Error(`DB disconnected: ${JSON.stringify(data.checks)}`);
     // #162: the public shape carries liveness only — provider wiring stays gated.
-    for (const f of ['paymentProvider', 'emailProvider', 'errorReporting', 'sellerEntityActive', 'piiEncryptionKey', 'cron']) {
+    for (const f of ['paymentProvider', 'emailProvider', 'smsProvider', 'errorReporting', 'sellerEntityActive', 'piiEncryptionKey', 'cron']) {
       if (data.checks && data.checks[f] !== undefined) throw new Error(`Public health leaks ${f}`);
     }
   });

@@ -39,7 +39,7 @@ export interface PaymentProvider {
   name: string;
   mode: "LIVE" | "SANDBOX";
   publicConfig(): Record<string, unknown>;
-  confirm(i: { orderId: string; paymentKey: string; amountMinor: number; currency: string; idempotencyKey: string }): Promise<ConfirmResult>;
+  confirm(i: { orderId: string; paymentKey: string; amountMinor: number; currency: string; idempotencyKey: string; returnUrl?: string }): Promise<ConfirmResult>;
   refund(i: { paymentKey: string; amountMinor: number; reason: string; idempotencyKey: string }): Promise<RefundResult>;
   lookup(i: { orderId: string; paymentKey: string | null; amountMinor: number }): Promise<LookupResult>;
 }
@@ -180,24 +180,51 @@ export function tossProvider(secretKey: string, clientKey: string | undefined, a
   };
 }
 
-/** Resolve the configured provider, or null if payments are disabled. */
-export function getPaymentProvider(env: Env): PaymentProvider | null {
-  const p = (env.PAYMENT_PROVIDER || "").toLowerCase();
-  if (p === "sandbox") {
+function resolveOne(env: Env, name: string): PaymentProvider | null {
+  if (name === "sandbox") {
     if (!isNonProduction(env)) return null; // never in production
     return sandboxProvider();
   }
-  if (p === "toss" && env.TOSS_SECRET_KEY) {
+  if (name === "toss" && env.TOSS_SECRET_KEY) {
     // TOSS_API_BASE exists only to aim the contract tests at a stub. Production always talks to Toss.
     const stub = isNonProduction(env) ? (env.TOSS_API_BASE || "").trim() : "";
     return tossProvider(env.TOSS_SECRET_KEY, env.TOSS_CLIENT_KEY, stub || undefined);
   }
-  if (p === "stripe" && env.STRIPE_SECRET_KEY) {
+  if (name === "stripe" && env.STRIPE_SECRET_KEY) {
     // Same stub rule as Toss. returnBase feeds the 3DS return_url.
     const stub = isNonProduction(env) ? (env.STRIPE_API_BASE || "").trim() : "";
     return stripeProvider(env.STRIPE_SECRET_KEY, env.STRIPE_PUBLISHABLE_KEY, stub || undefined, env.PUBLIC_SITE_URL);
   }
   return null;
+}
+
+/**
+ * GAP-06: every usable PG. PAYMENT_PROVIDER is a comma allowlist
+ * ("toss,stripe"); unset (or nothing usable) means payments are disabled.
+ * Single values behave exactly as before; the first listed entry is the
+ * default for old clients that never name a provider.
+ */
+export function availablePaymentProviders(env: Env): PaymentProvider[] {
+  const names = (env.PAYMENT_PROVIDER || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const seen = new Set<string>();
+  const out: PaymentProvider[] = [];
+  for (const n of names) {
+    if (seen.has(n)) continue;
+    seen.add(n);
+    const p = resolveOne(env, n);
+    if (p) out.push(p);
+  }
+  return out;
+}
+
+/** Resolve one PG by name (per-payment operations), or null when unusable. */
+export function getPaymentProviderFor(env: Env, name: string): PaymentProvider | null {
+  return availablePaymentProviders(env).find((p) => p.name === name) || null;
+}
+
+/** Resolve the default provider, or null if payments are disabled. */
+export function getPaymentProvider(env: Env): PaymentProvider | null {
+  return availablePaymentProviders(env)[0] || null;
 }
 
 export function requirePaymentProvider(env: Env): PaymentProvider {

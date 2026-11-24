@@ -19,6 +19,7 @@
     "test:e2e:stripe": "node --test worker/test/e2e/stripe.e2e.mjs",
     "test:e2e:suppliers": "node --test worker/test/e2e/suppliers.e2e.mjs",
     "test:e2e:replica": "node --test worker/test/e2e/replica.e2e.mjs",
+    "test:e2e:multi": "node --test worker/test/e2e/multipg.e2e.mjs",
     "typecheck": "tsc -p worker/tsconfig.json"
   },
   "devDependencies": {

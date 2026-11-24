@@ -73,6 +73,14 @@ const SECRET = "sk_test_contract";
 const last = () => seen[seen.length - 1];
 const p = () => stripeDirect(SECRET, "pk_test_x", stub);
 
+test("stripe: per-confirm returnUrl overrides the constructed 3DS return", async () => {
+  seen.length = 0;
+  await p().confirm({ orderId: "b", paymentKey: "pm_stub_ok_x", amountMinor: 1, currency: "KRW", idempotencyKey: "r1", returnUrl: "https://portal.test/checkout/payment-return?bookingId=b" });
+  assert.equal(last().form.return_url, "https://portal.test/checkout/payment-return?bookingId=b");
+  await p().confirm({ orderId: "b", paymentKey: "pm_stub_ok_x", amountMinor: 1, currency: "KRW", idempotencyKey: "r2" });
+  assert.equal(last().form.return_url, "https://getfortrip.com/api/v1/payments/stripe/return");
+});
+
 test("stripe: confirm approval maps succeeded to CAPTURED with form shape", async () => {
   seen.length = 0;
   const r = await p().confirm({ orderId: "bkg_1", paymentKey: "pm_stub_ok_x", amountMinor: 605000, currency: "KRW", idempotencyKey: "confirm_1" });

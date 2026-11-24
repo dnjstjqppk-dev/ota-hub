@@ -210,7 +210,6 @@ export async function flushOutbox(env: Env, limit?: number): Promise<{ sent: num
  * of queueing rows nobody will ever send (C3).
  */
 export function outboxInsert(db: D1Database, channel: "EMAIL" | "SMS" | "KAKAO", recipient: string, template: string, payload: unknown): D1PreparedStatement {
-  if (channel !== "EMAIL") throw new Error(`${channel} delivery is not implemented; no sender is configured.`);
   return db.prepare("INSERT INTO notification_outbox (id, channel, recipient, template, payload_json, status) VALUES (?, ?, ?, ?, ?, 'PENDING')")
     .bind(newId("ntf"), channel, recipient, template, JSON.stringify(payload));
 }

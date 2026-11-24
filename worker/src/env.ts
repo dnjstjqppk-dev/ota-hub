@@ -11,7 +11,7 @@ export interface Env {
   ALLOWED_ORIGINS?: string;
   PUBLIC_SITE_URL?: string;
   PARTNER_SITE_URL?: string;
-  /** "toss" | "sandbox" | unset. Unset = payments disabled. "sandbox" is refused outside development/test. */
+  /** GAP-06: comma allowlist, e.g. "toss,stripe" (first = default). Unset = payments disabled. "sandbox" is refused outside development/test. */
   PAYMENT_PROVIDER?: string;
   TOSS_SECRET_KEY?: string;
   TOSS_CLIENT_KEY?: string;
@@ -25,6 +25,17 @@ export interface Env {
   ALLOW_DRAFT_ENTITY?: string;
   /** Resend API key for transactional email. Unset = emails stay queued, API says NOT_CONFIGURED. */
   RESEND_API_KEY?: string;
+  /** GAP-09: Solapi SMS/Alimtalk. Key + secret + sender(all three) gate SMS; KAKAO_PFID gates Alimtalk. Unset = rows stay queued. */
+  SOLAPI_API_KEY?: string;
+  SOLAPI_API_SECRET?: string;
+  /** Registered sender number for SMS/LMS (e.g. "01012345678"). */
+  SOLAPI_SENDER?: string;
+  /** Solapi base override (tests/stubs). Default https://api.solapi.com. */
+  SOLAPI_API_BASE?: string;
+  /** Kakao channel sender key (pfId) for Alimtalk. */
+  SOLAPI_KAKAO_PFID?: string;
+  /** JSON map of our template name → approved Alimtalk template id. Missing = SMS fallback. */
+  SOLAPI_KAKAO_TEMPLATES?: string;
   /** Verified sender identity, e.g. "getfortrip <noreply@getfortrip.com>". */
   EMAIL_FROM?: string;
   /** Sentry DSN for unhandled-error reporting. Unset = reporting disabled (silent no-op). */

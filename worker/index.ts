@@ -100,6 +100,7 @@ async function health(request: Request, env: Env, url: URL): Promise<Response> {
       paymentProvider: pay ? `${pay.name}:${pay.mode}` : "DISABLED",
       sellerEntityActive: Boolean(entity),
       emailProvider: (env.RESEND_API_KEY || "").trim() ? "RESEND" : "NOT_CONFIGURED",
+      smsProvider: (env.SOLAPI_API_KEY || "").trim() ? "SOLAPI" : "NOT_CONFIGURED",
       errorReporting: (env.SENTRY_DSN || "").trim() ? "SENTRY" : "NOT_CONFIGURED",
       cron,
     },

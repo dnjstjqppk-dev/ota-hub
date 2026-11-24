@@ -120,6 +120,24 @@ async function runMaintenance() {
   } catch (e) { toast((e as Error).message, 'danger') } finally { runningJobs.value = false }
 }
 const ACTOR: Record<string, string> = { SYSTEM: '시스템', USER: '고객', ADMIN: '운영자', SUPPLIER: '공급사', PG: 'PG' }
+
+// GAP-08: itinerary-change approvals (involuntary requests wait here).
+const changes = ref<any[]>([])
+async function loadChanges() {
+  changes.value = id.value ? (await api(`/admin/change-requests?bookingId=${encodeURIComponent(id.value)}`)).requests || [] : []
+}
+watch(id, loadChanges, { immediate: true })
+const chNote = ref('')
+async function decideChange(reqId: string, decision: 'APPROVE' | 'REJECT') {
+  if (decision === 'REJECT' && !chNote.value.trim()) { toast('거절 사유를 입력해 주세요.', 'danger'); return }
+  busy.value = true
+  try {
+    await api(`/admin/change-requests/${encodeURIComponent(reqId)}`, { method: 'PATCH', json: { decision, note: chNote.value.trim() || undefined } })
+    toast(decision === 'APPROVE' ? '일정 변경을 승인했어요. 수수료가 면제됩니다.' : '일정 변경을 거절했어요.')
+    chNote.value = ''
+    await Promise.all([loadChanges(), detail.reload(), list.reload()])
+  } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
+}
 </script>
 
 <template>
@@ -228,6 +246,21 @@ const ACTOR: Record<string, string> = { SYSTEM: '시스템', USER: '고객', ADM
                 <button type="button" class="btn-ghost btn-sm" @click="form.mode = ''">취소</button>
               </div>
             </form>
+          </section>
+
+          <section v-if="changes.length" class="rounded-card border border-line bg-surface-sunken/60 p-4">
+            <h3 class="font-bold text-ink">일정 변경 요청</h3>
+            <ul class="mt-2 space-y-3">
+              <li v-for="c in changes" :key="c.id" class="rounded-field border border-line bg-surface p-3 text-sm">
+                <p class="font-medium">{{ c.type === 'INVOLUNTARY' ? '항공사 사유' : '자발적' }} · {{ c.new_start_date }}<span v-if="c.new_end_date"> → {{ c.new_end_date }}</span> · <span class="font-mono">{{ c.status }}</span></p>
+                <p class="mt-1 text-xs text-ink-muted">새 금액 {{ krw(c.new_total_minor) }} · 취소 수수료 {{ krw(c.cancel_fee_minor) }} · 환불 예정 {{ krw(c.refund_due_minor) }}<span v-if="c.reason"> · 사유: {{ c.reason }}</span><span v-if="c.new_booking_id"> · 새 예약 <span class="font-mono">{{ c.new_booking_id }}</span></span></p>
+                <div v-if="c.status === 'PENDING_APPROVAL'" class="mt-2 flex flex-wrap items-center gap-2">
+                  <input v-model="chNote" class="input flex-1" placeholder="메모 (거절 시 필수)" maxlength="300" />
+                  <button type="button" class="btn-primary btn-sm" :disabled="busy" @click="decideChange(c.id, 'APPROVE')">승인 (수수료 면제)</button>
+                  <button type="button" class="btn-danger btn-sm" :disabled="busy" @click="decideChange(c.id, 'REJECT')">거절</button>
+                </div>
+              </li>
+            </ul>
           </section>
 
           <dl class="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">

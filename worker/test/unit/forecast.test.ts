@@ -36,13 +36,16 @@ function seriesDb(days: Array<{ day: string; c: number }>, extra: Record<string,
       if (sql.includes("FROM bookings WHERE domain_type")) return [];
       return [];
     },
-    first: (sql) => {
+    first: (sql, params = []) => {
       if (sql.includes("FROM bookings WHERE domain_type")) return { c: extra.itemBooks ?? 0 };
+      if (sql.includes("FROM bookings WHERE id =")) return extra.booking ?? null;
       if (sql.includes("FROM inventory_holds")) return { c: extra.held ?? 0 };
       if (sql.includes("FROM hotels WHERE")) return { rooms_json: JSON.stringify(extra.rooms ?? [{ available_inventory: 10 }]) };
       if (sql.includes("FROM product_policies")) return { floor_price_minor: extra.floor ?? null };
-      if (sql.includes("JOIN bookings b ON b.quote_id")) return extra.join ?? null;
-      if (sql.includes("FROM pricing_decisions")) return extra.decision ?? null;
+      if (sql.includes("FROM pricing_decisions")) {
+        if (extra.decisionsByQuote) return extra.decisionsByQuote[String(params[0])] ?? null;
+        return extra.decision ?? null;
+      }
       if (sql.includes("FROM feature_flags")) return { is_enabled: extra.flag ?? 0 };
       if (sql.includes("FROM experiment_assignments")) return extra.assignment ?? null;
       return null;
@@ -139,11 +142,20 @@ test("forecast: own discount clamps to the floor instead of rejecting", async ()
 });
 
 test("forecast: decision rows load by quote and by booking", async () => {
-  const db = seriesDb([], { decision: { markup_minor: 1500 }, join: { m: -500 } });
+  const db = seriesDb([], {
+    decisionsByQuote: { qt_1: { markup_minor: 1500, m: 1500 }, qt_2: { markup_minor: -500, m: -500 } },
+    booking: { quote_id: "qt_2", details_json: "{}" },
+  });
   assert.deepEqual(await loadMarkupForQuote(db, "qt_1"), { amount: 1500, found: true });
   assert.deepEqual(await loadMarkupForQuote(seriesDb([]), "qt_x"), { amount: 0, found: false });
   assert.equal(await loadMarkupForBooking(db, "bkg_1"), -500);
   assert.equal(await loadMarkupForBooking(seriesDb([]), "bkg_x"), 0);
+  // GAP-07: cart bookings sum every leg's stored decision.
+  const cartDb = seriesDb([], {
+    decisionsByQuote: { qt_a: { markup_minor: 100, m: 100 }, qt_b: { markup_minor: 200, m: 200 } },
+    booking: { quote_id: "qt_a", details_json: JSON.stringify({ cartQuoteIds: ["qt_a", "qt_b"] }) },
+  });
+  assert.equal(await loadMarkupForBooking(cartDb, "bkg_cart"), 300);
   assert.equal(await floorPriceMinor(seriesDb([], { floor: 5000 }), "HOTEL", "h"), 5000);
   assert.equal(await floorPriceMinor(seriesDb([]), "HOTEL", "h"), null);
 });

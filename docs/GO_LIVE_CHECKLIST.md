@@ -275,6 +275,23 @@ npx wrangler secret put RESEND_API_KEY
 `"EMAIL_FROM": "getfortrip <noreply@getfortrip.com>"` (도메인 인증된 발신자로 교체).
 확인(어드민 토큰 필요): `/api/v1/health?verbose=1` → `emailProvider: RESEND`.
 
+## 5S. 문자 발송 (Solapi SMS·알림톡)
+
+없으면 예약확정·취소·환불 문자가 outbox에 적재만 된다. 키 등록 후 크론(5분)이
+밀린 문자를 자동 발송한다. 예약·결제 시 고객 전화번호가 있을 때만 발송된다.
+
+```powershell
+npx wrangler secret put SOLAPI_API_KEY
+npx wrangler secret put SOLAPI_API_SECRET
+```
+
+`wrangler.jsonc` vars에 **추가** 후 재배포 (공개 설정값):
+`"SOLAPI_SENDER": "01012345678"` (발신번호 등록된 번호),
+`"SOLAPI_KAKAO_PFID": "..."` (카카오 채널 Sender Key, 알림톡 사용 시),
+`"SOLAPI_KAKAO_TEMPLATES": "{\"BOOKING_CONFIRMED\":\"KA01...\"}"` (승인된
+템플릿 ID 매핑 — 미등록 템플릿은 SMS로 폴백 발송).
+확인(어드민 토큰 필요): `/api/v1/health?verbose=1` → `smsProvider: SOLAPI`.
+
 ## 6. 오류 알림 (Sentry)
 
 ```powershell
@@ -315,8 +332,8 @@ npx wrangler secret put TOSS_SECRET_KEY   # test_sk_... 입력
 ## 7S. 글로벌 PG — Stripe 테스트 (해외카드 판매 시)
 
 대시보드에서 테스트키(`sk_test_`, `pk_test_`) 발급. `wrangler.jsonc` vars의
-`PAYMENT_PROVIDER`를 `stripe`로 바꾸고 재배포 (토스와 stripe 중 하나만 활성 —
-동시 운영은 후속 과제).
+`PAYMENT_PROVIDER`를 `"toss,stripe"`로 바꾸고 재배포 (GAP-06: 콤마 허용목록 —
+둘 다 활성, 첫 항목이 기본값. 단일값은 기존과 동일).
 
 ```powershell
 npx wrangler secret put STRIPE_SECRET_KEY   # sk_test_... 입력

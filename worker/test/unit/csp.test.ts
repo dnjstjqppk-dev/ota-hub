@@ -20,12 +20,13 @@ function policyOf(text: string): string {
 const HAS = ["default-src 'self'", "frame-ancestors 'self'", "base-uri 'self'", "object-src 'none'",
   "https://cdn.jsdelivr.net", "https://ota-hub.dnjstjqppk.workers.dev", "*.sentry.io"];
 
-test("csp: user portal policy allows SSR inline scripts + Toss, nothing else remote", () => {
+test("csp: user portal policy allows SSR inline scripts + Toss/Stripe, nothing else remote", () => {
   const csp = policyOf(read("frontend-user/nuxt.config.ts"));
   for (const t of HAS) assert.ok(csp.includes(t), `missing ${t}`);
-  assert.ok(csp.includes("script-src 'self' 'unsafe-inline' https://js.tosspayments.com"), "toss sdk + ssr inline");
+  assert.ok(csp.includes("script-src 'self' 'unsafe-inline' https://js.tosspayments.com https://js.stripe.com"), "pg sdks + ssr inline");
   assert.ok(csp.includes("https://api.tosspayments.com"), "toss api");
-  assert.ok(csp.includes("frame-src https://pay.tosspayments.com"), "toss frames");
+  assert.ok(csp.includes("https://api.stripe.com"), "stripe api");
+  assert.ok(csp.includes("frame-src https://pay.tosspayments.com https://js.stripe.com"), "pg frames");
   assert.ok(!csp.includes("unsafe-eval"), "no eval");
 });
 

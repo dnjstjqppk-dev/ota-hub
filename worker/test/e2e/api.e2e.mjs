@@ -343,12 +343,24 @@ test("toss webhook: hint triggers PG lookup; duplicates acknowledged; unknown or
 test("outbox email: without a provider key, rows stay queued and maintenance says so", async () => {
   const h = await api("GET", "/api/v1/health?verbose=1", { token: ADMIN });
   assert.equal(h.data.checks.emailProvider, "NOT_CONFIGURED");
-  const before = sql("SELECT COUNT(*) AS c FROM notification_outbox WHERE status IN ('PENDING','BLOCKED_NO_PROVIDER')")[0].c;
+  const before = sql("SELECT COUNT(*) AS c FROM notification_outbox WHERE channel = 'EMAIL' AND status IN ('PENDING','BLOCKED_NO_PROVIDER')")[0].c;
   assert.ok(before > 0, "earlier tests enqueued booking emails");
   const m = await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN });
   assert.equal(m.data.stats.emailsSent, 0);
   assert.equal(m.data.stats.emailsPending, Math.min(before, 20), JSON.stringify(m.data.stats));
-  const after = sql("SELECT COUNT(*) AS c FROM notification_outbox WHERE status IN ('PENDING','BLOCKED_NO_PROVIDER')")[0].c;
+  const after = sql("SELECT COUNT(*) AS c FROM notification_outbox WHERE channel = 'EMAIL' AND status IN ('PENDING','BLOCKED_NO_PROVIDER')")[0].c;
+  assert.equal(after, before, "nothing sent, nothing lost");
+});
+
+test("outbox sms: without Solapi keys, KAKAO rows stay queued and maintenance says so", async () => {
+  const h = await api("GET", "/api/v1/health?verbose=1", { token: ADMIN });
+  assert.equal(h.data.checks.smsProvider, "NOT_CONFIGURED");
+  const before = sql("SELECT COUNT(*) AS c FROM notification_outbox WHERE channel IN ('SMS','KAKAO') AND status IN ('PENDING','BLOCKED_NO_PROVIDER')")[0].c;
+  assert.ok(before > 0, "earlier tests enqueued booking messages");
+  const m = await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN });
+  assert.equal(m.data.stats.smsSent, 0);
+  assert.equal(m.data.stats.smsPending, Math.min(before, 20), JSON.stringify(m.data.stats));
+  const after = sql("SELECT COUNT(*) AS c FROM notification_outbox WHERE channel IN ('SMS','KAKAO') AND status IN ('PENDING','BLOCKED_NO_PROVIDER')")[0].c;
   assert.equal(after, before, "nothing sent, nothing lost");
 });
 
@@ -4550,4 +4562,107 @@ test("TG-21d review digests summarize with PII masked", async () => {
   assert.ok(!d.summary.includes("010-1111"));
   assert.equal(d.review_count, 3);
   assert.equal((await api("GET", "/api/v1/reviews/digest?domain=HOTEL&itemId=no_such_hotel")).data.digest, null);
+});
+
+test("GAP-07 cart: hotel + activity book and pay once, settle per vendor", async () => {
+  const U = await register("cart");
+  const qh = (await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "HOTEL", itemId: "htl_seoul_01", unitId: "rm_seoul_01_dlx", startDate: day(120), endDate: day(121), rooms: 1, travelers: { adults: 2 } } })).data.quote;
+  const qa = (await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "ACTIVITY", itemId: "act_disney_tokyo", startDate: day(122), travelers: { adults: 2 } } })).data.quote;
+  const travelers2 = [{ type: "ADULT", lastNameEn: "KIM", firstNameEn: "MINJI" }, { type: "ADULT", lastNameEn: "LEE", firstNameEn: "JIHO" }];
+  const r = await api("POST", "/api/v1/bookings", { token: U.token, headers: { "Idempotency-Key": idem() }, body: { cartQuoteIds: [qh.quoteId, qa.quoteId], contact, travelers: travelers2, consents: TXC } });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  const b = r.data.booking;
+  assert.equal(b.totalMinor, qh.totalMinor + qa.totalMinor);
+  assert.match(b.title, /외 1건/);
+  const items = sql(`SELECT domain_type, supplier_id, total_minor FROM booking_items WHERE booking_id = '${b.id}' ORDER BY created_at`);
+  assert.equal(items.length, 2);
+  assert.deepEqual(items.map((i) => i.domain_type).sort(), ["ACTIVITY", "HOTEL"]);
+  const p = await pay(U.token, b, "ok");
+  assert.equal(p.status, 200, JSON.stringify(p.data));
+  assert.equal(p.data.booking.status, "VOUCHER_ISSUED");
+  const stl = sql(`SELECT seller_id, gross_amount_minor FROM marketplace_order_settlements WHERE booking_id = '${b.id}' ORDER BY created_at`);
+  assert.equal(stl.length, 2);
+  assert.equal(stl[0].gross_amount_minor + stl[1].gross_amount_minor, b.totalMinor);
+  assert.notEqual(stl[0].seller_id, stl[1].seller_id);
+  const vouchers = sql(`SELECT voucher_code FROM booking_items WHERE booking_id = '${b.id}'`);
+  assert.ok(vouchers.every((v) => v.voucher_code) && vouchers[0].voucher_code !== vouchers[1].voucher_code);
+});
+
+test("GAP-07 cart: validation rejects bad groups with distinct codes", async () => {
+  const U = await register("cartneg");
+  const q = (await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "HOTEL", itemId: "htl_seoul_01", unitId: "rm_seoul_01_dlx", startDate: day(130), endDate: day(131), rooms: 1, travelers: { adults: 2 } } })).data.quote;
+  const t2 = [...lead, { type: "ADULT", lastNameEn: "LEE", firstNameEn: "JIHO" }];
+  const post = (body) => api("POST", "/api/v1/bookings", { token: U.token, headers: { "Idempotency-Key": idem() }, body: { contact, travelers: t2, consents: TXC, ...body } });
+  assert.equal((await post({ cartQuoteIds: [q.quoteId] })).data.code, "CART_TOO_FEW");
+  assert.equal((await post({ cartQuoteIds: [q.quoteId, q.quoteId] })).data.code, "CART_DUPLICATE_QUOTE");
+  assert.equal((await post({ cartQuoteIds: [q.quoteId, "quo_nope"] })).status, 404);
+});
+
+async function ticketedFlight(tag, itemId = "flt_ke703", startDay = 70) {
+  const U = await register(tag);
+  const fq = (await api("POST", "/api/v1/quotes", { token: U.token, body: { domain: "FLIGHT", itemId, startDate: fday(startDay), travelers: { adults: 1 } } })).data.quote;
+  const tv = [{ type: "ADULT", lastNameEn: "KIM", firstNameEn: "MINJI", birthDate: "1990-01-01", gender: "F", nationality: "KOR", passportNumber: "M12345678", passportExpiry: day(900) }];
+  const b = (await book(U.token, fq, { travelers: tv })).data.booking;
+  const p = await pay(U.token, b);
+  assert.equal(p.data.booking.status, "TICKETED");
+  return { U, b: p.data.booking, tv };
+}
+
+test("GAP-08 change: voluntary reissue reprices, executes, and retickets", async () => {
+  sql("INSERT OR IGNORE INTO product_policies (domain_type, item_id, free_cancel_hours, tiers_json) VALUES ('FLIGHT', 'flt_ke703', 720, '[]')");
+  const { U, b, tv } = await ticketedFlight("chgvol");
+  const req = await api("POST", `/api/v1/bookings/${b.id}/change-request`, { token: U.token, body: { type: "VOLUNTARY", newStartDate: fday(90), reason: "일정 변경" } });
+  assert.equal(req.status, 201, JSON.stringify(req.data));
+  assert.equal(req.data.status, "APPROVED");
+  assert.equal(req.data.executable, true);
+  assert.ok(req.data.newTotalMinor > 0);
+  const done = await api("POST", `/api/v1/change-requests/${req.data.requestId}/confirm`, { token: U.token, body: { contact, travelers: tv, consents: TXC } });
+  assert.equal(done.status, 200, JSON.stringify(done.data));
+  assert.ok(done.data.newBookingId && done.data.newBookingId !== b.id);
+  const old = (await api("GET", `/api/v1/bookings/${b.id}`, { token: U.token })).data.booking;
+  assert.equal(old.status, "CANCELLED"); // discount economy is non-refundable: full forfeit, no refund row
+  assert.equal(sql(`SELECT COUNT(*) AS c FROM refunds WHERE booking_id = '${b.id}'`)[0].c, 0);
+  const nb = (await api("GET", `/api/v1/bookings/${done.data.newBookingId}`, { token: U.token })).data.booking;
+  assert.equal(nb.status, "AWAITING_PAYMENT");
+  const p2 = await pay(U.token, nb);
+  assert.equal(p2.data.booking.status, "TICKETED");
+  const row = sql(`SELECT status, new_booking_id FROM change_requests WHERE id = '${req.data.requestId}'`)[0];
+  assert.equal(row.status, "EXECUTED");
+  assert.equal(row.new_booking_id, done.data.newBookingId);
+});
+
+test("GAP-08 change: voluntary hotel change refunds the old stay in full", async () => {
+  const U = await register("chghotel");
+  const b = (await fullHotelBooking(U.token)).b;
+  const req = await api("POST", `/api/v1/bookings/${b.id}/change-request`, { token: U.token, body: { type: "VOLUNTARY", newStartDate: day(160), newEndDate: day(161) } });
+  assert.equal(req.status, 201, JSON.stringify(req.data));
+  const done = await api("POST", `/api/v1/change-requests/${req.data.requestId}/confirm`, { token: U.token, body: { contact, travelers: lead, consents: TXC } });
+  assert.equal(done.status, 200, JSON.stringify(done.data));
+  const paid = (await api("GET", `/api/v1/bookings/${b.id}`, { token: U.token })).data.booking.paidMinor;
+  assert.equal(sql(`SELECT amount_minor AS a FROM refunds WHERE booking_id = '${b.id}'`)[0].a, paid);
+  const nb = (await api("GET", `/api/v1/bookings/${done.data.newBookingId}`, { token: U.token })).data.booking;
+  assert.equal(nb.status, "AWAITING_PAYMENT");
+  assert.equal((await pay(U.token, nb)).data.booking.status, "VOUCHER_ISSUED");
+});
+
+test("GAP-08 change: involuntary needs approval; guards hold", async () => {
+  const { U, b, tv } = await ticketedFlight("chginv", "flt_ke723", 71);
+  const req = await api("POST", `/api/v1/bookings/${b.id}/change-request`, { token: U.token, body: { type: "INVOLUNTARY", newStartDate: fday(95), reason: "결항" } });
+  assert.equal(req.data.status, "PENDING_APPROVAL");
+  assert.equal(req.data.executable, false);
+  const early = await api("POST", `/api/v1/change-requests/${req.data.requestId}/confirm`, { token: U.token, body: { contact, travelers: tv, consents: TXC } });
+  assert.equal(early.data.code, "CHANGE_NOT_APPROVED");
+  const ap = await api("PATCH", `/api/v1/admin/change-requests/${req.data.requestId}`, { token: ADMIN, body: { decision: "APPROVE", note: "항공사 결항 확인" } });
+  assert.equal(ap.status, 200, JSON.stringify(ap.data));
+  const done = await api("POST", `/api/v1/change-requests/${req.data.requestId}/confirm`, { token: U.token, body: { contact, reuseTravelers: true, consents: TXC } });
+  assert.equal(done.status, 200, JSON.stringify(done.data));
+  const fee = sql(`SELECT cancellation_fee_minor AS f FROM bookings WHERE id = '${b.id}'`)[0].f;
+  assert.equal(Number(fee || 0), 0, "involuntary change waives the fee");
+  const paid = (await api("GET", `/api/v1/bookings/${b.id}`, { token: U.token })).data.booking.paidMinor;
+  assert.equal(sql(`SELECT amount_minor AS a FROM refunds WHERE booking_id = '${b.id}'`)[0].a, paid, "involuntary change refunds in full");
+  const H = await register("chgneg");
+  const hq = (await api("POST", "/api/v1/quotes", { token: H.token, body: { domain: "ACTIVITY", itemId: "act_disney_tokyo", startDate: day(140), travelers: { adults: 1 } } })).data.quote;
+  const hb = (await book(H.token, hq)).data.booking;
+  assert.equal((await pay(H.token, hb)).data.booking.status, "VOUCHER_ISSUED");
+  assert.equal((await api("POST", `/api/v1/bookings/${hb.id}/change-request`, { token: H.token, body: { type: "VOLUNTARY", newStartDate: day(150) } })).data.code, "CHANGE_DOMAIN_UNSUPPORTED");
 });

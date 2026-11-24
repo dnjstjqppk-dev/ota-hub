@@ -4,8 +4,9 @@ import { idempotencyPrecheck, idempotencyStore } from "../lib/idempotency.ts";
 import { rateLimit, requireUser } from "../lib/auth.ts";
 import { db } from "../db/database.ts";
 import { trackEvent } from "../lib/analytics.ts";
-import { getPaymentProvider } from "../payments/provider.ts";
+import { availablePaymentProviders } from "../payments/provider.ts";
 import * as S from "../services/booking-service.ts";
+import * as changeSvc from "../services/change-service.ts";
 import { startSpan, traceOf, withSpan } from "../lib/tracing.ts";
 
 /** payment.confirm span that parents supplier spans (waterfall fidelity). */
@@ -28,8 +29,9 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
   const method = request.method;
 
   if (path === "/api/v1/payments/config" && method === "GET") {
-    const p = getPaymentProvider(env);
-    return json({ success: true, enabled: Boolean(p), ...(p ? p.publicConfig() : { provider: null, mode: null }) });
+    const all = availablePaymentProviders(env);
+    const p = all[0] || null;
+    return json({ success: true, enabled: Boolean(p), ...(p ? p.publicConfig() : { provider: null, mode: null }), providers: all.map((x) => x.publicConfig()) });
   }
 
   if (path === "/api/v1/quotes" && method === "POST") {
@@ -44,10 +46,30 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
     const user = await requireUser(request, env);
     await rateLimit(request, env, "bookings", 120, 60);
     const bookingBody = await readJson(request);
-    const r = await withSpan(traceOf(request), "booking.create", () => S.createBooking(env, user, bookingBody, request.headers.get("Idempotency-Key"), request));
+    const creator = Array.isArray(bookingBody.cartQuoteIds) ? S.createCartBooking : S.createBooking;
+    const r = await withSpan(traceOf(request), "booking.create", () => creator(env, user, bookingBody, request.headers.get("Idempotency-Key"), request));
     // TG-03: funnel "book" fires on fresh bookings only — replays already counted.
     if (!r.replayed) await trackEvent(db(env), { type: "book", domain: r.booking.domain, entityId: r.booking.id, userId: user.id });
     return json({ success: true, replayed: r.replayed, booking: r.booking }, r.replayed ? 200 : 201);
+  }
+
+  // GAP-08: flight itinerary change (assisted cancel + rebook).
+  let chm = path.match(/^\/api\/v1\/bookings\/([A-Za-z0-9_-]{4,64})\/change-request$/);
+  if (chm && method === "POST") {
+    const user = await requireUser(request, env);
+    await rateLimit(request, env, "bookings", 120, 60);
+    return json({ success: true, ...(await changeSvc.requestChange(env, user, chm[1], await readJson(request))) }, 201);
+  }
+  chm = path.match(/^\/api\/v1\/change-requests\/([A-Za-z0-9_-]{4,64})\/confirm$/);
+  if (chm && method === "POST") {
+    const user = await requireUser(request, env);
+    await rateLimit(request, env, "bookings", 120, 60);
+    return json({ success: true, ...(await changeSvc.confirmChange(env, user, chm[1], await readJson(request))) });
+  }
+  chm = path.match(/^\/api\/v1\/bookings\/([A-Za-z0-9_-]{4,64})\/change-requests$/);
+  if (chm && method === "GET") {
+    const user = await requireUser(request, env);
+    return json({ success: true, requests: await changeSvc.listChanges(env, user.id, chm[1], null) });
   }
 
   if (path === "/api/v1/bookings" && method === "GET") {

@@ -25,7 +25,7 @@ import { type Env, isNonProduction } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { rateLimit } from "../lib/auth.ts";
 import { constantTimeEqual, newId } from "../lib/crypto.ts";
-import { getPaymentProvider } from "../payments/provider.ts";
+import { getPaymentProviderFor } from "../payments/provider.ts";
 import { stripeDispute, verifyStripeSignature } from "../payments/stripe.ts";
 import { applyExternalCancel, getBooking, reconcilePaymentByLookup } from "../services/booking-service.ts";
 
@@ -70,7 +70,7 @@ export async function handleWebhooks(request: Request, env: Env, url: URL): Prom
     return json({ success: true, duplicate: true, reconciled: dup.outcome === "RECONCILED", action, outcome: action });
   }
 
-  const provider = getPaymentProvider(env);
+  const provider = getPaymentProviderFor(env, "toss");
   if (!provider) {
     await record(env, eventId, eventType, body, "IGNORED_NO_PROVIDER");
     return json({ success: true, reconciled: false, action: "IGNORED_NO_PROVIDER" });
@@ -93,9 +93,10 @@ export async function handleWebhooks(request: Request, env: Env, url: URL): Prom
   const hint = `${eventType} ${status}`.toUpperCase();
   const cancelHint = /CANCEL|CHARGEBACK|ABORTED|EXPIRED/.test(hint);
   if (cancelHint) {
-    const captured = await env.DB.prepare("SELECT id, provider_payment_key, amount_minor FROM payments WHERE booking_id = ? AND status IN ('CAPTURED', 'PARTIALLY_REFUNDED') ORDER BY created_at").bind(b.id).all<any>();
+    const captured = await env.DB.prepare("SELECT id, provider, provider_payment_key, amount_minor FROM payments WHERE booking_id = ? AND status IN ('CAPTURED', 'PARTIALLY_REFUNDED') ORDER BY created_at").bind(b.id).all<any>();
     for (const p of captured.results || []) {
-      const r = await provider.lookup({ orderId: b.id, paymentKey: p.provider_payment_key, amountMinor: p.amount_minor });
+      const pp = getPaymentProviderFor(env, p.provider) || provider;
+      const r = await pp.lookup({ orderId: b.id, paymentKey: p.provider_payment_key, amountMinor: p.amount_minor });
       if (r.outcome === "CANCELED" || r.outcome === "PARTIAL_CANCELED") {
         const applied = await applyExternalCancel(env, b.id, { paymentId: p.id, canceledMinor: r.canceledMinor, cancelReason: r.cancelReason, transactionKey: r.transactionKey });
         if (applied === "APPLIED") externalApplied++;
@@ -141,8 +142,8 @@ async function stripeWebhook(request: Request, env: Env, url: URL): Promise<Resp
   if (!eventId || !eventType) throw new HttpError(400, "INVALID_WEBHOOK", "Stripe event id/type이 필요합니다.");
   const dup = await env.DB.prepare("SELECT outcome FROM payment_events WHERE provider = 'stripe' AND event_id = ?").bind(eventId).first<{ outcome: string | null }>();
   if (dup) return json({ success: true, duplicate: true, reconciled: dup.outcome === "RECONCILED", action: dup.outcome });
-  const provider = getPaymentProvider(env);
-  if (!provider || provider.name !== "stripe") {
+  const provider = getPaymentProviderFor(env, "stripe");
+  if (!provider) {
     await stripeRecord(env, eventId, eventType, body, "IGNORED_NO_PROVIDER");
     return json({ success: true, reconciled: false, action: "IGNORED_NO_PROVIDER" });
   }

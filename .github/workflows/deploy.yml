@@ -165,6 +165,18 @@ jobs:
           BASE='http://127.0.0.1:8799' ADMIN_PASSWORD='LocalAdmin2026!x' npm run test:e2e:replica
           ci_stop_server
 
+      # GAP-06: the multi-PG suite needs Toss AND Stripe stubs, so it runs as
+      # a fifth pass. The boot check reads the default (first listed) provider.
+      - name: Run multi-PG E2E suite against local wrangler dev
+        env:
+          TOSS_E2E_WEBHOOK_SECRET: toss_e2e
+          STRIPE_E2E_WEBHOOK_SECRET: whsec_multi
+        run: |
+          source scripts/ci-e2e-server.sh
+          ci_boot_server toss /tmp/wrangler-multi.log -- -c wrangler.local.jsonc --port 8799 --var PAYMENT_PROVIDER:toss,stripe --var TOSS_SECRET_KEY:test_sk_e2e --var TOSS_API_BASE:http://127.0.0.1:18797 --var TOSS_WEBHOOK_SECRET:$TOSS_E2E_WEBHOOK_SECRET --var STRIPE_SECRET_KEY:sk_test_e2e --var STRIPE_API_BASE:http://127.0.0.1:18799 --var STRIPE_WEBHOOK_SECRET:$STRIPE_E2E_WEBHOOK_SECRET
+          BASE='http://127.0.0.1:8799' ADMIN_PASSWORD='LocalAdmin2026!x' npm run test:e2e:multi
+          ci_stop_server
+
   deploy:
     runs-on: ubuntu-latest
     name: Build & Deploy to Cloudflare Workers

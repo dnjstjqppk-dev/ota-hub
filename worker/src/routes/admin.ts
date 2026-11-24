@@ -2,6 +2,7 @@ import type { Env } from "../env.ts";
 import { HttpError, json, readJson, str } from "../lib/http.ts";
 import { audit, rateLimit, requireAdmin, resetSubjectSessions } from "../lib/auth.ts";
 import * as S from "../services/booking-service.ts";
+import * as changeSvc from "../services/change-service.ts";
 import { rollupDailyJob } from "../services/warehouse.ts";
 import { recoMetrics } from "../services/reco-service.ts";
 import { capacityFor, forecastDemand, markupMetrics } from "../services/forecast-service.ts";
@@ -223,6 +224,19 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     return json({ success: true, booking: await S.serializeBooking(env, b, admin), ledger: ledger.results, supplierCalls: calls.results });
   }
 
+  // GAP-08: involuntary change approvals.
+  if (path === "/api/v1/admin/change-requests" && method === "GET") {
+    return json({ success: true, requests: await changeSvc.listChanges(env, null, str(url.searchParams.get("bookingId"), 64) || null, str(url.searchParams.get("status"), 20).toUpperCase() || null) });
+  }
+  m = path.match(/^\/api\/v1\/admin\/change-requests\/([A-Za-z0-9_-]{4,64})$/);
+  if (m && method === "PATCH") {
+    const body = await readJson(request);
+    const decision = str(body.decision, 20).toUpperCase();
+    if (decision !== "APPROVE" && decision !== "REJECT") throw new HttpError(400, "DECISION_REQUIRED", "decision은 APPROVE 또는 REJECT입니다.");
+    const r = await changeSvc.decideChange(env, m[1], decision === "APPROVE", str(body.note, 500));
+    await audit(env, admin.id, `CHANGE_DECISION_${decision}`, "BOOKING", r.booking_id, { requestId: r.id, note: str(body.note, 300) });
+    return json({ success: true, request: r });
+  }
   m = path.match(/^\/api\/v1\/admin\/bookings\/([A-Za-z0-9_-]+)\/supplier-decision$/);
   if (m && method === "POST") {
     const body = await readJson(request);

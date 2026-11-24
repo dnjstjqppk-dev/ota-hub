@@ -51,14 +51,14 @@ export function stripeProvider(secretKey: string, publishableKey: string | undef
     mode,
     actionCapable: true as const,
     publicConfig: () => ({ provider: "stripe", mode, publishableKey: publishableKey || null }),
-    async confirm({ orderId, paymentKey, amountMinor, currency, idempotencyKey }): Promise<ConfirmResult | StripeActionRequired> {
+    async confirm({ orderId, paymentKey, amountMinor, currency, idempotencyKey, returnUrl: override }): Promise<ConfirmResult | StripeActionRequired> {
       const form = new URLSearchParams({
         amount: String(amountMinor),
         currency: String(currency || "KRW").toLowerCase(),
         payment_method: paymentKey,
         confirmation_method: "automatic",
         confirm: "true",
-        return_url: returnUrl,
+        return_url: override || returnUrl,
         "metadata[order_id]": orderId,
       });
       const r = await call("/v1/payment_intents", form, idempotencyKey);

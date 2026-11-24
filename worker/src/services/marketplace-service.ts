@@ -139,8 +139,11 @@ export async function planOrderSettlement(
     supplyCostMinor = attr.supply_cost_minor;
     commissionRateBps = attr.commission_rate_bps;
   } else {
+    // GAP-07: carts settle per item — the fallback follows the item's
+    // supplier, not the booking header's (identical for single-item orders).
+    const item = await env.DB.prepare('SELECT supplier_id FROM booking_items WHERE booking_id = ? AND item_id = ? LIMIT 1').bind(bookingId, itemId).first<{ supplier_id: string }>();
     const b = await env.DB.prepare('SELECT supplier_id FROM bookings WHERE id = ?').bind(bookingId).first<{ supplier_id: string }>();
-    const sup = b ? await env.DB.prepare('SELECT id, name, transaction_model, settlement_rate_bps FROM suppliers WHERE id = ?').bind(b.supplier_id).first<any>() : null;
+    const sup = await env.DB.prepare('SELECT id, name, transaction_model, settlement_rate_bps FROM suppliers WHERE id = ?').bind(item?.supplier_id || b?.supplier_id || '').first<any>();
     model = sup?.transaction_model === 'MERCHANT_OF_RECORD' ? '1P' : '3P';
     source = 'SUPPLIER_FALLBACK';
     sellerId = sup?.id || b?.supplier_id || 'UNKNOWN_SUPPLIER';

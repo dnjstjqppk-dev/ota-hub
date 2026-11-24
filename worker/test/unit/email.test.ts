@@ -92,10 +92,10 @@ test("C3: payment/cancel/refund/reject templates render with amounts and escape 
   assert.ok(rj && rj.subject.includes("공급사") && rj.html.includes("전액 환불"));
 });
 
-test("C3: SMS/KAKAO enqueue fails closed (no sender exists)", async () => {
+test("C3/GAP-09: all channels enqueue; fail-closed moved to flush time", async () => {
   const { outboxInsert } = await import("../../src/services/email-service.ts");
   const fakeDb = { prepare: () => ({ bind: () => ({}) }) } as any;
-  assert.throws(() => outboxInsert(fakeDb, "SMS", "010-0000-0000", "X", {}), /not implemented/);
-  assert.throws(() => outboxInsert(fakeDb, "KAKAO", "010-0000-0000", "X", {}), /not implemented/);
+  assert.doesNotThrow(() => outboxInsert(fakeDb, "SMS", "010-0000-0000", "X", {}));
+  assert.doesNotThrow(() => outboxInsert(fakeDb, "KAKAO", "010-0000-0000", "X", {}));
   assert.doesNotThrow(() => outboxInsert(fakeDb, "EMAIL", "a@b.c", "X", {}));
 });
