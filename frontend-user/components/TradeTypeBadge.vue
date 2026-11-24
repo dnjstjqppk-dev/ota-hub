@@ -12,13 +12,14 @@ import { computed } from 'vue'
 /** Server-derived trade branch; parents map bookable/outlink_path to this. */
 export type TradeType = 'DIRECT' | 'AFFILIATE'
 
-const LABEL: Record<TradeType, string> = {
-  DIRECT: '직접판매 · 즉시 바우처',
-  AFFILIATE: '제휴 연결'
+const { t } = useI18n()
+const LABEL: Record<TradeType, () => string> = {
+  DIRECT: () => t('trade.direct'),
+  AFFILIATE: () => t('trade.affiliate')
 }
-const NOTE: Record<TradeType, string> = {
-  DIRECT: 'getfortrip에서 결제하고 공급사 확정 후 바우처를 발급해요.',
-  AFFILIATE: '예약·결제는 외부 제휴사 사이트에서 진행돼요.'
+const NOTE: Record<TradeType, () => string> = {
+  DIRECT: () => t('trade.directNote'),
+  AFFILIATE: () => t('trade.affiliateNote')
 }
 
 const props = withDefaults(defineProps<{
@@ -29,8 +30,8 @@ const props = withDefaults(defineProps<{
   size?: 'sm' | 'md'
 }>(), { showNote: true, size: 'md' })
 
-const label = computed(() => LABEL[props.tradeType])
-const note = computed(() => NOTE[props.tradeType])
+const label = computed(() => LABEL[props.tradeType]())
+const note = computed(() => NOTE[props.tradeType]())
 const badgeClass = computed(() =>
   props.tradeType === 'DIRECT'
     ? 'bg-primary-soft text-primary'
@@ -42,7 +43,7 @@ const sizeClass = computed(() => (props.size === 'sm' ? 'px-2 py-0.5 text-2xs' :
 </script>
 
 <template>
-  <div data-testid="trade-type-badge" role="note" :aria-label="`거래 유형: ${label}`">
+  <div data-testid="trade-type-badge" role="note" :aria-label="`${t('trade.type')}: ${label}`">
     <span :class="['inline-flex items-center gap-1.5 rounded-lg font-bold', sizeClass, badgeClass]">
       <AppIcon :name="icon" :size="iconSize" />{{ label }}
     </span>

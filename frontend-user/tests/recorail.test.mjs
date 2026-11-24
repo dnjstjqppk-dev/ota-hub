@@ -4,7 +4,15 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import { transformSync } from 'esbuild'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+
+const ko = JSON.parse(readFileSync(new URL('../i18n/locales/ko.json', import.meta.url), 'utf8'))
+const tx = (key, params) => {
+  const s = String(key).split('.').reduce((o, k) => (o == null ? o : o[k]), ko)
+  if (typeof s !== 'string') return key
+  if (!params || typeof params !== 'object') return s
+  return Object.entries(params).reduce((acc, [k, v]) => acc.replaceAll(`{${k}}`, String(v)), s)
+}
 
 const filename = 'components/RecoRail.vue'
 const source = readFileSync(new URL('../components/RecoRail.vue', import.meta.url), 'utf8')
@@ -20,7 +28,11 @@ const setupBody = descriptor.scriptSetup.content
 const code = transformSync(setupBody + '\n;globalThis.page = { slotTitle, priceText };', { loader: 'ts', format: 'cjs' }).code
 
 function setup() {
-  const context = { ref, onMounted: () => {}, defineProps: () => ({}) }
+  const context = {
+    ref, computed, onMounted: () => {}, defineProps: () => ({}),
+    useI18n: () => ({ t: tx, locale: ref('ko') }),
+    apiFetch: async () => ({ ok: false, status: 500, data: {} }),
+  }
   runInNewContext(code, context)
   return context.page
 }

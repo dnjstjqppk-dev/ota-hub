@@ -42,6 +42,7 @@ const PATHS: Record<string, string> = {
   briefcase: 'M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zm5 0V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3',
   plus: 'M12 5v14M5 12h14',
   minus: 'M5 12h14',
+  bag: 'M6 8h15l-1.5 12a1 1 0 0 1-1 .9H5.6a1 1 0 0 1-1-.9L3 8zm4 0V6a4 4 0 0 1 8 0v2',
   mail: 'M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm0 1 8 6 8-6',
   external: 'M14 4h6v6m0-6-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
   more: 'M5 12h.01M12 12h.01M19 12h.01',

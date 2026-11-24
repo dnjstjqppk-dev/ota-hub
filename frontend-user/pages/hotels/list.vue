@@ -14,21 +14,19 @@ import { seoHead } from '~/composables/useSeoPage'
 const route = useRoute()
 const router = useRouter()
 const currency = useCurrencyStore()
+const { t, locale } = useI18n()
 
 // ------------------------------------------------------------------ URL state
 const str = (v: unknown) => (typeof v === 'string' ? v : Array.isArray(v) ? String(v[0] ?? '') : '')
 const int = (v: unknown, d: number, lo: number, hi: number) => { const n = parseInt(str(v), 10); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d }
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
-const SORTS = [
-  { id: 'recommended', label: '추천순' },
-  { id: 'price_asc', label: '낮은 요금순' },
-  { id: 'score_desc', label: '평점 높은순' },
-  { id: 'star_desc', label: '성급 높은순' }
-] as const
-type Sort = typeof SORTS[number]['id']
-const TYPES = [{ id: '', label: '전체' }, { id: 'HOTEL', label: '호텔' }, { id: 'RESORT', label: '리조트' }, { id: 'APARTMENT', label: '레지던스' }]
-const TYPE_LABEL: Record<string, string> = { HOTEL: '호텔', RESORT: '리조트', APARTMENT: '레지던스' }
+const SORT_IDS = ['recommended', 'price_asc', 'score_desc', 'star_desc'] as const
+type Sort = typeof SORT_IDS[number]
+const SORTS = computed(() => SORT_IDS.map((id) => ({ id, label: t(`hotels.list.sort_${id}`) })))
+const TYPE_IDS = ['', 'HOTEL', 'RESORT', 'APARTMENT'] as const
+const TYPES = computed(() => TYPE_IDS.map((id) => ({ id, label: id ? t(`hotels.list.type_${id}`) : t('common.all') })))
+const TYPE_LABEL = computed<Record<string, string>>(() => ({ HOTEL: t('hotels.list.type_HOTEL'), RESORT: t('hotels.list.type_RESORT'), APARTMENT: t('hotels.list.type_APARTMENT') }))
 const PRICE_STEPS = [100000, 200000, 300000, 400000, 500000, 700000, 1000000]
 const PRICE_ANY = 0
 
@@ -36,14 +34,14 @@ const q = computed(() => {
   const r = route.query
   const checkIn = ISO.test(str(r.checkIn)) ? str(r.checkIn) : ''
   const checkOut = ISO.test(str(r.checkOut)) && str(r.checkOut) > checkIn ? str(r.checkOut) : ''
-  const sort = (SORTS.some((s) => s.id === str(r.sortBy)) ? str(r.sortBy) : 'recommended') as Sort
+  const sort = ((SORT_IDS as readonly string[]).includes(str(r.sortBy)) ? str(r.sortBy) : 'recommended') as Sort
   return {
     city: str(r.city || r.searchWord).trim(),
     checkIn, checkOut: checkIn ? checkOut : '',
     adults: int(r.adults, 2, 1, 9), children: int(r.children, 0, 0, 8), rooms: int(r.rooms, 1, 1, 5),
     star: int(r.star || r.starRating, 0, 0, 5),
     score: [4, 4.5, 4.8].includes(Number(str(r.minScore))) ? Number(str(r.minScore)) : 0,
-    type: TYPE_LABEL[str(r.propertyType)] ? str(r.propertyType) : '',
+    type: TYPE_LABEL.value[str(r.propertyType)] ? str(r.propertyType) : '',
     maxPrice: PRICE_STEPS.includes(Number(str(r.maxPrice))) ? Number(str(r.maxPrice)) : PRICE_ANY,
     freeCancel: str(r.freeCancel) === 'true',
     breakfast: str(r.breakfast) === 'true',
@@ -74,12 +72,12 @@ const FILTER_DEFAULTS = { star: 0, score: 0, type: '', maxPrice: PRICE_ANY, free
 const activeFilters = computed(() => {
   const x = q.value
   const list: { key: string; label: string; clear: Partial<Q> }[] = []
-  if (x.star) list.push({ key: 'star', label: `${x.star}성급${x.star < 5 ? ' 이상' : ''}`, clear: { star: 0 } })
-  if (x.score) list.push({ key: 'score', label: `평점 ${x.score}+`, clear: { score: 0 } })
-  if (x.type) list.push({ key: 'type', label: TYPE_LABEL[x.type] ?? x.type, clear: { type: '' } })
-  if (x.maxPrice) list.push({ key: 'price', label: `1박 ${currency.formatKRW(x.maxPrice)} 이하`, clear: { maxPrice: PRICE_ANY } })
-  if (x.freeCancel) list.push({ key: 'fc', label: '무료 취소', clear: { freeCancel: false } })
-  if (x.breakfast) list.push({ key: 'bf', label: '조식 포함', clear: { breakfast: false } })
+  if (x.star) list.push({ key: 'star', label: t('hotels.list.chipStar', { n: x.star, plus: x.star < 5 ? t('hotels.list.chipStarPlus') : '' }), clear: { star: 0 } })
+  if (x.score) list.push({ key: 'score', label: t('hotels.list.chipScore', { n: x.score }), clear: { score: 0 } })
+  if (x.type) list.push({ key: 'type', label: TYPE_LABEL.value[x.type] ?? x.type, clear: { type: '' } })
+  if (x.maxPrice) list.push({ key: 'price', label: t('hotels.list.chipPrice', { v: currency.formatKRW(x.maxPrice) }), clear: { maxPrice: PRICE_ANY } })
+  if (x.freeCancel) list.push({ key: 'fc', label: t('hotels.list.freeCancel'), clear: { freeCancel: false } })
+  if (x.breakfast) list.push({ key: 'bf', label: t('hotels.list.breakfast'), clear: { breakfast: false } })
   return list
 })
 
@@ -95,13 +93,18 @@ function submitSearch() {
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
-const WEEK = ['일', '월', '화', '수', '목', '금', '토']
-function shortDate(s: string) { const [y = NaN, m = NaN, d = NaN] = s.split('-').map(Number); const dt = new Date(y, m - 1, d); return `${m}.${pad(d)}(${WEEK[dt.getDay()] ?? ''})` }
+const WEEKDAYS: Record<string, string[]> = {
+  ko: ['일', '월', '화', '수', '목', '금', '토'],
+  en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  ja: ['日', '月', '火', '水', '木', '金', '土'],
+  zh: ['日', '一', '二', '三', '四', '五', '六'],
+}
+function shortDate(s: string) { const [y = NaN, m = NaN, d = NaN] = s.split('-').map(Number); const dt = new Date(y, m - 1, d); const wk = WEEKDAYS[locale.value] || WEEKDAYS.ko || []; return `${m}.${pad(d)}(${wk[dt.getDay()] ?? ''})` }
 const nights = computed(() => (q.value.checkIn && q.value.checkOut ? Math.round((Date.parse(q.value.checkOut) - Date.parse(q.value.checkIn)) / 86400000) : 0))
 const summaryLine = computed(() => {
   const x = q.value
-  const when = nights.value ? `${shortDate(x.checkIn)} – ${shortDate(x.checkOut)} · ${nights.value}박` : '날짜 미정'
-  return `${when} · 성인 ${x.adults}${x.children ? ` 아동 ${x.children}` : ''} · 객실 ${x.rooms}`
+  const when = nights.value ? t('hotels.list.whenRange', { a: shortDate(x.checkIn), b: shortDate(x.checkOut), n: nights.value }) : t('hotels.list.whenTbd')
+  return t('hotels.list.summary', { when, adults: x.adults, rooms: x.rooms, kids: x.children ? t('hotels.list.summaryKids', { n: x.children }) : '' })
 })
 
 // ------------------------------------------------------------------ data
@@ -156,7 +159,7 @@ function detailLink(h: any) {
 
 // Filters change the URL → the URL drives loading. Search-form fields only follow the URL when it changes.
 // Ignore the route change that navigates away from this page (it is still mounted during the transition).
-watch(() => route.fullPath, () => { if (route.path !== '/hotels/list') return; syncDraft(); load() })
+watch(() => route.fullPath, () => { if (!route.path.endsWith('/hotels/list')) return; syncDraft(); load() })
 // TG-15: SSR the first paint (ISR caches it); the watcher re-loads on client query changes.
 // A server-side failure must 503 (uncached), never bake an error shell into the edge cache.
 await useAsyncData('tg15-hotels-list', () => load())
@@ -176,8 +179,9 @@ const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 useHead(() => seoHead({
   site: seoSite,
   path: '/hotels/list',
-  title: q.value.city ? `${q.value.city} 호텔·숙소` : '호텔·숙소 검색',
-  description: `${q.value.city || '전 세계'} 호텔과 리조트를 평점, 성급, 요금으로 비교하고 예약하세요.`,
+  localePrefix: locale.value === 'ko' ? '' : `/${locale.value}`,
+  title: q.value.city ? t('hotels.list.seoTitle', { city: q.value.city }) : t('hotels.list.seoTitleAll'),
+  description: t('hotels.list.seoDesc', { city: q.value.city || t('hotels.list.seoWorld') }),
 }) as any)
 
 const CHIP = 'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-semibold transition-colors'
@@ -193,22 +197,22 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
         <button v-if="!formOpen" type="button" class="flex w-full items-center gap-3 rounded-2xl border border-line bg-canvas px-4 py-2.5 text-left lg:hidden" @click="formOpen = true">
           <AppIcon name="search" class="text-ink-subtle" />
           <span class="min-w-0 flex-1">
-            <span class="block truncate font-bold text-ink">{{ q.city || '모든 목적지' }}</span>
+            <span class="block truncate font-bold text-ink">{{ q.city || $t('hotels.list.allDest') }}</span>
             <span class="block truncate text-xs text-ink-muted">{{ summaryLine }}</span>
           </span>
-          <span class="text-sm font-semibold text-primary">변경</span>
+          <span class="text-sm font-semibold text-primary">{{ $t('hotels.list.change') }}</span>
         </button>
 
         <form :class="['grid gap-2 lg:grid lg:grid-cols-[1.5fr_1.4fr_1fr_auto]', formOpen ? 'grid' : 'hidden']" novalidate @submit.prevent="submitSearch">
           <div class="relative flex min-h-[52px] flex-col justify-center rounded-2xl border border-line bg-surface px-4 py-1.5 transition-colors focus-within:border-primary focus-within:shadow-focus hover:border-line-strong">
-            <label for="hl-city" class="mb-0.5 block text-2xs font-semibold uppercase tracking-wide text-ink-subtle">목적지</label>
-            <SearchAutocomplete v-model="draft.city" input-id="hl-city" domain="hotels" variant="bare" placeholder="도시, 지역, 호텔명" @enter="submitSearch" />
+            <label for="hl-city" class="mb-0.5 block text-2xs font-semibold uppercase tracking-wide text-ink-subtle">{{ $t('hotels.list.dest') }}</label>
+            <SearchAutocomplete v-model="draft.city" input-id="hl-city" domain="hotels" variant="bare" :placeholder="$t('hotels.list.destPh')" @enter="submitSearch" />
           </div>
-          <DateRangePicker v-model:start="draft.checkIn" v-model:end="draft.checkOut" start-label="체크인" end-label="체크아웃" :min="today" :max-range="30" compact />
+          <DateRangePicker v-model:start="draft.checkIn" v-model:end="draft.checkOut" :start-label="$t('checkout.startHotel')" :end-label="$t('checkout.endHotel')" :min="today" :max-range="30" compact />
           <GuestPicker v-model:adults="draft.adults" v-model:children="draft.children" v-model:rooms="draft.rooms" compact />
           <div class="flex gap-2">
-            <button v-if="formOpen" type="button" class="rounded-2xl border border-line px-4 text-sm font-semibold text-ink-muted lg:hidden" @click="formOpen = false; syncDraft()">취소</button>
-            <button type="submit" class="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-7 font-bold text-primary-ink transition-colors hover:bg-primary-hover"><AppIcon name="search" :size="18" />검색</button>
+            <button v-if="formOpen" type="button" class="rounded-2xl border border-line px-4 text-sm font-semibold text-ink-muted lg:hidden" @click="formOpen = false; syncDraft()">{{ $t('common.cancel') }}</button>
+            <button type="submit" class="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-7 font-bold text-primary-ink transition-colors hover:bg-primary-hover"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
           </div>
         </form>
       </div>
@@ -218,16 +222,16 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
       <!-- Heading + sort -->
       <div class="flex flex-wrap items-end justify-between gap-3 pb-3 pt-6">
         <div>
-          <nav class="mb-1 flex items-center gap-1 text-xs text-ink-subtle" aria-label="이동 경로">
-            <NuxtLink to="/" class="hover:text-ink">홈</NuxtLink><AppIcon name="chevron-right" :size="12" /><NuxtLink to="/hotels" class="hover:text-ink">호텔</NuxtLink>
+          <nav class="mb-1 flex items-center gap-1 text-xs text-ink-subtle" :aria-label="$t('common.breadcrumb')">
+            <NuxtLink :to="$localePath('/')" class="hover:text-ink">{{ $t('common.home') }}</NuxtLink><AppIcon name="chevron-right" :size="12" /><NuxtLink :to="$localePath('/hotels')" class="hover:text-ink">{{ $t('nav.hotels') }}</NuxtLink>
           </nav>
           <h1 class="text-xl font-bold tracking-tight text-ink sm:text-2xl">
-            {{ q.city ? `${q.city}의 숙소` : '모든 숙소' }}
-            <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ hotels.length }}개</span>
+            {{ q.city ? $t('hotels.list.h1city', { city: q.city }) : $t('hotels.list.h1all') }}
+            <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ $t('hotels.list.count', { n: hotels.length }) }}</span>
           </h1>
         </div>
         <label class="flex items-center gap-2 text-sm text-ink-muted">
-          <span class="hidden sm:inline">정렬</span>
+          <span class="hidden sm:inline">{{ $t('hotels.list.sort') }}</span>
           <select :value="q.sort" class="rounded-xl border border-line bg-surface py-2 pl-3 pr-8 text-sm font-semibold text-ink focus:border-primary focus:outline-none focus:ring-0" @change="setQuery({ sort: ($event.target as HTMLSelectElement).value as Sort })">
             <option v-for="s in SORTS" :key="s.id" :value="s.id">{{ s.label }}</option>
           </select>
@@ -237,21 +241,21 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
       <!-- Phone: filter button + quick chips -->
       <div class="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
         <button type="button" :class="[...chip(activeFilters.length > 0), 'shrink-0 whitespace-nowrap']" @click="sheet = true">
-          <AppIcon name="menu" :size="16" />필터<span v-if="activeFilters.length" class="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1 text-2xs text-primary-ink tabular">{{ activeFilters.length }}</span>
+          <AppIcon name="menu" :size="16" />{{ $t('hotels.list.filter') }}<span v-if="activeFilters.length" class="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1 text-2xs text-primary-ink tabular">{{ activeFilters.length }}</span>
         </button>
-        <button type="button" :class="[...chip(q.freeCancel), 'shrink-0']" :aria-pressed="q.freeCancel" @click="setQuery({ freeCancel: !q.freeCancel })">무료 취소</button>
-        <button type="button" :class="[...chip(q.breakfast), 'shrink-0']" :aria-pressed="q.breakfast" @click="setQuery({ breakfast: !q.breakfast })">조식 포함</button>
-        <button type="button" :class="[...chip(q.star === 5), 'shrink-0']" :aria-pressed="q.star === 5" @click="setQuery({ star: q.star === 5 ? 0 : 5 })">5성급</button>
-        <button type="button" :class="[...chip(q.score === 4.5), 'shrink-0']" :aria-pressed="q.score === 4.5" @click="setQuery({ score: q.score === 4.5 ? 0 : 4.5 })">평점 4.5+</button>
+        <button type="button" :class="[...chip(q.freeCancel), 'shrink-0']" :aria-pressed="q.freeCancel" @click="setQuery({ freeCancel: !q.freeCancel })">{{ $t('hotels.list.freeCancel') }}</button>
+        <button type="button" :class="[...chip(q.breakfast), 'shrink-0']" :aria-pressed="q.breakfast" @click="setQuery({ breakfast: !q.breakfast })">{{ $t('hotels.list.breakfast') }}</button>
+        <button type="button" :class="[...chip(q.star === 5), 'shrink-0']" :aria-pressed="q.star === 5" @click="setQuery({ star: q.star === 5 ? 0 : 5 })">{{ $t('hotels.list.star5') }}</button>
+        <button type="button" :class="[...chip(q.score === 4.5), 'shrink-0']" :aria-pressed="q.score === 4.5" @click="setQuery({ score: q.score === 4.5 ? 0 : 4.5 })">{{ $t('hotels.list.score45') }}</button>
       </div>
 
       <div class="grid gap-6 lg:grid-cols-[272px_1fr]">
         <!-- Filters (desktop sidebar; same panel is reused in the phone sheet) -->
-        <aside class="hidden lg:block" aria-label="필터">
+        <aside class="hidden lg:block" :aria-label="$t('hotels.list.filter')">
           <div class="sticky top-24 rounded-card border border-line bg-surface p-5">
             <div class="mb-4 flex items-center justify-between">
-              <h2 class="font-bold text-ink">필터</h2>
-              <button v-if="activeFilters.length" type="button" class="text-sm font-semibold text-primary hover:underline" @click="setQuery(FILTER_DEFAULTS)">초기화</button>
+              <h2 class="font-bold text-ink">{{ $t('hotels.list.filter') }}</h2>
+              <button v-if="activeFilters.length" type="button" class="text-sm font-semibold text-primary hover:underline" @click="setQuery(FILTER_DEFAULTS)">{{ $t('hotels.list.reset') }}</button>
             </div>
             <HotelFilterPanel :q="q" :types="TYPES" :price-steps="PRICE_STEPS" @set="setQuery" />
           </div>
@@ -260,17 +264,17 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
         <!-- Results -->
         <div class="min-w-0">
           <div v-if="activeFilters.length" class="mb-3 hidden flex-wrap items-center gap-2 lg:flex">
-            <button v-for="f in activeFilters" :key="f.key" type="button" class="inline-flex items-center gap-1 rounded-full bg-primary-soft py-1 pl-3 pr-2 text-sm font-semibold text-primary hover:bg-primary/15" :aria-label="`${f.label} 필터 해제`" @click="setQuery(f.clear)">
+            <button v-for="f in activeFilters" :key="f.key" type="button" class="inline-flex items-center gap-1 rounded-full bg-primary-soft py-1 pl-3 pr-2 text-sm font-semibold text-primary hover:bg-primary/15" :aria-label="$t('hotels.list.unfilter', { label: f.label })" @click="setQuery(f.clear)">
               {{ f.label }}<AppIcon name="close" :size="14" />
             </button>
           </div>
 
           <p class="mb-3 flex items-start gap-1.5 text-xs text-ink-subtle">
-            <AppIcon name="check" :size="14" class="mt-px" />표시 요금은 객실 1개·1박 참고가이며 세금 10%가 별도로 붙어요. 최종 금액은 예약 단계에서 날짜·인원 기준으로 확정됩니다.
+            <AppIcon name="check" :size="14" class="mt-px" />{{ $t('hotels.list.priceNote') }}
           </p>
 
           <!-- Loading -->
-          <ul v-if="state === 'loading'" class="space-y-3" aria-busy="true" aria-label="숙소를 불러오는 중">
+          <ul v-if="state === 'loading'" class="space-y-3" aria-busy="true" :aria-label="$t('hotels.list.loadingAria')">
             <li v-for="n in 4" :key="n" class="flex flex-col overflow-hidden rounded-card border border-line bg-surface sm:flex-row">
               <div class="aspect-[16/10] animate-pulse bg-surface-sunken sm:aspect-auto sm:h-auto sm:w-64" />
               <div class="flex-1 space-y-3 p-5"><div class="h-3 w-24 rounded bg-surface-sunken" /><div class="h-5 w-2/3 rounded bg-surface-sunken" /><div class="h-3 w-1/2 rounded bg-surface-sunken" /><div class="h-8 w-32 rounded bg-surface-sunken sm:ml-auto" /></div>
@@ -280,19 +284,19 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
           <!-- Error -->
           <div v-else-if="state === 'error'" class="rounded-card border border-dashed border-line-strong bg-surface px-6 py-12 text-center" role="alert">
             <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-danger-soft text-danger"><AppIcon name="close" /></span>
-            <p class="mt-4 font-bold text-ink">숙소 목록을 불러오지 못했어요</p>
-            <p class="mt-1 text-sm text-ink-muted">네트워크 상태를 확인한 뒤 다시 시도해 주세요.</p>
-            <button type="button" class="mt-5 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-ink hover:bg-primary-hover" @click="load">다시 시도</button>
+            <p class="mt-4 font-bold text-ink">{{ $t('hotels.list.loadFail') }}</p>
+            <p class="mt-1 text-sm text-ink-muted">{{ $t('hotels.list.loadFailSub') }}</p>
+            <button type="button" class="mt-5 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-ink hover:bg-primary-hover" @click="load">{{ $t('common.retry') }}</button>
           </div>
 
           <!-- Empty -->
           <div v-else-if="!hotels.length" class="rounded-card border border-dashed border-line-strong bg-surface px-6 py-12 text-center">
             <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-sunken text-ink-subtle"><AppIcon name="hotel" /></span>
-            <p class="mt-4 font-bold text-ink">{{ q.city ? `‘${q.city}’에서 조건에 맞는 숙소가 없어요` : '조건에 맞는 숙소가 없어요' }}</p>
-            <p class="mt-1 text-sm text-ink-muted">필터를 줄이거나 다른 목적지로 검색해 보세요.</p>
+            <p class="mt-4 font-bold text-ink">{{ q.city ? $t('hotels.list.emptyCity', { city: q.city }) : $t('hotels.list.emptyAll') }}</p>
+            <p class="mt-1 text-sm text-ink-muted">{{ $t('hotels.list.emptySub') }}</p>
             <div class="mt-5 flex flex-wrap justify-center gap-2">
-              <button v-if="activeFilters.length" type="button" class="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-ink hover:bg-primary-hover" @click="setQuery(FILTER_DEFAULTS)">필터 초기화</button>
-              <button v-if="q.city" type="button" class="rounded-xl border border-line px-5 py-2.5 text-sm font-semibold text-ink hover:bg-surface-sunken" @click="setQuery({ city: '' })">모든 목적지 보기</button>
+              <button v-if="activeFilters.length" type="button" class="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-ink hover:bg-primary-hover" @click="setQuery(FILTER_DEFAULTS)">{{ $t('hotels.list.resetFilters') }}</button>
+              <button v-if="q.city" type="button" class="rounded-xl border border-line px-5 py-2.5 text-sm font-semibold text-ink hover:bg-surface-sunken" @click="setQuery({ city: '' })">{{ $t('hotels.list.viewAllDest') }}</button>
             </div>
           </div>
 
@@ -307,22 +311,22 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
                   <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
                       <p class="flex flex-wrap items-center gap-x-2 text-xs text-ink-subtle">
-                        <span v-if="Number(h.star_rating) > 0" class="flex items-center text-warning" :aria-label="`${h.star_rating}성급`">
+                        <span v-if="Number(h.star_rating) > 0" class="flex items-center text-warning" :aria-label="$t('hotels.list.starAria', { n: h.star_rating })">
                           <AppIcon v-for="n in Number(h.star_rating)" :key="n" name="star" :size="12" stroke="0" class="fill-current" />
                         </span>
-                        <span>{{ TYPE_LABEL[h.property_type] || '숙소' }}</span>
+                        <span>{{ TYPE_LABEL[h.property_type] || $t('hotels.list.stay') }}</span>
                       </p>
                       <h2 class="mt-1 text-lg font-bold leading-snug text-ink">
-                        <NuxtLink :to="detailLink(h)" class="after:absolute after:inset-0 group-hover:text-primary">{{ h.name_ko }}</NuxtLink>
+                        <NuxtLink :to="$localePath(detailLink(h))" class="after:absolute after:inset-0 group-hover:text-primary">{{ h.name_ko }}</NuxtLink>
                       </h2>
                       <p v-if="h.name_en" class="truncate text-xs text-ink-subtle">{{ h.name_en }}</p>
                     </div>
                     <div v-if="Number(h.review_score) > 0" class="flex shrink-0 flex-col items-end">
                       <span class="rounded-lg bg-primary px-2 py-1 text-sm font-bold text-primary-ink tabular">{{ Number(h.review_score).toFixed(1) }}</span>
-                      <span v-if="h.review_count" class="mt-1 text-2xs text-ink-subtle tabular">인증 후기 {{ Number(h.review_count).toLocaleString('ko-KR') }}</span>
+                      <span v-if="h.review_count" class="mt-1 text-2xs text-ink-subtle tabular">{{ $t('hotels.list.verifiedReviews', { n: $n(Number(h.review_count)) }) }}</span>
                     </div>
                     <div v-else class="flex shrink-0 flex-col items-end">
-                      <span class="rounded-lg bg-surface-sunken px-2 py-1 text-xs font-bold text-ink-muted">신규</span>
+                      <span class="rounded-lg bg-surface-sunken px-2 py-1 text-xs font-bold text-ink-muted">{{ $t('hotels.list.newBadge') }}</span>
                     </div>
                   </div>
 
@@ -338,16 +342,16 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
 
                   <div class="mt-auto flex items-end justify-between gap-3 pt-4">
                     <ul class="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold">
-                      <li v-if="h.free_cancellation" class="flex items-center gap-1 text-success"><AppIcon name="check" :size="14" />무료 취소</li>
-                      <li v-if="h.free_breakfast" class="flex items-center gap-1 text-success"><AppIcon name="check" :size="14" />조식 포함</li>
-                      <li v-if="h.bookable === false" class="flex items-center gap-1 text-warning">현재 직접 예약 불가</li>
+                      <li v-if="h.free_cancellation" class="flex items-center gap-1 text-success"><AppIcon name="check" :size="14" />{{ $t('hotels.list.freeCancel') }}</li>
+                      <li v-if="h.free_breakfast" class="flex items-center gap-1 text-success"><AppIcon name="check" :size="14" />{{ $t('hotels.list.breakfast') }}</li>
+                      <li v-if="h.bookable === false" class="flex items-center gap-1 text-warning">{{ $t('hotels.list.notBookableNow') }}</li>
                     </ul>
                     <div v-if="fromPrice(h)" class="shrink-0 text-right">
-                      <p class="text-2xs text-ink-subtle">1박 참고가</p>
+                      <p class="text-2xs text-ink-subtle">{{ $t('hotels.list.perNightRef') }}</p>
                       <p class="text-xl font-extrabold text-ink tabular">{{ currency.formatKRW(fromPrice(h)!) }}<span class="text-xs font-medium text-ink-subtle">~</span></p>
-                      <p v-if="nights > 0" class="text-2xs text-ink-subtle tabular">{{ nights }}박 · 객실 {{ q.rooms }}개 약 {{ currency.formatKRW(fromPrice(h)! * nights * q.rooms) }}</p>
+                      <p v-if="nights > 0" class="text-2xs text-ink-subtle tabular">{{ $t('hotels.list.stayTotal', { n: nights, rooms: q.rooms, v: currency.formatKRW(fromPrice(h)! * nights * q.rooms) }) }}</p>
                     </div>
-                    <p v-else class="shrink-0 text-sm text-ink-subtle">요금 확인 필요</p>
+                    <p v-else class="shrink-0 text-sm text-ink-subtle">{{ $t('hotels.list.priceTbd') }}</p>
                   </div>
                 </div>
               </article>
@@ -362,18 +366,18 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
       <Transition enter-from-class="opacity-0" enter-active-class="transition-opacity duration-150" leave-to-class="opacity-0" leave-active-class="transition-opacity duration-100">
         <div v-if="sheet" class="fixed inset-0 z-[70] bg-midnight-950/50 lg:hidden" @click="sheet = false" />
       </Transition>
-      <div v-if="sheet" role="dialog" aria-modal="true" aria-label="필터" class="fixed inset-x-0 bottom-0 z-[71] flex max-h-[88vh] animate-pop-in flex-col rounded-t-[28px] bg-surface-raised shadow-pop lg:hidden">
+      <div v-if="sheet" role="dialog" aria-modal="true" :aria-label="$t('hotels.list.filter')" class="fixed inset-x-0 bottom-0 z-[71] flex max-h-[88vh] animate-pop-in flex-col rounded-t-[28px] bg-surface-raised shadow-pop lg:hidden">
         <div class="flex items-center justify-between border-b border-line px-5 pb-3 pt-4">
-          <h2 class="text-base font-bold text-ink">필터</h2>
-          <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" aria-label="닫기" @click="sheet = false"><AppIcon name="close" /></button>
+          <h2 class="text-base font-bold text-ink">{{ $t('hotels.list.filter') }}</h2>
+          <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" :aria-label="$t('common.close')" @click="sheet = false"><AppIcon name="close" /></button>
         </div>
         <div class="flex-1 overflow-y-auto overscroll-contain px-5 py-4">
           <HotelFilterPanel :q="q" :types="TYPES" :price-steps="PRICE_STEPS" @set="setQuery" />
         </div>
         <div class="flex gap-2 border-t border-line px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-          <button type="button" class="rounded-xl px-4 py-3 text-sm font-semibold text-ink-muted hover:bg-surface-sunken" @click="setQuery(FILTER_DEFAULTS)">초기화</button>
+          <button type="button" class="rounded-xl px-4 py-3 text-sm font-semibold text-ink-muted hover:bg-surface-sunken" @click="setQuery(FILTER_DEFAULTS)">{{ $t('hotels.list.reset') }}</button>
           <button type="button" class="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-primary-ink hover:bg-primary-hover" @click="sheet = false">
-            {{ state === 'loading' ? '검색 중…' : `숙소 ${hotels.length}개 보기` }}
+            {{ state === 'loading' ? $t('hotels.list.searching') : $t('hotels.list.viewCount', { n: hotels.length }) }}
           </button>
         </div>
       </div>

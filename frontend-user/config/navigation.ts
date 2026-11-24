@@ -21,22 +21,22 @@ export const CATEGORIES: NavCategory[] = [
 ]
 
 export const DISCOVER_LINKS = [
-  { label: '특가·쿠폰', to: '/deals', icon: 'gift' },
-  { label: 'getfortrip Best', to: '/trip-best', icon: 'trophy' },
-  { label: '여행 모먼트', to: '/moments', icon: 'camera' }
+  { key: 'deals', label: '특가·쿠폰', to: '/deals', icon: 'gift' },
+  { key: 'best', label: 'getfortrip Best', to: '/trip-best', icon: 'trophy' },
+  { key: 'moments', label: '여행 모먼트', to: '/moments', icon: 'camera' }
 ]
 
 export const SUPPORT_LINKS = [
-  { label: '고객센터', to: '/help', icon: 'support' },
-  { label: '자주 묻는 질문', to: '/faq', icon: 'support' },
-  { label: '취소·환불 규정', to: '/refund-policy', icon: 'refund' }
+  { key: 'help', label: '고객센터', to: '/help', icon: 'support' },
+  { key: 'faq', label: '자주 묻는 질문', to: '/faq', icon: 'support' },
+  { key: 'refundPolicy', label: '취소·환불 규정', to: '/refund-policy', icon: 'refund' }
 ]
 
 export const CURRENCIES = ['KRW', 'USD', 'JPY', 'EUR', 'CNY', 'GBP'] as const
 
 export const LOCALES = [
-  { id: 'ko-kr', label: '한국어' },
-  { id: 'en-us', label: 'English' },
-  { id: 'ja-jp', label: '日本語' },
-  { id: 'zh-cn', label: '中文' }
+  { id: 'ko', label: '한국어' },
+  { id: 'en', label: 'English' },
+  { id: 'ja', label: '日本語' },
+  { id: 'zh', label: '中文' }
 ] as const

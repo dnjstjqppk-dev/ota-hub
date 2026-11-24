@@ -24,6 +24,7 @@ interface Plan {
 
 const currency = useCurrencyStore()
 const { route, patch } = useUrlQuery()
+const { t, locale } = useI18n()
 const MIN_DAYS = 1
 const MAX_DAYS = 90
 const days = ref(qInt(route.query.days, 5, MIN_DAYS, MAX_DAYS))
@@ -50,8 +51,8 @@ onMounted(async () => {
   const code = qStr(route.query.country).toUpperCase()
   if (isIsoCountry(code)) destination.value = (await resolveCountry(code, 'insurance'))?.name || ''
 })
-let t: ReturnType<typeof setTimeout> | undefined
-watch(days, (n) => { patch({ days: n === 5 ? '' : n }); clearTimeout(t); t = setTimeout(load, 250) })
+let deb: ReturnType<typeof setTimeout> | undefined
+watch(days, (n) => { patch({ days: n === 5 ? '' : n }); clearTimeout(deb); deb = setTimeout(load, 250) })
 
 function onSelect(it: { code?: string | null; country_code?: string | null }) {
   const code = it.code || it.country_code
@@ -64,33 +65,37 @@ function setDays(n: number) {
 }
 
 /** 70,000,000 → "7,000만원", 100,000,000 → "1억원". */
-function won(n: number) {
+function wonKo(n: number) {
   if (n >= 1e8 && n % 1e8 === 0) return `${(n / 1e8).toLocaleString('ko-KR')}억원`
   if (n >= 1e4) return `${Math.round(n / 1e4).toLocaleString('ko-KR')}만원`
   return `${n.toLocaleString('ko-KR')}원`
 }
-const tripLabel = computed(() => `${destination.value.trim() ? `${destination.value.trim()} ` : ''}${days.value}일 여행 기준`)
+const won = (n: number) => (locale.value === 'ko' ? wonKo(n) : currency.formatKRW(n))
+const tripLabel = computed(() => {
+  const d = destination.value.trim()
+  return d ? t('insurance.tripDest', { dest: d, n: days.value }) : t('insurance.tripNoDest', { n: days.value })
+})
 
 // P5: canonical + hreflang + OG via the shared builder (affiliate landing: no direct issuance).
-useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/insurance', title: '해외 여행자보험', description: '여행 기간에 맞춰 해외 여행자보험 플랜의 보장 내용과 보험료를 비교해 보세요.' })
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/insurance', title: t('insurance.seoTitle'), description: t('insurance.seoDesc') })
 </script>
 
 <template>
   <div class="pb-24 lg:pb-16">
     <section class="relative overflow-hidden border-b border-line bg-gradient-to-b from-sapphire-50 to-canvas">
       <div class="mx-auto max-w-7xl px-4 pb-6 pt-8 lg:px-6 lg:pt-12">
-        <nav class="mb-2 flex items-center gap-1 text-xs text-ink-subtle" aria-label="이동 경로"><NuxtLink to="/" class="hover:text-ink">홈</NuxtLink><AppIcon name="chevron-right" :size="12" /><span>여행자보험</span></nav>
-        <h1 class="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">여행 기간에 맞춘 여행자보험</h1>
-        <p class="mt-2 max-w-2xl text-base text-ink-muted">여행할 국가와 기간을 넣으면 플랜별 보험료를 비교해 드려요.</p>
+        <nav class="mb-2 flex items-center gap-1 text-xs text-ink-subtle" :aria-label="$t('common.breadcrumb')"><NuxtLink :to="$localePath('/')" class="hover:text-ink">{{ $t('common.home') }}</NuxtLink><AppIcon name="chevron-right" :size="12" /><span>{{ $t('nav.insurance') }}</span></nav>
+        <h1 class="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ $t('insurance.heroTitle') }}</h1>
+        <p class="mt-2 max-w-2xl text-base text-ink-muted">{{ $t('insurance.heroSub') }}</p>
         <div class="mt-5 flex max-w-2xl flex-col gap-2 sm:flex-row">
-          <div class="field-box flex-1"><label for="ins-dest" class="field-label">여행 국가</label><SearchAutocomplete v-model="destination" input-id="ins-dest" domain="insurance" variant="bare" placeholder="예: 일본, 프랑스" @select="onSelect" /></div>
+          <div class="field-box flex-1"><label for="ins-dest" class="field-label">{{ $t('esim.countryLabel') }}</label><SearchAutocomplete v-model="destination" input-id="ins-dest" domain="insurance" variant="bare" :placeholder="$t('insurance.countryPh')" @select="onSelect" /></div>
           <div class="field-box sm:w-48">
-            <label for="ins-days" class="field-label">여행 기간</label>
+            <label for="ins-days" class="field-label">{{ $t('insurance.period') }}</label>
             <div class="flex items-center gap-2">
-              <button type="button" class="flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted hover:text-ink disabled:opacity-40" :disabled="days <= MIN_DAYS" aria-label="하루 줄이기" @click="setDays(days - 1)"><AppIcon name="minus" :size="14" /></button>
+              <button type="button" class="flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted hover:text-ink disabled:opacity-40" :disabled="days <= MIN_DAYS" :aria-label="$t('insurance.dayDec')" @click="setDays(days - 1)"><AppIcon name="minus" :size="14" /></button>
               <input id="ins-days" :value="days" type="number" inputmode="numeric" :min="MIN_DAYS" :max="MAX_DAYS" class="w-12 bg-transparent text-center text-base font-semibold text-ink tabular focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" @change="setDays(Number(($event.target as HTMLInputElement).value))" />
-              <span class="text-sm text-ink-muted">일</span>
-              <button type="button" class="flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted hover:text-ink disabled:opacity-40" :disabled="days >= MAX_DAYS" aria-label="하루 늘리기" @click="setDays(days + 1)"><AppIcon name="plus" :size="14" /></button>
+              <span class="text-sm text-ink-muted">{{ $t('insurance.dayUnit') }}</span>
+              <button type="button" class="flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted hover:text-ink disabled:opacity-40" :disabled="days >= MAX_DAYS" :aria-label="$t('insurance.dayInc')" @click="setDays(days + 1)"><AppIcon name="plus" :size="14" /></button>
             </div>
           </div>
         </div>
@@ -100,30 +105,30 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/i
     <div class="mx-auto max-w-7xl px-4 lg:px-6">
       <div class="mt-6 flex items-start gap-3 rounded-card border border-line bg-surface-sunken p-4 text-sm text-ink-muted" role="note">
         <AppIcon name="shield" class="mt-0.5 shrink-0 text-ink-subtle" />
-        <p><strong class="font-semibold text-ink">여행자보험은 아직 가입할 수 없어요.</strong> 보험 판매에 필요한 대리점 등록과 보험사 제휴를 준비하고 있어요. 아래 보장 내용과 보험료는 확정 전 참고용이고, 이 화면에서는 가입이나 증권 발급이 되지 않아요.</p>
+        <p><strong class="font-semibold text-ink">{{ $t('insurance.comingSoon') }}</strong> {{ $t('insurance.comingSub') }}</p>
       </div>
 
-      <h2 class="pb-3 pt-8 text-xl font-bold tracking-tight text-ink">플랜 비교 <span class="ml-1 text-base font-semibold text-ink-subtle">{{ tripLabel }}</span></h2>
+      <h2 class="pb-3 pt-8 text-xl font-bold tracking-tight text-ink">{{ $t('insurance.compare') }} <span class="ml-1 text-base font-semibold text-ink-subtle">{{ tripLabel }}</span></h2>
 
       <div v-if="state === 'loading' && !plans.length" class="grid gap-4 md:grid-cols-3">
         <div v-for="n in 3" :key="n" class="h-64 animate-pulse rounded-card bg-surface-sunken" />
       </div>
       <div v-else-if="state === 'error'" class="card p-6 text-center text-sm">
-        <span class="text-ink-muted">플랜을 불러오지 못했어요.</span>
-        <button type="button" class="ml-2 font-semibold text-primary" @click="load">다시 시도</button>
+        <span class="text-ink-muted">{{ $t('insurance.loadFail') }}</span>
+        <button type="button" class="ml-2 font-semibold text-primary" @click="load">{{ $t('common.retry') }}</button>
       </div>
-      <p v-else-if="!plans.length" class="card p-8 text-center text-sm text-ink-muted">준비된 플랜이 없어요.</p>
+      <p v-else-if="!plans.length" class="card p-8 text-center text-sm text-ink-muted">{{ $t('insurance.empty') }}</p>
       <ul v-else class="grid gap-4 md:grid-cols-3" :aria-busy="state === 'loading'">
         <li v-for="p in plans" :key="p.id" class="card flex flex-col p-5" :class="state === 'loading' ? 'opacity-60' : ''">
           <h3 class="text-lg font-bold text-ink">{{ p.plan_name }}</h3>
           <p class="mt-2 text-2xl font-extrabold text-ink tabular">{{ currency.formatKRW(p.total_price_minor) }}</p>
-          <p class="text-2xs text-ink-subtle">{{ days }}일 · 1인 · 하루 {{ currency.formatKRW(p.daily_rate_minor) }} · 참고가</p>
+          <p class="text-2xs text-ink-subtle">{{ $t('insurance.perLine', { n: days, v: currency.formatKRW(p.daily_rate_minor) }) }}</p>
           <dl class="mb-4 mt-4 space-y-2 border-t border-line pt-4 text-sm">
-            <div class="flex justify-between gap-3"><dt class="text-ink-subtle">해외 의료비</dt><dd class="font-semibold text-ink tabular">최대 {{ won(p.medical_coverage_minor) }}</dd></div>
-            <div class="flex justify-between gap-3"><dt class="text-ink-subtle">휴대품 손해</dt><dd class="font-semibold text-ink tabular">최대 {{ won(p.baggage_loss_coverage_minor) }}</dd></div>
-            <div class="flex justify-between gap-3"><dt class="text-ink-subtle">여행 취소</dt><dd class="font-semibold text-ink tabular">최대 {{ won(p.cancellation_coverage_minor) }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-ink-subtle">{{ $t('insurance.covMedical') }}</dt><dd class="font-semibold text-ink tabular">{{ $t('insurance.maxCover', { v: won(p.medical_coverage_minor) }) }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-ink-subtle">{{ $t('insurance.covBaggage') }}</dt><dd class="font-semibold text-ink tabular">{{ $t('insurance.maxCover', { v: won(p.baggage_loss_coverage_minor) }) }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-ink-subtle">{{ $t('insurance.covCancel') }}</dt><dd class="font-semibold text-ink tabular">{{ $t('insurance.maxCover', { v: won(p.cancellation_coverage_minor) }) }}</dd></div>
           </dl>
-          <button type="button" class="btn-secondary mt-auto w-full cursor-not-allowed opacity-60" disabled>가입 준비 중</button>
+          <button type="button" class="btn-secondary mt-auto w-full cursor-not-allowed opacity-60" disabled>{{ $t('insurance.comingBtn') }}</button>
         </li>
       </ul>
     </div>

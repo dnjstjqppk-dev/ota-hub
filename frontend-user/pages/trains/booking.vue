@@ -4,5 +4,5 @@ useLegacyCheckoutRedirect('TRAIN', (q) => ({ itemId: q.trainId, startDate: q.dat
 </script>
 
 <template>
-  <div class="min-h-[40vh] flex items-center justify-center text-sm text-slate-500">예약 화면으로 이동 중…</div>
+  <div class="min-h-[40vh] flex items-center justify-center text-sm text-slate-500">{{ $t('redirect.checkout') }}</div>
 </template>

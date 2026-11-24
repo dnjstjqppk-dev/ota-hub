@@ -3,10 +3,14 @@ import { ref, onMounted } from 'vue'
 import { apiFetch, useApiUrl } from '~/composables/useApi'
 import { useAuthStore } from '~/stores/auth'
 
+const { t, locale } = useI18n()
+const localePath = useLocalePath()
 useHead({
-  title: '여행 모먼트',
-  meta: [{ name: 'description', content: '전 세계 여행자들의 생생한 여행 기록과 포토 커뮤니티' }]
+  title: t('moments.title'),
+  meta: [{ name: 'description', content: t('moments.desc') }]
 })
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
+const fmtDate = (s: string) => new Date(s).toLocaleDateString(LOCALE_TAG[locale.value] || 'ko-KR')
 
 interface Moment {
   id: string
@@ -46,7 +50,7 @@ function toMoment(r: any): Moment {
   } catch {}
   return {
     id: String(r.id),
-    user_name: r.user_name || '여행자',
+    user_name: r.user_name || t('moments.traveler'),
     user_avatar: r.user_avatar || null,
     city: r.city || '',
     title: r.title || '',
@@ -70,7 +74,7 @@ const fetchMoments = async () => {
 
 function openWrite() {
   if (!auth.isLoggedIn) {
-    navigateTo({ path: '/login', query: { redirect: '/moments' } })
+    navigateTo({ path: localePath('/login'), query: { redirect: localePath('/moments') } })
     return
   }
   submitError.value = ''
@@ -81,7 +85,7 @@ function openWrite() {
 
 const toggleLike = async (m: Moment) => {
   if (!auth.isLoggedIn) {
-    navigateTo({ path: '/login', query: { redirect: '/moments' } })
+    navigateTo({ path: localePath('/login'), query: { redirect: localePath('/moments') } })
     return
   }
   if (liking.value) return
@@ -114,11 +118,11 @@ const attachFiles = async (ev: Event) => {
       form.append('purpose', 'MOMENT_PHOTO')
       const res = await fetch(useApiUrl('/uploads'), { credentials: 'include', method: 'POST', body: form })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok || !json.url) throw new Error(json.error || '사진 업로드에 실패했습니다.')
+      if (!res.ok || !json.url) throw new Error(json.error || t('moments.uploadFail'))
       draftPhotos.value.push(absolutizeUpload(String(json.url)))
     }
   } catch (e: any) {
-    uploadError.value = e.message || '사진 업로드에 실패했습니다.'
+    uploadError.value = e.message || t('moments.uploadFail')
   } finally {
     uploading.value = false
     input.value = ''
@@ -133,18 +137,18 @@ const submitMoment = async () => {
   submitError.value = ''
   const r = await apiFetch('/moments', {
     method: 'POST',
-    body: { title, content, city: newCity.value.trim() || '서울', photos: draftPhotos.value.slice(0, 10) }
+    body: { title, content, city: newCity.value.trim() || t('moments.cityDef'), photos: draftPhotos.value.slice(0, 10) }
   })
   submitting.value = false
   if (!r.ok) {
-    submitError.value = (r.data as any)?.error || '작성에 실패했습니다. 다시 시도해주세요.'
+    submitError.value = (r.data as any)?.error || t('moments.submitFail')
     return
   }
   moments.value.unshift({
     id: String((r.data as any).id),
-    user_name: auth.user?.fullName || '여행자',
+    user_name: auth.user?.fullName || t('moments.traveler'),
     user_avatar: null,
-    city: newCity.value.trim() || '서울',
+    city: newCity.value.trim() || t('moments.cityDef'),
     title,
     content,
     photos: draftPhotos.value.slice(0, 10),
@@ -167,8 +171,8 @@ onMounted(() => {
   <div class="max-w-6xl mx-auto px-4 py-8 space-y-6">
     <div class="flex items-center justify-between gap-3">
       <div>
-        <h1 class="text-3xl font-black text-slate-900 tracking-tight">여행 모먼트</h1>
-        <p class="text-sm text-slate-500 mt-1">전 세계 여행자들의 생생한 여행 기록, 꿀팁 및 포토 커뮤니티</p>
+        <h1 class="text-3xl font-black text-slate-900 tracking-tight">{{ $t('moments.title') }}</h1>
+        <p class="text-sm text-slate-500 mt-1">{{ $t('moments.sub') }}</p>
       </div>
 
       <button
@@ -176,7 +180,7 @@ onMounted(() => {
         @click="openWrite"
         class="px-5 py-2.5 bg-trip-blue hover:bg-trip-hover text-white text-xs font-bold rounded-xl shadow-md flex shrink-0 items-center gap-2"
       >
-        <AppIcon name="plus" :size="14" /> 모먼트 작성하기
+        <AppIcon name="plus" :size="14" /> {{ $t('moments.write') }}
       </button>
     </div>
 
@@ -184,30 +188,30 @@ onMounted(() => {
       :state="state"
       :count="moments.length"
       icon="camera"
-      empty-title="아직 등록된 모먼트가 없어요"
-      empty-hint="첫 여행 기록을 남겨보세요."
-      error-title="모먼트를 불러오지 못했어요"
+      :empty-title="$t('moments.empty')"
+      :empty-hint="$t('moments.emptyHint')"
+      :error-title="$t('moments.loadFail')"
       @retry="fetchMoments"
     >
       <template #empty-actions>
-        <button type="button" class="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-ink hover:bg-primary-hover" @click="openWrite">첫 모먼트 작성하기</button>
+        <button type="button" class="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-ink hover:bg-primary-hover" @click="openWrite">{{ $t('moments.writeFirst') }}</button>
       </template>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <article v-for="m in moments" :key="m.id" class="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm space-y-4">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-trip-blue/10 text-sm font-black text-trip-blue" aria-hidden="true">{{ (m.user_name || '여').slice(0, 1) }}</span>
+              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-trip-blue/10 text-sm font-black text-trip-blue" aria-hidden="true">{{ (m.user_name || $t('moments.traveler')).slice(0, 1) }}</span>
               <div>
                 <div class="font-bold text-slate-900 text-sm">{{ m.user_name }}</div>
-                <div class="text-xs text-slate-400">{{ m.city }} 여행기 · {{ m.created_at ? new Date(m.created_at).toLocaleDateString() : '' }}</div>
+                <div class="text-xs text-slate-400">{{ $t('moments.tripLog', { city: m.city, d: m.created_at ? fmtDate(m.created_at) : '' }) }}</div>
               </div>
             </div>
             <button
               type="button"
               :disabled="liking === m.id"
               :aria-pressed="likedIds.has(m.id)"
-              :aria-label="likedIds.has(m.id) ? '좋아요 취소' : '좋아요'"
+              :aria-label="likedIds.has(m.id) ? $t('moments.unlike') : $t('moments.like')"
               :class="['flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold transition disabled:opacity-50', likedIds.has(m.id) ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-600 hover:bg-rose-100']"
               @click="toggleLike(m)"
             >
@@ -221,37 +225,37 @@ onMounted(() => {
           </div>
 
           <div v-if="m.photos.length" class="flex gap-2">
-            <SmartImg v-for="p in m.photos" :key="p" :src="p" class="w-32 h-24 rounded-2xl object-cover" alt="모먼트 사진" />
+            <SmartImg v-for="p in m.photos" :key="p" :src="p" class="w-32 h-24 rounded-2xl object-cover" :alt="$t('moments.photoAlt')" />
           </div>
         </article>
       </div>
     </ResultsState>
 
     <!-- 작성 모달 -->
-    <div v-if="showWriteModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-label="새 여행 모먼트 작성">
+    <div v-if="showWriteModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" :aria-label="$t('moments.modalAria')">
       <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-        <h3 class="text-lg font-black text-slate-900">새 여행 모먼트 작성</h3>
+        <h3 class="text-lg font-black text-slate-900">{{ $t('moments.modalTitle') }}</h3>
 
         <div class="space-y-3">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-city">여행 도시</label>
-            <input id="moment-city" v-model="newCity" type="text" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold" placeholder="서울" />
+            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-city">{{ $t('moments.cityLabel') }}</label>
+            <input id="moment-city" v-model="newCity" type="text" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold" :placeholder="$t('moments.cityDef')" />
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-title">제목</label>
-            <input id="moment-title" v-model="newTitle" type="text" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold" placeholder="여행지의 인상적인 순간을 요약해주세요" />
+            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-title">{{ $t('help.subject') }}</label>
+            <input id="moment-title" v-model="newTitle" type="text" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold" :placeholder="$t('moments.titlePh')" />
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-content">내용</label>
-            <textarea id="moment-content" v-model="newContent" rows="4" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs" placeholder="여행 꿀팁, 맛집, 호텔 후기를 적어주세요."></textarea>
+            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-content">{{ $t('help.body') }}</label>
+            <textarea id="moment-content" v-model="newContent" rows="4" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs" :placeholder="$t('moments.contentPh')"></textarea>
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-photos">사진 (최대 10장)</label>
+            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-photos">{{ $t('moments.photosLabel') }}</label>
             <input id="moment-photos" type="file" accept="image/jpeg,image/png,image/webp" multiple :disabled="uploading || draftPhotos.length >= 10" class="w-full text-xs text-slate-600" @change="attachFiles" />
-            <p v-if="uploading" class="mt-1 text-xs text-slate-500" role="status">사진을 올리는 중…</p>
+            <p v-if="uploading" class="mt-1 text-xs text-slate-500" role="status">{{ $t('moments.uploading') }}</p>
             <p v-if="uploadError" class="mt-1 text-xs font-bold text-danger" role="alert">{{ uploadError }}</p>
             <div v-if="draftPhotos.length" class="mt-2 flex flex-wrap gap-2">
-              <img v-for="(p, i) in draftPhotos" :key="p + i" :src="p" class="h-16 w-20 rounded-xl object-cover" alt="첨부 미리보기" />
+              <img v-for="(p, i) in draftPhotos" :key="p + i" :src="p" class="h-16 w-20 rounded-xl object-cover" :alt="$t('moments.previewAlt')" />
             </div>
           </div>
         </div>
@@ -260,10 +264,10 @@ onMounted(() => {
 
         <div class="flex gap-2 pt-2">
           <button type="button" :disabled="submitting || !newTitle.trim() || !newContent.trim()" @click="submitMoment" class="flex-1 py-3 bg-trip-blue text-white font-bold rounded-xl text-xs shadow-md disabled:opacity-50">
-            {{ submitting ? '작성 중…' : '작성 완료' }}
+            {{ submitting ? $t('moments.submitting') : $t('moments.submit') }}
           </button>
           <button type="button" @click="showWriteModal = false" class="py-3 px-5 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs">
-            취소
+            {{ $t('common.cancel') }}
           </button>
         </div>
       </div>

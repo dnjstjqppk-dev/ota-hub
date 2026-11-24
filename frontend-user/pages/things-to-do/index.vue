@@ -10,16 +10,19 @@ import { qOneOf, qStr, useUrlQuery } from '~/composables/useUrlQuery'
 
 const { route, patch, isSelf } = useUrlQuery()
 const currency = useCurrencyStore()
+const { t } = useI18n()
 
-const SORTS = [{ id: 'recommended', label: '추천순' }, { id: 'price_asc', label: '낮은 가격순' }, { id: 'rating_desc', label: '평점 높은순' }] as const
-const CATEGORY_KO: Record<string, string> = { THEME_PARK: '테마파크', DAY_TOUR: '일일 투어', DOCENT_TOUR: '해설 투어', TICKET: '입장권', EXPERIENCE: '체험', CRUISE: '크루즈', SHOW: '공연', ESIM: 'eSIM·데이터' }
+const SORT_IDS = ['recommended', 'price_asc', 'rating_desc'] as const
+const SORTS = computed(() => SORT_IDS.map((id) => ({ id, label: t(`todo.sort_${id}`) })))
+const CAT_IDS = ['THEME_PARK', 'DAY_TOUR', 'DOCENT_TOUR', 'TICKET', 'EXPERIENCE', 'CRUISE', 'SHOW', 'ESIM'] as const
+const catLabel = (c: string) => ((CAT_IDS as readonly string[]).includes(c) ? t(`todo.cat_${c}`) : c)
 
 const q = computed(() => {
   const r = route.query
   return {
     text: qStr(r.q || r.city || r.query), category: qStr(r.category),
     instant: qStr(r.instant) === 'true', freeCancel: qStr(r.freeCancel) === 'true',
-    sort: qOneOf(r.sortBy, SORTS.map((s) => s.id), 'recommended')
+    sort: qOneOf(r.sortBy, [...SORT_IDS], 'recommended')
   }
 })
 const draft = ref('')
@@ -60,31 +63,31 @@ await useAsyncData('tg15-things-list', () => load())
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onBeforeUnmount(() => ctrl?.abort())
 useHead(() => ({
-  title: q.value.text ? `${q.value.text} 투어·티켓` : '투어·티켓·체험',
-  meta: [{ name: 'description', content: '테마파크 입장권, 현지 투어, 체험 상품을 비교하고 예약하세요.' }]
+  title: q.value.text ? t('todo.docTitleQ', { q: q.value.text }) : t('todo.title'),
+  meta: [{ name: 'description', content: t('todo.seoDesc') }]
 }))
 // P5: canonical + hreflang via the shared builder (bare path; query filters excluded from the canonical).
-useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/things-to-do', title: '투어·티켓·체험', description: '테마파크 입장권, 현지 투어, 체험 상품을 비교하고 예약하세요.' })
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/things-to-do', title: t('todo.title'), description: t('todo.seoDesc') })
 </script>
 
 <template>
   <div class="pb-24 lg:pb-16">
     <section class="relative overflow-hidden border-b border-line bg-gradient-to-b from-sapphire-50 to-canvas">
       <div class="mx-auto max-w-7xl px-4 pb-6 pt-8 lg:px-6 lg:pt-12">
-        <nav class="mb-2 flex items-center gap-1 text-xs text-ink-subtle" aria-label="이동 경로"><NuxtLink to="/" class="hover:text-ink">홈</NuxtLink><AppIcon name="chevron-right" :size="12" /><span>투어·티켓</span></nav>
-        <h1 class="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">여행지에서 할 일을 찾아보세요</h1>
+        <nav class="mb-2 flex items-center gap-1 text-xs text-ink-subtle" :aria-label="$t('common.breadcrumb')"><NuxtLink :to="$localePath('/')" class="hover:text-ink">{{ $t('common.home') }}</NuxtLink><AppIcon name="chevron-right" :size="12" /><span>{{ $t('nav.things-to-do') }}</span></nav>
+        <h1 class="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ $t('todo.heroTitle') }}</h1>
         <form class="mt-5 flex max-w-2xl gap-2" role="search" novalidate @submit.prevent="submit">
-          <div class="field-box flex-1"><label for="td-q" class="field-label">도시·명소·상품</label><SearchAutocomplete v-model="draft" input-id="td-q" domain="things-to-do" variant="bare" placeholder="예: 도쿄, 디즈니랜드, 루브르" @enter="submit" /></div>
-          <button type="submit" class="btn-primary min-h-[52px] rounded-2xl px-6 text-base"><AppIcon name="search" :size="18" /><span class="hidden sm:inline">검색</span></button>
+          <div class="field-box flex-1"><label for="td-q" class="field-label">{{ $t('todo.searchLabel') }}</label><SearchAutocomplete v-model="draft" input-id="td-q" domain="things-to-do" variant="bare" :placeholder="$t('todo.searchPh')" @enter="submit" /></div>
+          <button type="submit" class="btn-primary min-h-[52px] rounded-2xl px-6 text-base" :aria-label="$t('common.search')"><AppIcon name="search" :size="18" /><span class="hidden sm:inline">{{ $t('common.search') }}</span></button>
         </form>
       </div>
     </section>
 
     <div class="mx-auto max-w-7xl px-4 lg:px-6">
       <div class="flex flex-wrap items-end justify-between gap-3 pb-3 pt-6">
-        <h2 class="text-xl font-bold tracking-tight text-ink">{{ q.text ? `‘${q.text}’ 검색 결과` : '모든 투어·티켓' }} <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ items.length }}개</span></h2>
+        <h2 class="text-xl font-bold tracking-tight text-ink">{{ q.text ? $t('todo.h2q', { q: q.text }) : $t('todo.h2all') }} <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ $t('hotels.list.count', { n: items.length }) }}</span></h2>
         <label class="flex items-center gap-2 text-sm text-ink-muted">
-          <span class="hidden sm:inline">정렬</span>
+          <span class="hidden sm:inline">{{ $t('hotels.list.sort') }}</span>
           <select :value="q.sort" class="rounded-xl border border-line bg-surface py-2 pl-3 pr-8 text-sm font-semibold text-ink focus:border-primary focus:outline-none" @change="patch({ sortBy: ($event.target as HTMLSelectElement).value === 'recommended' ? '' : ($event.target as HTMLSelectElement).value })">
             <option v-for="s in SORTS" :key="s.id" :value="s.id">{{ s.label }}</option>
           </select>
@@ -92,44 +95,44 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/t
       </div>
 
       <div class="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <button type="button" class="chip" :aria-pressed="!q.category" @click="patch({ category: '' })">전체</button>
-        <button v-for="c in categories" :key="c" type="button" class="chip" :aria-pressed="q.category === c" @click="patch({ category: q.category === c ? '' : c })">{{ CATEGORY_KO[c] || c }}</button>
+        <button type="button" class="chip" :aria-pressed="!q.category" @click="patch({ category: '' })">{{ $t('common.all') }}</button>
+        <button v-for="c in categories" :key="c" type="button" class="chip" :aria-pressed="q.category === c" @click="patch({ category: q.category === c ? '' : c })">{{ catLabel(c) }}</button>
         <span class="mx-1 w-px shrink-0 bg-line" aria-hidden="true" />
-        <button type="button" class="chip" :aria-pressed="q.instant" @click="patch({ instant: q.instant ? '' : 'true' })"><AppIcon name="bolt" :size="14" />즉시 확정</button>
-        <button type="button" class="chip" :aria-pressed="q.freeCancel" @click="patch({ freeCancel: q.freeCancel ? '' : 'true' })">무료 취소</button>
+        <button type="button" class="chip" :aria-pressed="q.instant" @click="patch({ instant: q.instant ? '' : 'true' })"><AppIcon name="bolt" :size="14" />{{ $t('todo.instant') }}</button>
+        <button type="button" class="chip" :aria-pressed="q.freeCancel" @click="patch({ freeCancel: q.freeCancel ? '' : 'true' })">{{ $t('hotels.list.freeCancel') }}</button>
       </div>
 
-      <ResultsState :state="state" :count="items.length" icon="ticket" :empty-title="q.text ? `‘${q.text}’에 맞는 상품이 없어요` : '조건에 맞는 상품이 없어요'" empty-hint="도시 이름으로 검색하거나 필터를 줄여 보세요." error-title="상품을 불러오지 못했어요" @retry="load">
+      <ResultsState :state="state" :count="items.length" icon="ticket" :empty-title="q.text ? $t('todo.emptyQ', { q: q.text }) : $t('todo.emptyAll')" :empty-hint="$t('todo.emptyHint')" :error-title="$t('todo.loadFail')" @retry="load">
         <template #empty-actions>
-          <button v-if="activeCount" type="button" class="btn-primary" @click="patch(RESET)">필터 초기화</button>
-          <button v-if="q.text" type="button" class="btn-secondary" @click="patch({ q: '', city: '', query: '' })">모든 상품 보기</button>
+          <button v-if="activeCount" type="button" class="btn-primary" @click="patch(RESET)">{{ $t('hotels.list.resetFilters') }}</button>
+          <button v-if="q.text" type="button" class="btn-secondary" @click="patch({ q: '', city: '', query: '' })">{{ $t('todo.viewAll') }}</button>
         </template>
         <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <li v-for="a in items" :key="a.id">
             <article class="card group relative flex h-full flex-col overflow-hidden transition-shadow hover:shadow-pop">
               <SmartImg :src="a.thumbnail_url || a.image_url" :alt="a.title" icon="ticket" img-class="aspect-[4/3] w-full object-cover transition-transform duration-500 group-hover:scale-105" />
               <div class="flex flex-1 flex-col p-4">
-                <p class="text-xs text-ink-subtle">{{ [a.city, CATEGORY_KO[a.category] || a.category].filter(Boolean).join(' · ') }}</p>
-                <h3 class="mt-1 line-clamp-2 text-sm font-bold leading-snug text-ink"><NuxtLink :to="`/things-to-do/detail/${a.id}`" class="after:absolute after:inset-0 group-hover:text-primary">{{ a.title }}</NuxtLink></h3>
+                <p class="text-xs text-ink-subtle">{{ [a.city, catLabel(a.category)].filter(Boolean).join(' · ') }}</p>
+                <h3 class="mt-1 line-clamp-2 text-sm font-bold leading-snug text-ink"><NuxtLink :to="$localePath(`/things-to-do/detail/${a.id}`)" class="after:absolute after:inset-0 group-hover:text-primary">{{ a.title }}</NuxtLink></h3>
                 <p v-if="Number(a.review_score) > 0" class="mt-1.5 flex items-center gap-1 text-xs text-ink-muted">
                   <AppIcon name="star" :size="12" stroke="0" class="fill-current text-warning" /><b class="text-ink tabular">{{ Number(a.review_score).toFixed(1) }}</b>
-                  <span v-if="a.review_count" class="tabular">(인증 후기 {{ Number(a.review_count).toLocaleString('ko-KR') }})</span>
+                  <span v-if="a.review_count" class="tabular">{{ $t('todo.reviewCount', { n: $n(Number(a.review_count)) }) }}</span>
                 </p>
-                <p v-else class="mt-1.5 text-2xs font-semibold text-ink-subtle">신규</p>
+                <p v-else class="mt-1.5 text-2xs font-semibold text-ink-subtle">{{ $t('hotels.list.newBadge') }}</p>
                 <ul class="mt-2 flex flex-wrap gap-x-2.5 gap-y-1 text-2xs font-semibold">
-                  <li v-if="a.instant_confirmed" class="flex items-center gap-0.5 text-success"><AppIcon name="bolt" :size="12" />즉시 확정</li>
-                  <li v-if="Number(a.free_cancellation)" class="flex items-center gap-0.5 text-success"><AppIcon name="check" :size="12" />무료 취소</li>
+                  <li v-if="a.instant_confirmed" class="flex items-center gap-0.5 text-success"><AppIcon name="bolt" :size="12" />{{ $t('todo.instant') }}</li>
+                  <li v-if="Number(a.free_cancellation)" class="flex items-center gap-0.5 text-success"><AppIcon name="check" :size="12" />{{ $t('hotels.list.freeCancel') }}</li>
                 </ul>
                 <div class="mt-auto flex items-end justify-between pt-3">
-                  <span v-if="a.bookable === false" class="text-xs font-semibold text-warning">직접 예약 불가</span>
-                  <p v-if="Number(a.price_krw) > 0" class="ml-auto text-base font-extrabold text-ink tabular">{{ currency.formatKRW(Number(a.price_krw)) }}<span class="text-xs font-medium text-ink-subtle"> /1인</span></p>
+                  <span v-if="a.bookable === false" class="text-xs font-semibold text-warning">{{ $t('transfers.list.noDirect') }}</span>
+                  <p v-if="Number(a.price_krw) > 0" class="ml-auto text-base font-extrabold text-ink tabular">{{ currency.formatKRW(Number(a.price_krw)) }}<span class="text-xs font-medium text-ink-subtle">{{ $t('packages.list.perPerson') }}</span></p>
                 </div>
               </div>
             </article>
           </li>
         </ul>
       </ResultsState>
-      <p class="mt-4 text-xs text-ink-subtle">평점은 공급사가 제공한 값이에요.</p>
+      <p class="mt-4 text-xs text-ink-subtle">{{ $t('todo.ratingNote') }}</p>
     </div>
   </div>
 </template>

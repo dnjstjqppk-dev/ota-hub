@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 
+const { t, locale } = useI18n()
 useHead({
-  title: '서비스 상태',
-  meta: [{ name: 'description', content: 'getfortrip 서비스 상태와 진행 중인 장애 안내' }]
+  title: t('status.title'),
+  meta: [{ name: 'description', content: t('status.desc') }]
 })
 
 interface ActiveIncident {
@@ -24,8 +25,10 @@ interface StatusData {
 const data = ref<StatusData | null>(null)
 const state = ref<'loading' | 'ready' | 'error'>('loading')
 
-const STATUS_LABEL: Record<string, string> = { ok: '정상 운영 중', degraded: '일부 지연', outage: '장애 대응 중' }
-const SEVERITY_LABEL: Record<string, string> = { INFO: '안내', DEGRADED: '지연', OUTAGE: '장애' }
+const STATUS_IDS = ['ok', 'degraded', 'outage'] as const
+const statusLabel = (s: string) => ((STATUS_IDS as readonly string[]).includes(s) ? t(`status.state_${s}`) : s)
+const SEV_IDS = ['INFO', 'DEGRADED', 'OUTAGE'] as const
+const sevLabel = (s: string) => ((SEV_IDS as readonly string[]).includes(s) ? t(`status.sev_${s}`) : s)
 
 const load = async () => {
   state.value = 'loading'
@@ -41,9 +44,10 @@ const load = async () => {
 
 onMounted(load)
 
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
 const fmtTime = (iso: string) => {
   try {
-    return new Date(iso).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return new Date(iso).toLocaleString(LOCALE_TAG[locale.value] || 'ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   } catch {
     return iso
   }
@@ -52,43 +56,43 @@ const fmtTime = (iso: string) => {
 
 <template>
   <div class="mx-auto max-w-3xl px-4 py-10">
-    <h1 class="text-2xl font-bold">서비스 상태</h1>
-    <p class="mt-1 text-sm text-gray-500">getfortrip 운영 상태를 실시간으로 안내해요.</p>
+    <h1 class="text-2xl font-bold">{{ $t('status.title') }}</h1>
+    <p class="mt-1 text-sm text-gray-500">{{ $t('status.sub') }}</p>
 
-    <div v-if="state === 'loading'" class="mt-6 rounded-xl border p-6 text-sm text-gray-500">상태를 불러오는 중…</div>
+    <div v-if="state === 'loading'" class="mt-6 rounded-xl border p-6 text-sm text-gray-500">{{ $t('status.loading') }}</div>
     <div v-else-if="state === 'error'" class="mt-6 rounded-xl border p-6 text-sm">
-      상태를 불러오지 못했어요.
-      <button type="button" class="ml-2 min-h-[44px] px-3 underline" @click="load">다시 시도</button>
+      {{ $t('status.loadFail') }}
+      <button type="button" class="ml-2 min-h-[44px] px-3 underline" @click="load">{{ $t('common.retry') }}</button>
     </div>
     <div v-else-if="data" class="mt-6 space-y-4">
       <div
         class="rounded-xl border p-5 text-lg font-bold"
         :class="data.status === 'ok' ? 'border-green-200 bg-green-50 text-green-800' : data.status === 'degraded' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-red-200 bg-red-50 text-red-800'"
       >
-        {{ STATUS_LABEL[data.status] || data.status }}
+        {{ statusLabel(data.status) }}
       </div>
 
       <section class="rounded-xl border p-5">
-        <h2 class="text-sm font-bold">구성 요소</h2>
+        <h2 class="text-sm font-bold">{{ $t('status.components') }}</h2>
         <ul class="mt-2 space-y-1 text-sm">
-          <li>예약 API — {{ data.components.api ? '정상' : '확인 중' }}</li>
-          <li>데이터베이스 — {{ data.components.database ? '정상' : '확인 중' }}</li>
+          <li>{{ $t('status.apiLine', { s: data.components.api ? $t('status.up') : $t('status.checking') }) }}</li>
+          <li>{{ $t('status.dbLine', { s: data.components.database ? $t('status.up') : $t('status.checking') }) }}</li>
         </ul>
       </section>
 
       <section v-if="data.activeIncidents.length" class="rounded-xl border p-5">
-        <h2 class="text-sm font-bold">진행 중인 안내 ({{ data.activeIncidents.length }}건)</h2>
+        <h2 class="text-sm font-bold">{{ $t('status.activeTitle', { n: data.activeIncidents.length }) }}</h2>
         <ul class="mt-3 space-y-3">
           <li v-for="inc in data.activeIncidents" :key="inc.id" class="rounded-lg bg-gray-50 p-3 text-sm">
-            <p class="font-bold">[{{ SEVERITY_LABEL[inc.severity] || inc.severity }}] {{ inc.title }}</p>
+            <p class="font-bold">[{{ sevLabel(inc.severity) }}] {{ inc.title }}</p>
             <p v-if="inc.latestUpdate" class="mt-1 whitespace-pre-line text-gray-600">{{ inc.latestUpdate }}</p>
-            <p class="mt-1 text-xs text-gray-400">시작 {{ fmtTime(inc.startedAt) }}</p>
+            <p class="mt-1 text-xs text-gray-400">{{ $t('status.started', { d: fmtTime(inc.startedAt) }) }}</p>
           </li>
         </ul>
       </section>
-      <p v-else class="text-sm text-gray-500">진행 중인 장애가 없어요.</p>
+      <p v-else class="text-sm text-gray-500">{{ $t('status.noIncidents') }}</p>
 
-      <p class="text-xs text-gray-400">마지막 확인 {{ fmtTime(data.time) }}</p>
+      <p class="text-xs text-gray-400">{{ $t('status.lastCheck', { d: fmtTime(data.time) }) }}</p>
     </div>
   </div>
 </template>

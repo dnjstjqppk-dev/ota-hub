@@ -5,12 +5,13 @@ import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
 const router = useRouter()
+const localePath = useLocalePath()
 onMounted(() => {
   const id = route.query.bookingId || route.query.id
-  router.replace(id ? { path: '/booking/result', query: { bookingId: String(id) } } : '/my/bookings')
+  router.replace(id ? localePath({ path: '/booking/result', query: { bookingId: String(id) } }) : localePath('/my/bookings'))
 })
 </script>
 
 <template>
-  <div class="min-h-[40vh] flex items-center justify-center text-sm text-slate-500">예약 상태를 확인하는 중…</div>
+  <div class="min-h-[40vh] flex items-center justify-center text-sm text-slate-500">{{ $t('booking.checking') }}</div>
 </template>

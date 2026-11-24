@@ -14,14 +14,15 @@ const target = computed(() => {
   return BRAND.partnerConsoleUrl + (MAP[seg] ?? '/dashboard')
 })
 onMounted(() => { window.location.replace(target.value) })
-useHead({ title: '파트너 콘솔로 이동', meta: [{ name: 'robots', content: 'noindex' }] })
+const { t } = useI18n()
+useHead({ title: t('partnerMove.title'), meta: [{ name: 'robots', content: 'noindex' }] })
 </script>
 
 <template>
   <div class="mx-auto max-w-lg px-4 py-24 text-center">
     <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-soft text-primary"><AppIcon name="briefcase" /></span>
-    <h1 class="mt-4 text-xl font-bold text-ink">파트너 센터가 파트너 콘솔로 옮겨졌어요</h1>
-    <p class="mt-2 text-sm text-ink-muted">상품·예약·정산 관리는 파트너 콘솔에서 할 수 있어요. 잠시 후 자동으로 이동해요.</p>
-    <a :href="target" class="btn-primary mt-6">파트너 콘솔 열기<AppIcon name="external" :size="16" /></a>
+    <h1 class="mt-4 text-xl font-bold text-ink">{{ $t('partnerMove.h1') }}</h1>
+    <p class="mt-2 text-sm text-ink-muted">{{ $t('partnerMove.sub') }}</p>
+    <a :href="target" class="btn-primary mt-6">{{ $t('partnerMove.open') }}<AppIcon name="external" :size="16" /></a>
   </div>
 </template>

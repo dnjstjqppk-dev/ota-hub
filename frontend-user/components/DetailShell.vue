@@ -13,15 +13,15 @@ defineEmits<{ retry: [] }>()
     </div>
     <div v-else-if="state === 'notfound'" class="mx-auto max-w-xl py-20 text-center" data-testid="detail-notfound">
       <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-sunken text-ink-subtle"><AppIcon name="search" /></span>
-      <p class="mt-4 font-bold text-ink">요청하신 상품을 찾을 수 없어요</p>
-      <p class="mt-1 text-sm text-ink-muted">판매가 끝났거나 주소가 잘못되었을 수 있어요.</p>
-      <NuxtLink :to="listPath" class="btn-primary mt-5">{{ listLabel }}</NuxtLink>
+      <p class="mt-4 font-bold text-ink">{{ $t('detail.notFound') }}</p>
+      <p class="mt-1 text-sm text-ink-muted">{{ $t('detail.notFoundHint') }}</p>
+      <NuxtLink :to="$localePath(listPath)" class="btn-primary mt-5">{{ listLabel }}</NuxtLink>
     </div>
     <div v-else-if="state === 'error'" class="mx-auto max-w-xl py-20 text-center" role="alert">
       <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-danger-soft text-danger"><AppIcon name="close" /></span>
-      <p class="mt-4 font-bold text-ink">상품 정보를 불러오지 못했어요</p>
-      <p class="mt-1 text-sm text-ink-muted">네트워크 상태를 확인한 뒤 다시 시도해 주세요.</p>
-      <button type="button" class="btn-primary mt-5" @click="$emit('retry')">다시 시도</button>
+      <p class="mt-4 font-bold text-ink">{{ $t('detail.loadFailed') }}</p>
+      <p class="mt-1 text-sm text-ink-muted">{{ $t('search.checkNetwork') }}</p>
+      <button type="button" class="btn-primary mt-5" @click="$emit('retry')">{{ $t('common.retry') }}</button>
     </div>
     <slot v-else />
   </div>

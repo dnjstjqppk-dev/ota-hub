@@ -5,7 +5,7 @@
  * visitors see popular only (server decides). The section hides itself on
  * flag-off (503), errors, and empty results — never an error wall.
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { apiFetch } from '~/composables/useApi'
 import { detailUrl } from '~/stores/wishlist'
 
@@ -14,12 +14,15 @@ const props = defineProps<{ domain: string; itemId: string }>()
 interface Card { itemId: string; domain: string; title: string; priceKrw: number | null; exposureId: string }
 type Slot = 'together' | 'popular' | 'recent'
 
+const { t, locale } = useI18n()
+const tag = computed(() => ({ ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' })[locale.value] || 'ko-KR')
+
 function slotTitle(slot: Slot): string {
-  return slot === 'together' ? '함께 본 상품' : slot === 'popular' ? '인기 상품' : '최근 본 상품'
+  return slot === 'together' ? t('reco.together') : slot === 'popular' ? t('reco.popular') : t('reco.recent')
 }
 
 function priceText(priceKrw: number | null): string {
-  return typeof priceKrw === 'number' ? `${priceKrw.toLocaleString('ko-KR')}원 참고가` : '가격 확인 중'
+  return typeof priceKrw === 'number' ? t('reco.priceRef', { p: priceKrw.toLocaleString(tag.value) }) : t('reco.pricePending')
 }
 
 const slots = ref<Record<Slot, Card[]>>({ together: [], popular: [], recent: [] })
@@ -45,14 +48,14 @@ onMounted(load)
 </script>
 
 <template>
-  <section v-if="state === 'ready'" aria-label="추천 상품" class="space-y-8">
+  <section v-if="state === 'ready'" :aria-label="t('reco.section')" class="space-y-8">
     <div v-for="slot in (['together', 'popular', 'recent'] as Slot[])" :key="slot">
       <template v-if="slots[slot].length">
         <h2 class="text-lg font-bold tracking-tight text-ink">{{ slotTitle(slot) }}</h2>
         <ul class="mt-3 space-y-2">
           <li v-for="c in slots[slot]" :key="c.exposureId">
             <NuxtLink
-              :to="detailUrl(c.domain, c.itemId)"
+              :to="$localePath(detailUrl(c.domain, c.itemId))"
               class="card flex min-h-[44px] items-center justify-between gap-3 px-4 py-3"
               @click="clicked(c)"
             >

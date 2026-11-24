@@ -2,6 +2,8 @@
 import { BRAND } from '~/config/brand'
 const VERSION = '2.0'
 const EFFECTIVE = '2026년 11월 7일'
+const { t } = useI18n()
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/refund-policy', title: t('seo.refund.title'), description: t('seo.refund.description'), koOnly: true })
 </script>
 
 <template>

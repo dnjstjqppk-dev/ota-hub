@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { BRAND } from '~/config/brand'
+const { t } = useI18n()
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/safety', title: t('seo.safety.title'), description: t('seo.safety.description'), koOnly: true })
 </script>
 
 <template>
@@ -39,8 +41,8 @@ import { BRAND } from '~/config/brand'
           예약된 호텔 입실에 문제가 발생하거나 항공편 결항/지연 시 도움 센터에 문의해 주세요. 접수된 순서대로 확인하고 예약 내역에서 답변을 안내해 드립니다.
         </p>
         <div class="pt-2 flex flex-wrap gap-3">
-          <NuxtLink to="/help" class="px-4 py-2 bg-trip-blue text-white rounded-xl text-xs font-bold shadow-sm">
-            도움 센터 문의하기 →
+          <NuxtLink :to="$localePath('/help')" class="px-4 py-2 bg-trip-blue text-white rounded-xl text-xs font-bold shadow-sm">
+            {{ $t('safety.cta') }}
           </NuxtLink>
         </div>
       </div>

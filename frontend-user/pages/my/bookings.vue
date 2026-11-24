@@ -4,7 +4,8 @@ import { computed, ref } from 'vue'
 import { apiFetch } from '~/composables/useApi'
 import { todayIso } from '~/composables/useUrlQuery'
 
-useHead({ title: '예약 내역' })
+const { t } = useI18n()
+useHead({ title: t('my.bookings') })
 const bookings = ref<any[]>([])
 const state = ref<'loading' | 'ready' | 'error'>('loading')
 const tab = ref<'upcoming' | 'past' | 'closed'>('upcoming')
@@ -22,7 +23,8 @@ const groups = computed(() => {
   past.sort((a, b) => String(b.serviceStart).localeCompare(String(a.serviceStart)))
   return { upcoming: up, past, closed }
 })
-const TABS = [{ id: 'upcoming', label: '예정' }, { id: 'past', label: '지난 여행' }, { id: 'closed', label: '취소·실패' }] as const
+const TAB_IDS = ['upcoming', 'past', 'closed'] as const
+const TABS = computed(() => TAB_IDS.map((id) => ({ id, label: t(`my.tab_${id}`) })))
 
 async function load() {
   state.value = 'loading'
@@ -34,14 +36,14 @@ async function load() {
 </script>
 
 <template>
-  <MyShell title="예약 내역" subtitle="결제·확정 상태는 공급사 처리 결과에 따라 바뀌어요." @ready="load">
+  <MyShell :title="$t('my.bookings')" :subtitle="$t('my.bookingsSub')" @ready="load">
     <div class="mb-4 flex gap-1.5" role="tablist">
-      <button v-for="t in TABS" :key="t.id" type="button" role="tab" class="chip" :aria-selected="tab === t.id" :aria-pressed="tab === t.id" @click="tab = t.id">
-        {{ t.label }}<span v-if="state === 'ready'" class="tabular text-ink-subtle">{{ groups[t.id].length }}</span>
+      <button v-for="tb in TABS" :key="tb.id" type="button" role="tab" class="chip" :aria-selected="tab === tb.id" :aria-pressed="tab === tb.id" @click="tab = tb.id">
+        {{ tb.label }}<span v-if="state === 'ready'" class="tabular text-ink-subtle">{{ groups[tb.id].length }}</span>
       </button>
     </div>
-    <ResultsState :state="state" :count="groups[tab].length" icon="bookings" :empty-title="tab === 'upcoming' ? '예정된 예약이 없어요' : tab === 'past' ? '지난 여행이 없어요' : '취소되거나 실패한 예약이 없어요'" error-title="예약 내역을 불러오지 못했어요" @retry="load">
-      <template #empty-actions><NuxtLink v-if="tab === 'upcoming'" to="/" class="btn-primary">여행 검색하기</NuxtLink></template>
+    <ResultsState :state="state" :count="groups[tab].length" icon="bookings" :empty-title="$t(`my.empty_${tab}`)" :error-title="$t('my.bookingsFail')" @retry="load">
+      <template #empty-actions><NuxtLink v-if="tab === 'upcoming'" :to="$localePath('/')" class="btn-primary">{{ $t('my.searchTrips') }}</NuxtLink></template>
       <ul class="space-y-3"><li v-for="b in groups[tab]" :key="b.id"><BookingRow :b="b" /></li></ul>
     </ResultsState>
   </MyShell>

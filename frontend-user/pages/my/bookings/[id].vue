@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '~/stores/auth'
+const localePath = useLocalePath()
 
 const route = useRoute()
 const router = useRouter()
@@ -10,7 +11,7 @@ const bookingId = String(route.params.id || '')
 
 onMounted(async () => {
   await auth.initAuth()
-  if (!auth.isLoggedIn) router.replace(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
+  if (!auth.isLoggedIn) router.replace(localePath(`/login?redirect=${encodeURIComponent(route.fullPath)}`))
 })
 </script>
 

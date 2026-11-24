@@ -20,10 +20,11 @@ onMounted(async () => {
 })
 
 interface PolicyTier { hours_before: number; refund_bps: number; note?: string }
+const { t } = useI18n()
 function hoursLabel(h: number): string {
-  if (h >= 24 && h % 24 === 0) return `${h / 24}일`
-  if (h >= 24) return `${h}시간(${(h / 24).toFixed(1)}일)`
-  return `${h}시간`
+  if (h >= 24 && h % 24 === 0) return `${h / 24}${t('policy.days')}`
+  if (h >= 24) return `${h}${t('policy.hours')}(${(h / 24).toFixed(1)}${t('policy.days')})`
+  return `${h}${t('policy.hours')}`
 }
 function pct(bps: number): string {
   return `${Number((bps / 100).toFixed(bps % 100 === 0 ? 0 : 1))}%`

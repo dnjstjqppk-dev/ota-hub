@@ -6,6 +6,14 @@ import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import { transformSync } from 'esbuild'
 import { reactive, ref } from 'vue'
 
+const ko = JSON.parse(readFileSync(new URL('../i18n/locales/ko.json', import.meta.url), 'utf8'))
+const tx = (key, params) => {
+  const s = String(key).split('.').reduce((o, k) => (o == null ? o : o[k]), ko)
+  if (typeof s !== 'string') return key
+  if (!params || typeof params !== 'object') return s
+  return Object.entries(params).reduce((acc, [k, v]) => acc.replaceAll(`{${k}}`, String(v)), s)
+}
+
 const filename = 'pages/my/passengers.vue'
 const source = readFileSync(new URL('../pages/my/passengers.vue', import.meta.url), 'utf8')
 const { descriptor, errors } = parse(source, { filename })
@@ -19,6 +27,7 @@ function setup() {
   const calls = []
   const context = {
     ref, reactive, useHead: () => {},
+    useI18n: () => ({ t: tx, locale: ref('ko') }),
     confirm: () => true,
     apiFetch: async (path, opts) => { calls.push({ path, opts }); return context.reply(path, opts) },
     reply: async () => ({ ok: true, status: 200, data: { passengers: [] } })

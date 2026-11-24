@@ -38,10 +38,17 @@ export function daysBetween(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000)
 }
 const WEEK = ['일', '월', '화', '수', '목', '금', '토']
-export function fmtDay(s: string, long = false): string {
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
+export function fmtDay(s: string, long = false, locale = 'ko'): string {
   if (!s) return ''
   const [y = NaN, m = NaN, d = NaN] = s.split('-').map(Number)
-  const w = WEEK[new Date(y, m - 1, d).getDay()]
+  const dt = new Date(y, m - 1, d)
+  if (locale !== 'ko') {
+    return new Intl.DateTimeFormat(LOCALE_TAG[locale] || 'en-US', long
+      ? { month: 'short', day: 'numeric', weekday: 'short' }
+      : { month: 'numeric', day: 'numeric', weekday: 'narrow' }).format(dt)
+  }
+  const w = WEEK[dt.getDay()]
   return long ? `${m}월 ${d}일 (${w})` : `${m}.${String(d).padStart(2, '0')}(${w})`
 }
 

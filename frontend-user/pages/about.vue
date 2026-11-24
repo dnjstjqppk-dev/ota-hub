@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { BRAND } from '~/config/brand'
+const { t } = useI18n()
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/about', title: t('seo.about.title'), description: t('seo.about.description'), koOnly: true })
 </script>
 
 <template>

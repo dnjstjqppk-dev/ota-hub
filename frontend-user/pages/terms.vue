@@ -2,6 +2,8 @@
 import { BRAND } from '~/config/brand'
 const VERSION = '2.1'
 const EFFECTIVE = '2026년 11월 10일'
+const { t } = useI18n()
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/terms', title: t('seo.terms.title'), description: t('seo.terms.description'), koOnly: true })
 </script>
 
 <template>

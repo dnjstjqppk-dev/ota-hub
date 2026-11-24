@@ -10,7 +10,7 @@ import { computed } from 'vue'
 import { faqLd, jsonLdScript } from '~/composables/useJsonLd'
 
 const props = withDefaults(defineProps<{ items: { q: string; a: string }[]; heading?: string; id?: string }>(), {
-  heading: '자주 묻는 질문',
+  heading: '',
   id: 'faq',
 })
 
@@ -22,7 +22,7 @@ useHead({ script: [jsonLdScript(faqLd(shown.value))] })
 
 <template>
   <section v-if="shown.length" :aria-labelledby="`${id}-h`">
-    <h2 :id="`${id}-h`" class="text-xl font-extrabold tracking-tight text-ink">{{ heading }}</h2>
+    <h2 :id="`${id}-h`" class="text-xl font-extrabold tracking-tight text-ink">{{ heading || $t('support.faq') }}</h2>
     <div class="mt-4 space-y-3">
       <details
         v-for="(f, i) in shown"

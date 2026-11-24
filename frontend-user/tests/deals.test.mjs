@@ -6,6 +6,14 @@ import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import { transformSync } from 'esbuild'
 import { ref } from 'vue'
 
+const ko = JSON.parse(readFileSync(new URL('../i18n/locales/ko.json', import.meta.url), 'utf8'))
+const tx = (key, params) => {
+  const s = String(key).split('.').reduce((o, k) => (o == null ? o : o[k]), ko)
+  if (typeof s !== 'string') return key
+  if (!params || typeof params !== 'object') return s
+  return Object.entries(params).reduce((acc, [k, v]) => acc.replaceAll(`{${k}}`, String(v)), s)
+}
+
 const filename = 'pages/deals.vue'
 const source = readFileSync(new URL('../pages/deals.vue', import.meta.url), 'utf8')
 const { descriptor, errors } = parse(source, { filename })
@@ -23,7 +31,7 @@ const setupBody = descriptor.scriptSetup.content
 const code = transformSync(setupBody + '\n;globalThis.page = { benefitText, boundText, discountTypeLabel };', { loader: 'ts', format: 'cjs' }).code
 
 function setup() {
-  const context = { ref, onMounted: () => {}, useHead: () => {}, apiFetch: async () => ({ ok: true, data: { promotions: [] } }) }
+  const context = { ref, onMounted: () => {}, useHead: () => {}, apiFetch: async () => ({ ok: true, data: { promotions: [] } }), useI18n: () => ({ t: tx, locale: ref('ko') }) }
   runInNewContext(code, context)
   return context.page
 }

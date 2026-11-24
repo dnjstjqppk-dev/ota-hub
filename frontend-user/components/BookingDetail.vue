@@ -7,11 +7,14 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiFetch, formatKrw } from '~/composables/useApi'
+const localePath = useLocalePath()
 
 const props = defineProps<{ bookingId: string }>()
 const router = useRouter()
+const { t, locale } = useI18n()
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
 
-const DOMAIN_LABEL: Record<string, string> = { HOTEL: '숙소', FLIGHT: '항공권', TRAIN: '기차', CAR: '렌터카', TRANSFER: '공항 이동', ACTIVITY: '투어·티켓', PACKAGE: '패키지' }
+const domainLabel = (d: string) => t(`checkout.domain_${d}`, d)
 const IN_FLIGHT = ['PAYMENT_PROCESSING', 'PAYMENT_AUTHORIZED', 'SUPPLIER_BOOKING_PENDING', 'TICKETING_PENDING', 'CANCELLATION_REQUESTED', 'REFUND_PENDING']
 const POLL_MS = 4000
 const POLL_MAX = 45
@@ -53,19 +56,19 @@ const headline = computed(() => {
   const b = booking.value
   if (!b) return ''
   switch (b.status) {
-    case 'VOUCHER_ISSUED': case 'TICKETED': return '예약이 확정되었습니다'
-    case 'COMPLETED': return '이용이 완료된 예약입니다'
-    case 'AWAITING_PAYMENT': return '결제를 기다리고 있습니다'
-    case 'PAYMENT_PROCESSING': case 'PAYMENT_AUTHORIZED': return '결제가 승인되어 예약을 진행 중입니다'
-    case 'SUPPLIER_BOOKING_PENDING': case 'SUPPLIER_CONFIRMED': return '공급사 확정을 기다리고 있습니다'
-    case 'TICKETING_PENDING': return '항공권 발권을 진행 중입니다'
-    case 'CANCELLATION_REQUESTED': return '취소를 처리하고 있습니다'
-    case 'REFUND_PENDING': return '환불을 진행 중입니다'
-    case 'REFUNDED': return '환불이 완료되었습니다'
-    case 'CANCELLED': return '취소된 예약입니다'
-    case 'EXPIRED': return '결제 시간이 지나 예약이 만료되었습니다'
-    case 'FAILED': return '예약이 완료되지 못했습니다'
-    case 'MANUAL_REVIEW_REQUIRED': return '담당자 확인이 필요한 예약입니다'
+    case 'VOUCHER_ISSUED': case 'TICKETED': return t('booking.detail.headConfirmed')
+    case 'COMPLETED': return t('booking.detail.headCompleted')
+    case 'AWAITING_PAYMENT': return t('booking.detail.headAwaiting')
+    case 'PAYMENT_PROCESSING': case 'PAYMENT_AUTHORIZED': return t('booking.detail.headPaying')
+    case 'SUPPLIER_BOOKING_PENDING': case 'SUPPLIER_CONFIRMED': return t('booking.detail.headSupplier')
+    case 'TICKETING_PENDING': return t('booking.detail.headTicketing')
+    case 'CANCELLATION_REQUESTED': return t('booking.detail.headCancelling')
+    case 'REFUND_PENDING': return t('booking.detail.headRefunding')
+    case 'REFUNDED': return t('booking.detail.headRefunded')
+    case 'CANCELLED': return t('booking.detail.headCancelled')
+    case 'EXPIRED': return t('booking.detail.headExpired')
+    case 'FAILED': return t('booking.detail.headFailed')
+    case 'MANUAL_REVIEW_REQUIRED': return t('booking.detail.headReview')
     default: return b.statusLabel
   }
 })
@@ -73,15 +76,16 @@ const headline = computed(() => {
 const subline = computed(() => {
   const b = booking.value
   if (!b) return ''
-  if (b.status === 'MANUAL_REVIEW_REQUIRED') return '결제 또는 공급사 응답을 확인하는 중입니다. 처리 결과는 이 예약 내역에서 확인할 수 있습니다.'
-  if (b.status === 'FAILED') return b.paidMinor > 0 ? '결제된 금액은 전액 환불 처리됩니다.' : '결제는 청구되지 않았습니다.'
-  if (IN_FLIGHT.includes(b.status)) return '보통 1~2분 내에 완료됩니다. 이 화면은 자동으로 갱신됩니다.'
-  if (b.status === 'SUPPLIER_CONFIRMED') return '공급사 확정이 완료되었으며 바우처를 발급하고 있습니다.'
+  if (b.status === 'MANUAL_REVIEW_REQUIRED') return t('booking.detail.subReview')
+  if (b.status === 'FAILED') return b.paidMinor > 0 ? t('booking.detail.subFailedPaid') : t('booking.detail.subFailedFree')
+  if (IN_FLIGHT.includes(b.status)) return t('booking.detail.subInflight')
+  if (b.status === 'SUPPLIER_CONFIRMED') return t('booking.detail.subSupplierDone')
   return ''
 })
 
-const deadlineText = computed(() => booking.value?.paymentDeadline ? new Date(booking.value.paymentDeadline).toLocaleString('ko-KR') : '')
-const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString('ko-KR') : '-')
+const tag = () => LOCALE_TAG[locale.value] || 'ko-KR'
+const deadlineText = computed(() => booking.value?.paymentDeadline ? new Date(booking.value.paymentDeadline).toLocaleString(tag()) : '')
+const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString(tag()) : '-')
 
 // Phase 2 wholesale: supplier-issued credentials arrive server-parsed
 // (item.artefacts); raw typed strings are never shown. PDF QR carries the
@@ -94,11 +98,12 @@ async function copyText(v: string) {
 async function load() {
   const r = await apiFetch(`/bookings/${encodeURIComponent(props.bookingId)}`)
   loading.value = false
-  if (r.status === 401) return router.push(`/login?redirect=${encodeURIComponent(router.currentRoute.value.fullPath)}`)
-  if (!r.ok) { error.value = r.status === 404 || r.status === 403 ? '예약 정보를 찾을 수 없습니다.' : (r.data.error || '예약 정보를 불러오지 못했습니다.'); return }
+  if (r.status === 401) return router.push(localePath(`/login?redirect=${encodeURIComponent(router.currentRoute.value.fullPath)}`))
+  if (!r.ok) { error.value = r.status === 404 || r.status === 403 ? t('booking.detail.notFound') : (r.data.error || t('booking.detail.loadFail')); return }
   error.value = ''
   booking.value = r.data.booking
   schedulePoll()
+  loadChanges()
 }
 
 function schedulePoll() {
@@ -114,14 +119,14 @@ async function cancel() {
   const b = booking.value
   const p = b.cancellationPreview
   const msg = b.status === 'AWAITING_PAYMENT'
-    ? '결제 전 예약을 취소합니다. 청구된 금액은 없습니다. 계속할까요?'
-    : p ? `취소 수수료 ${formatKrw(p.feeMinor)}, 환불 예정 금액 ${formatKrw(p.refundMinor)}입니다. 취소할까요?` : '예약을 취소할까요?'
+    ? t('booking.detail.confirmCancelPre')
+    : p ? t('booking.detail.confirmCancelFee', { fee: formatKrw(p.feeMinor), refund: formatKrw(p.refundMinor) }) : t('booking.detail.confirmCancel')
   if (!confirm(msg)) return
   cancelling.value = true
   cancelMsg.value = ''
   const r = await apiFetch(`/bookings/${encodeURIComponent(b.id)}/cancel`, { method: 'POST' })
   cancelling.value = false
-  if (!r.ok) { cancelMsg.value = r.data.error || '취소를 처리하지 못했습니다.'; return }
+  if (!r.ok) { cancelMsg.value = r.data.error || t('booking.detail.cancelFail'); return }
   booking.value = r.data.booking
   polls = 0
   schedulePoll()
@@ -129,7 +134,56 @@ async function cancel() {
 
 function resumePayment() {
   const b = booking.value
-  router.push(`/checkout?domain=${b.domain}&itemId=${encodeURIComponent(b.itemId)}&bookingId=${encodeURIComponent(b.id)}`)
+  router.push(localePath(`/checkout?domain=${b.domain}&itemId=${encodeURIComponent(b.itemId)}&bookingId=${encodeURIComponent(b.id)}`))
+}
+
+// GAP-08: itinerary change (assisted cancel + rebook). Same party travels —
+// the server reuses this booking's travelers, so passports stay encrypted.
+const chgForm = ref({ startDate: '', endDate: '', type: 'VOLUNTARY', reason: '' })
+const chgPreview = ref<any>(null)
+const chgBusy = ref(false)
+const chgMsg = ref('')
+const chgContact = ref({ name: '', email: '', phone: '' })
+const chgAgree = ref({ refund: false, privacy: false, thirdParty: false })
+const chgList = ref<any[]>([])
+const chgEligible = computed(() => {
+  const b = booking.value
+  return !!b && ['FLIGHT', 'HOTEL'].includes(b.domain) && ['TICKETED', 'VOUCHER_ISSUED'].includes(b.status)
+})
+async function loadChanges() {
+  if (!chgEligible.value) return
+  const r = await apiFetch(`/bookings/${encodeURIComponent(props.bookingId)}/change-requests`)
+  if (r.ok) chgList.value = r.data.requests || []
+}
+async function requestChange() {
+  chgMsg.value = ''
+  if (!chgForm.value.startDate) { chgMsg.value = t('booking.detail.chgNeedDate'); return }
+  chgBusy.value = true
+  try {
+    const r = await apiFetch(`/bookings/${encodeURIComponent(props.bookingId)}/change-request`, { method: 'POST', body: { ...chgForm.value } })
+    if (!r.ok) { chgMsg.value = r.data.error || t('booking.detail.chgReqFail'); return }
+    chgPreview.value = r.data
+    const b = booking.value
+    chgContact.value = { name: b.customerName || '', email: b.customerEmail || '', phone: b.customerPhone || '' }
+    await loadChanges()
+  } finally { chgBusy.value = false }
+}
+async function confirmChange() {
+  const p = chgPreview.value
+  if (!p?.executable) return
+  if (!chgAgree.value.refund || !chgAgree.value.privacy || !chgAgree.value.thirdParty) { chgMsg.value = t('booking.detail.chgNeedAgrees'); return }
+  chgBusy.value = true
+  try {
+    const lv = await apiFetch('/legal')
+    const versions: Record<string, string> = {}
+    if (lv.ok) for (const d of (lv.data.documents || []) as any[]) versions[d.slug] = d.version
+    const r = await apiFetch(`/change-requests/${encodeURIComponent(p.requestId)}/confirm`, {
+      method: 'POST',
+      body: { contact: chgContact.value, reuseTravelers: true, consents: { refundPolicy: versions['refund-policy'], privacy: versions['privacy'], thirdParty: versions['privacy'] } },
+    })
+    if (!r.ok) { chgMsg.value = r.data.error || t('booking.detail.chgConfirmFail'); return }
+    router.push(localePath(`/checkout?bookingId=${encodeURIComponent(r.data.newBookingId)}`))
+  } finally { chgBusy.value = false }
 }
 
 const printVoucher = () => window.print()
@@ -140,30 +194,30 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
 
 <template>
   <div class="max-w-3xl mx-auto px-4 py-6 md:py-10">
-    <div v-if="loading" class="py-24 text-center text-sm text-ink-subtle" data-testid="booking-loading">예약 정보를 불러오는 중…</div>
+    <div v-if="loading" class="py-24 text-center text-sm text-ink-subtle" data-testid="booking-loading">{{ $t('booking.checking') }}</div>
 
     <div v-else-if="error" class="rounded-2xl border border-line bg-surface p-8 text-center" role="alert" data-testid="booking-error">
       <p class="text-sm font-semibold text-ink">{{ error }}</p>
-      <NuxtLink to="/my/bookings" class="mt-4 inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-ink-inverse">내 예약 목록</NuxtLink>
+      <NuxtLink :to="$localePath('/my/bookings')" class="mt-4 inline-block rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-ink-inverse">{{ $t('booking.myList') }}</NuxtLink>
     </div>
 
     <div v-else-if="booking" class="space-y-4" data-testid="booking-detail">
       <div :class="['rounded-2xl border p-5 md:p-6', TONE_CLASS[tone]]" data-testid="booking-status">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <div class="text-xs font-semibold opacity-80">{{ DOMAIN_LABEL[booking.domain] || booking.domain }} · 예약번호 <span class="font-mono">{{ booking.bookingNumber }}</span></div>
-            <div v-if="booking.salesTypeLabel" class="mt-1 text-xs font-semibold opacity-80" data-testid="sales-type">판매 형태: {{ booking.salesTypeLabel }}<span v-if="booking.supplierName"> · {{ booking.supplierName }}</span></div>
+            <div class="text-xs font-semibold opacity-80">{{ domainLabel(booking.domain) }} · {{ $t('booking.detail.bookingNo', { n: booking.bookingNumber }) }}</div>
+            <div v-if="booking.salesTypeLabel" class="mt-1 text-xs font-semibold opacity-80" data-testid="sales-type">{{ $t('booking.detail.salesType', { v: booking.salesTypeLabel }) }}<span v-if="booking.supplierName"> · {{ booking.supplierName }}</span></div>
             <h1 class="mt-1 text-lg md:text-xl font-bold">{{ headline }}</h1>
             <p v-if="subline" class="mt-1 text-sm opacity-90">{{ subline }}</p>
           </div>
-          <span class="shrink-0 rounded-full bg-surface/70 px-3 py-1 text-xs font-semibold" :data-status="booking.status">{{ booking.statusLabel }}</span>
+          <span class="shrink-0 rounded-full bg-surface/70 px-3 py-1 text-xs font-semibold" :data-status="booking.status">{{ $te('booking.status.' + booking.status) ? $t('booking.status.' + booking.status) : booking.statusLabel }}</span>
         </div>
-        <div v-if="booking.paymentMode === 'SANDBOX'" class="mt-3 text-[11px] font-semibold text-warning">테스트 모드 예약 — 실제 결제·실제 예약이 아닙니다.</div>
+        <div v-if="booking.paymentMode === 'SANDBOX'" class="mt-3 text-[11px] font-semibold text-warning">{{ $t('booking.detail.sandboxNote') }}</div>
       </div>
 
       <div v-if="booking.status === 'AWAITING_PAYMENT'" class="rounded-2xl border border-line bg-surface p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <p class="text-sm text-ink-muted">{{ deadlineText }}까지 결제하지 않으면 예약이 자동 취소됩니다.</p>
-        <button class="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-ink transition-colors hover:bg-primary-hover" data-testid="resume-payment" @click="resumePayment">{{ formatKrw(booking.totalMinor) }} 결제하기</button>
+        <p class="text-sm text-ink-muted">{{ $t('booking.detail.autoCancel', { d: deadlineText }) }}</p>
+        <button class="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-ink transition-colors hover:bg-primary-hover" data-testid="resume-payment" @click="resumePayment">{{ $t('checkout.payNow', { v: formatKrw(booking.totalMinor) }) }}</button>
       </div>
 
       <section class="rounded-2xl border border-line bg-surface p-5 md:p-6">
@@ -173,99 +227,138 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
         <div v-for="(it, i) in booking.items" :key="i" class="mt-4 rounded-xl bg-surface-sunken p-4 text-sm" data-testid="booking-item">
           <div v-if="booking.items.length > 1" class="mb-2 font-semibold text-ink">{{ it.title }} <span class="font-normal text-ink-subtle">· {{ it.service_start }}</span></div>
           <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-            <template v-if="it.voucher_code"><dt class="text-ink-subtle">바우처</dt><dd class="font-mono font-bold text-ink" data-testid="voucher-code">{{ it.voucher_code }}</dd></template>
-            <template v-if="it.pnr"><dt class="text-ink-subtle">예약번호(PNR)</dt><dd class="font-mono font-bold text-ink">{{ it.pnr }}</dd></template>
-            <template v-if="it.ticket_numbers?.length && !it.artefacts"><dt class="text-ink-subtle">항공권 번호</dt><dd class="font-mono text-ink">{{ it.ticket_numbers.join(', ') }}</dd></template>
+            <template v-if="it.voucher_code"><dt class="text-ink-subtle">{{ $t('booking.detail.voucher') }}</dt><dd class="font-mono font-bold text-ink" data-testid="voucher-code">{{ it.voucher_code }}</dd></template>
+            <template v-if="it.pnr"><dt class="text-ink-subtle">{{ $t('booking.detail.pnr') }}</dt><dd class="font-mono font-bold text-ink">{{ it.pnr }}</dd></template>
+            <template v-if="it.ticket_numbers?.length && !it.artefacts"><dt class="text-ink-subtle">{{ $t('booking.detail.ticketNos') }}</dt><dd class="font-mono text-ink">{{ it.ticket_numbers.join(', ') }}</dd></template>
             <template v-if="it.artefacts">
-              <dt class="text-ink-subtle">공급사 이용권</dt>
+              <dt class="text-ink-subtle">{{ $t('booking.detail.artefacts') }}</dt>
               <dd class="space-y-1" data-testid="wholesale-artefacts">
-                <p v-if="it.artefacts.lpa">eSIM 활성화 코드: <span class="font-mono font-bold">{{ it.artefacts.lpa }}</span> <button type="button" class="ml-1 rounded border border-line px-1.5 py-0.5 text-xs" @click="copyText(it.artefacts.lpa)">{{ copied === it.artefacts.lpa ? '복사됨' : '복사' }}</button></p>
-                <p v-if="it.artefacts.qr">eSIM QR 정보: <span class="font-mono break-all">{{ it.artefacts.qr }}</span></p>
-                <p v-for="(c, ci) in it.artefacts.codes" :key="ci">이용권 번호: <span class="font-mono font-bold">{{ c }}</span></p>
-                <p v-for="(u, ui) in it.artefacts.pdfUrls" :key="ui"><a :href="u" target="_blank" rel="noopener" class="font-semibold text-primary underline">이용권 PDF 열기</a></p>
+                <p v-if="it.artefacts.lpa">{{ $t('booking.detail.lpa') }}: <span class="font-mono font-bold">{{ it.artefacts.lpa }}</span> <button type="button" class="ml-1 rounded border border-line px-1.5 py-0.5 text-xs" @click="copyText(it.artefacts.lpa)">{{ copied === it.artefacts.lpa ? $t('booking.detail.copied') : $t('booking.detail.copy') }}</button></p>
+                <p v-if="it.artefacts.qr">{{ $t('booking.detail.qrInfo') }}: <span class="font-mono break-all">{{ it.artefacts.qr }}</span></p>
+                <p v-for="(c, ci) in it.artefacts.codes" :key="ci">{{ $t('booking.detail.credNo') }}: <span class="font-mono font-bold">{{ c }}</span></p>
+                <p v-for="(u, ui) in it.artefacts.pdfUrls" :key="ui"><a :href="u" target="_blank" rel="noopener" class="font-semibold text-primary underline">{{ $t('booking.detail.pdfOpen') }}</a></p>
               </dd>
             </template>
-            <template v-if="it.supplier_reference"><dt class="text-ink-subtle">공급사 확인번호</dt><dd class="font-mono text-ink">{{ it.supplier_reference }}</dd></template>
-            <dt class="text-ink-subtle">공급사 상태</dt><dd class="text-ink">{{ it.supplier_status || '-' }}</dd>
+            <template v-if="it.supplier_reference"><dt class="text-ink-subtle">{{ $t('booking.detail.supRef') }}</dt><dd class="font-mono text-ink">{{ it.supplier_reference }}</dd></template>
+            <dt class="text-ink-subtle">{{ $t('booking.detail.supStatus') }}</dt><dd class="text-ink">{{ it.supplier_status || '-' }}</dd>
           </dl>
-          <p v-if="!it.voucher_code && !booking.isConfirmed" class="mt-2 text-xs text-ink-subtle">바우처·이용권은 공급사 확정 후 발급됩니다.</p>
+          <p v-if="!it.voucher_code && !booking.isConfirmed" class="mt-2 text-xs text-ink-subtle">{{ $t('booking.detail.voucherPending') }}</p>
         </div>
       </section>
 
       <section class="rounded-2xl border border-line bg-surface p-5 md:p-6 grid md:grid-cols-2 gap-6 text-sm">
         <div>
-          <h3 class="font-semibold text-ink">결제 정보</h3>
+          <h3 class="font-semibold text-ink">{{ $t('booking.detail.payInfo') }}</h3>
           <dl class="mt-2 space-y-1">
-            <div class="flex justify-between"><dt class="text-ink-subtle">총 금액</dt><dd class="font-bold" data-testid="booking-total">{{ formatKrw(booking.totalMinor) }}</dd></div>
-            <div class="flex justify-between"><dt class="text-ink-subtle">결제 금액</dt><dd>{{ formatKrw(booking.paidMinor) }}</dd></div>
-            <div v-if="booking.cancellationFeeMinor" class="flex justify-between"><dt class="text-ink-subtle">취소 수수료</dt><dd>{{ formatKrw(booking.cancellationFeeMinor) }}</dd></div>
-            <div v-if="booking.refundedMinor" class="flex justify-between"><dt class="text-ink-subtle">환불 금액</dt><dd class="text-success">{{ formatKrw(booking.refundedMinor) }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.total') }}</dt><dd class="font-bold" data-testid="booking-total">{{ formatKrw(booking.totalMinor) }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.paid') }}</dt><dd>{{ formatKrw(booking.paidMinor) }}</dd></div>
+            <div v-if="booking.cancellationFeeMinor" class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.cancelFee') }}</dt><dd>{{ formatKrw(booking.cancellationFeeMinor) }}</dd></div>
+            <div v-if="booking.refundedMinor" class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.refunded') }}</dt><dd class="text-success">{{ formatKrw(booking.refundedMinor) }}</dd></div>
           </dl>
           <ul v-if="booking.refunds?.length" class="mt-2 space-y-1 text-xs text-ink-muted">
-            <li v-for="rf in booking.refunds" :key="rf.id">환불 {{ formatKrw(rf.amount_minor) }} · {{ rf.status }} · {{ fmt(rf.updated_at) }}</li>
+            <li v-for="rf in booking.refunds" :key="rf.id">{{ $t('booking.detail.refundLine', { v: formatKrw(rf.amount_minor), s: rf.status, d: fmt(rf.updated_at) }) }}</li>
           </ul>
         </div>
         <div>
-          <h3 class="font-semibold text-ink">예약자</h3>
+          <h3 class="font-semibold text-ink">{{ $t('booking.detail.booker') }}</h3>
           <p class="mt-2 text-ink-muted">{{ booking.contact?.name }}<br>{{ booking.contact?.email }}<br>{{ booking.contact?.phone }}</p>
-          <h3 v-if="booking.travelers?.length" class="mt-4 font-semibold text-ink">여행자</h3>
+          <h3 v-if="booking.travelers?.length" class="mt-4 font-semibold text-ink">{{ $t('booking.detail.travelers') }}</h3>
           <ul class="mt-1 space-y-0.5 text-ink-muted">
-            <li v-for="(t, i) in booking.travelers" :key="i">{{ t.lastNameEn }} {{ t.firstNameEn }} <span class="text-xs text-ink-subtle">({{ t.type === 'ADULT' ? '성인' : t.type === 'CHILD' ? '아동' : '유아' }}{{ t.passport ? ' · 여권 ' + t.passport : '' }})</span></li>
+            <li v-for="(t, i) in booking.travelers" :key="i">{{ t.lastNameEn }} {{ t.firstNameEn }} <span class="text-xs text-ink-subtle">({{ t.type === 'ADULT' ? $t('checkout.paxAdult') : t.type === 'CHILD' ? $t('checkout.paxChild') : $t('checkout.infant') }}{{ t.passport ? $t('booking.detail.paxPassport', { p: t.passport }) : '' }})</span></li>
           </ul>
         </div>
       </section>
 
       <section class="rounded-2xl border border-line bg-surface p-5 md:p-6 text-sm">
-        <h3 class="font-semibold text-ink">취소 규정</h3>
+        <h3 class="font-semibold text-ink">{{ $t('checkout.cancelPolicy') }}</h3>
         <p class="mt-1 text-ink-muted">
-          <span v-if="booking.cancellationPolicy?.type === 'FREE_UNTIL'">{{ fmt(booking.cancellationPolicy.freeUntil) }}까지 무료 취소, 이후 취소 시 환불 불가</span>
-          <span v-else>환불 불가 요금입니다.</span>
+          <span v-if="booking.cancellationPolicy?.type === 'FREE_UNTIL'">{{ $t('booking.detail.freeUntilFull', { d: fmt(booking.cancellationPolicy.freeUntil) }) }}</span>
+          <span v-else>{{ $t('checkout.nonRefundable') }}</span>
         </p>
-        <p v-if="booking.cancellationPreview" class="mt-1 text-xs text-ink-subtle">지금 취소 시: 수수료 {{ formatKrw(booking.cancellationPreview.feeMinor) }} · 환불 {{ formatKrw(booking.cancellationPreview.refundMinor) }}</p>
+        <p v-if="booking.cancellationPreview" class="mt-1 text-xs text-ink-subtle">{{ $t('booking.detail.cancelNow', { fee: formatKrw(booking.cancellationPreview.feeMinor), refund: formatKrw(booking.cancellationPreview.refundMinor) }) }}</p>
         <PolicyNotice :domain="booking.domain" :item-id="booking.itemId" v-slot="{ policy, hoursLabel, pct }">
           <ul v-if="policy && policy.tiers?.length" class="mt-2 space-y-1 text-xs text-ink-muted">
-            <li v-for="(t, i) in policy.tiers" :key="i">· 이용 {{ hoursLabel(t.hours_before) }} 전 취소 시 {{ pct(t.refund_bps) }} 환불{{ t.note ? ` (${t.note})` : '' }}</li>
-            <li v-if="policy.no_show_fee_bps">· 노쇼 시 요금의 {{ pct(policy.no_show_fee_bps) }} 위약금</li>
+            <li v-for="(t, i) in policy.tiers" :key="i">{{ $t('booking.detail.tierLine', { h: hoursLabel(t.hours_before), p: pct(t.refund_bps), note: t.note ? ` (${t.note})` : '' }) }}</li>
+            <li v-if="policy.no_show_fee_bps">{{ $t('booking.detail.noshowLine', { p: pct(policy.no_show_fee_bps) }) }}</li>
           </ul>
         </PolicyNotice>
         <button v-if="booking.canCancel" :disabled="cancelling" class="mt-3 rounded-xl border border-danger/40 px-4 py-2 text-sm font-semibold text-danger disabled:opacity-50" data-testid="cancel-booking" @click="cancel">
-          {{ cancelling ? '처리 중…' : '예약 취소' }}
+          {{ cancelling ? $t('my.processing') : $t('booking.detail.cancelGo') }}
         </button>
         <p v-if="cancelMsg" class="mt-2 text-sm text-danger" role="alert">{{ cancelMsg }}</p>
+      </section>
+
+      <section v-if="chgEligible" class="rounded-2xl border border-line bg-surface p-5 md:p-6" data-testid="change-section">
+        <h2 class="font-bold text-ink">{{ $t('booking.detail.chgTitle') }}</h2>
+        <p class="mt-1 text-sm text-ink-muted">{{ $t('booking.detail.chgSub') }}</p>
+        <div v-if="chgList.length" class="mt-3 space-y-2">
+          <div v-for="c in chgList" :key="c.id" class="rounded-xl bg-surface-sunken p-3 text-sm">
+            <p class="font-semibold text-ink">{{ $t('booking.detail.chgRow', { a: c.new_start_date, b: c.new_end_date ? ` → ${c.new_end_date}` : '', s: c.status === 'PENDING_APPROVAL' ? $t('booking.detail.chgPending') : c.status === 'EXECUTED' ? $t('booking.detail.chgDone') : c.status }) }}</p>
+            <p v-if="c.status === 'PENDING_APPROVAL'" class="mt-1 text-xs text-ink-subtle">{{ $t('booking.detail.chgInvolNote') }}</p>
+          </div>
+        </div>
+        <div v-if="!chgPreview" class="mt-3 grid gap-3 sm:grid-cols-2">
+          <label class="text-sm">{{ $t('booking.detail.chgNewStart') }}<input v-model="chgForm.startDate" type="date" class="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5" data-testid="change-start" /></label>
+          <label class="text-sm">{{ $t('booking.detail.chgNewEnd') }}<input v-model="chgForm.endDate" type="date" class="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5" /></label>
+          <label class="text-sm">{{ $t('booking.detail.chgReason') }}
+            <select v-model="chgForm.type" class="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5">
+              <option value="VOLUNTARY">{{ $t('booking.detail.chgVoluntary') }}</option>
+              <option value="INVOLUNTARY">{{ $t('booking.detail.chgInvoluntary') }}</option>
+            </select>
+          </label>
+          <label class="text-sm">{{ $t('booking.detail.chgMemo') }}<input v-model="chgForm.reason" type="text" maxlength="200" class="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5" /></label>
+        </div>
+        <div v-if="chgPreview" class="mt-3 rounded-xl bg-surface-sunken p-4 text-sm" data-testid="change-preview">
+          <p class="font-semibold text-ink">{{ $t('booking.detail.chgPreviewLine', { v: formatKrw(chgPreview.newTotalMinor), fee: formatKrw(chgPreview.cancelFeeMinor), refund: formatKrw(chgPreview.refundDueMinor) }) }}</p>
+          <p v-if="!chgPreview.executable" class="mt-1 text-xs text-ink-subtle">{{ $t('booking.detail.chgNeedApproval') }}</p>
+          <div v-else class="mt-3 space-y-2">
+            <input v-model="chgContact.name" :placeholder="$t('booking.detail.chgPhName')" class="w-full rounded-xl border border-line bg-surface px-3 py-2.5" />
+            <input v-model="chgContact.email" :placeholder="$t('auth.email')" class="w-full rounded-xl border border-line bg-surface px-3 py-2.5" />
+            <input v-model="chgContact.phone" :placeholder="$t('booking.detail.chgPhPhone')" class="w-full rounded-xl border border-line bg-surface px-3 py-2.5" />
+            <label class="flex items-center gap-2 text-xs"><input v-model="chgAgree.refund" type="checkbox" /> {{ $t('booking.detail.chgAgreeRefund') }}</label>
+            <label class="flex items-center gap-2 text-xs"><input v-model="chgAgree.privacy" type="checkbox" /> {{ $t('booking.detail.chgAgreePrivacy') }}</label>
+            <label class="flex items-center gap-2 text-xs"><input v-model="chgAgree.thirdParty" type="checkbox" /> {{ $t('booking.detail.chgAgreeThird') }}</label>
+          </div>
+        </div>
+        <p v-if="chgMsg" class="mt-2 text-sm text-danger" role="alert">{{ chgMsg }}</p>
+        <div class="mt-3 flex gap-2">
+          <button v-if="!chgPreview" type="button" :disabled="chgBusy" class="btn-secondary" data-testid="change-request" @click="requestChange">{{ chgBusy ? $t('booking.detail.chgLooking') : $t('booking.detail.chgQuote') }}</button>
+          <button v-if="chgPreview?.executable" type="button" :disabled="chgBusy" class="btn-primary" data-testid="change-confirm" @click="confirmChange">{{ chgBusy ? $t('my.processing') : $t('booking.detail.chgConfirm') }}</button>
+        </div>
       </section>
 
       <!-- CR-03: conversation with the seller (or getfortrip CS when there is no partner) -->
       <BookingMessages :booking-id="bookingId" class="print:hidden" />
 
       <details v-if="booking.paidMinor > 0" class="rounded-2xl border border-line bg-surface p-5 text-sm" data-testid="receipt-block" @toggle="(e: any) => loadReceipt(e.target.open)">
-        <summary class="cursor-pointer font-semibold text-ink">결제 영수증</summary>
-        <p v-if="receiptLoading" class="mt-3 text-ink-muted">불러오는 중…</p>
+        <summary class="cursor-pointer font-semibold text-ink">{{ $t('booking.detail.receipt') }}</summary>
+        <p v-if="receiptLoading" class="mt-3 text-ink-muted">{{ $t('common.loading') }}</p>
         <div v-else-if="receipt" class="mt-3 space-y-2">
           <dl class="space-y-1">
-            <div class="flex justify-between"><dt class="text-ink-subtle">예약번호</dt><dd class="font-mono">{{ receipt.bookingNumber }}</dd></div>
-            <div class="flex justify-between"><dt class="text-ink-subtle">판매 형태</dt><dd>{{ receipt.salesTypeLabel }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('checkout.bookingNo') }}</dt><dd class="font-mono">{{ receipt.bookingNumber }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.salesTypeShort') }}</dt><dd>{{ receipt.salesTypeLabel }}</dd></div>
             <div v-for="p in receipt.payments" :key="p.id" class="border-t border-line pt-2">
-              <div class="flex justify-between"><dt class="text-ink-subtle">결제 {{ p.method || p.provider }}</dt><dd class="font-bold">{{ formatKrw(p.amountMinor) }}</dd></div>
-              <div v-if="p.card?.company" class="flex justify-between text-xs text-ink-muted"><span>{{ p.card.company }} {{ p.card.number }}</span><span>{{ p.card.installmentMonths ? `할부 ${p.card.installmentMonths}개월` : '일시불' }}</span></div>
-              <div class="flex justify-between text-xs text-ink-muted"><span>승인 {{ p.approvedAt ? fmt(p.approvedAt) : '—' }}</span><span>{{ p.status }}</span></div>
+              <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.payLine', { m: p.method || p.provider }) }}</dt><dd class="font-bold">{{ formatKrw(p.amountMinor) }}</dd></div>
+              <div v-if="p.card?.company" class="flex justify-between text-xs text-ink-muted"><span>{{ p.card.company }} {{ p.card.number }}</span><span>{{ p.card.installmentMonths ? $t('booking.detail.installment', { n: p.card.installmentMonths }) : $t('booking.detail.lumpSum') }}</span></div>
+              <div class="flex justify-between text-xs text-ink-muted"><span>{{ $t('booking.detail.approved', { d: p.approvedAt ? fmt(p.approvedAt) : '—' }) }}</span><span>{{ p.status }}</span></div>
             </div>
-            <div v-for="rf in receipt.refunds" :key="rf.id" class="flex justify-between text-success"><dt>환불 · {{ rf.status }}</dt><dd>{{ formatKrw(rf.amountMinor) }}</dd></div>
-            <div class="flex justify-between border-t border-line pt-2"><dt class="text-ink-subtle">실결제액</dt><dd class="font-bold">{{ formatKrw(receipt.paidMinor - receipt.refundedMinor) }}</dd></div>
+            <div v-for="rf in receipt.refunds" :key="rf.id" class="flex justify-between text-success"><dt>{{ $t('booking.detail.refundLineShort', { s: rf.status }) }}</dt><dd>{{ formatKrw(rf.amountMinor) }}</dd></div>
+            <div class="flex justify-between border-t border-line pt-2"><dt class="text-ink-subtle">{{ $t('booking.detail.netPaid') }}</dt><dd class="font-bold">{{ formatKrw(receipt.paidMinor - receipt.refundedMinor) }}</dd></div>
           </dl>
-          <button class="rounded-xl border border-line-strong px-4 py-2 text-xs font-semibold print:hidden" @click="printVoucher">영수증 인쇄</button>
+          <button class="rounded-xl border border-line-strong px-4 py-2 text-xs font-semibold print:hidden" @click="printVoucher">{{ $t('booking.detail.printReceipt') }}</button>
         </div>
       </details>
 
       <details class="rounded-2xl border border-line bg-surface p-5 text-sm">
-        <summary class="cursor-pointer font-semibold text-ink">처리 이력</summary>
+        <summary class="cursor-pointer font-semibold text-ink">{{ $t('booking.detail.history') }}</summary>
         <ol class="mt-3 space-y-1 text-xs text-ink-muted">
-          <li v-for="(h, i) in booking.history" :key="i">{{ fmt(h.created_at) }} · {{ h.from_status || '생성' }} → <strong>{{ h.to_status }}</strong><span v-if="h.reason"> ({{ h.reason }})</span></li>
+          <li v-for="(h, i) in booking.history" :key="i">{{ fmt(h.created_at) }} · {{ h.from_status || $t('booking.detail.created') }} → <strong>{{ h.to_status }}</strong><span v-if="h.reason"> ({{ h.reason }})</span></li>
         </ol>
       </details>
 
       <div class="flex gap-2">
-        <NuxtLink to="/my/bookings" class="rounded-xl border border-line-strong px-4 py-2.5 text-sm font-semibold">내 예약 목록</NuxtLink>
-        <button v-if="booking.isConfirmed" class="rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-ink-inverse print:hidden" @click="printVoucher">바우처 인쇄</button>
+        <NuxtLink :to="$localePath('/my/bookings')" class="rounded-xl border border-line-strong px-4 py-2.5 text-sm font-semibold">{{ $t('booking.myList') }}</NuxtLink>
+        <button v-if="booking.isConfirmed" class="rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-ink-inverse print:hidden" @click="printVoucher">{{ $t('booking.detail.printVoucher') }}</button>
       </div>
     </div>
   </div>

@@ -2,6 +2,8 @@
 import { BRAND } from '~/config/brand'
 
 const articles: Array<{ id: number; date: string; category: string; title: string; summary: string }> = []
+const { t } = useI18n()
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/news', title: t('seo.news.title'), description: t('seo.news.description'), koOnly: true })
 </script>
 
 <template>
@@ -11,10 +13,10 @@ const articles: Array<{ id: number; date: string; category: string; title: strin
         Newsroom
       </span>
       <h1 class="text-3xl sm:text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
-        {{ BRAND.name }} 뉴스룸
+        {{ $t('news.h1', { brand: BRAND.name }) }}
       </h1>
       <p class="text-sm text-slate-500 dark:text-slate-400">
-        {{ BRAND.name }}의 최신 보도자료, 파트너십 소식 및 기술 혁신 업데이트를 확인하세요.
+        {{ $t('news.sub', { brand: BRAND.name }) }}
       </p>
     </div>
 
@@ -33,8 +35,8 @@ const articles: Array<{ id: number; date: string; category: string; title: strin
       </article>
     </div>
     <div v-else class="bg-white dark:bg-slate-800 p-10 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm text-center">
-      <p class="text-sm text-slate-500 dark:text-slate-400 font-bold">아직 등록된 소식이 없습니다.</p>
-      <p class="text-xs text-slate-400 dark:text-slate-500 mt-2">서비스 소식이 나오는 대로 이곳에 안내해 드립니다.</p>
+      <p class="text-sm text-slate-500 dark:text-slate-400 font-bold">{{ $t('news.empty') }}</p>
+      <p class="text-xs text-slate-400 dark:text-slate-500 mt-2">{{ $t('news.emptySub') }}</p>
     </div>
   </div>
 </template>

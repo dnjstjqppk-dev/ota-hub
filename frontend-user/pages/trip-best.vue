@@ -3,10 +3,8 @@ import { ref } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { apiFetch } from '~/composables/useApi'
 
-useHead({
-  title: '평점 높은 호텔 랭킹',
-  meta: [{ name: 'description', content: '리뷰 평점 기준으로 정렬한 getfortrip 인기 호텔 랭킹' }]
-})
+const { t } = useI18n()
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/trip-best', title: t('best.seoTitle'), description: t('best.seoDesc') })
 
 const currencyStore = useCurrencyStore()
 const hotels = ref<any[]>([])
@@ -43,17 +41,17 @@ if (state.value === 'error' && import.meta.server) throw createError({ statusCod
       <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-black/20 rounded-full text-xs font-black uppercase tracking-wider">
         <AppIcon name="trophy" :size="14" /> getfortrip Hotel Ranking
       </span>
-      <h1 class="text-3xl font-black">리뷰 평점 높은 순 호텔 랭킹</h1>
-      <p class="text-xs text-amber-100 font-medium">리뷰 평점과 리뷰 수를 기준으로 정렬한 인기 숙소 목록입니다.</p>
+      <h1 class="text-3xl font-black">{{ $t('best.hero') }}</h1>
+      <p class="text-xs text-amber-100 font-medium">{{ $t('best.heroSub') }}</p>
     </div>
 
     <ResultsState
       :state="state"
       :count="hotels.length"
       icon="trophy"
-      empty-title="랭킹에 표시할 호텔이 없어요"
-      empty-hint="카탈로그에 호텔이 등록되면 이곳에 표시됩니다."
-      error-title="랭킹을 불러오지 못했어요"
+      :empty-title="$t('best.empty')"
+      :empty-hint="$t('best.emptyHint')"
+      :error-title="$t('best.loadFail')"
       @retry="fetchBest"
     >
       <div class="space-y-4">
@@ -67,20 +65,20 @@ if (state.value === 'error' && import.meta.server) throw createError({ statusCod
               <div class="text-xs text-slate-400 font-semibold">{{ h.city }}, {{ h.country }}</div>
               <h3 class="break-words text-base font-black text-slate-900 md:text-lg">{{ h.name_ko }}</h3>
               <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span v-if="h.review_score != null" class="px-2 py-0.5 bg-trip-blue text-white rounded text-[11px] font-bold">{{ h.review_score }}점</span>
-                <span v-else class="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[11px] font-bold">신규</span>
-                <span class="text-xs text-slate-500 font-medium">(인증 후기 {{ Number(h.review_count || 0).toLocaleString() }}개)</span>
+                <span v-if="h.review_score != null" class="px-2 py-0.5 bg-trip-blue text-white rounded text-[11px] font-bold">{{ $t('best.score', { v: h.review_score }) }}</span>
+                <span v-else class="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[11px] font-bold">{{ $t('hotels.list.newBadge') }}</span>
+                <span class="text-xs text-slate-500 font-medium">{{ $t('todo.reviewCount', { n: $n(Number(h.review_count || 0)) }) }}</span>
               </div>
             </div>
           </div>
 
           <div class="text-right flex items-center gap-4">
             <div>
-              <div class="text-xs text-slate-400">1박 최저가</div>
+              <div class="text-xs text-slate-400">{{ $t('best.lowest') }}</div>
               <div class="text-2xl font-black text-trip-blue">{{ lowestPrice(h) == null ? '-' : currencyStore.formatKRW(lowestPrice(h)!) }}</div>
             </div>
-            <NuxtLink :to="`/hotels/detail/${h.id}`" class="px-5 py-2.5 bg-trip-blue text-white text-xs font-bold rounded-xl shadow-md">
-              상세 보기
+            <NuxtLink :to="$localePath(`/hotels/detail/${h.id}`)" class="px-5 py-2.5 bg-trip-blue text-white text-xs font-bold rounded-xl shadow-md">
+              {{ $t('best.detail') }}
             </NuxtLink>
           </div>
         </div>

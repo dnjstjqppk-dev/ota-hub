@@ -2,10 +2,12 @@
 import { ref } from 'vue'
 import { apiFetch } from '~/composables/useApi'
 
+const { t, locale } = useI18n()
 useHead({
-  title: '진행 중인 할인 쿠폰',
-  meta: [{ name: 'description', content: 'getfortrip 진행 중인 할인 쿠폰과 프로모션 코드 모음' }]
+  title: t('deals.title'),
+  meta: [{ name: 'description', content: t('deals.desc') }]
 })
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
 
 interface Promotion {
   id: string
@@ -22,22 +24,18 @@ const promotions = ref<Promotion[]>([])
 const state = ref<'loading' | 'ready' | 'error'>('loading')
 const copiedCode = ref<string | null>(null)
 
-const DISCOUNT_TYPE_LABEL: Record<string, string> = {
-  PERCENTAGE: '정률 할인',
-  FIXED_AMOUNT: '정액 할인'
-}
-const discountTypeLabel = (t: string) => DISCOUNT_TYPE_LABEL[t] || t
+const discountTypeLabel = (v: string) => t(`deals.type_${v}`, v)
 // #90: the actual benefit (percent or KRW) plus only the bounds that apply —
 // a zero min/max bound is hidden instead of printed as ₩0.
-const benefitText = (p: Promotion) => p.discount_type === 'PERCENTAGE'
-  ? `${Number(p.discount_value).toLocaleString()}% 할인`
-  : `${Number(p.discount_value).toLocaleString()}원 할인`
+const num = (n: number) => Number(n).toLocaleString(LOCALE_TAG[locale.value] || 'ko-KR')
+const benefitText = (p: Promotion) => t('deals.benefit', { v: p.discount_type === 'PERCENTAGE' ? `${num(p.discount_value)}%` : t('deals.krw', { v: num(p.discount_value) }) })
 const boundText = (p: Promotion) => {
   const parts: string[] = []
-  if (Number(p.min_order_amount_krw || 0) > 0) parts.push(`최소 주문금액 ₩${Number(p.min_order_amount_krw).toLocaleString()}`)
-  if (Number(p.max_discount_krw || 0) > 0) parts.push(`최대 ₩${Number(p.max_discount_krw).toLocaleString()} 할인`)
+  if (Number(p.min_order_amount_krw || 0) > 0) parts.push(t('deals.minOrder', { v: num(p.min_order_amount_krw) }))
+  if (Number(p.max_discount_krw || 0) > 0) parts.push(t('deals.maxOff', { v: num(p.max_discount_krw) }))
   return parts.join(' · ')
 }
+const fmtDate = (s: string) => new Date(s).toLocaleDateString(LOCALE_TAG[locale.value] || 'ko-KR')
 
 const copyCouponCode = async (code: string) => {
   try {
@@ -73,19 +71,19 @@ if (state.value === 'error' && import.meta.server) throw createError({ statusCod
   <div class="max-w-6xl mx-auto px-4 py-8 space-y-6">
     <div class="bg-gradient-to-r from-orange-500 to-amber-500 rounded-3xl p-8 text-white space-y-2 shadow-xl">
       <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-black/20 rounded-full text-xs font-black uppercase tracking-wider">
-        <AppIcon name="gift" :size="14" /> getfortrip 글로벌 프로모션 센터
+        <AppIcon name="gift" :size="14" /> {{ $t('deals.badge') }}
       </span>
-      <h1 class="text-3xl font-black">진행 중인 모든 할인 쿠폰을 다운로드하세요!</h1>
-      <p class="text-xs text-orange-100 font-medium">결제 시 쿠폰 코드를 입력하면 즉시 할인이 적용됩니다.</p>
+      <h1 class="text-3xl font-black">{{ $t('deals.hero') }}</h1>
+      <p class="text-xs text-orange-100 font-medium">{{ $t('deals.heroSub') }}</p>
     </div>
 
     <ResultsState
       :state="state"
       :count="promotions.length"
       icon="gift"
-      empty-title="진행 중인 쿠폰이 없어요"
-      empty-hint="새 프로모션이 등록되면 이곳에 표시됩니다."
-      error-title="쿠폰을 불러오지 못했어요"
+      :empty-title="$t('deals.empty')"
+      :empty-hint="$t('deals.emptyHint')"
+      :error-title="$t('my.couponsFail')"
       @retry="fetchPromotions"
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -98,7 +96,7 @@ if (state.value === 'error' && import.meta.server) throw createError({ statusCod
             <p class="text-sm font-black text-orange-600">{{ benefitText(p) }}</p>
             <p v-if="boundText(p)" class="text-xs text-slate-500">{{ boundText(p) }}</p>
             <div class="text-[11px] font-mono text-slate-400">
-              유효기간: ~ {{ p.valid_until ? new Date(p.valid_until).toLocaleDateString() : '-' }}
+              {{ $t('deals.valid', { d: p.valid_until ? fmtDate(p.valid_until) : '-' }) }}
             </div>
           </div>
 
@@ -107,7 +105,7 @@ if (state.value === 'error' && import.meta.server) throw createError({ statusCod
               {{ p.code }}
             </div>
             <button type="button" @click="copyCouponCode(p.code)" class="-my-3 inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-2 text-xs text-slate-500 hover:text-trip-blue font-bold cursor-pointer">
-              {{ copiedCode === p.code ? '✓ 복사완료' : '코드 복사' }}
+              {{ copiedCode === p.code ? $t('deals.copied') : $t('deals.copy') }}
             </button>
           </div>
         </div>

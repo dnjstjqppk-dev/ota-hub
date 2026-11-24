@@ -10,6 +10,7 @@ import { fmtDay, qDate, qInt, qStr, todayIso, useUrlQuery } from '~/composables/
 
 const { route, router, isSelf } = useUrlQuery()
 const currency = useCurrencyStore()
+const { t } = useI18n()
 
 const q = computed(() => {
   const r = route.query
@@ -52,32 +53,32 @@ await useAsyncData('tg15-packages-list', () => load())
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
-useHead(() => ({ title: q.value.city ? `${q.value.city} 항공+호텔` : '항공+호텔 패키지' }))
+useHead(() => ({ title: q.value.city ? t('packages.list.docTitle', { c: q.value.city }) : t('packages.list.title') }))
 </script>
 
 <template>
   <div class="pb-24 lg:pb-16">
     <section class="border-b border-line bg-surface">
       <form class="mx-auto grid max-w-7xl gap-2 px-4 py-3 lg:grid-cols-[1.4fr_1fr_1fr_auto] lg:px-6 lg:py-4" novalidate @submit.prevent="submit">
-        <div class="field-box"><label for="pl-city" class="field-label">여행지</label><SearchAutocomplete v-model="draft.city" input-id="pl-city" domain="packages" variant="bare" placeholder="도시 또는 국가" @enter="submit" /></div>
-        <DateRangePicker v-model:start="draft.date" mode="single" start-label="출발일" :min="today" compact />
-        <GuestPicker v-model:adults="draft.adults" v-model:children="draft.children" :show-rooms="false" label="여행자" compact />
-        <button type="submit" class="btn-primary min-h-[52px] rounded-2xl px-7 text-base"><AppIcon name="search" :size="18" />검색</button>
+        <div class="field-box"><label for="pl-city" class="field-label">{{ $t('packages.list.dest') }}</label><SearchAutocomplete v-model="draft.city" input-id="pl-city" domain="packages" variant="bare" :placeholder="$t('packages.list.destPh')" @enter="submit" /></div>
+        <DateRangePicker v-model:start="draft.date" mode="single" :start-label="$t('packages.list.depDate')" :min="today" compact />
+        <GuestPicker v-model:adults="draft.adults" v-model:children="draft.children" :show-rooms="false" :label="$t('packages.list.travelers')" compact />
+        <button type="submit" class="btn-primary min-h-[52px] rounded-2xl px-7 text-base"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
       </form>
     </section>
 
     <div class="mx-auto max-w-7xl px-4 lg:px-6">
       <div class="pb-3 pt-6">
-        <nav class="mb-1 flex items-center gap-1 text-xs text-ink-subtle" aria-label="이동 경로"><NuxtLink to="/" class="hover:text-ink">홈</NuxtLink><AppIcon name="chevron-right" :size="12" /><NuxtLink to="/packages" class="hover:text-ink">항공+호텔</NuxtLink></nav>
-        <h1 class="text-xl font-bold tracking-tight text-ink sm:text-2xl">{{ q.city ? `${q.city} 항공+호텔` : '모든 항공+호텔 패키지' }} <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ items.length }}개</span></h1>
-        <p v-if="q.date" class="mt-0.5 text-sm text-ink-muted">{{ fmtDay(q.date, true) }} 출발</p>
+        <nav class="mb-1 flex items-center gap-1 text-xs text-ink-subtle" :aria-label="$t('common.breadcrumb')"><NuxtLink :to="$localePath('/')" class="hover:text-ink">{{ $t('common.home') }}</NuxtLink><AppIcon name="chevron-right" :size="12" /><NuxtLink :to="$localePath('/packages')" class="hover:text-ink">{{ $t('nav.packages') }}</NuxtLink></nav>
+        <h1 class="text-xl font-bold tracking-tight text-ink sm:text-2xl">{{ q.city ? $t('packages.list.docTitle', { c: q.city }) : $t('packages.list.h1all') }} <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ $t('hotels.list.count', { n: items.length }) }}</span></h1>
+        <p v-if="q.date" class="mt-0.5 text-sm text-ink-muted">{{ $t('packages.list.depOn', { d: fmtDay(q.date, true) }) }}</p>
       </div>
-      <p class="mb-3 flex items-start gap-1.5 text-xs text-ink-subtle"><AppIcon name="check" :size="14" class="mt-px" />표시 요금은 1인 참고가예요. 패키지는 환불할 수 없는 상품이며 최종 금액은 결제 전 확인 화면에서 확정돼요.</p>
+      <p class="mb-3 flex items-start gap-1.5 text-xs text-ink-subtle"><AppIcon name="check" :size="14" class="mt-px" />{{ $t('packages.list.priceNote') }}</p>
 
-      <ResultsState :state="state" :count="items.length" icon="package" :empty-title="q.city ? `‘${q.city}’ 패키지가 아직 없어요` : '판매 중인 패키지가 없어요'" empty-hint="항공권과 호텔을 각각 검색해 예약할 수도 있어요." error-title="패키지를 불러오지 못했어요" @retry="load">
+      <ResultsState :state="state" :count="items.length" icon="package" :empty-title="q.city ? $t('packages.list.emptyCity', { c: q.city }) : $t('packages.list.emptyAll')" :empty-hint="$t('packages.list.emptyHint')" :error-title="$t('packages.list.loadFail')" @retry="load">
         <template #empty-actions>
-          <NuxtLink v-if="q.city" :to="{ path: '/hotels/list', query: { city: q.city } }" class="btn-primary">{{ q.city }} 호텔 보기</NuxtLink>
-          <button v-if="q.city" type="button" class="btn-secondary" @click="router.replace({ query: {} })">모든 패키지 보기</button>
+          <NuxtLink v-if="q.city" :to="$localePath({ path: '/hotels/list', query: { city: q.city } })" class="btn-primary">{{ $t('packages.list.cityHotels', { c: q.city }) }}</NuxtLink>
+          <button v-if="q.city" type="button" class="btn-secondary" @click="router.replace({ query: {} })">{{ $t('packages.list.viewAll') }}</button>
         </template>
         <ul class="grid gap-4 md:grid-cols-2">
           <li v-for="p in items" :key="p.id">
@@ -85,15 +86,15 @@ useHead(() => ({ title: q.value.city ? `${q.value.city} 항공+호텔` : '항공
               <SmartImg :src="p.thumbnail_url || p.hero_image_url" :alt="p.title" icon="package" img-class="aspect-[16/10] w-full shrink-0 object-cover sm:aspect-auto sm:w-48" />
               <div class="flex flex-1 flex-col p-4">
                 <p class="flex items-center gap-2 text-xs text-ink-subtle"><span>{{ p.destination_city }}</span><span v-if="p.badge" class="rounded-full bg-accent-soft px-2 py-0.5 font-semibold text-accent">{{ p.badge }}</span></p>
-                <h2 class="mt-1 line-clamp-2 font-bold leading-snug text-ink"><NuxtLink :to="detailLink(p)" class="after:absolute after:inset-0 group-hover:text-primary">{{ p.title }}</NuxtLink></h2>
+                <h2 class="mt-1 line-clamp-2 font-bold leading-snug text-ink"><NuxtLink :to="$localePath(detailLink(p))" class="after:absolute after:inset-0 group-hover:text-primary">{{ p.title }}</NuxtLink></h2>
                 <ul v-if="features(p).length" class="mt-2 space-y-1 text-xs text-ink-muted">
                   <li v-for="f in features(p)" :key="f" class="flex items-start gap-1.5"><AppIcon name="check" :size="12" class="mt-0.5 text-primary" /><span class="line-clamp-1">{{ f }}</span></li>
                 </ul>
                 <div class="mt-auto flex items-end justify-between gap-2 border-t border-line pt-3">
-                  <span v-if="p.bookable === false" class="text-xs font-semibold text-warning">직접 예약 불가</span>
+                  <span v-if="p.bookable === false" class="text-xs font-semibold text-warning">{{ $t('transfers.list.noDirect') }}</span>
                   <div class="ml-auto text-right">
-                    <p v-if="original(p) > price(p)" class="text-2xs text-ink-subtle">정가 <span class="line-through tabular">{{ currency.formatKRW(original(p)) }}</span></p>
-                    <p class="text-lg font-extrabold text-ink tabular">{{ currency.formatKRW(price(p)) }}<span class="text-xs font-medium text-ink-subtle"> /1인</span></p>
+                    <p v-if="original(p) > price(p)" class="text-2xs text-ink-subtle">{{ $t('packages.list.regularPre') }} <span class="line-through tabular">{{ currency.formatKRW(original(p)) }}</span></p>
+                    <p class="text-lg font-extrabold text-ink tabular">{{ currency.formatKRW(price(p)) }}<span class="text-xs font-medium text-ink-subtle">{{ $t('packages.list.perPerson') }}</span></p>
                   </div>
                 </div>
               </div>

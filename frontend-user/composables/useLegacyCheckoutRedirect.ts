@@ -15,6 +15,7 @@ const isCount = (v: unknown) => typeof s(v) === 'string' && /^\d{1,2}$/.test(s(v
 export function useLegacyCheckoutRedirect(domain: string, map: (q: Q) => { itemId?: unknown; unitId?: unknown; ratePlanId?: unknown; returnItemId?: unknown; returnDate?: unknown; startDate?: unknown; endDate?: unknown; adults?: unknown; children?: unknown; rooms?: unknown }) {
   const route = useRoute()
   const router = useRouter()
+  const localePath = useLocalePath()
   onMounted(() => {
     const m = map(route.query as Q)
     const out: Record<string, string> = { domain }
@@ -26,7 +27,7 @@ export function useLegacyCheckoutRedirect(domain: string, map: (q: Q) => { itemI
     if (isDate(m.startDate)) out.startDate = s(m.startDate)!
     if (isDate(m.endDate)) out.endDate = s(m.endDate)!
     for (const k of ['adults', 'children', 'rooms'] as const) if (isCount(m[k])) out[k] = s(m[k])!
-    if (!out.itemId) return router.replace('/')
-    router.replace({ path: '/checkout', query: out })
+    if (!out.itemId) return router.replace(localePath('/'))
+    router.replace(localePath({ path: '/checkout', query: out }) as any)
   })
 }

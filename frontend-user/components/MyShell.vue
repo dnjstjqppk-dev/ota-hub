@@ -6,6 +6,7 @@
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '~/stores/auth'
+const localePath = useLocalePath()
 
 defineProps<{ title: string; subtitle?: string }>()
 const emit = defineEmits<{ ready: [] }>()
@@ -15,18 +16,19 @@ const auth = useAuthStore()
 const ready = ref(false)
 
 const NAV = [
-  { to: '/my', label: '개요', icon: 'home', exact: true },
-  { to: '/my/bookings', label: '예약 내역', icon: 'bookings' },
-  { to: '/my/coupons', label: '쿠폰', icon: 'gift' },
-  { to: '/my/wishlist', label: '찜·가격 알림', icon: 'heart' },
-  { to: '/my/passengers', label: '자주 쓰는 여행자', icon: 'users' },
-  { to: '/my/profile', label: '회원 정보', icon: 'user' }
+  { to: '/my', key: 'overview', icon: 'home', exact: true },
+  { to: '/my/bookings', key: 'bookings', icon: 'bookings' },
+  { to: '/my/coupons', key: 'coupons', icon: 'gift' },
+  { to: '/my/wishlist', key: 'wishlist', icon: 'heart' },
+  { to: '/my/passengers', key: 'passengers', icon: 'users' },
+  { to: '/my/profile', key: 'profile', icon: 'user' }
 ]
-const active = (n: typeof NAV[number]) => (n.exact ? route.path === n.to : route.path.startsWith(n.to))
+const bare = (p: string) => p.replace(/^\/(en|ja|zh)(?=\/|$)/, '') || '/'
+const active = (n: typeof NAV[number]) => (n.exact ? bare(route.path) === n.to : bare(route.path).startsWith(n.to))
 
 onMounted(async () => {
   await auth.initAuth()
-  if (!auth.isLoggedIn) { router.replace(`/login?redirect=${encodeURIComponent(route.fullPath)}`); return }
+  if (!auth.isLoggedIn) { router.replace(localePath(`/login?redirect=${encodeURIComponent(route.fullPath)}`)); return }
   ready.value = true
   emit('ready')
 })
@@ -36,14 +38,14 @@ useHead({ meta: [{ name: 'robots', content: 'noindex' }] })
 <template>
   <div class="mx-auto max-w-6xl px-4 pb-24 pt-6 lg:px-6 lg:pt-10">
     <div class="grid gap-6 lg:grid-cols-[220px_1fr]">
-      <nav class="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:mx-0 lg:block lg:space-y-1 lg:overflow-visible lg:px-0 [&::-webkit-scrollbar]:hidden" aria-label="내 계정">
+      <nav class="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:mx-0 lg:block lg:space-y-1 lg:overflow-visible lg:px-0 [&::-webkit-scrollbar]:hidden" :aria-label="$t('my.nav')">
         <div v-if="auth.user" class="mb-4 hidden rounded-card border border-line bg-surface p-4 lg:block">
-          <p class="truncate font-bold text-ink">{{ auth.user.fullName || '회원' }}</p>
+          <p class="truncate font-bold text-ink">{{ auth.user.fullName || $t('my.member') }}</p>
           <p class="truncate text-xs text-ink-subtle">{{ auth.user.email }}</p>
         </div>
-        <NuxtLink v-for="n in NAV" :key="n.to" :to="n.to" :aria-current="active(n) ? 'page' : undefined"
+        <NuxtLink v-for="n in NAV" :key="n.to" :to="$localePath(n.to)" :aria-current="active(n) ? 'page' : undefined"
           :class="['flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-colors', active(n) ? 'bg-primary-soft text-primary' : 'text-ink-muted hover:bg-surface hover:text-ink']">
-          <AppIcon :name="n.icon" :size="18" />{{ n.label }}
+          <AppIcon :name="n.icon" :size="18" />{{ $t('my.' + n.key) }}
         </NuxtLink>
       </nav>
       <main class="min-w-0">

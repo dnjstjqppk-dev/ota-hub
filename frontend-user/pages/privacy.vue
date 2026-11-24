@@ -4,6 +4,8 @@ import { useCompany } from '~/composables/useCompany'
 const VERSION = '2.1'
 const EFFECTIVE = '2026년 11월 10일'
 const co = useCompany()
+const { t } = useI18n()
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/privacy', title: t('seo.privacy.title'), description: t('seo.privacy.description'), koOnly: true })
 </script>
 
 <template>

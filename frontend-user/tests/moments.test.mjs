@@ -6,6 +6,14 @@ import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import { transformSync } from 'esbuild'
 import { ref } from 'vue'
 
+const ko = JSON.parse(readFileSync(new URL('../i18n/locales/ko.json', import.meta.url), 'utf8'))
+const tx = (key, params) => {
+  const s = String(key).split('.').reduce((o, k) => (o == null ? o : o[k]), ko)
+  if (typeof s !== 'string') return key
+  if (!params || typeof params !== 'object') return s
+  return Object.entries(params).reduce((acc, [k, v]) => acc.replaceAll(`{${k}}`, String(v)), s)
+}
+
 const filename = 'pages/moments/index.vue'
 const source = readFileSync(new URL('../pages/moments/index.vue', import.meta.url), 'utf8')
 const { descriptor, errors } = parse(source, { filename })
@@ -22,6 +30,8 @@ function setup({ loggedIn = true } = {}) {
     ref,
     onMounted: () => {},
     useHead: () => {},
+    useLocalePath: () => (to) => (typeof to === 'string' ? to : to.path),
+    useI18n: () => ({ t: tx, locale: ref('ko') }),
     navigateTo: (to) => navs.push(to),
     useAuthStore: () => ({ isLoggedIn: loggedIn, user: { fullName: 'QA' } }),
     useApiUrl: (p = '') => `https://api.test${p.startsWith('/') ? p : `/${p}`}`,

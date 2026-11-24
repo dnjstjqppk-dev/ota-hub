@@ -31,11 +31,11 @@ const STYLE: Record<string, string> = {
 
 <template>
   <div v-if="providers.length" class="space-y-2" data-testid="social-login">
-    <div class="relative my-5 text-center text-xs text-ink-subtle"><span class="relative z-10 bg-surface px-3">간편 로그인</span><span class="absolute inset-x-0 top-1/2 h-px bg-line" aria-hidden="true" /></div>
+    <div class="relative my-5 text-center text-xs text-ink-subtle"><span class="relative z-10 bg-surface px-3">{{ $t('auth.socialTitle') }}</span><span class="absolute inset-x-0 top-1/2 h-px bg-line" aria-hidden="true" /></div>
     <button v-for="p in providers" :key="p.id" type="button" class="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition" :class="STYLE[p.id]" @click="start(p.id)">
       <span aria-hidden="true" class="grid h-5 w-5 place-items-center text-base font-black">{{ p.id === 'kakao' ? '●' : p.id === 'naver' ? 'N' : 'G' }}</span>
-      {{ p.label }}로 계속하기
+      {{ $t('auth.continueWith', { p: p.label }) }}
     </button>
-    <p class="pt-1 text-center text-2xs text-ink-subtle">처음이면 약관 동의 후 바로 가입돼요.</p>
+    <p class="pt-1 text-center text-2xs text-ink-subtle">{{ $t('auth.firstTime') }}</p>
   </div>
 </template>

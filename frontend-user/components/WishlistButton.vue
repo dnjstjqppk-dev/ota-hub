@@ -4,6 +4,7 @@ import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWishlistStore } from '~/stores/wishlist'
 import { useAuthStore } from '~/stores/auth'
+const localePath = useLocalePath()
 
 const props = defineProps<{
   domain: 'HOTEL' | 'FLIGHT' | 'TRAIN' | 'CAR' | 'TRANSFER' | 'ACTIVITY' | 'PACKAGE'
@@ -25,7 +26,7 @@ onMounted(() => {
 
 async function toggle() {
   if (!auth.isLoggedIn) {
-    await router.push(`/login?redirect=${encodeURIComponent(router.currentRoute.value.fullPath)}`)
+    await router.push(localePath(`/login?redirect=${encodeURIComponent(router.currentRoute.value.fullPath)}`))
     return
   }
   await store.toggleWishlist({
@@ -43,12 +44,12 @@ async function toggle() {
   <button
     type="button"
     :aria-pressed="saved"
-    :aria-label="saved ? '찜 해제' : '찜하기'"
+    :aria-label="saved ? $t('wishlist.unsave') : $t('wishlist.save')"
     class="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors"
     :class="saved ? 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100' : 'border-line-strong bg-surface text-ink-muted hover:bg-surface-sunken'"
     data-testid="wishlist-toggle"
     @click="toggle"
   >
-    <AppIcon name="heart" :size="14" :stroke="saved ? 0 : 2" :class="saved ? 'fill-current' : ''" />{{ saved ? '찜 해제' : '찜하기' }}
+    <AppIcon name="heart" :size="14" :stroke="saved ? 0 : 2" :class="saved ? 'fill-current' : ''" />{{ saved ? $t('wishlist.unsave') : $t('wishlist.save') }}
   </button>
 </template>

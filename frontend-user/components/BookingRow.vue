@@ -4,10 +4,12 @@ import { formatKrw } from '~/composables/useApi'
 import { fmtDay } from '~/composables/useUrlQuery'
 
 defineProps<{ b: any }>()
-const DOMAIN: Record<string, { label: string; icon: string }> = {
-  HOTEL: { label: '숙소', icon: 'hotel' }, FLIGHT: { label: '항공권', icon: 'flight' }, TRAIN: { label: '기차', icon: 'train' }, CAR: { label: '렌터카', icon: 'car' },
-  TRANSFER: { label: '공항 이동', icon: 'transfer' }, ACTIVITY: { label: '투어·티켓', icon: 'ticket' }, PACKAGE: { label: '항공+호텔', icon: 'package' }
+const { t, locale } = useI18n()
+const DOMAIN: Record<string, { key: string; icon: string }> = {
+  HOTEL: { key: 'hotels', icon: 'hotel' }, FLIGHT: { key: 'flights', icon: 'flight' }, TRAIN: { key: 'trains', icon: 'train' }, CAR: { key: 'cars', icon: 'car' },
+  TRANSFER: { key: 'transfers', icon: 'transfer' }, ACTIVITY: { key: 'activities', icon: 'ticket' }, PACKAGE: { key: 'packages', icon: 'package' }
 }
+const domainKey = (d: string) => DOMAIN[d]?.key || ''
 function tone(s: string) {
   if (['VOUCHER_ISSUED', 'TICKETED', 'SUPPLIER_CONFIRMED', 'COMPLETED'].includes(s)) return 'bg-success-soft text-success'
   if (s === 'FAILED') return 'bg-danger-soft text-danger'
@@ -18,15 +20,15 @@ function tone(s: string) {
 </script>
 
 <template>
-  <NuxtLink :to="`/my/bookings/${b.id}`" class="card group flex items-center gap-4 p-4 transition-shadow hover:shadow-pop sm:p-5">
+  <NuxtLink :to="$localePath(`/my/bookings/${b.id}`)" class="card group flex items-center gap-4 p-4 transition-shadow hover:shadow-pop sm:p-5">
     <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-ink-muted"><AppIcon :name="DOMAIN[b.domain]?.icon || 'bookings'" /></span>
     <div class="min-w-0 flex-1">
       <p class="flex flex-wrap items-center gap-2 text-xs text-ink-subtle">
-        <span>{{ DOMAIN[b.domain]?.label || b.domain }}</span><span class="tabular">{{ b.bookingNumber }}</span>
-        <span :class="['rounded-full px-2 py-0.5 font-semibold', tone(b.status)]">{{ b.statusLabel || b.status }}</span>
+        <span>{{ domainKey(b.domain) ? t('nav.' + domainKey(b.domain)) : b.domain }}</span><span class="tabular">{{ b.bookingNumber }}</span>
+        <span :class="['rounded-full px-2 py-0.5 font-semibold', tone(b.status)]">{{ t('booking.status.' + b.status) }}</span>
       </p>
       <p class="mt-1 line-clamp-1 font-semibold text-ink group-hover:text-primary">{{ b.title }}</p>
-      <p class="text-sm text-ink-muted">{{ fmtDay(b.serviceStart, true) }}<template v-if="b.serviceEnd && b.serviceEnd !== b.serviceStart"> – {{ fmtDay(b.serviceEnd, true) }}</template></p>
+      <p class="text-sm text-ink-muted">{{ fmtDay(b.serviceStart, true, locale) }}<template v-if="b.serviceEnd && b.serviceEnd !== b.serviceStart"> – {{ fmtDay(b.serviceEnd, true, locale) }}</template></p>
     </div>
     <div class="hidden text-right sm:block">
       <p class="font-bold text-ink tabular">{{ formatKrw(b.totalMinor) }}</p>

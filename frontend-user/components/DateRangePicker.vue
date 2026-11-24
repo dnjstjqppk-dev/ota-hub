@@ -19,7 +19,10 @@ const props = withDefaults(defineProps<{
   unit?: 'night' | 'day'
   invalid?: boolean
   compact?: boolean
-}>(), { end: '', mode: 'range', label: '', startLabel: '시작', endLabel: '종료', min: '', maxRange: 30, unit: 'night', invalid: false, compact: false })
+}>(), { end: '', mode: 'range', label: '', startLabel: '', endLabel: '', min: '', maxRange: 30, unit: 'night', invalid: false, compact: false })
+const { t, locale } = useI18n()
+const startText = computed(() => props.startLabel || t('search.start'))
+const endText = computed(() => props.endLabel || t('search.end'))
 
 const emit = defineEmits<{ (e: 'update:start', v: string): void; (e: 'update:end', v: string): void }>()
 
@@ -45,15 +48,30 @@ const addDays = (s: string, n: number) => { const d = fromIso(s); d.setDate(d.ge
 const addMonths = (s: string, n: number) => { const d = fromIso(s); return toIso(new Date(d.getFullYear(), d.getMonth() + n, 1)) }
 const diff = (x: string, y: string) => Math.round((fromIso(y).getTime() - fromIso(x).getTime()) / 86400000)
 const todayIso = () => toIso(new Date())
-const WEEK = ['일', '월', '화', '수', '목', '금', '토']
-const fmtShort = (s: string) => { if (!s) return ''; const d = fromIso(s); return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEK[d.getDay()]})` }
-const fmtLong = (s: string) => { const d = fromIso(s); return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${WEEK[d.getDay()]}요일` }
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
+// Weekday narrow names per locale (ko matches the legacy single-char row exactly).
+const WEEK = computed(() => {
+  const tag = LOCALE_TAG[locale.value] || 'ko-KR'
+  const f = new Intl.DateTimeFormat(tag, { weekday: 'narrow', timeZone: 'UTC' })
+  return [0, 1, 2, 3, 4, 5, 6].map((i) => f.format(new Date(Date.UTC(2024, 0, 7 + i))))
+})
+const fmtShort = (s: string) => {
+  if (!s) return ''
+  const d = fromIso(s)
+  if (locale.value === 'ko') return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEK.value[d.getDay()] ?? ''})`
+  return new Intl.DateTimeFormat(LOCALE_TAG[locale.value] || 'en-US', { month: 'short', day: 'numeric', weekday: 'short' }).format(d)
+}
+const fmtLong = (s: string) => {
+  const d = fromIso(s)
+  if (locale.value === 'ko') return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${WEEK.value[d.getDay()] ?? ''}요일`
+  return new Intl.DateTimeFormat(LOCALE_TAG[locale.value] || 'en-US', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(d)
+}
 
 const minDay = computed(() => props.min || todayIso())
 const maxDay = computed(() => addDays(minDay.value, 365))
 const isRange = computed(() => props.mode === 'range')
 const length = computed(() => (a.value && b.value ? diff(a.value, b.value) : 0))
-const unitLabel = computed(() => (props.unit === 'night' ? '박' : '일'))
+const unitLabel = computed(() => (props.unit === 'night' ? t('search.nights') : t('search.days')))
 
 function monthGrid(first: string) {
   const d = fromIso(first)
@@ -170,10 +188,10 @@ onBeforeUnmount(() => {
 })
 
 const summary = computed(() => {
-  if (!isRange.value) return a.value ? fmtShort(a.value) : '날짜를 선택하세요'
+  if (!isRange.value) return a.value ? fmtShort(a.value) : t('search.pickDate')
   if (a.value && b.value) return `${fmtShort(a.value)} → ${fmtShort(b.value)} · ${length.value}${unitLabel.value}`
-  if (a.value) return `${fmtShort(a.value)} → ${props.endLabel}을 선택하세요`
-  return `${props.startLabel}을 선택하세요`
+  if (a.value) return `${fmtShort(a.value)} → ${t('search.pickEnd', { label: endText.value })}`
+  return t('search.pickStart', { label: startText.value })
 })
 </script>
 
@@ -197,7 +215,7 @@ const summary = computed(() => {
           <span class="tabular">{{ fmtShort(start) }}</span>
           <template v-if="isRange"><AppIcon name="arrow-right" :size="14" class="text-ink-subtle" /><span class="tabular" :class="!end && 'text-ink-subtle'">{{ end ? fmtShort(end) : endLabel }}</span></template>
         </template>
-        <span v-else class="font-normal text-ink-subtle">날짜 선택</span>
+        <span v-else class="font-normal text-ink-subtle">{{ t('search.selectDates') }}</span>
       </span>
     </button>
 
@@ -211,7 +229,7 @@ const summary = computed(() => {
         ref="panel"
         role="dialog"
         aria-modal="true"
-        :aria-label="isRange ? `${startLabel}·${endLabel} 날짜 선택` : `${startLabel} 날짜 선택`"
+        :aria-label="isRange ? `${startText}·${endText} ${t('search.selectDates')}` : `${startText} ${t('search.selectDates')}`"
         :style="panelStyle"
         :class="isPhone
           ? 'fixed inset-x-0 bottom-0 z-[71] flex max-h-[88vh] flex-col rounded-t-[28px] bg-surface-raised shadow-pop animate-pop-in'
@@ -222,7 +240,7 @@ const summary = computed(() => {
           <div class="mx-auto mb-3 h-1 w-10 rounded-full bg-line-strong" />
           <div class="flex items-center justify-between">
             <p class="text-base font-bold text-ink">{{ isRange ? `${startLabel}·${endLabel}` : startLabel }}</p>
-            <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" aria-label="닫기" @click="close"><AppIcon name="close" /></button>
+            <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" :aria-label="t('common.close')" @click="close"><AppIcon name="close" /></button>
           </div>
           <div class="mt-3 grid grid-cols-7 text-center text-2xs font-semibold text-ink-subtle">
             <span v-for="(w, i) in WEEK" :key="w" :class="i === 0 && 'text-danger/80'">{{ w }}</span>
@@ -231,9 +249,9 @@ const summary = computed(() => {
 
         <!-- Desktop nav -->
         <div v-else class="mb-3 flex items-center justify-between">
-          <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink hover:bg-surface-sunken disabled:opacity-25" :disabled="!canPrev" aria-label="이전 달" @click="viewMonth = addMonths(viewMonth, -1)"><AppIcon name="chevron-right" class="rotate-180" /></button>
+          <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink hover:bg-surface-sunken disabled:opacity-25" :disabled="!canPrev" :aria-label="t('search.prevMonth')" @click="viewMonth = addMonths(viewMonth, -1)"><AppIcon name="chevron-right" class="rotate-180" /></button>
           <p class="text-sm font-medium text-ink-muted" aria-live="polite">{{ summary }}</p>
-          <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink hover:bg-surface-sunken disabled:opacity-25" :disabled="!canNext" aria-label="다음 달" @click="viewMonth = addMonths(viewMonth, 1)"><AppIcon name="chevron-right" /></button>
+          <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink hover:bg-surface-sunken disabled:opacity-25" :disabled="!canNext" :aria-label="t('search.nextMonth')" @click="viewMonth = addMonths(viewMonth, 1)"><AppIcon name="chevron-right" /></button>
         </div>
 
         <div :class="isPhone ? 'flex-1 overflow-y-auto overscroll-contain px-4 pb-4' : 'grid grid-cols-1 gap-8 sm:grid-cols-2'">
@@ -276,15 +294,15 @@ const summary = computed(() => {
         <!-- Footer -->
         <div :class="isPhone ? 'border-t border-line px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3' : 'mt-4 flex items-center justify-between border-t border-line pt-4'">
           <p v-if="isPhone" class="mb-3 text-sm font-medium text-ink" aria-live="polite">{{ summary }}</p>
-          <p v-else class="text-xs text-ink-subtle">오늘 <span class="inline-block h-1 w-1 translate-y-[-2px] rounded-full bg-primary" /> · 최대 {{ maxRange }}{{ unitLabel }}</p>
+          <p v-else class="text-xs text-ink-subtle">{{ t('search.today') }} <span class="inline-block h-1 w-1 translate-y-[-2px] rounded-full bg-primary" /> · {{ t('search.maxUpTo', { n: maxRange }) }}{{ unitLabel }}</p>
           <div class="flex gap-2" :class="isPhone && 'w-full'">
-            <button type="button" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted hover:bg-surface-sunken" @click="reset">초기화</button>
+            <button type="button" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted hover:bg-surface-sunken" @click="reset">{{ t('search.reset') }}</button>
             <button
               type="button"
               class="flex-1 rounded-xl bg-primary px-6 py-2.5 text-sm font-bold text-primary-ink hover:bg-primary-hover disabled:opacity-40"
               :disabled="isRange ? !(a && b) : !a"
               @click="commit"
-            >확인</button>
+            >{{ t('search.done') }}</button>
           </div>
         </div>
       </div>

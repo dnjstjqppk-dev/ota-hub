@@ -8,23 +8,24 @@ import { generatedFallback } from '~/composables/useGeneratedCatalog'
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
 const { item: t, state, reload } = await useCatalogDetail('/transfers', id, generatedFallback('TRANSFER', id))
+const { t: tr } = useI18n()
 
 const facts = computed(() => {
   const x = t.value
   if (!x) return []
   return ([
-    ['출발 공항', x.airport_code],
-    ['도착 지역', x.destination_area],
-    ['차량 등급', x.vehicle_class],
-    ['최대 탑승 인원', x.max_passengers ? `${x.max_passengers}명` : null],
-    ['최대 수하물', x.max_luggage ? `${x.max_luggage}개` : null],
-    ['항공편 추적', x.flight_tracking ? '지원 (예약 시 요청사항에 항공편명을 적어주세요)' : null]
+    [tr('transfers.detail.fAirport'), x.airport_code],
+    [tr('transfers.detail.fDest'), x.destination_area],
+    [tr('transfers.detail.fClass'), x.vehicle_class],
+    [tr('transfers.detail.fMaxPax'), x.max_passengers ? tr('transfers.detail.paxN', { n: x.max_passengers }) : null],
+    [tr('transfers.detail.fMaxLug'), x.max_luggage ? tr('transfers.detail.lugN', { n: x.max_luggage }) : null],
+    [tr('transfers.detail.fTracking'), x.flight_tracking ? tr('transfers.detail.trackingYes') : null]
   ] as [string, string | null][]).filter((f): f is [string, string] => !!f[1])
 })
 
 useHead(() => {
   const x = t.value
-  if (!x) return { title: '공항 이동' }
+  if (!x) return { title: tr('transfers.list.title') }
   return {
     title: `${x.airport_code} → ${x.destination_area} · ${x.service_title}`,
     script: [jsonLdScript({
@@ -39,16 +40,16 @@ useHead(() => {
 </script>
 
 <template>
-  <DetailShell :state="state" list-path="/transfers" list-label="공항 이동 검색으로" @retry="reload">
+  <DetailShell :state="state" list-path="/transfers" :list-label="$t('transfers.detail.backToSearch')" @retry="reload">
     <div v-if="t" class="grid gap-6 lg:grid-cols-[1fr_360px]">
       <div class="min-w-0 space-y-8">
-        <DetailHero :crumbs="[{ label: '홈', to: '/' }, { label: '공항 이동', to: '/transfers' }, { label: t.service_title }]" :eyebrow="t.vehicle_class" :title="t.service_title" :image="t.image_url || null" image-icon="transfer" :facts="facts" testid="transfer-detail" :wishlist="{ domain: 'TRANSFER', itemId: t.id, title: t.service_title, priceKrw: t.price_krw, thumbnailUrl: t.image_url || null, targetUrl: $route.fullPath }">
-          <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">차량 1대 편도 요금이에요. 탑승 인원이 최대 인원을 넘으면 예약할 수 없어요.</p>
+        <DetailHero :crumbs="[{ label: $t('common.home'), to: '/' }, { label: $t('nav.transfers'), to: '/transfers' }, { label: t.service_title }]" :eyebrow="t.vehicle_class" :title="t.service_title" :image="t.image_url || null" image-icon="transfer" :facts="facts" testid="transfer-detail" :wishlist="{ domain: 'TRANSFER', itemId: t.id, title: t.service_title, priceKrw: t.price_krw, thumbnailUrl: t.image_url || null, targetUrl: $route.fullPath }">
+          <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">{{ $t('transfers.detail.note') }}</p>
         </DetailHero>
         <ReviewsSection domain="TRANSFER" :target-id="t.id" />
         <RecoRail domain="TRANSFER" :item-id="t.id" />
       </div>
-      <DetailBookingCard :item="t" domain="TRANSFER" :price-krw="t.price_krw" unit-label="차량 1대 편도" cancellation="FREE" people :max-people="Number(t.max_passengers) || 9" :alert-label="t.airport_code + ' ' + t.service_title" />
+      <DetailBookingCard :item="t" domain="TRANSFER" :price-krw="t.price_krw" :unit-label="$t('transfers.list.perVehicle')" cancellation="FREE" people :max-people="Number(t.max_passengers) || 9" :alert-label="t.airport_code + ' ' + t.service_title" />
     </div>
   </DetailShell>
 </template>

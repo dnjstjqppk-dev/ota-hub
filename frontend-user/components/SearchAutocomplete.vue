@@ -90,18 +90,13 @@ const query = computed(() => text.value.trim())
 const rows = computed<SuggestItem[]>(() => (query.value ? items.value : [...recent.value, ...popular.value.filter(p => !recent.value.some(r => r.id === p.id))]))
 const activeId = computed(() => (active.value >= 0 && rows.value[active.value] ? `${uid}-opt-${active.value}` : undefined))
 
-const placeholderText = computed(() => props.placeholder || ({
-  flights: '도시, 공항 또는 코드 (예: 도쿄, ICN)',
-  hotels: '도시, 지역, 명소 또는 호텔명',
-  trains: '역 이름 (예: 서울역, 신오사카역)',
-  cars: '공항, 도시 또는 기차역',
-  transfers: '공항, 호텔, 지역',
-  'things-to-do': '도시, 명소 또는 체험',
-  packages: '여행지 (예: 다낭, 오사카)',
-  esim: '국가 (예: 일본, 베트남)',
-  insurance: '여행 국가',
-  cruise: '출발 항구 또는 도시'
-} as Record<string, string>)[domain.value] || '어디로 떠나세요?')
+const { t } = useI18n()
+const PH_KEY: Record<string, string> = {
+  flights: 'phFlights', hotels: 'phHotels', trains: 'phTrains', cars: 'phCars',
+  transfers: 'phTransfers', 'things-to-do': 'phThings', packages: 'phPackages',
+  esim: 'phEsim', insurance: 'phInsurance', cruise: 'phCruise',
+}
+const placeholderText = computed(() => props.placeholder || t(`search.suggest.${PH_KEY[domain.value] || 'phDefault'}`))
 
 // ------------------------------------------------------------------ data
 
@@ -334,9 +329,9 @@ const iconPath = (t: string) => ICONS[t] || ICONS.city
 const leadIcon = computed(() => iconPath(LEAD_ICON[props.icon] || (domain.value === 'flights' ? 'airport' : domain.value === 'trains' ? 'station' : 'search')))
 const statusText = computed(() => {
   if (!open.value) return ''
-  if (state.value === 'loading') return '검색 중'
-  if (state.value === 'ready') return items.value.length ? `추천 ${items.value.length}개` : '검색 결과 없음'
-  if (state.value === 'error') return '추천을 불러오지 못했습니다'
+  if (state.value === 'loading') return t('search.suggest.stLoading')
+  if (state.value === 'ready') return items.value.length ? t('search.suggest.stReady', { n: items.value.length }) : t('search.suggest.stReadyEmpty')
+  if (state.value === 'error') return t('search.suggest.stError')
   return ''
 })
 </script>
@@ -374,7 +369,7 @@ const statusText = computed(() => {
         v-if="text"
         type="button"
         :class="variant === 'bare' ? '-right-1' : 'right-2.5'" class="absolute flex h-7 w-7 items-center justify-center rounded-full text-ink-subtle hover:bg-surface-sunken hover:text-ink"
-        aria-label="입력 지우기"
+        :aria-label="t('search.suggest.clearInput')"
         @click="clear"
       >
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
@@ -394,8 +389,8 @@ const statusText = computed(() => {
         <!-- Empty query: recent searches, then editorial suggestions -->
         <template v-if="!query">
           <li v-if="recent.length" role="presentation" class="flex items-center justify-between px-4 pb-1 pt-2">
-            <span class="text-2xs font-semibold uppercase tracking-wide text-ink-subtle">최근 검색</span>
-            <button type="button" class="text-2xs font-medium text-ink-subtle hover:text-danger" @pointerdown.prevent @click="clearRecent">전체 삭제</button>
+            <span class="text-2xs font-semibold uppercase tracking-wide text-ink-subtle">{{ t('search.suggest.recent') }}</span>
+            <button type="button" class="text-2xs font-medium text-ink-subtle hover:text-danger" @pointerdown.prevent @click="clearRecent">{{ t('search.suggest.clearAll') }}</button>
           </li>
         </template>
 
@@ -405,7 +400,7 @@ const statusText = computed(() => {
               v-if="!query && i === recent.length && popular.length"
               role="presentation"
               class="px-4 pb-1 pt-3 text-2xs font-semibold uppercase tracking-wide text-ink-subtle"
-            >추천 여행지</li>
+            >{{ t('search.suggest.recommended') }}</li>
             <li
               :id="`${uid}-opt-${i}`"
               role="option"
@@ -430,7 +425,7 @@ const statusText = computed(() => {
                 v-if="!query && i < recent.length"
                 type="button"
                 class="ml-1 hidden h-6 w-6 items-center justify-center rounded-full text-ink-subtle hover:bg-surface hover:text-danger group-hover:flex"
-                aria-label="최근 검색에서 삭제"
+                :aria-label="t('search.suggest.removeRecent')"
                 @pointerdown.prevent
                 @click.stop="removeRecent(it.id)"
               >
@@ -456,20 +451,20 @@ const statusText = computed(() => {
         </template>
 
         <li v-if="query && state === 'ready' && !items.length" role="presentation" class="px-5 py-6 text-center">
-          <p class="text-sm font-semibold text-ink">'{{ query }}'에 맞는 결과가 없어요</p>
-          <p class="mt-1 text-xs text-ink-muted">철자를 확인하거나 도시·공항 이름, 영문명, 코드로 검색해 보세요.</p>
+          <p class="text-sm font-semibold text-ink">{{ t('search.suggest.noResults', { q: query }) }}</p>
+          <p class="mt-1 text-xs text-ink-muted">{{ t('search.suggest.noResultsHint') }}</p>
         </li>
         <li v-if="state === 'error'" role="presentation" class="px-5 py-6 text-center">
-          <p class="text-sm font-semibold text-ink">추천 목록을 불러오지 못했어요</p>
-          <p class="mt-1 text-xs text-ink-muted">입력한 내용 그대로 검색할 수도 있어요.</p>
-          <button type="button" class="mt-3 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary-soft" @pointerdown.prevent @click="retry">다시 시도</button>
+          <p class="text-sm font-semibold text-ink">{{ t('search.suggest.loadFailed') }}</p>
+          <p class="mt-1 text-xs text-ink-muted">{{ t('search.suggest.loadFailedHint') }}</p>
+          <button type="button" class="mt-3 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary-soft" @pointerdown.prevent @click="retry">{{ t('common.retry') }}</button>
         </li>
         <li v-if="state === 'offline'" role="presentation" class="px-5 py-6 text-center">
-          <p class="text-sm font-semibold text-ink">인터넷 연결이 끊겼어요</p>
-          <p class="mt-1 text-xs text-ink-muted">연결되면 자동으로 다시 검색합니다.</p>
+          <p class="text-sm font-semibold text-ink">{{ t('search.suggest.offline') }}</p>
+          <p class="mt-1 text-xs text-ink-muted">{{ t('search.suggest.offlineHint') }}</p>
         </li>
         <li v-if="!query && !rows.length" role="presentation" class="px-5 py-5 text-center text-xs text-ink-muted">
-          도시, 공항, 역 이름을 입력해 보세요. 초성(ㄷㅋ)과 영문도 됩니다.
+          {{ t('search.suggest.emptyHint') }}
         </li>
       </ul>
     </div>

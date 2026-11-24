@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { apiFetch } from '~/composables/useApi'
 import { useAuthStore } from '~/stores/auth'
 
-useHead({
-  title: '고객센터',
-  meta: [{ name: 'description', content: 'getfortrip 자주 묻는 질문과 1:1 문의' }]
-})
+const { t, locale } = useI18n()
+const localePath = useLocalePath()
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/help', title: t('seo.help.title'), description: t('seo.help.description'), koOnly: true })
 
 const auth = useAuthStore()
 
@@ -19,15 +18,12 @@ const faqs = [
 
 const activeFaq = ref<number | null>(0)
 
-const CATEGORIES = [
-  { value: 'BOOKING', label: '예약' },
-  { value: 'PAYMENT', label: '결제' },
-  { value: 'REFUND', label: '취소/환불' },
-  { value: 'ACCOUNT', label: '계정' },
-  { value: 'TECHNICAL', label: '이용 오류' },
-  { value: 'GENERAL', label: '기타' }
-]
-const STATUS_LABEL: Record<string, string> = { OPEN: '접수', IN_PROGRESS: '처리 중', NEEDS_HUMAN: '상담원 연결됨', RESOLVED: '답변 완료', CLOSED: '종료' }
+const CAT_VALUES = ['BOOKING', 'PAYMENT', 'REFUND', 'ACCOUNT', 'TECHNICAL', 'GENERAL'] as const
+const CATEGORIES = computed(() => CAT_VALUES.map((value) => ({ value, label: t(`help.cat.${value}`) })))
+const catLabel = (v: string) => (CAT_VALUES as readonly string[]).includes(v) ? t(`help.cat.${v}`) : v
+const STATUS_LABEL = computed<Record<string, string>>(() => ({ OPEN: t('help.status.OPEN'), IN_PROGRESS: t('help.status.IN_PROGRESS'), NEEDS_HUMAN: t('help.status.NEEDS_HUMAN'), RESOLVED: t('help.status.RESOLVED'), CLOSED: t('help.status.CLOSED') }))
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
+const fmtDate = (s: string) => new Date(s).toLocaleDateString(LOCALE_TAG[locale.value] || 'ko-KR')
 
 interface Inquiry {
   id: string
@@ -79,7 +75,7 @@ const fetchMine = async () => {
 }
 
 function goLogin() {
-  navigateTo({ path: '/login', query: { redirect: '/help' } })
+  navigateTo({ path: localePath('/login'), query: { redirect: localePath('/help') } })
 }
 
 const submitInquiry = async () => {
@@ -92,7 +88,7 @@ const submitInquiry = async () => {
   const r = await apiFetch('/inquiries', { method: 'POST', body: { category: category.value, subject: s, body: b, ...(bookingId.value ? { bookingId: bookingId.value } : {}) } })
   submitting.value = false
   if (!r.ok) {
-    submitError.value = (r.data as any)?.error || '접수에 실패했습니다. 다시 시도해주세요.'
+    submitError.value = (r.data as any)?.error || t('help.submitFail')
     return
   }
   submitted.value = true
@@ -111,10 +107,10 @@ onMounted(() => {
   <div class="max-w-4xl mx-auto px-4 py-12 space-y-8">
     <div class="text-center space-y-2">
       <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-trip-blue rounded-full text-xs font-black uppercase tracking-wider">
-        <AppIcon name="support" :size="14" /> getfortrip 고객센터
+        <AppIcon name="support" :size="14" /> {{ $t('help.badge') }}
       </span>
-      <h1 class="text-3xl font-black text-slate-900 tracking-tight">무엇을 도와드릴까요?</h1>
-      <p class="text-sm text-slate-500">자주 묻는 질문을 확인하거나 1:1 문의를 남겨주세요.</p>
+      <h1 class="text-3xl font-black text-slate-900 tracking-tight">{{ $t('help.title') }}</h1>
+      <p class="text-sm text-slate-500">{{ $t('help.sub') }}</p>
     </div>
 
     <!-- 자주 묻는 질문 아코디언 -->
@@ -132,63 +128,63 @@ onMounted(() => {
 
     <!-- 1:1 문의 작성 -->
     <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
-      <h2 class="text-lg font-black text-slate-900">1:1 문의하기</h2>
+      <h2 class="text-lg font-black text-slate-900">{{ $t('help.formTitle') }}</h2>
       <div v-if="!auth.isLoggedIn" class="rounded-2xl bg-slate-50 border border-slate-200 p-5 text-center space-y-3">
-        <p class="text-xs text-slate-600">문의 작성과 내 문의 확인은 로그인이 필요합니다.</p>
-        <button type="button" class="px-5 py-2.5 bg-trip-blue text-white text-xs font-bold rounded-xl" @click="goLogin">로그인하러 가기</button>
+        <p class="text-xs text-slate-600">{{ $t('help.needLogin') }}</p>
+        <button type="button" class="px-5 py-2.5 bg-trip-blue text-white text-xs font-bold rounded-xl" @click="goLogin">{{ $t('help.goLogin') }}</button>
       </div>
       <div v-else class="space-y-3">
         <div class="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-3">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-category">문의 유형</label>
+            <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-category">{{ $t('help.type') }}</label>
             <select id="inq-category" v-model="category" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">
               <option v-for="c in CATEGORIES" :key="c.value" :value="c.value">{{ c.label }}</option>
             </select>
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-subject">제목</label>
-            <input id="inq-subject" v-model="subject" type="text" maxlength="120" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold" placeholder="문의 제목을 입력해 주세요" />
+            <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-subject">{{ $t('help.subject') }}</label>
+            <input id="inq-subject" v-model="subject" type="text" maxlength="120" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold" :placeholder="$t('help.subjectPh')" />
           </div>
         </div>
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-booking">관련 예약 (선택)</label>
+          <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-booking">{{ $t('help.bookingOpt') }}</label>
           <select id="inq-booking" v-model="bookingId" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">
-            <option value="">예약 선택 안 함</option>
+            <option value="">{{ $t('help.noBooking') }}</option>
             <option v-for="b in myBookings" :key="b.id" :value="b.id">{{ b.bookingNumber }} · {{ b.title }}</option>
           </select>
         </div>
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-body">내용</label>
-          <textarea id="inq-body" v-model="body" rows="5" maxlength="5000" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs" placeholder="문의 내용을 입력해 주세요."></textarea>
+          <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-body">{{ $t('help.body') }}</label>
+          <textarea id="inq-body" v-model="body" rows="5" maxlength="5000" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs" :placeholder="$t('help.bodyPh')"></textarea>
         </div>
         <p v-if="submitError" class="text-xs font-bold text-danger" role="alert">{{ submitError }}</p>
-        <p v-if="submitted" class="text-xs font-bold text-success" role="status">접수되었습니다. 확인 후 이 페이지에서 답변 상태를 볼 수 있습니다.</p>
+        <p v-if="submitted" class="text-xs font-bold text-success" role="status">{{ $t('help.submitted') }}</p>
         <button type="button" :disabled="submitting || !subject.trim() || !body.trim()" @click="submitInquiry" class="w-full sm:w-auto px-6 py-3 bg-trip-blue text-white font-bold rounded-xl text-xs shadow-md disabled:opacity-50">
-          {{ submitting ? '접수 중…' : '문의 접수하기' }}
+          {{ submitting ? $t('help.submitting') : $t('help.submit') }}
         </button>
       </div>
     </div>
 
     <!-- 내 문의 내역 -->
     <div v-if="auth.isLoggedIn" id="inquiries" class="scroll-mt-24 space-y-4">
-      <h2 class="text-lg font-black text-slate-900">내 문의 내역</h2>
+      <h2 class="text-lg font-black text-slate-900">{{ $t('help.myTitle') }}</h2>
       <ResultsState
         :state="listState"
         :count="inquiries.length"
         icon="support"
-        empty-title="접수한 문의가 없어요"
-        empty-hint="위 양식으로 첫 문의를 남겨보세요."
-        error-title="문의 내역을 불러오지 못했어요"
+        :empty-title="$t('help.emptyTitle')"
+        :empty-hint="$t('help.emptyHint')"
+        :error-title="$t('help.errorTitle')"
         @retry="fetchMine"
       >
         <div class="space-y-3">
           <div v-for="t in inquiries" :key="t.id" class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-2">
             <div class="flex items-center justify-between gap-2">
-              <span class="text-[11px] font-bold text-slate-500">{{ CATEGORIES.find((c) => c.value === t.category)?.label || t.category }} · {{ t.created_at ? new Date(t.created_at).toLocaleDateString() : '' }}</span>
+              <span class="text-[11px] font-bold text-slate-500">{{ catLabel(t.category) }} · {{ t.created_at ? fmtDate(t.created_at) : '' }}</span>
               <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold" :class="t.status === 'OPEN' ? 'bg-amber-50 text-amber-700' : (t.status === 'IN_PROGRESS' || t.status === 'NEEDS_HUMAN') ? 'bg-blue-50 text-trip-blue' : 'bg-emerald-50 text-emerald-700'">{{ STATUS_LABEL[t.status] || t.status }}</span>
             </div>
             <h3 class="font-bold text-slate-900 text-sm">{{ t.subject }}</h3>
-            <p v-if="t.booking_id" class="text-[11px] font-bold text-trip-blue">관련 예약: {{ t.booking_id }}</p>
+            <p v-if="t.booking_id" class="text-[11px] font-bold text-trip-blue">{{ $t('help.relatedBooking', { id: t.booking_id }) }}</p>
             <p class="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{{ t.body }}</p>
             <InquiryThread :ticket-id="t.id" :status="t.status" :has-reply="!!t.admin_note" @changed="fetchMine" />
           </div>

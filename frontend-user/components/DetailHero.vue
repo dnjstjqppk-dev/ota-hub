@@ -17,10 +17,10 @@ defineProps<{
 </script>
 
 <template>
-  <nav class="mb-3 flex flex-wrap items-center gap-1 text-xs text-ink-subtle" aria-label="이동 경로">
+  <nav class="mb-3 flex flex-wrap items-center gap-1 text-xs text-ink-subtle" :aria-label="$t('detail.breadcrumb')">
     <template v-for="(c, i) in crumbs" :key="i">
       <AppIcon v-if="i" name="chevron-right" :size="12" />
-      <NuxtLink v-if="c.to" :to="c.to" class="hover:text-ink">{{ c.label }}</NuxtLink>
+      <NuxtLink v-if="c.to" :to="$localePath(c.to)" class="hover:text-ink">{{ c.label }}</NuxtLink>
       <span v-else class="max-w-[16rem] truncate text-ink-muted">{{ c.label }}</span>
     </template>
   </nav>

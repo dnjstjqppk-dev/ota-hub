@@ -4,7 +4,15 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import { transformSync } from 'esbuild'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
+
+const ko = JSON.parse(readFileSync(new URL('../i18n/locales/ko.json', import.meta.url), 'utf8'))
+const tx = (key, params) => {
+  const s = String(key).split('.').reduce((o, k) => (o == null ? o : o[k]), ko)
+  if (typeof s !== 'string') return key
+  if (!params || typeof params !== 'object') return s
+  return Object.entries(params).reduce((acc, [k, v]) => acc.replaceAll(`{${k}}`, String(v)), s)
+}
 
 const filename = 'pages/checkout/index.vue'
 const source = readFileSync(new URL('../pages/checkout/index.vue', import.meta.url), 'utf8')
@@ -17,12 +25,17 @@ const code = transformSync(descriptor.scriptSetup.content.replace(/^import .*$/g
 
 function setup(routeQuery = {}, passengers = []) {
   const context = {
-    ref, computed, watch,
+    ref, computed, watch, nextTick,
     onMounted: () => {}, onBeforeUnmount: () => {},
     useRoute: () => ({ query: routeQuery, fullPath: '/checkout', path: '/checkout' }),
     useRouter: () => ({ push: () => {} }),
+    useHead: () => {},
+    useRuntimeConfig: () => ({ public: {} }),
+    useLocalePath: () => (to) => (typeof to === 'string' ? to : to.path),
+    useI18n: () => ({ t: tx, te: () => true, locale: ref('ko') }),
     useAuthStore: () => ({ user: null }),
     useCurrencyStore: () => ({ activeCurrency: 'KRW' }),
+    useCartStore: () => ({ legs: [], clear: () => {} }),
     apiFetch: async (path) => path === '/user/passengers'
       ? { ok: true, status: 200, data: { passengers } }
       : { ok: true, status: 200, data: {} },

@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { BRAND } from '~/config/brand'
 
-const categories = ['전체', '호텔', '항공권', '결제/환불', '회원/리워드', '기타']
-const selectedCat = ref('전체')
+const { t } = useI18n()
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/faq', title: t('seo.faq.title'), description: t('seo.faq.description'), koOnly: true })
+
+// Q&A bodies are Korean-only content; category keys stay stable while labels translate.
+const CAT_KEYS = ['ALL', 'HOTEL', 'FLIGHT', 'PAYMENT', 'REWARD', 'ETC'] as const
+const CAT_VALUE: Record<string, string> = { ALL: '전체', HOTEL: '호텔', FLIGHT: '항공권', PAYMENT: '결제/환불', REWARD: '회원/리워드', ETC: '기타' }
+const CAT_KEY_BY_VALUE = Object.fromEntries(Object.entries(CAT_VALUE).map(([k, v]) => [v, k]))
+const selectedCat = ref<string>('ALL')
 const activeIndex = ref<number | null>(0)
+const catLabel = (key: string) => t(`faq.cat.${key}`)
+const badgeLabel = (value: string) => t(`faq.cat.${CAT_KEY_BY_VALUE[value] || 'ETC'}`)
 
 const faqList = [
   {
@@ -45,8 +53,8 @@ const faqList = [
 ]
 
 const filteredFaqs = computed(() => {
-  if (selectedCat.value === '전체') return faqList
-  return faqList.filter(f => f.cat === selectedCat.value)
+  if (selectedCat.value === 'ALL') return faqList
+  return faqList.filter(f => f.cat === (CAT_VALUE[selectedCat.value] || ''))
 })
 </script>
 
@@ -57,17 +65,17 @@ const filteredFaqs = computed(() => {
         FAQ
       </span>
       <h1 class="text-3xl sm:text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
-        자주 묻는 질문
+        {{ $t('faq.title') }}
       </h1>
       <p class="text-sm text-slate-500 dark:text-slate-400 max-w-xl mx-auto">
-        {{ BRAND.name }} 이용 중 궁금하신 점을 카테고리별로 빠르게 확인하세요.
+        {{ $t('faq.sub', { brand: BRAND.name }) }}
       </p>
     </div>
 
     <!-- 카테고리 탭 -->
     <div class="flex items-center justify-center gap-2 flex-wrap">
       <button
-        v-for="cat in categories"
+        v-for="cat in CAT_KEYS"
         :key="cat"
         @click="selectedCat = cat"
         :class="[
@@ -75,7 +83,7 @@ const filteredFaqs = computed(() => {
           selectedCat === cat ? 'bg-slate-900 text-white shadow-sm' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
         ]"
       >
-        {{ cat }}
+        {{ catLabel(cat) }}
       </button>
     </div>
 
@@ -89,7 +97,7 @@ const filteredFaqs = computed(() => {
       >
         <div class="flex items-center justify-between font-bold text-slate-900 dark:text-slate-100 text-sm">
           <div class="flex items-center gap-2">
-            <span class="px-2 py-0.5 rounded bg-blue-50 text-trip-blue text-[10px] font-bold">{{ f.cat }}</span>
+            <span class="px-2 py-0.5 rounded bg-blue-50 text-trip-blue text-[10px] font-bold">{{ badgeLabel(f.cat) }}</span>
             <span>Q. {{ f.q }}</span>
           </div>
           <span class="text-slate-400 text-lg font-bold">{{ activeIndex === i ? '−' : '+' }}</span>

@@ -46,7 +46,7 @@ function goBack() {
             <button type="button" class="flex-1 rounded-xl border border-line py-3 text-sm font-semibold text-ink-muted hover:border-line-strong hover:text-ink" @click="goBack">
               이전 페이지
             </button>
-            <NuxtLink to="/help" class="flex-1 rounded-xl border border-line py-3 text-center text-sm font-semibold text-ink-muted hover:border-line-strong hover:text-ink">
+            <NuxtLink :to="$localePath('/help')" class="flex-1 rounded-xl border border-line py-3 text-center text-sm font-semibold text-ink-muted hover:border-line-strong hover:text-ink">
               고객센터
             </NuxtLink>
           </div>

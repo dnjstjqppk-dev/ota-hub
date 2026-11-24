@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { BRAND } from '~/config/brand'
+const { t } = useI18n()
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/sustainability', title: t('seo.sustainability.title'), description: t('seo.sustainability.description'), koOnly: true })
 </script>
 
 <template>

@@ -4,7 +4,15 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import { transformSync } from 'esbuild'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+
+const ko = JSON.parse(readFileSync(new URL('../i18n/locales/ko.json', import.meta.url), 'utf8'))
+const tx = (key, params) => {
+  const s = String(key).split('.').reduce((o, k) => (o == null ? o : o[k]), ko)
+  if (typeof s !== 'string') return key
+  if (!params || typeof params !== 'object') return s
+  return Object.entries(params).reduce((acc, [k, v]) => acc.replaceAll(`{${k}}`, String(v)), s)
+}
 
 const filename = 'pages/help.vue'
 const source = readFileSync(new URL('../pages/help.vue', import.meta.url), 'utf8')
@@ -18,9 +26,13 @@ const code = transformSync(descriptor.scriptSetup.content.replace(/^import .*$/g
 function setup({ loggedIn = true } = {}) {
   const calls = []
   const context = {
-    ref,
+    ref, computed,
     onMounted: () => {},
     useHead: () => {},
+    useSeoPage: () => {},
+    useRuntimeConfig: () => ({ public: {} }),
+    useLocalePath: () => (to) => (typeof to === 'string' ? to : to.path),
+    useI18n: () => ({ t: tx, locale: ref('ko') }),
     navigateTo: () => {},
     useAuthStore: () => ({ isLoggedIn: loggedIn }),
     apiFetch: async (path, opts) => {
@@ -62,5 +74,5 @@ test('#154: no selection sends no booking link', async () => {
 
 test('TG-21: handoff status renders its label', () => {
   const p = setup()
-  assert.equal(p.STATUS_LABEL.NEEDS_HUMAN, '상담원 연결됨')
+  assert.equal(p.STATUS_LABEL.value.NEEDS_HUMAN, '상담원 연결됨')
 })
