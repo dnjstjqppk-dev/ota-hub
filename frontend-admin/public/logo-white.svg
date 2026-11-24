@@ -1,22 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 44" fill="none" width="200" height="44">
   <defs>
     <linearGradient id="gft-logo-bg-w" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#2E6BD8"/>
-      <stop offset="55%" stop-color="#1B4B9B"/>
-      <stop offset="100%" stop-color="#12306E"/>
+      <stop offset="0%" stop-color="#199684"/>
+      <stop offset="55%" stop-color="#0D6B5E"/>
+      <stop offset="100%" stop-color="#08433B"/>
     </linearGradient>
   </defs>
 
-  <!-- Emblem: brightened for dark backgrounds -->
   <g transform="translate(3,4) scale(0.5625)">
-    <rect x="2" y="2" width="60" height="60" rx="17" fill="url(#gft-logo-bg-w)"/>
-    <ellipse cx="32" cy="34" rx="21" ry="7.5" transform="rotate(-24 32 34)" stroke="#7DE6FF" stroke-width="3.2" stroke-linecap="round" opacity="0.95"/>
-    <path d="M32 12 C33.6 20.5 35.5 24.5 44 26 C35.5 27.5 33.6 31.5 32 40 C30.4 31.5 28.5 27.5 20 26 C28.5 24.5 30.4 20.5 32 12 Z" fill="#FFFFFF"/>
-    <circle cx="51" cy="25.5" r="4" fill="#FF6A5C"/>
+    <rect x="2" y="2" width="60" height="60" rx="18" fill="url(#gft-logo-bg-w)"/>
+    <ellipse cx="32" cy="34" rx="21" ry="7.5" transform="rotate(-24 32 34)" stroke="#8CE5D6" stroke-width="3.2" stroke-linecap="round" opacity="0.95"/>
+    <path d="M32 12 C33.6 20.5 35.5 24.5 44 26 C35.5 27.5 33.6 31.5 32 40 C30.4 31.5 28.5 27.5 20 26 C28.5 24.5 30.4 20.5 32 12 Z" fill="#FAF8F4"/>
+    <circle cx="51" cy="25.5" r="4.2" fill="#E57A57"/>
   </g>
 
-  <!-- Wordmark: single text run with tspans so spacing survives any fallback font -->
   <text x="49" y="28.5" font-family="Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="22" font-weight="800" letter-spacing="-0.03em">
-    <tspan fill="#FFFFFF">getfor</tspan><tspan fill="#7DE6FF">trip</tspan>
+    <tspan fill="#FAF8F4">getfor</tspan><tspan fill="#64E2CE">trip</tspan>
   </text>
 </svg>

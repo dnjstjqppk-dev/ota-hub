@@ -75,39 +75,38 @@ onBeforeUnmount(() => {
 <template>
   <header
     ref="headerEl"
-    :class="['sticky top-0 z-40 border-b bg-surface/90 backdrop-blur-xl transition-shadow', scrolled ? 'border-line shadow-card' : 'border-transparent']"
+    :class="['sticky top-0 z-40 border-b bg-canvas/85 backdrop-blur-2xl transition-all duration-200', scrolled ? 'border-line shadow-card' : 'border-line/50']"
   >
-    <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-ink">{{ t('header.skip') }}</a>
-    <div class="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 lg:px-6">
-      <NuxtLink :to="$localePath('/')" class="flex shrink-0 items-center" :title="BRAND.name">
+    <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-50 focus:rounded-full focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-ink">{{ t('header.skip') }}</a>
+    <div class="mx-auto flex h-[68px] max-w-7xl items-center gap-5 px-4 lg:px-6">
+      <NuxtLink :to="$localePath('/')" class="flex shrink-0 items-center transition-opacity hover:opacity-90" :title="BRAND.name">
         <img src="/logo.svg" alt="getfortrip" class="h-8 w-auto dark:hidden" width="132" height="32" />
         <img src="/logo-white.svg" alt="getfortrip" class="hidden h-8 w-auto dark:block" width="132" height="32" />
       </NuxtLink>
 
-      <!-- Desktop navigation -->
-      <nav class="hidden min-w-0 flex-1 items-center gap-1 lg:flex" :aria-label="t('header.navAria')">
+      <!-- Desktop navigation: Meridian pill bar -->
+      <nav class="hidden min-w-0 flex-1 items-center gap-1 rounded-full border border-line/80 bg-surface/80 p-1 shadow-sm lg:flex lg:w-fit lg:flex-initial" :aria-label="t('header.navAria')">
         <NuxtLink
           v-for="c in primary"
           :key="c.key"
           :to="$localePath(c.to)"
-          :class="['relative rounded-lg px-3 py-2 text-sm font-semibold transition-colors', isActive(c.to) ? 'text-primary' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink']"
+          :class="['relative rounded-full px-3.5 py-1.5 text-sm font-semibold transition-all', isActive(c.to) ? 'bg-primary text-primary-ink shadow-sm' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink']"
         >
           {{ t('nav.' + c.key) }}
-          <span v-if="isActive(c.to)" class="absolute inset-x-3 -bottom-[13px] h-0.5 rounded-full bg-primary" />
         </NuxtLink>
         <div class="relative">
           <button
             type="button"
             :aria-expanded="pop === 'more'"
             aria-haspopup="menu"
-            class="flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+            :class="['flex items-center gap-1 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-all', pop === 'more' ? 'bg-surface-sunken text-ink' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink']"
             @click="toggle('more')"
           >
-            {{ t('header.more') }} <AppIcon name="chevron-down" :size="16" :class="['transition-transform', pop === 'more' && 'rotate-180']" />
+            {{ t('header.more') }} <AppIcon name="chevron-down" :size="15" :class="['transition-transform', pop === 'more' && 'rotate-180']" />
           </button>
-          <div v-if="pop === 'more'" role="menu" class="absolute left-0 top-full mt-2 w-64 animate-pop-in rounded-card border border-line bg-surface-raised p-2 shadow-pop">
+          <div v-if="pop === 'more'" role="menu" class="absolute left-0 top-full mt-3 w-64 animate-pop-in rounded-card border border-line bg-surface-raised p-2 shadow-pop">
             <NuxtLink v-for="c in secondary" :key="c.key" :to="$localePath(c.to)" role="menuitem" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-ink hover:bg-surface-sunken">
-              <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-soft text-primary"><AppIcon :name="c.icon" :size="18" /></span>{{ t('nav.' + c.key) }}
+              <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-primary-soft text-primary"><AppIcon :name="c.icon" :size="18" /></span>{{ t('nav.' + c.key) }}
             </NuxtLink>
             <div class="my-2 h-px bg-line" />
             <NuxtLink v-for="l in DISCOVER_LINKS" :key="l.to" :to="$localePath(l.to)" role="menuitem" class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink-muted hover:bg-surface-sunken hover:text-ink">
@@ -123,22 +122,22 @@ onBeforeUnmount(() => {
           <button
             type="button"
             :aria-expanded="pop === 'region'"
-            class="flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+            class="flex h-10 items-center gap-2 rounded-full border border-line bg-surface px-3.5 text-xs font-bold text-ink-muted transition-all hover:border-line-strong hover:text-ink"
             @click="toggle('region')"
           >
-            <AppIcon name="globe" :size="18" />
+            <AppIcon name="globe" :size="16" class="text-primary" />
             <span class="tabular">{{ currency.activeCurrency }}</span>
             <span class="h-3 w-px bg-line-strong" />
             <span>{{ localeLabel }}</span>
           </button>
-          <div v-if="pop === 'region'" class="absolute right-0 top-full mt-2 grid w-80 animate-pop-in grid-cols-2 gap-4 rounded-card border border-line bg-surface-raised p-4 shadow-pop">
+          <div v-if="pop === 'region'" class="absolute right-0 top-full mt-2.5 grid w-80 animate-pop-in grid-cols-2 gap-4 rounded-card border border-line bg-surface-raised p-4 shadow-pop">
             <div>
-              <p class="mb-2 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">{{ t('header.currency') }}</p>
+              <p class="mb-2 text-2xs font-bold uppercase tracking-wider text-ink-subtle">{{ t('header.currency') }}</p>
               <button
                 v-for="c in CURRENCIES"
                 :key="c"
                 type="button"
-                :class="['flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-sm font-semibold', currency.activeCurrency === c ? 'bg-primary-soft text-primary' : 'text-ink hover:bg-surface-sunken']"
+                :class="['flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-sm font-semibold', currency.activeCurrency === c ? 'bg-primary-soft text-primary' : 'text-ink hover:bg-surface-sunken']"
                 @click="currency.setCurrency(c); pop = null"
               >
                 <span class="tabular">{{ c }}</span>
@@ -146,12 +145,12 @@ onBeforeUnmount(() => {
               </button>
             </div>
             <div>
-              <p class="mb-2 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">{{ t('header.language') }}</p>
+              <p class="mb-2 text-2xs font-bold uppercase tracking-wider text-ink-subtle">{{ t('header.language') }}</p>
               <button
                 v-for="l in LOCALES"
                 :key="l.id"
                 type="button"
-                :class="['flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-sm font-semibold', locale === l.id ? 'bg-primary-soft text-primary' : 'text-ink hover:bg-surface-sunken']"
+                :class="['flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-sm font-semibold', locale === l.id ? 'bg-primary-soft text-primary' : 'text-ink hover:bg-surface-sunken']"
                 @click="setLocale(l.id); pop = null"
               >
                 {{ l.label }}
@@ -162,19 +161,19 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <NuxtLink :to="$localePath('/my/wishlist')" class="hidden h-10 w-10 items-center justify-center rounded-xl text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink md:flex" :aria-label="t('header.wishlist')" :title="t('header.wishlist')">
+        <NuxtLink :to="$localePath('/my/wishlist')" class="hidden h-10 w-10 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink md:flex" :aria-label="t('header.wishlist')" :title="t('header.wishlist')">
           <AppIcon name="heart" />
         </NuxtLink>
-        <NuxtLink :to="$localePath('/cart')" class="relative hidden h-10 w-10 items-center justify-center rounded-xl text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink md:flex" :aria-label="t('header.cart')" :title="t('header.cart')">
+        <NuxtLink :to="$localePath('/cart')" class="relative hidden h-10 w-10 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink md:flex" :aria-label="t('header.cart')" :title="t('header.cart')">
           <AppIcon name="bag" />
-          <span v-if="cart.count" class="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-2xs font-bold text-primary-ink tabular" data-testid="cart-count">{{ cart.count }}</span>
+          <span v-if="cart.count" class="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-2xs font-bold text-white shadow-sm tabular" data-testid="cart-count">{{ cart.count }}</span>
         </NuxtLink>
-        <NuxtLink :to="$localePath('/my/bookings')" class="hidden h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink md:flex">
-          <AppIcon name="bookings" :size="18" />{{ t('header.myBookings') }}
+        <NuxtLink :to="$localePath('/my/bookings')" class="hidden h-10 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink md:flex">
+          <AppIcon name="bookings" :size="17" />{{ t('header.myBookings') }}
         </NuxtLink>
         <button
           type="button"
-          class="flex h-10 w-10 items-center justify-center rounded-xl text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+          class="flex h-10 w-10 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
           :aria-label="dark ? t('header.switchToLight') : t('header.switchToDark')"
           :title="dark ? t('header.themeLight') : t('header.themeDark')"
           @click="toggleTheme"
@@ -184,12 +183,12 @@ onBeforeUnmount(() => {
 
         <!-- Account -->
         <div v-if="auth.isLoggedIn && auth.user" class="relative hidden md:block">
-          <button type="button" :aria-expanded="pop === 'account'" class="flex h-10 items-center gap-2 rounded-xl pl-1 pr-2 transition-colors hover:bg-surface-sunken" @click="toggle('account')">
+          <button type="button" :aria-expanded="pop === 'account'" class="flex h-10 items-center gap-2 rounded-full border border-line bg-surface pl-1 pr-2.5 transition-colors hover:border-line-strong" @click="toggle('account')">
             <img v-if="auth.user.avatarUrl" :src="auth.user.avatarUrl" alt="" class="h-8 w-8 rounded-full object-cover" />
             <span v-else class="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-ink">{{ initial }}</span>
-            <AppIcon name="chevron-down" :size="16" class="text-ink-subtle" />
+            <AppIcon name="chevron-down" :size="15" class="text-ink-subtle" />
           </button>
-          <div v-if="pop === 'account'" role="menu" class="absolute right-0 top-full mt-2 w-64 animate-pop-in rounded-card border border-line bg-surface-raised p-2 shadow-pop">
+          <div v-if="pop === 'account'" role="menu" class="absolute right-0 top-full mt-2.5 w-64 animate-pop-in rounded-card border border-line bg-surface-raised p-2 shadow-pop">
             <div class="px-3 py-2.5">
               <p class="truncate text-sm font-bold text-ink">{{ auth.user.fullName }}</p>
               <p class="truncate text-xs text-ink-subtle">{{ auth.user.email }}</p>
@@ -205,12 +204,12 @@ onBeforeUnmount(() => {
             <button type="button" role="menuitem" class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink-muted hover:bg-surface-sunken hover:text-danger" @click="logout"><AppIcon name="logout" :size="18" />{{ t('header.logout') }}</button>
           </div>
         </div>
-        <NuxtLink v-else :to="$localePath(`/login?redirect=${encodeURIComponent(route.fullPath)}`)" class="hidden h-10 items-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-ink transition-colors hover:bg-primary-hover md:flex">
+        <NuxtLink v-else :to="$localePath(`/login?redirect=${encodeURIComponent(route.fullPath)}`)" class="hidden h-10 items-center rounded-full bg-ink px-5 text-sm font-bold text-ink-inverse transition-all hover:bg-primary hover:text-primary-ink md:flex">
           {{ t('nav.login') }}
         </NuxtLink>
 
-        <button type="button" class="flex h-10 w-10 items-center justify-center rounded-xl text-ink transition-colors hover:bg-surface-sunken lg:hidden" :aria-label="t('header.menu')" :aria-expanded="drawer" @click="drawer = true">
-          <AppIcon name="menu" :size="22" />
+        <button type="button" class="flex h-10 w-10 items-center justify-center rounded-full border border-line bg-surface text-ink transition-colors hover:bg-surface-sunken lg:hidden" :aria-label="t('header.menu')" :aria-expanded="drawer" @click="drawer = true">
+          <AppIcon name="menu" :size="20" />
         </button>
       </div>
     </div>

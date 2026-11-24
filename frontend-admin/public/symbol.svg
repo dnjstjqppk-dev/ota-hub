@@ -1,21 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" width="64" height="64">
   <defs>
     <linearGradient id="gft-sym-bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#1B4B9B"/>
-      <stop offset="55%" stop-color="#12306E"/>
-      <stop offset="100%" stop-color="#0B1E45"/>
+      <stop offset="0%" stop-color="#0F7B6C"/>
+      <stop offset="55%" stop-color="#0A544A"/>
+      <stop offset="100%" stop-color="#062E29"/>
     </linearGradient>
   </defs>
 
-  <!-- Midnight squircle -->
-  <rect x="2" y="2" width="60" height="60" rx="17" fill="url(#gft-sym-bg)"/>
-
-  <!-- Orbit ring -->
-  <ellipse cx="32" cy="34" rx="21" ry="7.5" transform="rotate(-24 32 34)" stroke="#33DBFF" stroke-width="3.2" stroke-linecap="round" opacity="0.95"/>
-
-  <!-- North-star sparkle -->
-  <path d="M32 12 C33.6 20.5 35.5 24.5 44 26 C35.5 27.5 33.6 31.5 32 40 C30.4 31.5 28.5 27.5 20 26 C28.5 24.5 30.4 20.5 32 12 Z" fill="#FFFFFF"/>
-
-  <!-- Destination dot on the orbit -->
-  <circle cx="51" cy="25.5" r="4" fill="#FF5A36"/>
+  <rect x="2" y="2" width="60" height="60" rx="18" fill="url(#gft-sym-bg)"/>
+  <ellipse cx="32" cy="34" rx="21" ry="7.5" transform="rotate(-24 32 34)" stroke="#64E2CE" stroke-width="3.2" stroke-linecap="round" opacity="0.95"/>
+  <path d="M32 12 C33.6 20.5 35.5 24.5 44 26 C35.5 27.5 33.6 31.5 32 40 C30.4 31.5 28.5 27.5 20 26 C28.5 24.5 30.4 20.5 32 12 Z" fill="#FAF8F4"/>
+  <circle cx="51" cy="25.5" r="4.2" fill="#D05A34"/>
 </svg>

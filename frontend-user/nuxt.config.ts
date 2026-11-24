@@ -151,7 +151,7 @@ export default defineNuxtConfig({
         { name: 'twitter:card', content: 'summary' },
         { name: 'twitter:title', content: 'getfortrip - 전 세계 스마트 여행 예약 플랫폼' },
         { name: 'twitter:description', content: '전 세계 항공권, 호텔, 기차표, 렌터카 예약' },
-        { name: 'theme-color', content: '#1A6BFF' }
+        { name: 'theme-color', content: '#0D6B5E' }
       ],
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },

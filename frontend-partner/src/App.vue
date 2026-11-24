@@ -61,14 +61,14 @@ const handleLogout = () => {
     >
       <div class="overflow-y-auto">
         <!-- Logo Header -->
-        <div class="flex items-center gap-3 border-b border-midnight-800 p-5">
+        <div class="flex items-center gap-3 border-b border-white/10 p-5">
           <img src="/symbol.svg" alt="getfortrip" class="h-9 w-9 rounded-xl object-contain" />
           <div>
-            <div class="flex items-center gap-1.5 text-base font-black tracking-tight text-white">
-              <span>getfor<span class="text-sapphire-400">trip</span></span>
-              <span class="rounded bg-sapphire-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-sapphire-300">Partner</span>
+            <div class="flex items-center gap-1.5 text-base font-extrabold tracking-tight text-white">
+              <span>getfor<span class="text-horizon-300">trip</span></span>
+              <span class="rounded-full bg-coral-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-coral-400">Partner</span>
             </div>
-            <div class="text-[11px] font-medium text-sapphire-300">Supplier Extranet</div>
+            <div class="text-[11px] font-medium text-white/50">Meridian Extranet</div>
           </div>
         </div>
 
@@ -80,30 +80,30 @@ const handleLogout = () => {
             :to="item.path"
             :class="[
               route.path === item.path
-                ? 'bg-primary font-bold text-primary-ink shadow-md'
-                : 'font-semibold text-sapphire-300 hover:bg-midnight-800 hover:text-white',
-              'flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs transition'
+                ? 'bg-primary font-bold text-primary-ink shadow-sm'
+                : 'font-semibold text-white/70 hover:bg-white/5 hover:text-white',
+              'flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs transition-all'
             ]"
           >
-            <AppIcon :name="item.icon" :size="18" />
+            <AppIcon :name="item.icon" :size="17" />
             <span>{{ item.label }}</span>
           </router-link>
         </nav>
       </div>
 
       <!-- Partner Footer Profile -->
-      <div class="border-t border-midnight-800 bg-midnight-950/60 p-4">
+      <div class="border-t border-white/10 bg-midnight-950/60 p-4">
         <div class="flex items-center justify-between">
           <div class="truncate pr-2">
             <div class="truncate text-xs font-bold text-white">{{ partner.companyName }}</div>
-            <div class="truncate text-[10px] text-sapphire-300">{{ partner.email }}</div>
+            <div class="truncate text-[10px] text-white/50">{{ partner.email }}</div>
           </div>
           <div class="flex items-center gap-1">
             <button
               type="button"
               :aria-label="dark ? '라이트 모드' : '다크 모드'"
               :title="dark ? '라이트 모드' : '다크 모드'"
-              class="rounded-lg p-2 text-sapphire-300 transition hover:bg-midnight-800 hover:text-white"
+              class="rounded-lg p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
               @click="toggleTheme"
             >
               <AppIcon :name="dark ? 'sun' : 'moon'" :size="16" />
@@ -112,7 +112,7 @@ const handleLogout = () => {
               type="button"
               title="로그아웃"
               aria-label="로그아웃"
-              class="rounded-lg p-2 text-sapphire-300 transition hover:bg-midnight-800 hover:text-danger"
+              class="rounded-lg p-2 text-white/60 transition hover:bg-white/10 hover:text-danger"
               @click="handleLogout"
             >
               <AppIcon name="logout" :size="16" />

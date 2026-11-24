@@ -185,10 +185,10 @@ defineExpose({ askDates })
       <template v-if="item.bookable">
         <NuxtLink v-if="datesReady && !overCapacity" :to="$localePath({ path: '/checkout', query })" class="btn-primary w-full py-3" data-testid="book-now">{{ t('common.bookNow') }}</NuxtLink>
         <button v-else-if="!datesReady" type="button" class="btn-primary w-full py-3" data-testid="pick-date" @click="askDates">{{ t('search.selectDates') }}</button>
+        <span v-else class="block rounded-full bg-surface-sunken py-3 text-center text-sm font-semibold text-ink-subtle">{{ t('detail.card.overLimit') }}</span>
         <button v-if="datesReady && !overCapacity && !slotStart" type="button" class="btn-secondary mt-2 w-full py-3" :disabled="cart.adding" data-testid="add-cart" @click="addToCart">{{ cart.adding ? t('detail.card.adding') : addedTick ? t('detail.card.added') : t('detail.card.addCart') }}</button>
         <p v-if="slotStart" class="text-xs text-ink-subtle">{{ t('detail.card.slotSingle') }}</p>
         <p v-if="cart.error" class="text-xs font-medium text-danger" role="alert">{{ cart.error }}</p>
-        <span v-else class="block rounded-xl bg-surface-sunken py-3 text-center text-sm font-semibold text-ink-subtle">{{ t('detail.card.overLimit') }}</span>
         <p v-if="highlight && !datesReady" class="text-sm font-medium text-primary" role="status">{{ dateMode === 'range' ? t('detail.card.pickRange', { a: startText, b: endText }) : t('detail.card.pickSingle', { a: startText }) }}</p>
       </template>
       <template v-else>

@@ -1,5 +1,5 @@
 /**
- * getfortrip partner extranet — design system "Horizon" (same tokens as frontend-user, BRANDING.md palette).
+ * getfortrip partner extranet — design system "Meridian Partner" (unified with frontend-user).
  * Semantic colours resolve to CSS variables in src/style.css so light and dark share one vocabulary.
  *
  * @type {import('tailwindcss').Config}
@@ -22,17 +22,17 @@ module.exports = {
         warning: { DEFAULT: v('warning'), soft: v('warning-soft') },
         danger: { DEFAULT: v('danger'), soft: v('danger-soft') },
         sapphire: {
-          50: '#EEF4FF', 100: '#D9E6FF', 200: '#B5CEFF', 300: '#84ADFF', 400: '#4F87FF',
-          500: '#1A6BFF', 600: '#0F56E0', 700: '#0C44B3', 800: '#0E3A8C', 900: '#102F6B', 950: '#0B1E45'
+          50: '#E7F5F2', 100: '#CBEAE4', 200: '#9AD5C9', 300: '#64BCAC', 400: '#2DBFA8',
+          500: '#0D6B5E', 600: '#09544A', 700: '#08433B', 800: '#07352F', 900: '#062925', 950: '#041B18'
         },
-        horizon: { 300: '#7DE6FF', 400: '#33DBFF', 500: '#00D2FF', 600: '#00A8CC' },
-        coral: { 50: '#FFF1EC', 100: '#FFDCD1', 400: '#FF7A5C', 500: '#FF5A36', 600: '#E8431F', 700: '#BF3115' },
-        midnight: { 700: '#1B2B44', 800: '#122036', 900: '#0B192C', 950: '#060F1C' },
+        horizon: { 300: '#8CE5D6', 400: '#4FD1BE', 500: '#20B29D', 600: '#0D8A78' },
+        coral: { 50: '#FDF0EA', 100: '#FADAD0', 400: '#E57A57', 500: '#D05A34', 600: '#B54724', 700: '#8F361A' },
+        midnight: { 700: '#1D2D2B', 800: '#142120', 900: '#0E1716', 950: '#080E0E' },
         partner: {
-          navy: '#0b192c',
-          blue: '#1e3e62',
-          orange: '#ff6500',
-          dark: '#000000'
+          navy: '#0E1716',
+          blue: '#0D6B5E',
+          orange: '#D05A34',
+          dark: '#080E0E'
         }
       },
       fontFamily: {
@@ -40,11 +40,11 @@ module.exports = {
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace']
       },
       fontSize: { '2xs': ['0.6875rem', { lineHeight: '1rem' }] },
-      borderRadius: { card: '1rem', field: '0.75rem' },
+      borderRadius: { card: '1.125rem', field: '0.75rem' },
       boxShadow: {
-        card: '0 1px 2px rgb(11 25 44 / 0.04), 0 4px 16px -4px rgb(11 25 44 / 0.08)',
-        pop: '0 12px 40px -8px rgb(11 25 44 / 0.22), 0 2px 6px rgb(11 25 44 / 0.06)',
-        focus: '0 0 0 4px rgb(var(--gft-primary) / 0.18)'
+        card: '0 1px 2px rgb(18 24 23 / 0.04), 0 6px 20px -6px rgb(18 24 23 / 0.07)',
+        pop: '0 16px 44px -10px rgb(18 24 23 / 0.22), 0 2px 8px rgb(18 24 23 / 0.06)',
+        focus: '0 0 0 4px rgb(var(--gft-primary) / 0.16)'
       },
       keyframes: {
         'pop-in': { from: { opacity: '0', transform: 'translateY(-4px) scale(0.98)' }, to: { opacity: '1', transform: 'none' } },
