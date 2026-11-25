@@ -24,26 +24,26 @@ const co = useCompany()
         <nav :aria-label="$t('footer.products')">
           <h2 class="mb-4 text-xs font-bold uppercase tracking-widest text-horizon-300">{{ $t('footer.products') }}</h2>
           <ul class="grid grid-cols-2 gap-x-4 gap-y-0 text-sm text-white/70 md:grid-cols-1 md:gap-y-2.5">
-            <li v-for="c in CATEGORIES" :key="c.key"><NuxtLink :to="$localePath(c.to)" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white md:min-h-0">{{ $t('nav.' + c.key) }}</NuxtLink></li>
+            <li v-for="c in CATEGORIES" :key="c.key"><NuxtLink :to="$localePath(c.to)" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white lg:min-h-0">{{ $t('nav.' + c.key) }}</NuxtLink></li>
           </ul>
         </nav>
 
         <nav :aria-label="$t('footer.support')">
           <h2 class="mb-4 text-xs font-bold uppercase tracking-widest text-horizon-300">{{ $t('footer.support') }}</h2>
           <ul class="space-y-2.5 text-sm text-white/70">
-            <li v-for="l in SUPPORT_LINKS" :key="l.to"><NuxtLink :to="$localePath(l.to)" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white md:min-h-0">{{ $t('support.' + l.key) }}</NuxtLink></li>
-            <li><NuxtLink :to="$localePath('/my/bookings')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white md:min-h-0">{{ $t('footer.lookup') }}</NuxtLink></li>
-            <li><NuxtLink :to="$localePath('/safety')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white md:min-h-0">{{ $t('footer.safety') }}</NuxtLink></li>
+            <li v-for="l in SUPPORT_LINKS" :key="l.to"><NuxtLink :to="$localePath(l.to)" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white lg:min-h-0">{{ $t('support.' + l.key) }}</NuxtLink></li>
+            <li><NuxtLink :to="$localePath('/my/bookings')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white lg:min-h-0">{{ $t('footer.lookup') }}</NuxtLink></li>
+            <li><NuxtLink :to="$localePath('/safety')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white lg:min-h-0">{{ $t('footer.safety') }}</NuxtLink></li>
           </ul>
         </nav>
 
         <nav :aria-label="$t('footer.company')">
           <h2 class="mb-4 text-xs font-bold uppercase tracking-widest text-horizon-300">getfortrip</h2>
           <ul class="space-y-2.5 text-sm text-white/70">
-            <li><NuxtLink :to="$localePath('/about')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white md:min-h-0">{{ $t('footer.about') }}</NuxtLink></li>
-            <li><NuxtLink :to="$localePath('/news')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white md:min-h-0">{{ $t('footer.news') }}</NuxtLink></li>
-            <li><NuxtLink :to="$localePath('/careers')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white md:min-h-0">{{ $t('footer.careers') }}</NuxtLink></li>
-            <li><a :href="BRAND.partnerConsoleUrl" class="inline-flex min-h-[44px] items-center gap-1 transition-colors hover:text-horizon-300 md:min-h-0">{{ $t('footer.partnerConsole') }} <AppIcon name="external" :size="14" /></a></li>
+            <li><NuxtLink :to="$localePath('/about')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white lg:min-h-0">{{ $t('footer.about') }}</NuxtLink></li>
+            <li><NuxtLink :to="$localePath('/news')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white lg:min-h-0">{{ $t('footer.news') }}</NuxtLink></li>
+            <li><NuxtLink :to="$localePath('/careers')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white lg:min-h-0">{{ $t('footer.careers') }}</NuxtLink></li>
+            <li><a :href="BRAND.partnerConsoleUrl" class="inline-flex min-h-[44px] items-center gap-1 transition-colors hover:text-horizon-300 lg:min-h-0">{{ $t('footer.partnerConsole') }} <AppIcon name="external" :size="14" /></a></li>
           </ul>
         </nav>
       </div>
@@ -59,10 +59,10 @@ const co = useCompany()
           <p class="pt-1 text-white/60">© {{ year }} {{ co.orPending(co.name || BRAND.companyName) }}</p>
         </div>
         <div class="flex shrink-0 gap-5 font-semibold text-white/70">
-          <NuxtLink :to="$localePath('/terms')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white md:min-h-0">{{ $t('footer.terms') }}</NuxtLink>
-          <NuxtLink :to="$localePath('/privacy')" class="inline-flex min-h-[44px] items-center font-bold text-white transition-colors hover:text-horizon-300 md:min-h-0">{{ $t('footer.privacy') }}</NuxtLink>
-          <NuxtLink :to="$localePath('/cookies')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white md:min-h-0">{{ $t('footer.cookies') }}</NuxtLink>
-          <NuxtLink :to="$localePath('/status')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white md:min-h-0">{{ $t('footer.status') }}</NuxtLink>
+          <NuxtLink :to="$localePath('/terms')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white lg:min-h-0">{{ $t('footer.terms') }}</NuxtLink>
+          <NuxtLink :to="$localePath('/privacy')" class="inline-flex min-h-[44px] items-center font-bold text-white transition-colors hover:text-horizon-300 lg:min-h-0">{{ $t('footer.privacy') }}</NuxtLink>
+          <NuxtLink :to="$localePath('/cookies')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white lg:min-h-0">{{ $t('footer.cookies') }}</NuxtLink>
+          <NuxtLink :to="$localePath('/status')" class="inline-flex min-h-[44px] items-center transition-colors hover:text-white lg:min-h-0">{{ $t('footer.status') }}</NuxtLink>
         </div>
       </div>
     </div>

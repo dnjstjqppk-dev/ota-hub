@@ -56,7 +56,7 @@ const handleLogout = () => {
     <aside
       v-if="!isPublicPage"
       id="partner-nav"
-      :class="['fixed inset-y-0 left-0 z-40 flex w-64 select-none flex-col justify-between border-r border-midnight-800 bg-midnight-900 text-sapphire-200 shadow-2xl transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0', drawer ? 'translate-x-0' : '-translate-x-full']"
+      :class="['fixed inset-y-0 left-0 z-40 flex w-64 select-none flex-col justify-between border-r border-midnight-800 bg-midnight-900 text-sapphire-200 transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:shadow-2xl', drawer ? 'translate-x-0 shadow-2xl' : '-translate-x-full max-lg:invisible']"
       aria-label="파트너 메뉴"
     >
       <div class="overflow-y-auto">

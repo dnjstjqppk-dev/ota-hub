@@ -71,7 +71,7 @@ function logout() {
     <div v-if="drawer" class="fixed inset-0 z-30 bg-midnight-950/60 backdrop-blur-sm lg:hidden" aria-hidden="true" @click="drawer = false" />
     <aside
       id="admin-nav"
-      :class="['fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-midnight-700 bg-midnight-900 text-white/80 shadow-pop transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0', drawer ? 'translate-x-0' : '-translate-x-full']"
+      :class="['fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-midnight-700 bg-midnight-900 text-white/80 transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:shadow-pop', drawer ? 'translate-x-0 shadow-pop' : '-translate-x-full max-lg:invisible']"
       aria-label="관리자 메뉴"
     >
       <div class="flex h-16 items-center gap-2.5 border-b border-white/10 px-4">

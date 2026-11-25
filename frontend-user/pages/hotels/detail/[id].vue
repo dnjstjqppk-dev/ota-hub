@@ -231,14 +231,14 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
         <p v-if="hotel.name_en" class="mt-0.5 text-sm text-ink-subtle">{{ hotel.name_en }}</p>
         <p v-if="hotel.address" class="mt-2 flex items-start gap-1 text-sm text-ink-muted"><AppIcon name="map-pin" :size="16" class="mt-0.5 text-ink-subtle" />{{ hotel.address }}</p>
       </div>
-      <div class="flex shrink-0 items-center gap-3">
+      <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap sm:gap-3">
         <div v-if="score" class="flex items-center gap-2">
           <span class="rounded-xl bg-primary px-2.5 py-1.5 text-lg font-bold text-primary-ink tabular">{{ score.toFixed(1) }}</span>
           <span class="text-xs leading-tight text-ink-muted">{{ $t('hotels.detail.outOf5') }}<br /><template v-if="hotel.review_count">{{ $t('hotels.detail.verifiedCount', { n: $n(Number(hotel.review_count)) }) }}</template></span>
         </div>
         <div v-else class="flex items-center gap-2">
-          <span class="rounded-xl bg-surface-sunken px-2.5 py-1.5 text-sm font-bold text-ink-muted">{{ $t('hotels.list.newBadge') }}</span>
-          <span class="text-xs leading-tight text-ink-muted">{{ $t('hotels.detail.noReviewsYet') }}</span>
+          <span class="whitespace-nowrap rounded-xl bg-surface-sunken px-2.5 py-1.5 text-sm font-bold text-ink-muted">{{ $t('hotels.list.newBadge') }}</span>
+          <span class="whitespace-nowrap text-xs leading-tight text-ink-muted">{{ $t('hotels.detail.noReviewsYet') }}</span>
         </div>
         <WishlistButton domain="HOTEL" :item-id="hotel.id" :title="hotel.name_ko || hotel.name" :price-krw="minRoomPrice" :thumbnail-url="gallery[0] || null" :target-url="$route.fullPath" />
         <PriceAlertButton domain="HOTEL" :item-id="hotel.id" :label="hotel.name_ko || hotel.name" :current-price="minRoomPrice" />

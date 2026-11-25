@@ -303,13 +303,13 @@ onMounted(() => {
     <!-- Product Table -->
     <div class="card overflow-hidden">
       <div class="overflow-x-auto">
-        <table :class="['table text-xs', loading || products.length ? '!min-w-[640px]' : 'w-full !min-w-0']">
+        <table :class="['table text-xs', loading || products.length ? 'w-full !min-w-0 md:!min-w-[640px]' : 'w-full !min-w-0']">
           <thead>
             <tr>
-              <th>상품 ID</th>
-              <th>도메인</th>
+              <th class="hidden md:table-cell">상품 ID</th>
+              <th class="hidden md:table-cell">도메인</th>
               <th>상품명</th>
-              <th>위치/도시</th>
+              <th class="hidden md:table-cell">위치/도시</th>
               <th>기본 기준 요금</th>
               <th>판매 상태</th>
               <th class="!text-right">관리</th>
@@ -327,16 +327,16 @@ onMounted(() => {
               :key="p.id"
               class="transition hover:bg-surface-sunken"
             >
-              <td class="font-mono text-ink-subtle">{{ p.id }}</td>
-              <td>
+              <td class="hidden font-mono text-ink-subtle md:table-cell">{{ p.id }}</td>
+              <td class="hidden md:table-cell">
                 <span class="rounded bg-surface-sunken px-2 py-0.5 text-[10px] font-bold text-ink-muted">
                   {{ p.domain_type }}
                 </span>
               </td>
-              <td class="max-w-xs truncate font-bold" :title="p.title">
+              <td class="max-w-[140px] truncate font-bold sm:max-w-xs" :title="p.title">
                 {{ p.title }}
               </td>
-              <td class="text-ink-muted">{{ p.city }}</td>
+              <td class="hidden text-ink-muted md:table-cell">{{ p.city }}</td>
               <td class="font-bold tabular">
                 {{ (p.base_price_krw || 0).toLocaleString() }}원
               </td>

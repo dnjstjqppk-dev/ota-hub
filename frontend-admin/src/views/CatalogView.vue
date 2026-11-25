@@ -438,15 +438,15 @@ function onBulkFile(e: Event) {
     <StatePanel :state="list.state.value" :error="list.error.value" :empty="!list.data.value.length" empty-text="조건에 맞는 상품이 없어요." @retry="list.reload()">
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th>상품</th><th>상품군</th><th class="text-right">기준가</th><th>상태</th><th>공급사</th><th>연동</th><th class="text-right">작업</th></tr></thead>
+          <thead><tr><th>상품</th><th class="hidden md:table-cell">상품군</th><th class="text-right">기준가</th><th>상태</th><th class="hidden md:table-cell">공급사</th><th class="hidden md:table-cell">연동</th><th class="text-right">작업</th></tr></thead>
           <tbody>
             <tr v-for="it in list.data.value" :key="`${it.domain_type}:${it.id}`">
-              <td><p class="max-w-[280px] truncate font-medium">{{ it.title }}</p><p class="max-w-[280px] truncate text-2xs text-ink-subtle">{{ it.subtitle }} · <span class="font-mono">{{ it.id }}</span></p></td>
-              <td class="whitespace-nowrap text-xs"><span class="inline-flex items-center gap-1.5"><AppIcon :name="ICON[it.domain_type] || 'package'" :size="14" class="text-ink-subtle" />{{ domainLabel(it.domain_type) }}</span></td>
+              <td><p class="max-w-[150px] truncate font-medium sm:max-w-[280px]">{{ it.title }}</p><p class="max-w-[150px] truncate text-2xs text-ink-subtle sm:max-w-[280px]">{{ it.subtitle }} · <span class="font-mono">{{ it.id }}</span></p></td>
+              <td class="hidden whitespace-nowrap text-xs md:table-cell"><span class="inline-flex items-center gap-1.5"><AppIcon :name="ICON[it.domain_type] || 'package'" :size="14" class="text-ink-subtle" />{{ domainLabel(it.domain_type) }}</span></td>
               <td class="text-right font-semibold tabular">{{ krw(it.price) }}</td>
               <td><StatusBadge :tone="it.is_active ? 'success' : 'neutral'" :label="it.is_active ? '판매중' : '중지'" /></td>
-              <td class="font-mono text-xs text-ink-muted">{{ it.partner_id || '—' }}</td>
-              <td><StatusBadge v-bind="supplierBadge(it)" /></td>
+              <td class="hidden font-mono text-xs text-ink-muted md:table-cell">{{ it.partner_id || '—' }}</td>
+              <td class="hidden md:table-cell"><StatusBadge v-bind="supplierBadge(it)" /></td>
               <td class="whitespace-nowrap text-right">
                 <button type="button" class="btn-ghost btn-sm px-2" title="수정" aria-label="수정" @click="openEdit(it)"><AppIcon name="edit" :size="15" /></button>
                 <button type="button" class="btn-ghost btn-sm px-2" :title="it.is_active ? '판매중지' : '판매재개'" :aria-label="it.is_active ? '판매중지' : '판매재개'" @click="toggleActive(it)"><AppIcon :name="it.is_active ? 'pause' : 'play'" :size="15" /></button>

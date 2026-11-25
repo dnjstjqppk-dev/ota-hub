@@ -14,7 +14,8 @@ const id = String(route.params.id || route.query.activityId || route.query.id ||
 const { item: a, state, reload, liveOk } = await useCatalogDetail('/activities', id, generatedFallback('ACTIVITY', id))
 const { t, locale } = useI18n()
 
-const catLabel = (c: string) => t(`todo.cat_${c}`, c)
+// No category (e.g. fallback snapshot rows) -> no fact row, never a raw i18n key.
+const catLabel = (c?: string | null) => (c ? t(`todo.cat_${c}`, c) : null)
 const DUR_IDS = ['FULL_DAY', 'HALF_DAY', 'FLEXIBLE', 'HOURS'] as const
 const durLabel = (v: string) => ((DUR_IDS as readonly string[]).includes(v) ? t(`todo.detail_dur_${v}`) : v)
 const VCH_IDS = ['QR_CODE', 'MOBILE', 'PRINTED'] as const
