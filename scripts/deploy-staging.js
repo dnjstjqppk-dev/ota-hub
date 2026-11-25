@@ -35,11 +35,14 @@ console.log('\n☁️ [1/2] Deploying ota-hub-staging...');
 run('npx wrangler deploy --env staging');
 
 // 2. Smoke (hub only — admin/partner checks ride the hub fallbacks).
+// M2: staging has no custom domain and no user portal, so both skip.
 console.log('\n🩺 [2/2] Running smoke probe against staging...');
 run('node scripts/smoke-production.js', {
   BASE_URL: HUB,
   ADMIN_URL: `${HUB}/admin/`,
   PARTNER_URL: `${HUB}/partner/`,
+  SITE_URL: '',
+  USER_URL: '',
 });
 
 console.log('\n==============================================================================');
