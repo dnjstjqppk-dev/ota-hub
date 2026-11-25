@@ -240,6 +240,17 @@ export async function handleMarketing(request: Request, env: Env, url: URL): Pro
        FROM bookings WHERE substr(created_at, 1, 10) >= ? AND paid_minor > 0 GROUP BY domain_type, item_id ORDER BY paidMinor DESC LIMIT 10`,
     ).bind(startDay).all<any>();
 
+    // S10: sessions by traffic source (tab-session dedupe; SSR/pre-S10 rows lack
+    // session ids and land in unknown). Guarded for pre-0060 schemas.
+    let sources: { source: string; sessions: number; events: number }[] = [];
+    try {
+      const sourceRows = await db.prepare(
+        `SELECT COALESCE(source, 'unknown') AS source, COUNT(DISTINCT session_id) AS sessions, COUNT(*) AS events
+         FROM analytics_events WHERE substr(created_at, 1, 10) >= ? GROUP BY source ORDER BY events DESC`,
+      ).bind(startDay).all<any>();
+      sources = (sourceRows.results || []).map((r: any) => ({ source: String(r.source), sessions: Number(r.sessions || 0), events: Number(r.events || 0) }));
+    } catch { sources = []; }
+
     return json({
       success: true, days, from: startDay, to: today, currency: "KRW",
       kpis: {
@@ -248,12 +259,13 @@ export async function handleMarketing(request: Request, env: Env, url: URL): Pro
         averageOrderMinor: bookingsPaid ? Math.round(gmv / bookingsPaid) : null,
         signups, dau, mau,
       },
-      funnel, byDomain: byDomain.results || [], daily, topProducts: topProducts.results || [],
+      funnel, byDomain: byDomain.results || [], daily, topProducts: topProducts.results || [], sources,
       definitions: {
         gmv: "기간 내 승인된 결제 금액 합계(환불 전)",
         netRevenue: "원장 COMMISSION_REVENUE + CANCELLATION_FEE_REVENUE 순증",
         activeUsers: "로그인 상태로 검색·조회·예약 이벤트를 남긴 회원 수(비로그인 방문 제외)",
         cancelRate: "기간 내 생성·결제된 예약 중 취소 요청·환불·취소 상태 비율",
+        sources: "유입 출처별 브라우저 탭 세션 수(중복 제거)와 이벤트 수. SSR·구버전 트래픽은 세션 없이 unknown으로 집계된다.",
       },
     });
   }

@@ -12,7 +12,7 @@ import { useApiUrl } from '~/composables/useApi'
 import { getHotelById } from '~/data/hotelCatalog'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
-import { ogMeta } from '~/composables/useSeoPage'
+import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
 import { useCartStore } from '~/stores/cart'
 
 const route = useRoute()
@@ -161,7 +161,7 @@ useHead(() => {
       { name: 'description', content: [h.name_ko, h.city, h.neighborhood, t('hotels.detail.seoSuffix')].filter(Boolean).join(' · ') },
       ...ogMeta(seoSite, detailPath, (h as any).thumbnail_url || (h as any).image_url || null, locale.value),
     ],
-    link: [{ rel: 'canonical', href: `${seoSite}${detailPath}` }],
+    link: [{ rel: 'canonical', href: `${seoSite}${detailPath}` }, ...hreflangLinks(seoSite, detailPath)],
     script: [
       { type: 'application/ld+json', innerHTML: JSON.stringify(ld).replace(/</g, '\\u003c') },
       jsonLdScript(breadcrumbLd(seoSite, [{ name: t('common.home'), path: '/' }, { name: t('nav.hotels'), path: '/hotels' }, { name: h.name_ko || h.name, path: detailPath }])),

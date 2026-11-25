@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
-import { ogMeta } from '~/composables/useSeoPage'
+import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
@@ -37,6 +37,7 @@ useHead(() => {
   const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
     meta: [...ogMeta(seoSite, `/cars/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
+    link: [{ rel: 'canonical', href: `${seoSite}/cars/detail/${id}` }, ...hreflangLinks(seoSite, `/cars/detail/${id}`)],
     title: `${x.vehicle_model} · ${x.company_name}`,
     script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.cars'), path: '/cars' }, { name: x.vehicle_model, path: `/cars/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',

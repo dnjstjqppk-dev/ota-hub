@@ -432,10 +432,12 @@ test('s9 public pages carry og image locale and card', () => {
   for (const d of ['hotels', 'flights', 'trains', 'cars', 'transfers', 'things-to-do', 'packages']) {
     const src = readFileSync(new URL(`../pages/${d}/detail/[id].vue`, import.meta.url), 'utf8')
     assert.ok(src.includes('ogMeta('), `${d} detail og tags`)
+    assert.ok(src.includes('hreflangLinks('), `${d} detail alternates`)
   }
   for (const f of ['cars/list', 'flights/search', 'packages/list', 'trains/search', 'transfers/list']) {
     const src = readFileSync(new URL(`../pages/${f}.vue`, import.meta.url), 'utf8')
     assert.ok(src.includes('ogMeta('), `${f} og tags`)
+    assert.ok(src.includes('hreflangLinks('), `${f} alternates`)
   }
   for (const f of ['hotels/list', 'things-to-do/index', 'deals', 'moments/index', 'status']) {
     const src = readFileSync(new URL(`../pages/${f}.vue`, import.meta.url), 'utf8')

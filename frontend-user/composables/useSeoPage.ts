@@ -51,6 +51,19 @@ export function ogMeta(site: string, path: string, image: string | null | undefi
   ]
 }
 
+/**
+ * S10: hreflang alternates for pages with bespoke heads (details). Mirrors the
+ * seoHead set: ko has no prefix, x-default points at the ko URL.
+ */
+export function hreflangLinks(site: string, path: string) {
+  // type="text/html" satisfies unhead's alternate-link type; crawlers ignore it.
+  const link = (hreflang: string, href: string) => ({ rel: 'alternate' as const, hreflang, href, type: 'text/html' as const });
+  return [
+    ...SEO_LOCALES.map((l) => link(l.code, `${site}${l.prefix}${path}`)),
+    link('x-default', `${site}${path}`),
+  ]
+}
+
 /** S9: search-console ownership metas — only the configured engines render. */
 export function siteVerificationMetas(input: { naver?: string | null; google?: string | null }) {
   const out: { name: string; content: string }[] = []

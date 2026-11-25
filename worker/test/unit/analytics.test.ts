@@ -27,7 +27,7 @@ test("analytics: trackEvent inserts one row with type/domain/entity/user/meta", 
   });
   assert.equal(calls.length, 1);
   assert.match(calls[0].sql, /INSERT INTO analytics_events/);
-  assert.deepEqual(calls[0].args, ["search", "HOTEL", "htl_1", "usr_1", JSON.stringify({ resultCount: 7 })]);
+  assert.deepEqual(calls[0].args, ["search", "HOTEL", "htl_1", "usr_1", JSON.stringify({ resultCount: 7 }), null, null]);
 });
 
 test("analytics: unknown event types are dropped without a write", async () => {
@@ -46,6 +46,27 @@ test("analytics: long fields truncate and missing fields stay null", async () =>
   const calls: Array<{ sql: string; args: unknown[] }> = [];
   await trackEvent(stubDb(calls), { type: "book", domain: "HOTEL", entityId: "b".repeat(200) });
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].args, ["book", "HOTEL", "b".repeat(100), null, null]);
+  assert.deepEqual(calls[0].args, ["book", "HOTEL", "b".repeat(100), null, null, null, null]);
   assert.equal(ANALYTICS_RETENTION_DAYS, 90);
+});
+
+test("analytics: S10 attribution stores source plus session, retries pre-0060 shape", async () => {
+  const calls: Array<{ sql: string; args: unknown[] }> = [];
+  await trackEvent(stubDb(calls), { type: "view", domain: "HOTEL", entityId: "h", source: "ai_answer", sessionId: "s-1" });
+  assert.deepEqual(calls[0].args.slice(5), ["ai_answer", "s-1"]);
+  const legacy: Array<{ sql: string; args: unknown[] }> = [];
+  const legacyDb = {
+    prepare: (sql: string) => ({
+      bind: (...args: unknown[]) => ({
+        run: async () => {
+          if (sql.includes("session_id")) throw new Error("no such column");
+          legacy.push({ sql, args });
+          return { changes: 1 };
+        },
+      }),
+    }),
+  } as unknown as Db;
+  await trackEvent(legacyDb, { type: "view", domain: "HOTEL", entityId: "h", source: "ai_answer", sessionId: "s-1" });
+  assert.equal(legacy.length, 1);
+  assert.deepEqual(legacy[0].args, ["view", "HOTEL", "h", null, null]);
 });

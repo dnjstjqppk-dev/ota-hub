@@ -25,6 +25,7 @@ const series = (k: 'gmvMinor' | 'bookings' | 'activeUsers') => (d.value?.daily |
 const domainMax = computed(() => Math.max(1, ...(d.value?.byDomain || []).map((x: any) => Number(x.gmv) || 0)))
 const krwShort = (n: number) => (n >= 1e8 ? `${(n / 1e8).toFixed(1)}억원` : n >= 1e4 ? `${Math.round(n / 1e4).toLocaleString('ko-KR')}만원` : `${n.toLocaleString('ko-KR')}원`)
 const countFmt = (n: number) => `${n.toLocaleString('ko-KR')}`
+const sourceLabel = (s: string) => ({ ai_answer: 'AI 답변', organic: '검색', social: '소셜', paid: '광고', referral: '외부 링크', direct: '직접', unknown: '미측정' } as Record<string, string>)[s] || s
 </script>
 
 <template>
@@ -88,6 +89,23 @@ const countFmt = (n: number) => `${n.toLocaleString('ko-KR')}`
             </ul>
           </section>
         </div>
+
+        <section class="card mt-6 overflow-hidden">
+          <h2 class="border-b border-line px-4 py-3 text-sm font-bold">유입 출처별 세션 <span class="font-normal text-ink-subtle">· 브라우저 탭 세션 중복 제거 (SSR·구버전은 unknown)</span></h2>
+          <div class="overflow-x-auto">
+            <table class="table !min-w-[420px] text-xs">
+              <thead><tr><th>출처</th><th class="text-right">세션</th><th class="text-right">이벤트</th></tr></thead>
+              <tbody>
+                <tr v-if="!(d.sources || []).length"><td colspan="3" class="p-6 text-center text-ink-subtle">기간 내 유입 이벤트가 없어요.</td></tr>
+                <tr v-for="s in (d.sources || [])" :key="s.source">
+                  <td class="font-semibold">{{ sourceLabel(s.source) }}</td>
+                  <td class="text-right tabular">{{ num(s.sessions) }}</td>
+                  <td class="text-right tabular">{{ num(s.events) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         <section class="card mt-6 overflow-hidden">
           <h2 class="border-b border-line px-4 py-3 text-sm font-bold">결제액 상위 상품</h2>

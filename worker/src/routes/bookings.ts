@@ -4,6 +4,7 @@ import { idempotencyPrecheck, idempotencyStore } from "../lib/idempotency.ts";
 import { rateLimit, requireUser } from "../lib/auth.ts";
 import { db } from "../db/database.ts";
 import { trackEvent } from "../lib/analytics.ts";
+import { attributionFromRequest, ownHostsOf } from "../services/traffic-source.ts";
 import { availablePaymentProviders } from "../payments/provider.ts";
 import * as S from "../services/booking-service.ts";
 import * as changeSvc from "../services/change-service.ts";
@@ -27,6 +28,7 @@ async function confirmTraced(request: Request, env: Env, user: any, body: any) {
 export async function handleBookings(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
   const method = request.method;
+  const attr = attributionFromRequest(request, ownHostsOf(env)) || {};
 
   if (path === "/api/v1/payments/config" && method === "GET") {
     const all = availablePaymentProviders(env);
@@ -49,7 +51,7 @@ export async function handleBookings(request: Request, env: Env, url: URL): Prom
     const creator = Array.isArray(bookingBody.cartQuoteIds) ? S.createCartBooking : S.createBooking;
     const r = await withSpan(traceOf(request), "booking.create", () => creator(env, user, bookingBody, request.headers.get("Idempotency-Key"), request));
     // TG-03: funnel "book" fires on fresh bookings only — replays already counted.
-    if (!r.replayed) await trackEvent(db(env), { type: "book", domain: r.booking.domain, entityId: r.booking.id, userId: user.id });
+    if (!r.replayed) await trackEvent(db(env), { type: "book", domain: r.booking.domain, entityId: r.booking.id, userId: user.id, ...attr });
     return json({ success: true, replayed: r.replayed, booking: r.booking }, r.replayed ? 200 : 201);
   }
 

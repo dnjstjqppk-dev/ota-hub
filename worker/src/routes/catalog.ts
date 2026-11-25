@@ -8,6 +8,7 @@ import type { Env } from "../env.ts";
 import { HttpError, json, str } from "../lib/http.ts";
 import { optionalUser, rateLimit } from "../lib/auth.ts";
 import { hotelRatePlans, supplierBookabilityMap, type Bookability } from "../services/catalog.ts";
+import { attributionFromRequest, ownHostsOf } from "../services/traffic-source.ts";
 import { airportsForCityCode, airportsForPlaceName, likeEscape, parseDomain, suggest } from "../services/suggest-service.ts";
 import { catalogSnapshot } from "./seo.ts";
 import { indexnowKeyFile } from "../seo/indexnow.ts";
@@ -57,6 +58,8 @@ function annotate(rows: any[], map: Map<string, Bookability>, fallbackSupplier: 
 
 async function handleCatalogInner(request: Request, env: Env, url: URL): Promise<Response | null> {
   const path = url.pathname;
+  // S10: first-touch attribution for funnel events ({} when the caller sent none).
+  const attr = attributionFromRequest(request, ownHostsOf(env)) || {};
   if (request.method !== "GET") return null;
   // #141: the whole public read surface (suggest, 7 lists + details, slots,
   // esim/insurance, policies/legal/seo/promotions/notices/fx) shared one
@@ -244,14 +247,14 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
       const res = await env.DB.prepare(q).bind(...p).all();
       const formatted = (res.results || []).map(formatHotel);
       const annotated = annotate(formatted, bmap, "ptn_htl_01");
-      await trackEvent(db(env), { type: "search", domain: "HOTEL", userId: viewer?.id, meta: { resultCount: annotated.length } });
+      await trackEvent(db(env), { type: "search", domain: "HOTEL", ...attr, userId: viewer?.id, meta: { resultCount: annotated.length } });
       return json({ success: true, count: annotated.length, data: annotated });
     }
     if (path.startsWith("/api/v1/hotels/")) {
       const id = path.replace("/api/v1/hotels/", "");
       const row = await env.DB.prepare("SELECT * FROM hotels WHERE id = ?").bind(id).first<any>();
       if (!row || row.is_active === 0) return json({ success: false, error: "Hotel not found", code: "NOT_FOUND" }, 404);
-      await trackEvent(db(env), { type: "view", domain: "HOTEL", entityId: id, userId: viewer?.id });
+      await trackEvent(db(env), { type: "view", domain: "HOTEL", ...attr, entityId: id, userId: viewer?.id });
       return json({ success: true, data: annotate([formatHotel(row)], bmap, "ptn_htl_01")[0] });
     }
 
@@ -322,13 +325,13 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
       q += ` LIMIT ${Math.min(limit, 100)}`;
 
       const res = await env.DB.prepare(q).bind(...p).all();
-      { const rows = annotate(res.results || [], bmap, "ptn_flt_01", "FLIGHT"); await trackEvent(db(env), { type: "search", domain: "FLIGHT", userId: viewer?.id, meta: { resultCount: rows.length } }); return json({ success: true, count: rows.length, data: rows }); }
+      { const rows = annotate(res.results || [], bmap, "ptn_flt_01", "FLIGHT"); await trackEvent(db(env), { type: "search", domain: "FLIGHT", ...attr, userId: viewer?.id, meta: { resultCount: rows.length } }); return json({ success: true, count: rows.length, data: rows }); }
     }
     if (path.startsWith("/api/v1/flights/")) {
       const id = path.replace("/api/v1/flights/", "");
       const row = await env.DB.prepare("SELECT * FROM flights WHERE id = ?").bind(id).first();
       if (!row || (row as any).is_active === 0) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
-      await trackEvent(db(env), { type: "view", domain: "FLIGHT", entityId: id, userId: viewer?.id });
+      await trackEvent(db(env), { type: "view", domain: "FLIGHT", ...attr, entityId: id, userId: viewer?.id });
       return json({ success: true, data: annotate([row], bmap, "ptn_flt_01", "FLIGHT")[0] });
     }
 
@@ -365,13 +368,13 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
       }
       q += " LIMIT 50";
       const res = await env.DB.prepare(q).bind(...p).all();
-      { const rows = annotate(res.results || [], bmap, "unassigned_train"); await trackEvent(db(env), { type: "search", domain: "TRAIN", userId: viewer?.id, meta: { resultCount: rows.length } }); return json({ success: true, count: rows.length, data: rows }); }
+      { const rows = annotate(res.results || [], bmap, "unassigned_train"); await trackEvent(db(env), { type: "search", domain: "TRAIN", ...attr, userId: viewer?.id, meta: { resultCount: rows.length } }); return json({ success: true, count: rows.length, data: rows }); }
     }
     if (path.startsWith("/api/v1/trains/")) {
       const id = path.replace("/api/v1/trains/", "");
       const row = await env.DB.prepare("SELECT * FROM trains WHERE id = ?").bind(id).first();
       if (!row || (row as any).is_active === 0) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
-      await trackEvent(db(env), { type: "view", domain: "TRAIN", entityId: id, userId: viewer?.id });
+      await trackEvent(db(env), { type: "view", domain: "TRAIN", ...attr, entityId: id, userId: viewer?.id });
       return json({ success: true, data: annotate([row], bmap, "unassigned_train")[0] });
     }
 
@@ -405,13 +408,13 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
       }
       q += " LIMIT 50";
       const res = await env.DB.prepare(q).bind(...p).all();
-      { const rows = annotate(res.results || [], bmap, "ptn_car_01"); await trackEvent(db(env), { type: "search", domain: "CAR", userId: viewer?.id, meta: { resultCount: rows.length } }); return json({ success: true, count: rows.length, data: rows }); }
+      { const rows = annotate(res.results || [], bmap, "ptn_car_01"); await trackEvent(db(env), { type: "search", domain: "CAR", ...attr, userId: viewer?.id, meta: { resultCount: rows.length } }); return json({ success: true, count: rows.length, data: rows }); }
     }
     if (path.startsWith("/api/v1/cars/")) {
       const id = path.replace("/api/v1/cars/", "");
       const row = await env.DB.prepare("SELECT * FROM cars WHERE id = ?").bind(id).first<any>();
       if (!row || row.is_active === 0) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
-      await trackEvent(db(env), { type: "view", domain: "CAR", entityId: id, userId: viewer?.id });
+      await trackEvent(db(env), { type: "view", domain: "CAR", ...attr, entityId: id, userId: viewer?.id });
       return json({ success: true, data: annotate([row], bmap, "ptn_car_01")[0] });
     }
 
@@ -440,13 +443,13 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
       }
       q += " LIMIT 50";
       const res = await env.DB.prepare(q).bind(...p).all();
-      { const rows = annotate(res.results || [], bmap, "unassigned_transfer"); await trackEvent(db(env), { type: "search", domain: "TRANSFER", userId: viewer?.id, meta: { resultCount: rows.length } }); return json({ success: true, count: rows.length, data: rows }); }
+      { const rows = annotate(res.results || [], bmap, "unassigned_transfer"); await trackEvent(db(env), { type: "search", domain: "TRANSFER", ...attr, userId: viewer?.id, meta: { resultCount: rows.length } }); return json({ success: true, count: rows.length, data: rows }); }
     }
     if (path.startsWith("/api/v1/transfers/")) {
       const id = path.replace("/api/v1/transfers/", "");
       const row = await env.DB.prepare("SELECT * FROM transfers WHERE id = ?").bind(id).first();
       if (!row || (row as any).is_active === 0) return json({ success: false, error: "not found", code: "NOT_FOUND" }, 404);
-      await trackEvent(db(env), { type: "view", domain: "TRANSFER", entityId: id, userId: viewer?.id });
+      await trackEvent(db(env), { type: "view", domain: "TRANSFER", ...attr, entityId: id, userId: viewer?.id });
       return json({ success: true, data: annotate([row], bmap, "unassigned_transfer")[0] });
     }
 
@@ -502,7 +505,7 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
           image_url: row.thumbnail_url || row.image_url
         };
       });
-      await trackEvent(db(env), { type: "search", domain: "ACTIVITY", userId: viewer?.id, meta: { resultCount: list.length } });
+      await trackEvent(db(env), { type: "search", domain: "ACTIVITY", ...attr, userId: viewer?.id, meta: { resultCount: list.length } });
       return json({ success: true, count: list.length, data: annotate(list, bmap, "ptn_tour_01") });
     }
     // 13. Activity Time Slots & Availability: GET /api/v1/activities/:id/slots.
@@ -526,7 +529,7 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
       const id = path.replace("/api/v1/activities/", "");
       const row = await env.DB.prepare("SELECT * FROM activities WHERE id = ?").bind(id).first<any>();
       if (!row || row.is_active === 0) return json({ success: false, error: "Activity not found", code: "NOT_FOUND" }, 404);
-      await trackEvent(db(env), { type: "view", domain: "ACTIVITY", entityId: id, userId: viewer?.id });
+      await trackEvent(db(env), { type: "view", domain: "ACTIVITY", ...attr, entityId: id, userId: viewer?.id });
       let included: any[] = [];
       try { included = JSON.parse((row as any).packages_json || '[]'); } catch (e) {}
       return json({
@@ -565,14 +568,14 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
           hotel: details.hotel || null
         };
       });
-      await trackEvent(db(env), { type: "search", domain: "PACKAGE", userId: viewer?.id, meta: { resultCount: list.length } });
+      await trackEvent(db(env), { type: "search", domain: "PACKAGE", ...attr, userId: viewer?.id, meta: { resultCount: list.length } });
       return json({ success: true, count: list.length, data: annotate(list, bmap, "unassigned_package") });
     }
     if (path.startsWith("/api/v1/packages/")) {
       const id = path.replace("/api/v1/packages/", "");
       const row = await env.DB.prepare("SELECT * FROM packages WHERE id = ?").bind(id).first();
       if (!row || (row as any).is_active === 0) return json({ success: false, error: "Package not found", code: "NOT_FOUND" }, 404);
-      await trackEvent(db(env), { type: "view", domain: "PACKAGE", entityId: id, userId: viewer?.id });
+      await trackEvent(db(env), { type: "view", domain: "PACKAGE", ...attr, entityId: id, userId: viewer?.id });
       let details: any = {};
       try { details = JSON.parse((row as any).details_json || '{}'); } catch (e) {}
       return json({

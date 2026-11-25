@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
-import { ogMeta } from '~/composables/useSeoPage'
+import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
@@ -34,6 +34,7 @@ useHead(() => {
   const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
     meta: [...ogMeta(seoSite, `/trains/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
+    link: [{ rel: 'canonical', href: `${seoSite}/trains/detail/${id}` }, ...hreflangLinks(seoSite, `/trains/detail/${id}`)],
     title: `${x.train_type} ${x.train_number} ${x.departure_station}→${x.arrival_station}`,
     script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: tr('common.home'), path: '/' }, { name: tr('nav.trains'), path: '/trains' }, { name: x.train_number, path: `/trains/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',

@@ -7,7 +7,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
-import { ogMeta } from '~/composables/useSeoPage'
+import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
 import { fmtDay, qDate, qInt, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 
 const { route, router, isSelf } = useUrlQuery()
@@ -55,7 +55,7 @@ await useAsyncData('tg15-packages-list', () => load())
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
-useHead(() => ({ title: q.value.city ? t('packages.list.docTitle', { c: q.value.city }) : t('packages.list.title'), meta: [...ogMeta(packageSeoSite, '/packages/list', null, locale.value)] }))
+useHead(() => ({ title: q.value.city ? t('packages.list.docTitle', { c: q.value.city }) : t('packages.list.title'), meta: [...ogMeta(packageSeoSite, '/packages/list', null, locale.value)], link: [{ rel: 'canonical', href: `${packageSeoSite}/packages/list` }, ...hreflangLinks(packageSeoSite, '/packages/list')] }))
 const packageSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {

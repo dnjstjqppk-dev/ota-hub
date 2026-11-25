@@ -16,11 +16,14 @@ export interface AnalyticsEvent {
   entityId?: string;
   userId?: string;
   meta?: Record<string, unknown>;
+  /** S10: pre-classified traffic source + tab session (null = unmeasured, e.g. SSR). */
+  source?: string | null;
+  sessionId?: string | null;
 }
 
 export const ANALYTICS_RETENTION_DAYS = 90;
 
-const cap = (s: string | undefined, n: number): string | null => {
+const cap = (s: string | null | undefined, n: number): string | null => {
   const v = (s || "").slice(0, n);
   return v ? v : null;
 };
@@ -30,11 +33,20 @@ export async function trackEvent(db: Db, e: AnalyticsEvent): Promise<void> {
   try {
     if (e.type !== "search" && e.type !== "view" && e.type !== "book") return;
     const meta = e.meta ? JSON.stringify(e.meta).slice(0, 2000) : null;
-    await db.prepare(
-      "INSERT INTO analytics_events (event_type, domain, entity_id, user_id, meta_json) VALUES (?, ?, ?, ?, ?)",
-    )
-      .bind(e.type, cap(e.domain?.toUpperCase(), 20), cap(e.entityId, 100), cap(e.userId, 100), meta)
-      .run();
+    try {
+      await db.prepare(
+        "INSERT INTO analytics_events (event_type, domain, entity_id, user_id, meta_json, source, session_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+        .bind(e.type, cap(e.domain?.toUpperCase(), 20), cap(e.entityId, 100), cap(e.userId, 100), meta, cap(e.source, 20), cap(e.sessionId, 64))
+        .run();
+    } catch {
+      // Pre-0060 schema: retry without attribution rather than losing the event.
+      await db.prepare(
+        "INSERT INTO analytics_events (event_type, domain, entity_id, user_id, meta_json) VALUES (?, ?, ?, ?, ?)",
+      )
+        .bind(e.type, cap(e.domain?.toUpperCase(), 20), cap(e.entityId, 100), cap(e.userId, 100), meta)
+        .run();
+    }
   } catch {
     /* analytics is best-effort */
   }
