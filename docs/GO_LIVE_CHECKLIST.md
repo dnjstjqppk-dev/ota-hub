@@ -247,9 +247,12 @@ npx wrangler secret put PII_ENC_KEY
 
 - 4개 설정 모두 `workers_dev: true` 명시 — routes가 있으면 wrangler 기본값이
   workers.dev를 끄기 때문(스크립트·스모크·폴백 콘솔이 workers.dev를 쓴다).
-- 배포 토큰(`CLOUDFLARE_API_TOKEN`, CI 시크릿 포함)에 getfortrip.com 존 권한
-  **Zone:Read, DNS:Edit, Workers Routes:Edit**가 있어야 한다. 없으면 hub 배포가
-  인증 오류로 실패한다(마이그레이션은 이미 적용된 뒤).
+- CI 배포는 **코드만** 올린다(`DEPLOY_CODE_ONLY=1` → `wrangler versions upload` +
+  `versions deploy`). route·크론·custom domain(트리거)은 건드리지 않으므로 CI 토큰에는
+  Account의 Workers Scripts:Edit·D1:Edit만 있으면 된다(2026-11-25: 발급한 토큰 4개가
+  모두 `PUT …/scripts/ota-hub/routes`에서 403 → 트리거 동기화를 CI에서 분리).
+- wrangler 설정의 routes·crons·custom domain을 바꾼 커밋은 **로컬에서 전체 배포를 한 번**
+  돌려 트리거를 동기화한다: `node scripts/build-and-deploy.js` (로컬 wrangler 로그인 인증).
 - vars: `PARTNER_SITE_URL=https://partner.getfortrip.com`, 사용자 포털
   `NUXT_PUBLIC_API_BASE=https://getfortrip.com/api/v1`(SSR은 서비스 바인딩 그대로).
   admin/partner는 호스트가 `admin.`/`partner.`이면 apex API를 호출(같은 사이트 →

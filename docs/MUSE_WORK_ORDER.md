@@ -102,11 +102,7 @@
 
 아래는 사람(대표)이 직접 해야 한다. Muse는 손대지 않는다.
 
-- **CI 배포 토큰:** GitHub 저장소 시크릿 `CLOUDFLARE_API_TOKEN`에 `getfortrip.com` zone 권한을 추가해야 한다. 2026-11-25 run 45562298648 결과는 아래와 같다.
-  - fast·E2E는 통과했다. 새 계정의 D1 확인과 `ota-hub` 업로드도 성공했다.
-  - zone route 갱신은 `No access to the specified resource`로 실패했다.
-  - 운영은 영향이 없었다. 같은 코드였고, 기존 route가 유지됐다.
-  - 필요한 권한: **Zone → Workers Routes: Edit**, **Zone → DNS: Edit**, **Zone → Zone: Read** (대상 zone `getfortrip.com`). 고치기 전에는 push 배포가 계속 실패한다.
+- **트리거 동기화(해결됨, 2026-11-25):** CI는 코드만 배포한다(`DEPLOY_CODE_ONLY=1`). wrangler 설정의 routes·crons·custom domain을 바꾸는 카드는 결과 줄에 "대표 조치: 로컬 전체 배포(`node scripts/build-and-deploy.js`)로 트리거 동기화 필요"라고 적는다. Muse는 직접 배포하지 않는다.
 - **메일:** Resend에서 `getfortrip.com` 발신 도메인 인증(SPF·DKIM·DMARC DNS 레코드)을 하고, `RESEND_API_KEY` 시크릿과 `EMAIL_FROM` vars를 넣는다.
 - **소셜 로그인:** 카카오·구글·네이버 콘솔에 리다이렉트 URI `https://getfortrip.com/api/v1/auth/oauth/{kakao|google|naver}/callback`을 등록하고 `OAUTH_*` 키를 넣는다.
 - **검색엔진:** Google Search Console·네이버 서치어드바이저에 사이트 소유 인증(DNS TXT)을 하고 `https://getfortrip.com/sitemap-index.xml`을 제출한다.

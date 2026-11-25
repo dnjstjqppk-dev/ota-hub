@@ -31,6 +31,26 @@ function gitSha() {
   }
 }
 const SENTRY_RELEASE = process.env.SENTRY_RELEASE || gitSha();
+// DEPLOY_CODE_ONLY=1 (CI): ship code as a Worker Version (versions upload +
+// versions deploy) and leave triggers alone. Route/cron/custom-domain updates
+// need zone-level route edit rights the CI token does not carry (2026-11-25:
+// four tokens all got 403 on PUT .../scripts/ota-hub/routes). Triggers change
+// rarely — when a wrangler config's routes/crons change, run this script
+// locally (full `wrangler deploy`) once.
+const CODE_ONLY = process.env.DEPLOY_CODE_ONLY === '1';
+
+// One worker = one deploy. Full mode syncs triggers; code-only mode uploads a
+// tagged version and promotes exactly that version to 100%.
+function deployWorker(configArg) {
+  const cfg = configArg ? ` -c ${configArg}` : '';
+  if (!CODE_ONLY) {
+    run(`npx wrangler deploy${cfg} --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
+    return;
+  }
+  const tag = `r-${SENTRY_RELEASE}-${Date.now().toString(36)}`;
+  run(`npx wrangler versions upload${cfg} --tag ${tag} --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
+  run(`npx wrangler versions deploy${cfg} --version-tag ${tag}@100 --yes --message "release ${SENTRY_RELEASE}"`);
+}
 
 function run(cmd) {
   if (DRY_RUN) {
@@ -61,19 +81,20 @@ try {
   // 1. Deploy ota-hub (executes scripts/build-all.js to build all portals;
   // hub serves the API + console fallbacks, user SSR rides ota-user).
   console.log('\n☁️ [1/5] Triggering Wrangler build and deploy (ota-hub)...');
-  run(`npx wrangler deploy --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
+  if (CODE_ONLY) console.log('   (code-only: triggers untouched — config route/cron changes need a local full deploy)');
+  deployWorker('');
 
   // 2. Deploy ota-user (TG-15: user portal SSR + ISR worker).
   console.log('\n☁️ [2/5] Triggering Wrangler deploy for User Portal SSR (ota-user)...');
-  run(`npx wrangler deploy -c frontend-user/wrangler.jsonc --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
+  deployWorker('frontend-user/wrangler.jsonc');
 
   // 3. Deploy ota-admin (dedicated worker host)
   console.log('\n☁️ [3/5] Triggering Wrangler deploy for Admin Portal (ota-admin)...');
-  run(`npx wrangler deploy -c frontend-admin/wrangler.jsonc --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
+  deployWorker('frontend-admin/wrangler.jsonc');
 
   // 4. Deploy ota-partner (dedicated worker host)
   console.log('\n☁️ [4/5] Triggering Wrangler deploy for Partner Extranet (ota-partner)...');
-  run(`npx wrangler deploy -c frontend-partner/wrangler.jsonc --var SENTRY_RELEASE:${SENTRY_RELEASE}`);
+  deployWorker('frontend-partner/wrangler.jsonc');
 
   // 5. Post-deploy smoke (#52): unauthenticated, read-only, no secrets needed.
   console.log('\n🩺 [5/5] Running post-deploy smoke probe...');
