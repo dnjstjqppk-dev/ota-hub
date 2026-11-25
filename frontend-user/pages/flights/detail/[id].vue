@@ -5,11 +5,12 @@ import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
 import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
+// Resolved once in setup: head getters run at render time, outside the Nuxt context.
+const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
 const { item: f, state, reload, liveOk } = await useCatalogDetail('/flights', id, generatedFallback('FLIGHT', id))
-const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 const { t, locale } = useI18n()
 
 const cabinLabel = (c: string) => t(`flights.search.cabin_${c}`, c)
@@ -40,7 +41,7 @@ useHead(() => {
     meta: [...ogMeta(seoSite, `/flights/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
     link: [{ rel: 'canonical', href: `${seoSite}/flights/detail/${id}` }, ...hreflangLinks(seoSite, `/flights/detail/${id}`)],
     title: `${x.airline_name} ${x.flight_number} ${x.departure_airport}→${x.arrival_airport}`,
-    script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.flights'), path: '/flights' }, { name: x.flight_number, path: `/flights/detail/${id}` }])), jsonLdScript({
+    script: [jsonLdScript(breadcrumbLd(seoSite, [{ name: t('common.home'), path: '/' }, { name: t('nav.flights'), path: '/flights' }, { name: x.flight_number, path: `/flights/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',
       '@type': 'Flight',
       flightNumber: x.flight_number,

@@ -6,11 +6,12 @@ import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
 import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
+// Resolved once in setup: head getters run at render time, outside the Nuxt context.
+const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
 const { item: c, state, reload, liveOk } = await useCatalogDetail('/cars', id, generatedFallback('CAR', id))
-const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 const { t, locale } = useI18n()
 
 const TYPE_IDS = ['COMPACT', 'SEDAN', 'SUV', 'VAN', 'LUXURY', 'EV'] as const
@@ -39,7 +40,7 @@ useHead(() => {
     meta: [...ogMeta(seoSite, `/cars/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
     link: [{ rel: 'canonical', href: `${seoSite}/cars/detail/${id}` }, ...hreflangLinks(seoSite, `/cars/detail/${id}`)],
     title: `${x.vehicle_model} · ${x.company_name}`,
-    script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.cars'), path: '/cars' }, { name: x.vehicle_model, path: `/cars/detail/${id}` }])), jsonLdScript({
+    script: [jsonLdScript(breadcrumbLd(seoSite, [{ name: t('common.home'), path: '/' }, { name: t('nav.cars'), path: '/cars' }, { name: x.vehicle_model, path: `/cars/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',
       '@type': 'Car',
       name: x.vehicle_model,

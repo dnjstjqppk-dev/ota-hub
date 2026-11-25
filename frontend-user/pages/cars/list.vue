@@ -9,6 +9,8 @@ import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
 import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
 import { daysBetween, fmtDay, qDate, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
+// Resolved once in setup: head getters run at render time, outside the Nuxt context.
+const carSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
 
 const { route, router, patch, isSelf } = useUrlQuery()
 const currency = useCurrencyStore()
@@ -82,7 +84,6 @@ if (state.value === 'error' && import.meta.server) throw createError({ statusCod
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
 useHead(() => ({ title: q.value.city ? t('cars.list.docTitle', { c: q.value.city }) : t('cars.list.title'), meta: [...ogMeta(carSeoSite, '/cars/list', null, locale.value)], link: [{ rel: 'canonical', href: `${carSeoSite}/cars/list` }, ...hreflangLinks(carSeoSite, '/cars/list')] }))
-const carSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {
   const elements = items.value

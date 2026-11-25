@@ -5,11 +5,12 @@ import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
 import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
+// Resolved once in setup: head getters run at render time, outside the Nuxt context.
+const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
 const { item: t, state, reload, liveOk } = await useCatalogDetail('/trains', id, generatedFallback('TRAIN', id))
-const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 const { t: tr, locale } = useI18n()
 const hm = (m: number) => (m % 60 ? tr('flights.search.durHM', { h: Math.floor(m / 60), m: m % 60 }) : tr('flights.search.durH', { h: Math.floor(m / 60) }))
 
@@ -36,7 +37,7 @@ useHead(() => {
     meta: [...ogMeta(seoSite, `/trains/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
     link: [{ rel: 'canonical', href: `${seoSite}/trains/detail/${id}` }, ...hreflangLinks(seoSite, `/trains/detail/${id}`)],
     title: `${x.train_type} ${x.train_number} ${x.departure_station}→${x.arrival_station}`,
-    script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: tr('common.home'), path: '/' }, { name: tr('nav.trains'), path: '/trains' }, { name: x.train_number, path: `/trains/detail/${id}` }])), jsonLdScript({
+    script: [jsonLdScript(breadcrumbLd(seoSite, [{ name: tr('common.home'), path: '/' }, { name: tr('nav.trains'), path: '/trains' }, { name: x.train_number, path: `/trains/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',
       '@type': 'TrainTrip',
       trainNumber: x.train_number,

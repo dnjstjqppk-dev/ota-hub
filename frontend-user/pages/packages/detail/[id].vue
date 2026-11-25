@@ -6,11 +6,12 @@ import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
 import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
+// Resolved once in setup: head getters run at render time, outside the Nuxt context.
+const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
 const { item: p, state, reload, liveOk } = await useCatalogDetail('/packages', id, generatedFallback('PACKAGE', id))
-const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 const { t, locale } = useI18n()
 
 const details = computed<any>(() => {
@@ -31,7 +32,7 @@ useHead(() => {
     meta: [...ogMeta(seoSite, `/packages/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
     link: [{ rel: 'canonical', href: `${seoSite}/packages/detail/${id}` }, ...hreflangLinks(seoSite, `/packages/detail/${id}`)],
     title: x.title,
-    script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.packages'), path: '/packages' }, { name: x.destination_city || x.title, path: `/packages/detail/${id}` }])), jsonLdScript({
+    script: [jsonLdScript(breadcrumbLd(seoSite, [{ name: t('common.home'), path: '/' }, { name: t('nav.packages'), path: '/packages' }, { name: x.destination_city || x.title, path: `/packages/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',
       '@type': 'TouristTrip',
       name: x.title,

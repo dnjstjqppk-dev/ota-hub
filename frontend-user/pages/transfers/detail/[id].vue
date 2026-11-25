@@ -6,11 +6,12 @@ import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
 import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
+// Resolved once in setup: head getters run at render time, outside the Nuxt context.
+const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
 const { item: t, state, reload, liveOk } = await useCatalogDetail('/transfers', id, generatedFallback('TRANSFER', id))
-const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 const { t: tr, locale } = useI18n()
 
 const facts = computed(() => {
@@ -37,7 +38,7 @@ useHead(() => {
     meta: [...ogMeta(seoSite, `/transfers/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
     link: [{ rel: 'canonical', href: `${seoSite}/transfers/detail/${id}` }, ...hreflangLinks(seoSite, `/transfers/detail/${id}`)],
     title: `${x.airport_code} → ${x.destination_area} · ${x.service_title}`,
-    script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: tr('common.home'), path: '/' }, { name: tr('nav.transfers'), path: '/transfers' }, { name: x.service_title, path: `/transfers/detail/${id}` }])), jsonLdScript({
+    script: [jsonLdScript(breadcrumbLd(seoSite, [{ name: tr('common.home'), path: '/' }, { name: tr('nav.transfers'), path: '/transfers' }, { name: x.service_title, path: `/transfers/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',
       '@type': 'TaxiService',
       name: x.service_title,

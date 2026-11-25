@@ -12,6 +12,8 @@ import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
 import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
 import { addDaysIso, daysBetween, fmtDay, qDate, qInt, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
+// Resolved once in setup: head getters run at render time, outside the Nuxt context.
+const flightSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
 
 const { route, router, patch, isSelf } = useUrlQuery()
 const currency = useCurrencyStore()
@@ -179,7 +181,6 @@ const heading = computed(() => {
   return step.value === 'return' ? `${cityOf(x.dest)} → ${cityOf(x.origin)}` : `${cityOf(x.origin)} → ${cityOf(x.dest)}`
 })
 useHead(() => ({ title: q.value.origin && q.value.dest ? t('flights.search.docTitle', { o: cityOf(q.value.origin), d: cityOf(q.value.dest) }) : t('flights.search.title'), meta: [...ogMeta(flightSeoSite, '/flights/search', null, locale.value)], link: [{ rel: 'canonical', href: `${flightSeoSite}/flights/search` }, ...hreflangLinks(flightSeoSite, '/flights/search')] }))
-const flightSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {
   const elements = filtered.value

@@ -11,6 +11,8 @@ import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
 import { seoHead } from '~/composables/useSeoPage'
+// Resolved once in setup: head getters run at render time, outside the Nuxt context.
+const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 
 const route = useRoute()
 const router = useRouter()
@@ -183,7 +185,6 @@ watch(sheet, (v) => { document.documentElement.style.overflow = v ? 'hidden' : '
 onBeforeUnmount(() => { document.documentElement.style.overflow = '' })
 
 // P5: dynamic city title/meta + canonical (bare path; filter combos don't index) + hreflang + OG.
-const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 useHead(() => seoHead({
   site: seoSite,
   path: '/hotels/list',
