@@ -68,6 +68,51 @@ export default defineNuxtConfig({
     prerender: {
       crawlLinks: false,
       routes: ['/', '/help', '/moments', '/rewards']
+    },
+    // M5: www → apex 301 in FRONT of the generated entry. That entry serves
+    // public/ via ASSETS before server middleware runs, so canonical-host.ts
+    // never sees www asset requests (www/robots.txt → 200, a duplicate signal
+    // for crawlers). This renames the built entry to entry.orig.mjs and emits
+    // a wrapper index.mjs (wrangler "main" is unchanged) that 301s www.* hosts
+    // and delegates everything else untouched. Non-www traffic is unaffected.
+    rollupConfig: {
+      plugins: [
+        {
+          name: 'www-canonical-entry',
+          generateBundle(this: any, outputOptions: any, bundle: any) {
+            // Only the final server bundle: the prerender runner imports its
+            // own index.mjs directly and must keep the raw entry.
+            if (String(outputOptions?.dir || '').includes('prerender')) return
+            const entry = bundle['index.mjs']
+            if (!entry || entry.type !== 'chunk') return
+            delete bundle['index.mjs']
+            entry.fileName = 'entry.orig.mjs'
+            bundle['entry.orig.mjs'] = entry
+            this.emitFile({
+              type: 'asset',
+              fileName: 'index.mjs',
+              source: [
+                "import orig from './entry.orig.mjs';",
+                'const target = orig && orig.default ? orig.default : orig;',
+                'const wrapped = { ...target };',
+                'for (const k of Object.keys(wrapped)) {',
+                "  if (k !== 'fetch' && typeof wrapped[k] === 'function') wrapped[k] = wrapped[k].bind(target);",
+                '}',
+                'wrapped.fetch = async (request, env, ctx) => {',
+                '  const url = new URL(request.url);',
+                '  const host = url.hostname.toLowerCase();',
+                "  if (host.startsWith('www.')) {",
+                '    return Response.redirect(`https://${host.slice(4)}${url.pathname}${url.search}`, 301);',
+                '  }',
+                '  return target.fetch(request, env, ctx);',
+                '};',
+                'export default wrapped;',
+                ''
+              ].join('\n')
+            })
+          }
+        }
+      ]
     }
   },
   modules: ['@nuxtjs/i18n'],
