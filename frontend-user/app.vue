@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useAuthStore } from '~/stores/auth'
 import { jsonLdScript, orgWebsiteLd } from '~/composables/useJsonLd'
+import { siteVerificationMetas } from '~/composables/useSeoPage'
 
 const authStore = useAuthStore()
 
@@ -16,6 +17,13 @@ const runtimeCfg = useRuntimeConfig()
 
 useHead({
   titleTemplate: (titleChunk) => titleChunk ? `${titleChunk} - getfortrip` : 'getfortrip - 스마트한 전 세계 여행의 시작',
+  meta: [
+    // S9: search-console ownership (renders only when the operator configures the env).
+    ...siteVerificationMetas({
+      naver: (runtimeCfg.public as any).naverVerification || null,
+      google: (runtimeCfg.public as any).googleVerification || null,
+    }),
+  ],
   script: [
     // P5: Organization + WebSite/SearchAction graph (single source: useJsonLd).
     // S6: contactPoint/sameAs render only when the operator configures them.

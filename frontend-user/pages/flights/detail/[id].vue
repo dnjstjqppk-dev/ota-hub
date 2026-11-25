@@ -3,13 +3,14 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
+import { ogMeta } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
 const { item: f, state, reload, liveOk } = await useCatalogDetail('/flights', id, generatedFallback('FLIGHT', id))
 const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const cabinLabel = (c: string) => t(`flights.search.cabin_${c}`, c)
 const hm = (m: number) => (m % 60 ? t('flights.search.durHM', { h: Math.floor(m / 60), m: m % 60 }) : t('flights.search.durH', { h: Math.floor(m / 60) }))
@@ -36,6 +37,7 @@ useHead(() => {
   const offer = liveOk.value ? offerLd(seoSite, `/flights/detail/${id}`, x.base_price_krw, x.bookable, x.outlink_path) : null
   const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
+    meta: [...ogMeta(seoSite, `/flights/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
     title: `${x.airline_name} ${x.flight_number} ${x.departure_airport}→${x.arrival_airport}`,
     script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.flights'), path: '/flights' }, { name: x.flight_number, path: `/flights/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',

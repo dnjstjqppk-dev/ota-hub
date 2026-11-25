@@ -4,13 +4,14 @@ import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
+import { ogMeta } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.activityId || route.query.id || '')
 const { item: a, state, reload, liveOk } = await useCatalogDetail('/activities', id, generatedFallback('ACTIVITY', id))
 const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const catLabel = (c: string) => t(`todo.cat_${c}`, c)
 const DUR_IDS = ['FULL_DAY', 'HALF_DAY', 'FLEXIBLE', 'HOURS'] as const
@@ -40,6 +41,7 @@ useHead(() => {
   const offer = liveOk.value ? offerLd(seoSite, `/things-to-do/detail/${id}`, x.price_krw, x.bookable, x.outlink_path) : null
   const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
+    meta: [...ogMeta(seoSite, `/things-to-do/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
     title: x.title,
     script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.things-to-do'), path: '/things-to-do' }, { name: x.city || x.title, path: `/things-to-do/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',

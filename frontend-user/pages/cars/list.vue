@@ -7,11 +7,12 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
+import { ogMeta } from '~/composables/useSeoPage'
 import { daysBetween, fmtDay, qDate, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 
 const { route, router, patch, isSelf } = useUrlQuery()
 const currency = useCurrencyStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const localePath = useLocalePath()
 
 const SORT_IDS = ['price_asc', 'price_desc', 'seats'] as const
@@ -80,7 +81,7 @@ await useAsyncData('tg15-cars-list', () => load())
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
-useHead(() => ({ title: q.value.city ? t('cars.list.docTitle', { c: q.value.city }) : t('cars.list.title') }))
+useHead(() => ({ title: q.value.city ? t('cars.list.docTitle', { c: q.value.city }) : t('cars.list.title'), meta: [...ogMeta(carSeoSite, '/cars/list', null, locale.value)] }))
 const carSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {

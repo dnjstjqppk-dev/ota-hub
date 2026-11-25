@@ -2,10 +2,7 @@
 import { ref, onMounted } from 'vue'
 
 const { t, locale } = useI18n()
-useHead({
-  title: t('status.title'),
-  meta: [{ name: 'description', content: t('status.desc') }]
-})
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/status', title: t('status.title'), description: t('status.desc') })
 
 interface ActiveIncident {
   id: string

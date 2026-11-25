@@ -3,10 +3,7 @@ import { ref } from 'vue'
 import { apiFetch } from '~/composables/useApi'
 
 const { t, locale } = useI18n()
-useHead({
-  title: t('deals.title'),
-  meta: [{ name: 'description', content: t('deals.desc') }]
-})
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/deals', title: t('deals.title'), description: t('deals.desc') })
 const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
 
 interface Promotion {

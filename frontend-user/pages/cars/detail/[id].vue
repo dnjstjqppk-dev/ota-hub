@@ -4,13 +4,14 @@ import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
+import { ogMeta } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
 const { item: c, state, reload, liveOk } = await useCatalogDetail('/cars', id, generatedFallback('CAR', id))
 const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const TYPE_IDS = ['COMPACT', 'SEDAN', 'SUV', 'VAN', 'LUXURY', 'EV'] as const
 const typeLabel = (v: string) => ((TYPE_IDS as readonly string[]).includes(v) ? t(`cars.list.type_${v}`) : v)
@@ -35,6 +36,7 @@ useHead(() => {
   const offer = liveOk.value ? offerLd(seoSite, `/cars/detail/${id}`, x.daily_price_krw, x.bookable, x.outlink_path) : null
   const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
+    meta: [...ogMeta(seoSite, `/cars/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
     title: `${x.vehicle_model} · ${x.company_name}`,
     script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.cars'), path: '/cars' }, { name: x.vehicle_model, path: `/cars/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',

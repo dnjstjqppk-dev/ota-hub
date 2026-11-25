@@ -5,10 +5,7 @@ import { useAuthStore } from '~/stores/auth'
 
 const { t, locale } = useI18n()
 const localePath = useLocalePath()
-useHead({
-  title: t('moments.title'),
-  meta: [{ name: 'description', content: t('moments.desc') }]
-})
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/moments', title: t('moments.title'), description: t('moments.desc') })
 const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
 const fmtDate = (s: string) => new Date(s).toLocaleDateString(LOCALE_TAG[locale.value] || 'ko-KR')
 

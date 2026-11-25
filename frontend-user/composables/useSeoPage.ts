@@ -26,6 +26,41 @@ export const SEO_LOCALES = [
   { code: 'zh', prefix: '/zh' },
 ] as const
 
+const OG_LOCALE_TAG: Record<string, string> = { ko: 'ko_KR', en: 'en_US', ja: 'ja_JP', zh: 'zh_CN' }
+
+/** S9: Open Graph locale for a locale code (unknown codes fall back to ko_KR). */
+export function ogLocaleTag(locale: string) {
+  return OG_LOCALE_TAG[locale] || 'ko_KR'
+}
+
+/**
+ * S9: minimal social-card meta for pages with bespoke heads (details, lists).
+ * Title/description stay in the page's own tags; this fills image/locale/card.
+ */
+export function ogMeta(site: string, path: string, image: string | null | undefined, locale: string) {
+  const url = `${site}${path}`
+  const img = image || `${site}/symbol.svg`
+  const current = ogLocaleTag(locale)
+  return [
+    { property: 'og:url', content: url },
+    { property: 'og:image', content: img },
+    { property: 'og:locale', content: current },
+    ...Object.values(OG_LOCALE_TAG).filter((t) => t !== current).map((t) => ({ property: 'og:locale:alternate', content: t })),
+    { name: 'twitter:card', content: 'summary_large_image' },
+    { name: 'twitter:image', content: img },
+  ]
+}
+
+/** S9: search-console ownership metas — only the configured engines render. */
+export function siteVerificationMetas(input: { naver?: string | null; google?: string | null }) {
+  const out: { name: string; content: string }[] = []
+  const naver = (input.naver || '').trim()
+  const google = (input.google || '').trim()
+  if (naver) out.push({ name: 'naver-site-verification', content: naver })
+  if (google) out.push({ name: 'google-site-verification', content: google })
+  return out
+}
+
 /** "도쿄 호텔·숙소 예약" — city/country prefix the base phrase for list/landing pages. */
 export function seoTitle(base: string, city?: string, country?: string) {
   return [city, country, base].filter(Boolean).join(' ')
@@ -42,6 +77,7 @@ export function seoHead(i: SeoPageInput) {
   const prefix = i.koOnly ? '' : (i.localePrefix || '')
   const canonical = `${i.site}${prefix}${i.path}`
   const image = i.image || `${i.site}/symbol.svg`
+  const ogLocale = i.koOnly ? 'ko_KR' : ogLocaleTag((i.localePrefix || '').replace(/^\//, '') || 'ko')
   const alternates = i.koOnly
     ? [
         { rel: 'alternate', hreflang: 'ko', href: `${i.site}${i.path}` },
@@ -61,6 +97,8 @@ export function seoHead(i: SeoPageInput) {
       { property: 'og:description', content: desc },
       { property: 'og:url', content: canonical },
       { property: 'og:image', content: image },
+      { property: 'og:locale', content: ogLocale },
+      ...Object.values(OG_LOCALE_TAG).filter((t) => t !== ogLocale).map((t) => ({ property: 'og:locale:alternate', content: t })),
       { name: 'twitter:card', content: 'summary_large_image' },
       { name: 'twitter:title', content: title },
       { name: 'twitter:description', content: desc },

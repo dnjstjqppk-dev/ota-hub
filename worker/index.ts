@@ -54,6 +54,7 @@ import { reviewDigestJob } from "./src/services/review-digest.ts";
 import { sitemap } from "./src/routes/seo.ts";
 import { sitemapIndex, childSitemap } from "./src/seo/sitemap-index.ts";
 import { llmsTxt, llmsFull } from "./src/seo/llms.ts";
+import { rssFeed } from "./src/seo/rss.ts";
 import { pumpIndexNow } from "./src/seo/indexnow.ts";
 
 export type { Env };
@@ -363,6 +364,7 @@ export default {
       if (url.pathname === "/sitemap-index.xml") return sitemapIndex(env);
       if (url.pathname === "/llms.txt") return llmsTxt(env);
       if (url.pathname === "/llms-full.txt") return llmsFull(env);
+      if (url.pathname === "/rss.xml") return rssFeed(env);
       if (/^\/sitemap-[a-z-]+\.xml$/.test(url.pathname)) {
         const child = await childSitemap(env, url.pathname.slice(1));
         if (child) return child;

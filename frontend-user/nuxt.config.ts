@@ -165,6 +165,9 @@ export default defineNuxtConfig({
       // S6: official social profiles for the Organization sameAs graph
       // (comma-separated https URLs; empty = omitted from JSON-LD).
       sameAs: process.env.NUXT_PUBLIC_SAME_AS || '',
+      // S9: search-console ownership tokens (empty = meta tag omitted).
+      naverVerification: process.env.NUXT_PUBLIC_NAVER_SITE_VERIFICATION || '',
+      googleVerification: process.env.NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '',
       brandName: 'getfortrip',
       brandDomain: process.env.PUBLIC_SITE_URL ? new URL(process.env.PUBLIC_SITE_URL).hostname : 'getfortrip.com',
       // A5/A6: company + CPO facts are build-time env, never hardcoded. Empty = "preparing"

@@ -7,11 +7,12 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
+import { ogMeta } from '~/composables/useSeoPage'
 import { fmtDay, qDate, qInt, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 
 const { route, router, patch, isSelf } = useUrlQuery()
 const currency = useCurrencyStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const localePath = useLocalePath()
 
 const SORT_IDS = ['departure', 'price', 'duration'] as const
@@ -87,7 +88,7 @@ await useAsyncData('tg15-trains-list', () => load())
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
-useHead(() => ({ title: q.value.dep && q.value.arr ? t('trains.search.docTitle', { o: q.value.dep, d: q.value.arr }) : t('trains.search.title') }))
+useHead(() => ({ title: q.value.dep && q.value.arr ? t('trains.search.docTitle', { o: q.value.dep, d: q.value.arr }) : t('trains.search.title'), meta: [...ogMeta(trainSeoSite, '/trains/search', null, locale.value)] }))
 const trainSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {

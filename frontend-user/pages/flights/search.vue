@@ -10,11 +10,12 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
+import { ogMeta } from '~/composables/useSeoPage'
 import { addDaysIso, daysBetween, fmtDay, qDate, qInt, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 
 const { route, router, patch, isSelf } = useUrlQuery()
 const currency = useCurrencyStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const localePath = useLocalePath()
 
 const SORT_IDS = ['cheapest', 'fastest', 'earliest'] as const
@@ -177,7 +178,7 @@ const heading = computed(() => {
   if (!x.origin || !x.dest) return t('flights.search.title')
   return step.value === 'return' ? `${cityOf(x.dest)} → ${cityOf(x.origin)}` : `${cityOf(x.origin)} → ${cityOf(x.dest)}`
 })
-useHead(() => ({ title: q.value.origin && q.value.dest ? t('flights.search.docTitle', { o: cityOf(q.value.origin), d: cityOf(q.value.dest) }) : t('flights.search.title') }))
+useHead(() => ({ title: q.value.origin && q.value.dest ? t('flights.search.docTitle', { o: cityOf(q.value.origin), d: cityOf(q.value.dest) }) : t('flights.search.title'), meta: [...ogMeta(flightSeoSite, '/flights/search', null, locale.value)] }))
 const flightSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {

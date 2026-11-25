@@ -4,13 +4,14 @@ import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
+import { ogMeta } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
 const { item: p, state, reload, liveOk } = await useCatalogDetail('/packages', id, generatedFallback('PACKAGE', id))
 const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const details = computed<any>(() => {
   try { return JSON.parse(p.value?.details_json || '{}') || {} } catch { return {} }
@@ -27,6 +28,7 @@ useHead(() => {
   const offer = liveOk.value ? offerLd(seoSite, `/packages/detail/${id}`, price.value, x.bookable, x.outlink_path) : null
   const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
+    meta: [...ogMeta(seoSite, `/packages/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
     title: x.title,
     script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.packages'), path: '/packages' }, { name: x.destination_city || x.title, path: `/packages/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',

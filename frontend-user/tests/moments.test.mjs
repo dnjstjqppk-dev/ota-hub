@@ -30,6 +30,8 @@ function setup({ loggedIn = true } = {}) {
     ref,
     onMounted: () => {},
     useHead: () => {},
+    useSeoPage: () => {},
+    useRuntimeConfig: () => ({ public: { brandDomain: 'portal.test' } }),
     useLocalePath: () => (to) => (typeof to === 'string' ? to : to.path),
     useI18n: () => ({ t: tx, locale: ref('ko') }),
     navigateTo: (to) => navs.push(to),

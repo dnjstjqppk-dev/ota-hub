@@ -31,7 +31,7 @@ const setupBody = descriptor.scriptSetup.content
 const code = transformSync(setupBody + '\n;globalThis.page = { benefitText, boundText, discountTypeLabel };', { loader: 'ts', format: 'cjs' }).code
 
 function setup() {
-  const context = { ref, onMounted: () => {}, useHead: () => {}, apiFetch: async () => ({ ok: true, data: { promotions: [] } }), useI18n: () => ({ t: tx, locale: ref('ko') }) }
+  const context = { ref, onMounted: () => {}, useHead: () => {}, useSeoPage: () => {}, useRuntimeConfig: () => ({ public: { brandDomain: 'portal.test' } }), apiFetch: async () => ({ ok: true, data: { promotions: [] } }), useI18n: () => ({ t: tx, locale: ref('ko') }) }
   runInNewContext(code, context)
   return context.page
 }

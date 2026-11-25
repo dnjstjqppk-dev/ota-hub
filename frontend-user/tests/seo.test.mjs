@@ -5,7 +5,7 @@ import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import { createSSRApp, h } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import { aggregateRatingOf, attractionLd, availabilityOf, breadcrumbLd, faqLd, itemListLd, jsonLdScript, lodgingLd, offerLd, orgWebsiteLd, productLd, speakableLd } from '../composables/useJsonLd.ts'
-import { seoHead, seoH1, seoTitle } from '../composables/useSeoPage.ts'
+import { ogLocaleTag, ogMeta, seoHead, seoH1, seoTitle, siteVerificationMetas } from '../composables/useSeoPage.ts'
 
 const SITE = 'https://getfortrip.com'
 
@@ -397,6 +397,49 @@ test('s6 policy pages show revision date and datemodified', () => {
   for (const l of ['ko', 'en', 'ja', 'zh']) {
     const m = JSON.parse(readFileSync(new URL(`../i18n/locales/${l}.json`, import.meta.url), 'utf8'))
     assert.ok(m.common.updatedAt.includes('{d}'), `${l}.common.updatedAt`)
+  }
+})
+
+// (m) S9: verification metas render only when configured; og locale tags resolve.
+test('s9 verification metas and og locale tags', () => {
+  assert.deepEqual(siteVerificationMetas({}), [])
+  assert.deepEqual(siteVerificationMetas({ naver: '', google: null }), [])
+  assert.deepEqual(siteVerificationMetas({ naver: ' n123 ', google: 'g456' }), [
+    { name: 'naver-site-verification', content: 'n123' },
+    { name: 'google-site-verification', content: 'g456' },
+  ])
+  assert.equal(ogLocaleTag('ko'), 'ko_KR')
+  assert.equal(ogLocaleTag('ja'), 'ja_JP')
+  assert.equal(ogLocaleTag('xx'), 'ko_KR')
+  const tags = ogMeta(SITE, '/hotels/detail/H1', null, 'en')
+  const byProp = (p) => tags.find((t) => t.property === p || t.name === p)
+  assert.equal(byProp('og:image').content, `${SITE}/symbol.svg`)
+  assert.equal(byProp('og:locale').content, 'en_US')
+  assert.equal(tags.filter((t) => t.property === 'og:locale:alternate').length, 3)
+  assert.equal(byProp('twitter:card').content, 'summary_large_image')
+  const ko = seoHead({ site: SITE, path: '/hotels', title: 'T', description: 'D' })
+  assert.ok(ko.meta.some((m) => m.property === 'og:locale' && m.content === 'ko_KR'))
+  const en = seoHead({ site: SITE, path: '/hotels', title: 'T', description: 'D', localePrefix: '/en' })
+  assert.ok(en.meta.some((m) => m.property === 'og:locale' && m.content === 'en_US'))
+  const cfg = readFileSync(new URL('../nuxt.config.ts', import.meta.url), 'utf8')
+  assert.ok(cfg.includes('NUXT_PUBLIC_NAVER_SITE_VERIFICATION') && cfg.includes('NUXT_PUBLIC_GOOGLE_SITE_VERIFICATION'))
+  const app = readFileSync(new URL('../app.vue', import.meta.url), 'utf8')
+  assert.ok(app.includes('siteVerificationMetas('))
+})
+
+// (n) S9: every public content page carries image/locale/card tags.
+test('s9 public pages carry og image locale and card', () => {
+  for (const d of ['hotels', 'flights', 'trains', 'cars', 'transfers', 'things-to-do', 'packages']) {
+    const src = readFileSync(new URL(`../pages/${d}/detail/[id].vue`, import.meta.url), 'utf8')
+    assert.ok(src.includes('ogMeta('), `${d} detail og tags`)
+  }
+  for (const f of ['cars/list', 'flights/search', 'packages/list', 'trains/search', 'transfers/list']) {
+    const src = readFileSync(new URL(`../pages/${f}.vue`, import.meta.url), 'utf8')
+    assert.ok(src.includes('ogMeta('), `${f} og tags`)
+  }
+  for (const f of ['hotels/list', 'things-to-do/index', 'deals', 'moments/index', 'status']) {
+    const src = readFileSync(new URL(`../pages/${f}.vue`, import.meta.url), 'utf8')
+    assert.ok(src.includes('seoHead(') || src.includes('useSeoPage('), `${f} shared head`)
   }
 })
 
