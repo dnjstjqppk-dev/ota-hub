@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
-import { jsonLdScript } from '~/composables/useJsonLd'
+import { breadcrumbLd, jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
@@ -30,13 +30,14 @@ useHead(() => {
   if (!x) return { title: tr('trains.search.title') }
   return {
     title: `${x.train_type} ${x.train_number} ${x.departure_station}→${x.arrival_station}`,
-    script: [jsonLdScript({
+    script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: tr('common.home'), path: '/' }, { name: tr('nav.trains'), path: '/trains' }, { name: x.train_number, path: `/trains/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',
       '@type': 'TrainTrip',
       trainNumber: x.train_number,
       trainName: x.train_type,
       departureStation: { '@type': 'TrainStation', name: x.departure_station },
-      arrivalStation: { '@type': 'TrainStation', name: x.arrival_station }
+      arrivalStation: { '@type': 'TrainStation', name: x.arrival_station },
+      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {})
     })]
   }
 })
@@ -49,6 +50,7 @@ useHead(() => {
         <DetailHero :crumbs="[{ label: $t('common.home'), to: '/' }, { label: $t('nav.trains'), to: '/trains' }, { label: t.train_number }]" :eyebrow="t.train_type + ' · ' + t.train_number" :title="t.departure_station + ' → ' + t.arrival_station" :facts="facts" testid="train-detail" :wishlist="{ domain: 'TRAIN', itemId: t.id, title: `${t.departure_station} → ${t.arrival_station} ${t.train_number}`, priceKrw: t.price_krw, thumbnailUrl: null, targetUrl: $route.fullPath }">
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">{{ $t('trains.detail.note', { seat: t.seat_class }) }}</p>
         </DetailHero>
+        <p v-if="t.updated_at" class="text-xs text-ink-subtle">{{ $t('common.updatedAt', { d: String(t.updated_at).slice(0, 10) }) }}</p>
         <ReviewsSection domain="TRAIN" :target-id="t.id" />
         <RecoRail domain="TRAIN" :item-id="t.id" />
       </div>

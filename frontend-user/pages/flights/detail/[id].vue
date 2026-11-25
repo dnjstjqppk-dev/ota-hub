@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
-import { jsonLdScript } from '~/composables/useJsonLd'
+import { breadcrumbLd, jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
@@ -34,13 +34,14 @@ useHead(() => {
   if (!x) return { title: t('flights.search.title') }
   return {
     title: `${x.airline_name} ${x.flight_number} ${x.departure_airport}→${x.arrival_airport}`,
-    script: [jsonLdScript({
+    script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.flights'), path: '/flights' }, { name: x.flight_number, path: `/flights/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',
       '@type': 'Flight',
       flightNumber: x.flight_number,
       provider: { '@type': 'Airline', name: x.airline_name, ...(x.airline_code ? { iataCode: x.airline_code } : {}) },
       departureAirport: { '@type': 'Airport', iataCode: x.departure_airport },
-      arrivalAirport: { '@type': 'Airport', iataCode: x.arrival_airport }
+      arrivalAirport: { '@type': 'Airport', iataCode: x.arrival_airport },
+      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {})
     })]
   }
 })
@@ -53,6 +54,7 @@ useHead(() => {
         <DetailHero :crumbs="[{ label: $t('common.home'), to: '/' }, { label: $t('nav.flights'), to: '/flights' }, { label: f.flight_number }]" :eyebrow="f.airline_name + ' · ' + f.flight_number" :title="f.departure_airport + ' → ' + f.arrival_airport" :facts="facts" testid="flight-detail" :wishlist="{ domain: 'FLIGHT', itemId: f.id, title: `${f.departure_airport} → ${f.arrival_airport} ${f.flight_number}`, priceKrw: f.base_price_krw, thumbnailUrl: null, targetUrl: $route.fullPath }">
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">{{ $t('flights.detail.note') }}</p>
         </DetailHero>
+        <p v-if="f.updated_at" class="text-xs text-ink-subtle">{{ $t('common.updatedAt', { d: String(f.updated_at).slice(0, 10) }) }}</p>
         <ReviewsSection domain="FLIGHT" :target-id="f.id" />
         <RecoRail domain="FLIGHT" :item-id="f.id" />
       </div>

@@ -144,6 +144,7 @@ useHead(() => {
     ...(h.address ? { address: { '@type': 'PostalAddress', streetAddress: h.address, ...(h.city ? { addressLocality: h.city } : {}) } } : {}),
     ...(h.thumbnail_url || h.image_url ? { image: h.thumbnail_url || h.image_url } : {}),
     ...(Number(h.star_rating) > 0 ? { starRating: { '@type': 'Rating', ratingValue: Number(h.star_rating) } } : {}),
+    ...(h.updated_at ? { dateModified: String(h.updated_at) } : {}),
     ...(minRoomPrice.value ? { priceRange: t('hotels.detail.priceRange', { v: minRoomPrice.value.toLocaleString(LOCALE_TAG[locale.value] || 'ko-KR') }) } : {}),
   }
   const detailPath = `/hotels/detail/${hotelId}`
@@ -254,6 +255,8 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
             <li v-if="hotel.free_breakfast" class="flex items-start gap-3 rounded-2xl border border-line bg-surface p-4 text-sm text-ink"><AppIcon name="check" class="text-success" /><span><b class="font-semibold">{{ $t('hotels.detail.hasBreakfast') }}</b></span></li>
           </ul>
         </section>
+
+        <p v-if="hotel.updated_at" class="text-xs text-ink-subtle">{{ $t('common.updatedAt', { d: String(hotel.updated_at).slice(0, 10) }) }}</p>
 
         <SeoAnswer
           :name="hotel.name_ko || hotel.name"

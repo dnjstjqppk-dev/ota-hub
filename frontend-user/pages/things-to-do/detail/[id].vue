@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
-import { jsonLdScript } from '~/composables/useJsonLd'
+import { breadcrumbLd, jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
@@ -38,13 +38,14 @@ useHead(() => {
   if (!x) return { title: t('todo.title') }
   return {
     title: x.title,
-    script: [jsonLdScript({
+    script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.things-to-do'), path: '/things-to-do' }, { name: x.city || x.title, path: `/things-to-do/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',
       '@type': 'TouristTrip',
       name: x.title,
       ...(x.description ? { description: highlights.value.join(' / ') } : {}),
       ...(x.image_url || x.thumbnail_url ? { image: x.image_url || x.thumbnail_url } : {}),
-      ...(x.city ? { itinerary: { '@type': 'Place', name: x.city } } : {})
+      ...(x.city ? { itinerary: { '@type': 'Place', name: x.city } } : {}),
+      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {})
     })]
   }
 })
@@ -72,6 +73,7 @@ useHead(() => {
           </div>
           <p class="mt-6 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">{{ $t('todo.detail_kidNote') }}</p>
         </DetailHero>
+        <p v-if="a.updated_at" class="text-xs text-ink-subtle">{{ $t('common.updatedAt', { d: String(a.updated_at).slice(0, 10) }) }}</p>
         <SeoAnswer
           :name="a.title"
           :location="[a.city, a.country].filter(Boolean).join(', ') || null"

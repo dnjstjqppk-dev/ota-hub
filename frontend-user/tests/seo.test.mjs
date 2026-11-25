@@ -316,6 +316,21 @@ test('s3 detail pages wire seoanswer with real fields', () => {
   }
 })
 
+// (i0) S6: contactPoint/sameAs render only when the operator configures them.
+test('org graph adds contactpoint and sameas only when configured', () => {
+  const bare = orgWebsiteLd(SITE)['@graph'][0]
+  assert.equal(bare.logo, `${SITE}/logo.svg`)
+  assert.equal(bare.url, SITE)
+  assert.ok(!('contactPoint' in bare) && !('sameAs' in bare))
+  const full = orgWebsiteLd(SITE, { contactPhone: '02-000-0000', sameAs: ['https://example.com/getfortrip', 'notaurl', ''] })['@graph'][0]
+  assert.deepEqual(full.contactPoint, { '@type': 'ContactPoint', telephone: '02-000-0000', contactType: 'customer service' })
+  assert.deepEqual(full.sameAs, ['https://example.com/getfortrip'])
+  const cfg = readFileSync(new URL('../nuxt.config.ts', import.meta.url), 'utf8')
+  assert.ok(cfg.includes('NUXT_PUBLIC_SAME_AS'))
+  const app = readFileSync(new URL('../app.vue', import.meta.url), 'utf8')
+  assert.ok(app.includes('contactPhone:') && app.includes('sameAs:'))
+})
+
 // (i) S4: every detail page head links its markdown fact sheet alternate.
 test('s4 detail pages link markdown fact sheet alternates', () => {
   const pairs = [
@@ -326,5 +341,34 @@ test('s4 detail pages link markdown fact sheet alternates', () => {
     const src = readFileSync(new URL(`../pages/${page}/detail/[id].vue`, import.meta.url), 'utf8')
     assert.match(src, /rel: 'alternate', type: 'text\/markdown'/, `${page} alternate link`)
     assert.ok(src.includes(`/api/v1/seo/md/${code}/`), `${page} fact sheet path`)
+  }
+})
+
+// (j) S6: every detail page carries breadcrumbs, dateModified, and an update stamp.
+test('s6 detail pages carry breadcrumbs, datemodified, and update stamp', () => {
+  const refs = { hotels: 'hotel', flights: 'f', trains: 't', cars: 'c', transfers: 't', 'things-to-do': 'a', packages: 'p' }
+  for (const [page, ref] of Object.entries(refs)) {
+    const src = readFileSync(new URL(`../pages/${page}/detail/[id].vue`, import.meta.url), 'utf8')
+    assert.match(src, /breadcrumbLd\(/, `${page} breadcrumb`)
+    assert.ok(src.includes('dateModified'), `${page} dateModified`)
+    assert.ok(src.includes(`${ref}.updated_at`), `${page} updated field`)
+    assert.ok(src.includes('common.updatedAt'), `${page} stamp display`)
+  }
+})
+
+// (k) S6: policy pages show their revision date and dateModified.
+test('s6 policy pages show revision date and datemodified', () => {
+  const revised = { terms: '2026-11-10', privacy: '2026-11-10', cookies: '2026-11-07', 'refund-policy': '2026-11-07' }
+  for (const [page, iso] of Object.entries(revised)) {
+    const src = readFileSync(new URL(`../pages/${page}.vue`, import.meta.url), 'utf8')
+    assert.ok(src.includes(`const REVISED = '${iso}'`), `${page} revised const`)
+    const eff = src.match(/const EFFECTIVE = '([^']+)'/)[1]
+    assert.ok(eff.includes(iso.slice(0, 4)) && eff.includes(String(Number(iso.slice(5, 7)))) && eff.includes(String(Number(iso.slice(8, 10)))), `${page} revised matches effective`)
+    assert.ok(src.includes('dateModified: REVISED'), `${page} ld`)
+    assert.ok(src.includes('common.updatedAt'), `${page} stamp display`)
+  }
+  for (const l of ['ko', 'en', 'ja', 'zh']) {
+    const m = JSON.parse(readFileSync(new URL(`../i18n/locales/${l}.json`, import.meta.url), 'utf8'))
+    assert.ok(m.common.updatedAt.includes('{d}'), `${l}.common.updatedAt`)
   }
 })

@@ -12,11 +12,17 @@ function dismissOnboarding() {
   try { localStorage.setItem('getfortrip_onboarded_v1', '1') } catch {}
 }
 
+const runtimeCfg = useRuntimeConfig()
+
 useHead({
   titleTemplate: (titleChunk) => titleChunk ? `${titleChunk} - getfortrip` : 'getfortrip - 스마트한 전 세계 여행의 시작',
   script: [
     // P5: Organization + WebSite/SearchAction graph (single source: useJsonLd).
-    jsonLdScript(orgWebsiteLd('https://getfortrip.com')),
+    // S6: contactPoint/sameAs render only when the operator configures them.
+    jsonLdScript(orgWebsiteLd('https://getfortrip.com', {
+      contactPhone: (runtimeCfg.public as any).company?.csPhone || null,
+      sameAs: String((runtimeCfg.public as any).sameAs || '').split(','),
+    })),
   ]
 })
 

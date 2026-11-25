@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { BRAND } from '~/config/brand'
+import { jsonLdScript } from '~/composables/useJsonLd'
 const VERSION = '2.1'
 const EFFECTIVE = '2026년 11월 10일'
+const REVISED = '2026-11-10'
 const { t } = useI18n()
 useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/terms', title: t('seo.terms.title'), description: t('seo.terms.description'), koOnly: true })
+// S6: document revision as WebPage dateModified.
+useHead({ script: [jsonLdScript({ '@context': 'https://schema.org', '@type': 'WebPage', url: `https://${useRuntimeConfig().public.brandDomain}/terms`, dateModified: REVISED })] })
 </script>
 
 <template>
@@ -12,6 +16,7 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/t
       <span class="text-xs font-bold text-trip-blue">Terms of Service · v{{ VERSION }}</span>
       <h1 class="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">{{ BRAND.name }} 서비스 이용약관</h1>
       <p class="text-xs text-slate-400">시행일: {{ EFFECTIVE }}</p>
+      <p class="text-xs text-slate-400">{{ $t('common.updatedAt', { d: REVISED }) }}</p>
     </div>
 
     <div class="prose prose-slate dark:prose-invert max-w-none text-xs leading-relaxed text-slate-700 dark:text-slate-200 space-y-6">

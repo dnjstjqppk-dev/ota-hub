@@ -9,10 +9,16 @@ export function jsonLdScript(data: Record<string, unknown>) {
   return { type: 'application/ld+json' as const, innerHTML: JSON.stringify(data).replace(/</g, '\\u003c') }
 }
 
-export function orgWebsiteLd(site: string) {
+export function orgWebsiteLd(site: string, opts: { contactPhone?: string | null; sameAs?: string[] } = {}) {
+  const phone = (opts.contactPhone || '').trim()
+  const sameAs = [...new Set((opts.sameAs || []).map((s) => s.trim()).filter((s) => /^https:\/\/.+\..+/.test(s)))]
   return {
     '@context': 'https://schema.org', '@graph': [
-      { '@type': 'Organization', '@id': `${site}/#org`, name: 'getfortrip', url: site, logo: `${site}/logo.svg` },
+      {
+        '@type': 'Organization', '@id': `${site}/#org`, name: 'getfortrip', url: site, logo: `${site}/logo.svg`,
+        ...(sameAs.length ? { sameAs } : {}),
+        ...(phone ? { contactPoint: { '@type': 'ContactPoint', telephone: phone, contactType: 'customer service' } } : {}),
+      },
       { '@type': 'WebSite', '@id': `${site}/#site`, url: site, name: 'getfortrip', publisher: { '@id': `${site}/#org` }, potentialAction: { '@type': 'SearchAction', target: { '@type': 'EntryPoint', urlTemplate: `${site}/hotels/list?city={search_term_string}` }, 'query-input': 'required name=search_term_string' } },
     ],
   }

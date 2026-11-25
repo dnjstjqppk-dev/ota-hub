@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
-import { jsonLdScript } from '~/composables/useJsonLd'
+import { breadcrumbLd, jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
@@ -31,12 +31,13 @@ useHead(() => {
   if (!x) return { title: tr('transfers.list.title') }
   return {
     title: `${x.airport_code} → ${x.destination_area} · ${x.service_title}`,
-    script: [jsonLdScript({
+    script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: tr('common.home'), path: '/' }, { name: tr('nav.transfers'), path: '/transfers' }, { name: x.service_title, path: `/transfers/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',
       '@type': 'TaxiService',
       name: x.service_title,
       areaServed: x.destination_area,
-      ...(x.image_url ? { image: x.image_url } : {})
+      ...(x.image_url ? { image: x.image_url } : {}),
+      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {})
     })]
   }
 })
@@ -49,6 +50,7 @@ useHead(() => {
         <DetailHero :crumbs="[{ label: $t('common.home'), to: '/' }, { label: $t('nav.transfers'), to: '/transfers' }, { label: t.service_title }]" :eyebrow="t.vehicle_class" :title="t.service_title" :image="t.image_url || null" image-icon="transfer" :facts="facts" testid="transfer-detail" :wishlist="{ domain: 'TRANSFER', itemId: t.id, title: t.service_title, priceKrw: t.price_krw, thumbnailUrl: t.image_url || null, targetUrl: $route.fullPath }">
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">{{ $t('transfers.detail.note') }}</p>
         </DetailHero>
+        <p v-if="t.updated_at" class="text-xs text-ink-subtle">{{ $t('common.updatedAt', { d: String(t.updated_at).slice(0, 10) }) }}</p>
         <SeoAnswer
           :name="t.service_title"
           :location="[t.airport_code, t.destination_area].filter(Boolean).join(' → ') || null"

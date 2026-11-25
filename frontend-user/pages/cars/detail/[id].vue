@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
-import { jsonLdScript } from '~/composables/useJsonLd'
+import { breadcrumbLd, jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
@@ -33,13 +33,14 @@ useHead(() => {
   if (!x) return { title: t('cars.list.title') }
   return {
     title: `${x.vehicle_model} · ${x.company_name}`,
-    script: [jsonLdScript({
+    script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.cars'), path: '/cars' }, { name: x.vehicle_model, path: `/cars/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',
       '@type': 'Car',
       name: x.vehicle_model,
       ...(x.image_url ? { image: x.image_url } : {}),
       ...(x.seats ? { seatingCapacity: Number(x.seats) } : {}),
-      brand: { '@type': 'Organization', name: x.company_name }
+      brand: { '@type': 'Organization', name: x.company_name },
+      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {})
     })]
   }
 })
@@ -52,6 +53,7 @@ useHead(() => {
         <DetailHero :crumbs="[{ label: $t('common.home'), to: '/' }, { label: $t('nav.cars'), to: '/cars' }, { label: c.vehicle_model }]" :eyebrow="c.company_name" :title="c.vehicle_model" :image="c.image_url || null" image-icon="car" :facts="facts" testid="car-detail" :wishlist="{ domain: 'CAR', itemId: c.id, title: `${c.company_name} ${c.vehicle_model}`, priceKrw: c.daily_price_krw, thumbnailUrl: c.image_url || null, targetUrl: $route.fullPath }">
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">{{ $t('cars.detail.note') }}</p>
         </DetailHero>
+        <p v-if="c.updated_at" class="text-xs text-ink-subtle">{{ $t('common.updatedAt', { d: String(c.updated_at).slice(0, 10) }) }}</p>
         <SeoAnswer
           :name="`${c.company_name} ${c.vehicle_model}`"
           :location="c.pickup_location || null"

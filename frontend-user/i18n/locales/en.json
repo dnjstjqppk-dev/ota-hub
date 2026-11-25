@@ -19,6 +19,7 @@
     "login": "Sign In"
   },
   "common": {
+    "updatedAt": "Last updated: {d}",
     "search": "Search",
     "bookNow": "Book Now",
     "loading": "Loading…",

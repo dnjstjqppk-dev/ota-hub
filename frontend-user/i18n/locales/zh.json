@@ -19,6 +19,7 @@
     "login": "登录"
   },
   "common": {
+    "updatedAt": "最后更新：{d}",
     "search": "搜索",
     "bookNow": "立即预订",
     "loading": "加载中…",

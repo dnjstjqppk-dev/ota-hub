@@ -19,6 +19,7 @@
     "login": "로그인"
   },
   "common": {
+    "updatedAt": "최종 업데이트: {d}",
     "search": "검색",
     "bookNow": "예약하기",
     "loading": "불러오는 중…",

@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { BRAND } from '~/config/brand'
+import { jsonLdScript } from '~/composables/useJsonLd'
 const VERSION = '2.0'
 const EFFECTIVE = '2026년 11월 7일'
+const REVISED = '2026-11-07'
 const { t } = useI18n()
 useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/refund-policy', title: t('seo.refund.title'), description: t('seo.refund.description'), koOnly: true })
+// S6: document revision as WebPage dateModified.
+useHead({ script: [jsonLdScript({ '@context': 'https://schema.org', '@type': 'WebPage', url: `https://${useRuntimeConfig().public.brandDomain}/refund-policy`, dateModified: REVISED })] })
 </script>
 
 <template>
@@ -19,6 +23,7 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/r
         {{ BRAND.name }}은 투명하고 공정한 취소/환불 기준을 준수하며 모바일 마이페이지에서 간편한 원클릭 취소를 지원합니다.
         상품 상세에 구조화된 취소 구간이 표시된 경우 그 기준이 아래 도메인 기본 규정보다 우선합니다. (시행일: {{ EFFECTIVE }})
       </p>
+      <p class="text-xs text-slate-400">{{ $t('common.updatedAt', { d: REVISED }) }}</p>
     </div>
 
     <div class="space-y-6">

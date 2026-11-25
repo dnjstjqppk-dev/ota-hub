@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { BRAND } from '~/config/brand'
 import { useCompany } from '~/composables/useCompany'
+import { jsonLdScript } from '~/composables/useJsonLd'
 const VERSION = '2.1'
 const EFFECTIVE = '2026년 11월 10일'
+const REVISED = '2026-11-10'
 const co = useCompany()
 const { t } = useI18n()
 useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/privacy', title: t('seo.privacy.title'), description: t('seo.privacy.description'), koOnly: true })
+// S6: document revision as WebPage dateModified.
+useHead({ script: [jsonLdScript({ '@context': 'https://schema.org', '@type': 'WebPage', url: `https://${useRuntimeConfig().public.brandDomain}/privacy`, dateModified: REVISED })] })
 </script>
 
 <template>
@@ -14,6 +18,7 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/p
       <span class="text-xs font-bold text-trip-blue">Privacy Policy · v{{ VERSION }}</span>
       <h1 class="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">{{ BRAND.name }} 개인정보 처리방침</h1>
       <p class="text-xs text-slate-400">시행일: {{ EFFECTIVE }}</p>
+      <p class="text-xs text-slate-400">{{ $t('common.updatedAt', { d: REVISED }) }}</p>
     </div>
 
     <div class="prose prose-slate dark:prose-invert max-w-none text-xs leading-relaxed text-slate-700 dark:text-slate-200 space-y-6">

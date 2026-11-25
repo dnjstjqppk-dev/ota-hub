@@ -162,6 +162,9 @@ export default defineNuxtConfig({
       sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
       sentryEnv: process.env.NUXT_PUBLIC_SENTRY_ENV || 'production',
       sentryRelease: process.env.NUXT_PUBLIC_SENTRY_RELEASE || '',
+      // S6: official social profiles for the Organization sameAs graph
+      // (comma-separated https URLs; empty = omitted from JSON-LD).
+      sameAs: process.env.NUXT_PUBLIC_SAME_AS || '',
       brandName: 'getfortrip',
       brandDomain: process.env.PUBLIC_SITE_URL ? new URL(process.env.PUBLIC_SITE_URL).hostname : 'getfortrip.com',
       // A5/A6: company + CPO facts are build-time env, never hardcoded. Empty = "preparing"
