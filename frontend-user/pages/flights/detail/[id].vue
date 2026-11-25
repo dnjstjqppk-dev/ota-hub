@@ -2,12 +2,13 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
-import { breadcrumbLd, jsonLdScript } from '~/composables/useJsonLd'
+import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
-const { item: f, state, reload } = await useCatalogDetail('/flights', id, generatedFallback('FLIGHT', id))
+const { item: f, state, reload, liveOk } = await useCatalogDetail('/flights', id, generatedFallback('FLIGHT', id))
+const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 const { t } = useI18n()
 
 const cabinLabel = (c: string) => t(`flights.search.cabin_${c}`, c)
@@ -32,6 +33,8 @@ useHead(() => ({ link: [{ rel: 'alternate', type: 'text/markdown', href: `/api/v
 useHead(() => {
   const x = f.value
   if (!x) return { title: t('flights.search.title') }
+  const offer = liveOk.value ? offerLd(seoSite, `/flights/detail/${id}`, x.base_price_krw, x.bookable, x.outlink_path) : null
+  const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
     title: `${x.airline_name} ${x.flight_number} ${x.departure_airport}→${x.arrival_airport}`,
     script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.flights'), path: '/flights' }, { name: x.flight_number, path: `/flights/detail/${id}` }])), jsonLdScript({
@@ -41,7 +44,9 @@ useHead(() => {
       provider: { '@type': 'Airline', name: x.airline_name, ...(x.airline_code ? { iataCode: x.airline_code } : {}) },
       departureAirport: { '@type': 'Airport', iataCode: x.departure_airport },
       arrivalAirport: { '@type': 'Airport', iataCode: x.arrival_airport },
-      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {})
+      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {}),
+      ...(offer ? { offers: offer } : {}),
+      ...(rating ? { aggregateRating: rating } : {})
     })]
   }
 })

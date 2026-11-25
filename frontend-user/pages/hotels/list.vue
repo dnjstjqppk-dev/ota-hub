@@ -9,6 +9,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
 import { seoHead } from '~/composables/useSeoPage'
 
 const route = useRoute()
@@ -163,6 +164,13 @@ watch(() => route.fullPath, () => { if (!route.path.endsWith('/hotels/list')) re
 // TG-15: SSR the first paint (ISR caches it); the watcher re-loads on client query changes.
 // A server-side failure must 503 (uncached), never bake an error shell into the edge cache.
 await useAsyncData('tg15-hotels-list', () => load())
+// S7: visible results as ItemList for AI overviews (canonical bare paths).
+useHead(() => {
+  const elements = hotels.value
+    .filter((h) => h && h.id && (h.name_ko || h.name))
+    .map((h) => ({ name: h.name_ko || h.name, path: detailLink(h).path }))
+  return elements.length ? { script: [jsonLdScript(itemListLd(seoSite, t('nav.hotels'), elements))] } : {}
+})
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => {
   const d = new Date(); today.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`

@@ -11,7 +11,7 @@ import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { getHotelById } from '~/data/hotelCatalog'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
-import { breadcrumbLd, jsonLdScript } from '~/composables/useJsonLd'
+import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
 import { useCartStore } from '~/stores/cart'
 
 const route = useRoute()
@@ -148,6 +148,12 @@ useHead(() => {
     ...(minRoomPrice.value ? { priceRange: t('hotels.detail.priceRange', { v: minRoomPrice.value.toLocaleString(LOCALE_TAG[locale.value] || 'ko-KR') }) } : {}),
   }
   const detailPath = `/hotels/detail/${hotelId}`
+  // S7: offers/rating only from live rates — static first paint must never mint prices.
+  const liveOffers = ratesState.value === 'ok'
+  const offer = liveOffers ? offerLd(seoSite, detailPath, minRoomPrice.value, (h.rooms || []).some((r: any) => (r.rate_plans || []).length > 0), null) : null
+  const rating = liveOffers ? aggregateRatingOf(h.review_score, h.review_count) : null
+  if (offer) ld.offers = offer
+  if (rating) ld.aggregateRating = rating
   return {
     title: h.name_ko || h.name,
     meta: [

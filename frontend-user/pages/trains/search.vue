@@ -6,6 +6,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
 import { fmtDay, qDate, qInt, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 
 const { route, router, patch, isSelf } = useUrlQuery()
@@ -87,6 +88,15 @@ if (state.value === 'error' && import.meta.server) throw createError({ statusCod
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
 useHead(() => ({ title: q.value.dep && q.value.arr ? t('trains.search.docTitle', { o: q.value.dep, d: q.value.arr }) : t('trains.search.title') }))
+const trainSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
+// S7: visible results as ItemList for AI overviews (canonical bare paths).
+useHead(() => {
+  const elements = filtered.value
+    .filter((x) => x && x.id)
+    .map((x) => ({ name: [x.train_type, x.train_number, x.departure_station, x.arrival_station].filter(Boolean).join(' '), path: detailLink(x).path }))
+    .filter((it) => it.name)
+  return elements.length ? { script: [jsonLdScript(itemListLd(trainSeoSite, t('nav.trains'), elements))] } : {}
+})
 </script>
 
 <template>

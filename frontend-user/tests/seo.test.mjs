@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import { createSSRApp, h } from 'vue'
 import { renderToString } from '@vue/server-renderer'
-import { attractionLd, breadcrumbLd, faqLd, itemListLd, jsonLdScript, lodgingLd, orgWebsiteLd, productLd, speakableLd } from '../composables/useJsonLd.ts'
+import { aggregateRatingOf, attractionLd, availabilityOf, breadcrumbLd, faqLd, itemListLd, jsonLdScript, lodgingLd, offerLd, orgWebsiteLd, productLd, speakableLd } from '../composables/useJsonLd.ts'
 import { seoHead, seoH1, seoTitle } from '../composables/useSeoPage.ts'
 
 const SITE = 'https://getfortrip.com'
@@ -50,6 +50,33 @@ test('json-ld builders emit valid typed graphs', () => {
   assert.equal(speak['@type'], 'WebPage')
   assert.equal(speak.url, `${SITE}/hotels/detail/H1`)
   assert.deepEqual(speak.speakable.cssSelector, ['#answer-summary'])
+})
+
+// (b2) S7: complete offers, sellability mapping, verified-review ratings, item lists.
+test('offer rating and itemlist builders follow sellability and review rules', () => {
+  const offer = offerLd(SITE, '/hotels/detail/H1', 85000, true, null)
+  assert.deepEqual(offer, { '@type': 'Offer', url: `${SITE}/hotels/detail/H1`, priceCurrency: 'KRW', price: 85000, availability: 'https://schema.org/InStock' })
+  assert.equal(offerLd(SITE, '/p', 0, true, null), null)
+  assert.equal(offerLd(SITE, '/p', null, true, null), null)
+  assert.equal(availabilityOf(true, null), 'InStock')
+  assert.equal(availabilityOf(false, '/out/x'), 'InStock')
+  assert.equal(availabilityOf(false, null), 'OutOfStock')
+  assert.equal(availabilityOf(undefined, undefined), 'OutOfStock')
+  const soldout = offerLd(SITE, '/p', 1000, false, null)
+  assert.equal(soldout.availability, 'https://schema.org/OutOfStock')
+  assert.deepEqual(aggregateRatingOf(4.84, 120), { '@type': 'AggregateRating', ratingValue: 4.8, reviewCount: 120 })
+  assert.equal(aggregateRatingOf(4.8, 0), null)
+  assert.equal(aggregateRatingOf(null, 5), null)
+  assert.equal(aggregateRatingOf(4.8, null), null)
+  const list = itemListLd(SITE, 'Hotels', [{ name: 'A', path: '/hotels/detail/1' }, { name: '', path: '/x' }, { name: 'B', path: '/hotels/detail/2' }])
+  assert.equal(list.numberOfItems, 2)
+  assert.deepEqual(list.itemListElement.map((e) => [e.position, e.name, e.url]), [
+    [1, 'A', `${SITE}/hotels/detail/1`],
+    [2, 'B', `${SITE}/hotels/detail/2`],
+  ])
+  const long = itemListLd(SITE, 'X', Array.from({ length: 51 }, (_, i) => ({ name: `N${i}`, path: `/${i}` })))
+  assert.equal(long.itemListElement.length, 50)
+  assert.equal(long.itemListElement[49].position, 50)
 })
 
 // (c) semantic components compile (SFC) and carry their landmarks.
@@ -370,5 +397,36 @@ test('s6 policy pages show revision date and datemodified', () => {
   for (const l of ['ko', 'en', 'ja', 'zh']) {
     const m = JSON.parse(readFileSync(new URL(`../i18n/locales/${l}.json`, import.meta.url), 'utf8'))
     assert.ok(m.common.updatedAt.includes('{d}'), `${l}.common.updatedAt`)
+  }
+})
+
+// (l) S7: detail pages emit live-gated offers+ratings; lists emit item lists.
+test('s7 pages wire offers ratings and itemlists', () => {
+  const det = (d) => readFileSync(new URL(`../pages/${d}/detail/[id].vue`, import.meta.url), 'utf8')
+  const hotels = det('hotels')
+  assert.ok(hotels.includes('offerLd(seoSite, detailPath, minRoomPrice.value'), 'hotels offer')
+  assert.ok(hotels.includes('aggregateRatingOf(h.review_score, h.review_count)'), 'hotels rating')
+  assert.ok(hotels.includes("ratesState.value === 'ok'"), 'hotels live gate')
+  const rest = {
+    flights: ['/flights/detail/${id}', 'x.base_price_krw'], trains: ['/trains/detail/${id}', 'x.price_krw'],
+    cars: ['/cars/detail/${id}', 'x.daily_price_krw'], transfers: ['/transfers/detail/${id}', 'x.price_krw'],
+    'things-to-do': ['/things-to-do/detail/${id}', 'x.price_krw'], packages: ['/packages/detail/${id}', 'price.value'],
+  }
+  for (const [d, [path, price]] of Object.entries(rest)) {
+    const src = det(d)
+    assert.ok(src.includes('liveOk') && src.includes('offerLd('), `${d} gated offer`)
+    assert.ok(src.includes('aggregateRatingOf(x.review_score, x.review_count)'), `${d} rating`)
+    assert.ok(src.includes(path) && src.includes(price), `${d} offer inputs`)
+  }
+  const lists = {
+    'hotels/list': ['hotels.value', 'nav.hotels'], 'flights/search': ['filtered.value', 'nav.flights'],
+    'trains/search': ['filtered.value', 'nav.trains'], 'cars/list': ['items.value', 'nav.cars'],
+    'transfers/list': ['sorted.value', 'nav.transfers'], 'things-to-do/index': ['items.value', 'nav.things-to-do'],
+    'packages/list': ['items.value', 'nav.packages'],
+  }
+  for (const [f, [ref, nav]] of Object.entries(lists)) {
+    const src = readFileSync(new URL(`../pages/${f}.vue`, import.meta.url), 'utf8')
+    assert.ok(src.includes('itemListLd('), `${f} itemlist`)
+    assert.ok(src.includes(ref) && src.includes(nav), `${f} results source`)
   }
 })

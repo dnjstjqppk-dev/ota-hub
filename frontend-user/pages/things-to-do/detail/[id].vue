@@ -3,12 +3,13 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
-import { breadcrumbLd, jsonLdScript } from '~/composables/useJsonLd'
+import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.activityId || route.query.id || '')
-const { item: a, state, reload } = await useCatalogDetail('/activities', id, generatedFallback('ACTIVITY', id))
+const { item: a, state, reload, liveOk } = await useCatalogDetail('/activities', id, generatedFallback('ACTIVITY', id))
+const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 const { t } = useI18n()
 
 const catLabel = (c: string) => t(`todo.cat_${c}`, c)
@@ -36,6 +37,8 @@ useHead(() => ({ link: [{ rel: 'alternate', type: 'text/markdown', href: `/api/v
 useHead(() => {
   const x = a.value
   if (!x) return { title: t('todo.title') }
+  const offer = liveOk.value ? offerLd(seoSite, `/things-to-do/detail/${id}`, x.price_krw, x.bookable, x.outlink_path) : null
+  const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
     title: x.title,
     script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.things-to-do'), path: '/things-to-do' }, { name: x.city || x.title, path: `/things-to-do/detail/${id}` }])), jsonLdScript({
@@ -45,7 +48,9 @@ useHead(() => {
       ...(x.description ? { description: highlights.value.join(' / ') } : {}),
       ...(x.image_url || x.thumbnail_url ? { image: x.image_url || x.thumbnail_url } : {}),
       ...(x.city ? { itinerary: { '@type': 'Place', name: x.city } } : {}),
-      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {})
+      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {}),
+      ...(offer ? { offers: offer } : {}),
+      ...(rating ? { aggregateRating: rating } : {})
     })]
   }
 })

@@ -24,7 +24,8 @@ export async function useCatalogDetail(apiPath: string, id: string, fallback: Re
     if (state.value === 'notfound') throw createError({ statusCode: 404, statusMessage: 'Product not found' })
     throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
   }
-  return { item, state, reload: load }
+  // S7: liveOk gates offer/rating structured data — fallback snapshots must never mint prices.
+  return { item, state, reload: load, liveOk }
 }
 
 // NOTE: jsonLdScript lives in useJsonLd.ts (single source; removed a duplicate export here).

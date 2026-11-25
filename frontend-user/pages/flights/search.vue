@@ -9,6 +9,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
 import { addDaysIso, daysBetween, fmtDay, qDate, qInt, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 
 const { route, router, patch, isSelf } = useUrlQuery()
@@ -177,6 +178,15 @@ const heading = computed(() => {
   return step.value === 'return' ? `${cityOf(x.dest)} → ${cityOf(x.origin)}` : `${cityOf(x.origin)} → ${cityOf(x.dest)}`
 })
 useHead(() => ({ title: q.value.origin && q.value.dest ? t('flights.search.docTitle', { o: cityOf(q.value.origin), d: cityOf(q.value.dest) }) : t('flights.search.title') }))
+const flightSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
+// S7: visible results as ItemList for AI overviews (canonical bare paths).
+useHead(() => {
+  const elements = filtered.value
+    .filter((f) => f && f.id)
+    .map((f) => ({ name: [f.airline_name, f.flight_number, f.departure_airport, f.arrival_airport].filter(Boolean).join(' '), path: detailLink(f).path }))
+    .filter((it) => it.name)
+  return elements.length ? { script: [jsonLdScript(itemListLd(flightSeoSite, t('nav.flights'), elements))] } : {}
+})
 </script>
 
 <template>

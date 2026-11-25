@@ -3,12 +3,13 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
-import { breadcrumbLd, jsonLdScript } from '~/composables/useJsonLd'
+import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
-const { item: t, state, reload } = await useCatalogDetail('/transfers', id, generatedFallback('TRANSFER', id))
+const { item: t, state, reload, liveOk } = await useCatalogDetail('/transfers', id, generatedFallback('TRANSFER', id))
+const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 const { t: tr } = useI18n()
 
 const facts = computed(() => {
@@ -29,6 +30,8 @@ useHead(() => ({ link: [{ rel: 'alternate', type: 'text/markdown', href: `/api/v
 useHead(() => {
   const x = t.value
   if (!x) return { title: tr('transfers.list.title') }
+  const offer = liveOk.value ? offerLd(seoSite, `/transfers/detail/${id}`, x.price_krw, x.bookable, x.outlink_path) : null
+  const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
     title: `${x.airport_code} → ${x.destination_area} · ${x.service_title}`,
     script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: tr('common.home'), path: '/' }, { name: tr('nav.transfers'), path: '/transfers' }, { name: x.service_title, path: `/transfers/detail/${id}` }])), jsonLdScript({
@@ -37,7 +40,9 @@ useHead(() => {
       name: x.service_title,
       areaServed: x.destination_area,
       ...(x.image_url ? { image: x.image_url } : {}),
-      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {})
+      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {}),
+      ...(offer ? { offers: offer } : {}),
+      ...(rating ? { aggregateRating: rating } : {})
     })]
   }
 })

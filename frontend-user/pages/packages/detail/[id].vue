@@ -3,12 +3,13 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
-import { breadcrumbLd, jsonLdScript } from '~/composables/useJsonLd'
+import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 
 const route = useRoute()
 const id = String(route.params.id || route.query.id || '')
-const { item: p, state, reload } = await useCatalogDetail('/packages', id, generatedFallback('PACKAGE', id))
+const { item: p, state, reload, liveOk } = await useCatalogDetail('/packages', id, generatedFallback('PACKAGE', id))
+const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
 const { t } = useI18n()
 
 const details = computed<any>(() => {
@@ -23,6 +24,8 @@ useHead(() => ({ link: [{ rel: 'alternate', type: 'text/markdown', href: `/api/v
 useHead(() => {
   const x = p.value
   if (!x) return { title: t('packages.list.title') }
+  const offer = liveOk.value ? offerLd(seoSite, `/packages/detail/${id}`, price.value, x.bookable, x.outlink_path) : null
+  const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
     title: x.title,
     script: [jsonLdScript(breadcrumbLd(`https://${useRuntimeConfig().public.brandDomain}`, [{ name: t('common.home'), path: '/' }, { name: t('nav.packages'), path: '/packages' }, { name: x.destination_city || x.title, path: `/packages/detail/${id}` }])), jsonLdScript({
@@ -31,7 +34,9 @@ useHead(() => {
       name: x.title,
       ...(x.hero_image_url || x.thumbnail_url ? { image: x.hero_image_url || x.thumbnail_url } : {}),
       ...(x.destination_city ? { itinerary: { '@type': 'Place', name: x.destination_city } } : {}),
-      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {})
+      ...(x.updated_at ? { dateModified: String(x.updated_at) } : {}),
+      ...(offer ? { offers: offer } : {}),
+      ...(rating ? { aggregateRating: rating } : {})
     })]
   }
 })

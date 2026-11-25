@@ -6,6 +6,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
+import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
 import { daysBetween, fmtDay, qDate, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 
 const { route, router, patch, isSelf } = useUrlQuery()
@@ -80,6 +81,15 @@ if (state.value === 'error' && import.meta.server) throw createError({ statusCod
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
 useHead(() => ({ title: q.value.city ? t('cars.list.docTitle', { c: q.value.city }) : t('cars.list.title') }))
+const carSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
+// S7: visible results as ItemList for AI overviews (canonical bare paths).
+useHead(() => {
+  const elements = items.value
+    .filter((c) => c && c.id)
+    .map((c) => ({ name: [c.company_name, c.vehicle_model].filter(Boolean).join(' '), path: detailLink(c).path }))
+    .filter((it) => it.name)
+  return elements.length ? { script: [jsonLdScript(itemListLd(carSeoSite, t('nav.cars'), elements))] } : {}
+})
 </script>
 
 <template>

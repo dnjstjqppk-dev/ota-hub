@@ -60,5 +60,29 @@ export function attractionLd(p: ProductInput & { city?: string }) {
 }
 
 export function itemListLd(site: string, name: string, items: { name: string; path: string }[]) {
-  return { '@context': 'https://schema.org', '@type': 'ItemList', name, numberOfItems: items.length, itemListElement: items.slice(0, 50).map((it, i) => ({ '@type': 'ListItem', position: i + 1, name: it.name, url: `${site}${it.path}` })) }
+  const valid = (Array.isArray(items) ? items : []).filter((it) => it && it.name && it.path)
+  return { '@context': 'https://schema.org', '@type': 'ItemList', name, numberOfItems: valid.length, itemListElement: valid.slice(0, 50).map((it, i) => ({ '@type': 'ListItem', position: i + 1, name: it.name, url: `${site}${it.path}` })) }
+}
+
+/** S7: sellability → schema.org availability. Purchasable here or via partner link = InStock. */
+export function availabilityOf(bookable: boolean | null | undefined, outlink: string | null | undefined): 'InStock' | 'OutOfStock' {
+  return bookable === true || !!outlink ? 'InStock' : 'OutOfStock'
+}
+
+/** S7: complete Offer, or null when no valid price exists (never a priceless Offer). */
+export function offerLd(site: string, path: string, priceKrw: unknown, bookable?: boolean | null, outlink?: string | null) {
+  const price = Number(priceKrw)
+  if (!Number.isFinite(price) || price <= 0) return null
+  return { '@type': 'Offer', url: `${site}${path}`, priceCurrency: 'KRW', price, availability: `https://schema.org/${availabilityOf(bookable ?? null, outlink ?? null)}` }
+}
+
+/**
+ * S7: verified-review rating, or null unless ≥1 review exists (never a 0.0 rating).
+ * review_count only counts published reviews, which require a fulfilled booking.
+ */
+export function aggregateRatingOf(score: unknown, count: unknown): { '@type': 'AggregateRating'; ratingValue: number; reviewCount: number } | null {
+  if (score === null || score === undefined || score === '') return null
+  const s = Number(score), n = Number(count)
+  if (!Number.isFinite(s) || !Number.isFinite(n) || n < 1) return null
+  return { '@type': 'AggregateRating', ratingValue: Math.round(s * 10) / 10, reviewCount: Math.floor(n) }
 }
