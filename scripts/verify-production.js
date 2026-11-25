@@ -3,6 +3,8 @@
  * getfortrip Hardened Production Live E2E & Security Verification Suite
  * ==============================================================================
  * Tests live endpoints against https://ota-hub.dnjstjq0824.workers.dev
+ * The real domain https://getfortrip.com is likewise PRODUCTION (PROD_DOMAIN
+ * guard below): same hub behind the apex zone route, same acknowledgement.
  * Verifies P0~P3 Security Enforcements:
  *  - P0-01: Admin Backdoor Elimination (Default password rejected with 401)
  *  - P0-02: Cryptographic Secrets & Token Validation (Forged tokens rejected)
@@ -49,7 +51,7 @@ async function confirmProdTarget() {
     process.exit(2);
   }
   const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await new Promise((resolve) => rl.question(`Type PROCEED to run 50 live tests against PRODUCTION (${BASE_URL}): `, resolve));
+  const answer = await new Promise((resolve) => rl.question(`Type PROCEED to run 51 live tests against PRODUCTION (${BASE_URL}): `, resolve));
   rl.close();
   if (String(answer).trim() !== 'PROCEED') {
     console.error('Aborted: production run not confirmed.');
@@ -1522,6 +1524,32 @@ async function runVerificationSuite() {
       const r = await fetch(`${BASE_URL}/api/v1/admin/experiments/${ex}`, { headers: ah });
       if (!r.ok) throw new Error(`${ex} HTTP ${r.status}`);
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 51. REAL-DOMAIN TOPOLOGY (M3)
+  // ---------------------------------------------------------------------------
+  await test('M3: real-domain topology answers read-only probes', async () => {
+    // Unauthenticated GETs only — this test never writes, so it runs as-is
+    // against production. SITE_URL='' skips it for hermetic runs.
+    if (process.env.SITE_URL === '') {
+      console.log('(SITE_URL empty, topology probes skipped) ');
+      return;
+    }
+    const site = (process.env.SITE_URL || 'https://getfortrip.com').replace(/\/+$/, '');
+    const siteHost = site.replace(/^https?:\/\//, '');
+    const apex = await fetch(site, { redirect: 'manual' });
+    if (apex.status !== 200) throw new Error(`apex root HTTP ${apex.status}`);
+    if (!(apex.headers.get('content-type') || '').includes('text/html')) throw new Error('apex root is not HTML');
+    const www = await fetch(`https://www.${siteHost}/hotels?probe=1`, { redirect: 'manual' });
+    if (www.status !== 301) throw new Error(`www probe HTTP ${www.status}, want 301`);
+    if ((www.headers.get('location') || '') !== `${site}/hotels?probe=1`) throw new Error(`www Location is ${www.headers.get('location')}, want ${site}/hotels?probe=1`);
+    for (const [label, url] of [['admin', `https://admin.${siteHost}`], ['partner', `https://partner.${siteHost}`]]) {
+      const r = await fetch(url, { redirect: 'manual' });
+      if (r.status !== 200) throw new Error(`${label} domain root HTTP ${r.status}`);
+    }
+    const health = await fetch(`${site}/api/v1/health`, { redirect: 'manual' });
+    if (health.status !== 200) throw new Error(`apex /api/v1/health HTTP ${health.status}`);
   });
 
   // ---------------------------------------------------------------------------
