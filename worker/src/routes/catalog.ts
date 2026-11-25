@@ -11,6 +11,7 @@ import { hotelRatePlans, supplierBookabilityMap, type Bookability } from "../ser
 import { airportsForCityCode, airportsForPlaceName, likeEscape, parseDomain, suggest } from "../services/suggest-service.ts";
 import { catalogSnapshot } from "./seo.ts";
 import { indexnowKeyFile } from "../seo/indexnow.ts";
+import { productMd } from "../seo/product-md.ts";
 import { db } from "../db/database.ts";
 import { trackEvent } from "../lib/analytics.ts";
 import { SEARCH_DOMAINS, unifiedSearch } from "../services/search-service.ts";
@@ -96,6 +97,12 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
   {
     const km = path.match(/^\/api\/v1\/seo\/indexnow\/([^/]+)\.txt$/);
     if (km) return indexnowKeyFile(env, km[1]);
+  }
+
+  // S4: per-product markdown fact sheet for LLMs (apex /api/* route exposes it).
+  {
+    const md = path.match(/^\/api\/v1\/seo\/md\/([A-Za-z]+)\/([^/]+)$/);
+    if (md) return productMd(env, md[1], md[2]);
   }
 
   // Legal document version registry (bodies live in the versioned frontend pages).

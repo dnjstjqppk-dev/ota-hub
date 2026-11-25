@@ -1,7 +1,10 @@
 # getfortrip robots.txt — public catalog is crawlable; private/state-changing paths are not.
 # NOTE: a crawler matching a named group reads ONLY that group (RFC 9309, no
-# inheritance from `*`), so every group below repeats the same Disallow list.
+# inheritance from `*`), so every group below repeats the same rules.
 # Crawling/training stays allowed everywhere (Allow: / in each group).
+# Allow: /api/v1/seo/ sits ABOVE Disallow: /api/ on purpose: longest match wins
+# (RFC 9309), so the public SEO surface (fact sheets, IndexNow key file) stays
+# crawlable while the rest of /api/ is blocked.
 User-Agent: Googlebot
 Allow: /
 Disallow: /my/
@@ -14,6 +17,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -29,6 +33,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -44,6 +49,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -59,6 +65,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -74,6 +81,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -89,6 +97,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -104,6 +113,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -119,6 +129,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -134,6 +145,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -149,6 +161,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -164,6 +177,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -179,6 +193,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -194,6 +209,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -209,6 +225,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -224,6 +241,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -239,6 +257,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -254,6 +273,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -269,6 +289,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 
@@ -284,6 +305,7 @@ Disallow: /checkout
 Disallow: /booking/
 Disallow: /partner/
 Disallow: /admin/
+Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
 

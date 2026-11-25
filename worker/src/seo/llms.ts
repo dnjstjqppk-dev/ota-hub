@@ -41,6 +41,7 @@ ${llmsText(site)}
 
 ## Catalog detail routes
 ${direct}
+- Machine-readable fact sheet per product: ${site}/api/v1/seo/md/{HOTEL|FLIGHT|TRAIN|CAR|TRANSFER|ACTIVITY|PACKAGE}/{id} (text/markdown; linked from each detail page head as rel=alternate).
 
 ## Structured data
 - Detail pages carry JSON-LD (LodgingBusiness/Product/Offer/FAQPage/

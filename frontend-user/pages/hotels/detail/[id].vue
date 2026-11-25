@@ -131,6 +131,8 @@ watch(nights, (n) => { if (n) needDates.value = false })
 
 // ------------------------------------------------------------------ SEO (catalogue facts only; ratings must come from verified reviews)
 const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
+// S4: markdown fact sheet alternate for LLMs (hub serves it; same-origin on apex).
+useHead(() => ({ link: [{ rel: 'alternate', type: 'text/markdown', href: `/api/v1/seo/md/HOTEL/${String(route.params.id || '')}` }] }))
 useHead(() => {
   const h = hotel.value
   if (!h) return {}

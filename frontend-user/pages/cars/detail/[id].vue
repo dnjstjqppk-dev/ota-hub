@@ -26,6 +26,8 @@ const facts = computed(() => {
   ] as [string, string | null][]).filter((f): f is [string, string] => !!f[1])
 })
 
+// S4: markdown fact sheet alternate for LLMs (hub serves it; same-origin on apex).
+useHead(() => ({ link: [{ rel: 'alternate', type: 'text/markdown', href: `/api/v1/seo/md/CAR/${String(route.params.id || '')}` }] }))
 useHead(() => {
   const x = c.value
   if (!x) return { title: t('cars.list.title') }

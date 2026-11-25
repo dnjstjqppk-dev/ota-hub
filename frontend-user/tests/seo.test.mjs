@@ -91,6 +91,10 @@ test('robots allows crawlers, blocks private paths, names the index', () => {
   for (const g of groups) {
     for (const w of want) assert.ok(g.rules.includes(w), `${g.agent} misses ${w}`)
     assert.ok(g.rules.includes('Allow: /'), `${g.agent} misses Allow: /`)
+    // S4: the public SEO surface stays crawlable while /api/ is blocked.
+    const allowSeo = g.rules.indexOf('Allow: /api/v1/seo/')
+    const denyApi = g.rules.indexOf('Disallow: /api/')
+    assert.ok(allowSeo !== -1 && denyApi !== -1 && allowSeo < denyApi, `${g.agent} Allow /api/v1/seo/ above Disallow /api/`)
   }
   assert.match(robots, /Sitemap: https:\/\/getfortrip\.com\/sitemap-index\.xml/)
 })
@@ -309,5 +313,18 @@ test('s3 detail pages wire seoanswer with real fields', () => {
     for (const k of keys) assert.ok(typeof m[k] === 'string' && (k === 'join' || m[k].length > 0), `${l}.seoAnswer.${k}`)
     for (const k of keys.filter((k) => k.startsWith('s_'))) assert.match(m[k], /[.!?。！？]$/, `${l}.${k} ends complete`)
     for (const k of keys.filter((k) => k.startsWith('q_'))) assert.match(m[k], /[?？?]$/, `${l}.${k} ends asking`)
+  }
+})
+
+// (i) S4: every detail page head links its markdown fact sheet alternate.
+test('s4 detail pages link markdown fact sheet alternates', () => {
+  const pairs = [
+    ['hotels', 'HOTEL'], ['flights', 'FLIGHT'], ['trains', 'TRAIN'], ['cars', 'CAR'],
+    ['transfers', 'TRANSFER'], ['things-to-do', 'ACTIVITY'], ['packages', 'PACKAGE'],
+  ]
+  for (const [page, code] of pairs) {
+    const src = readFileSync(new URL(`../pages/${page}/detail/[id].vue`, import.meta.url), 'utf8')
+    assert.match(src, /rel: 'alternate', type: 'text\/markdown'/, `${page} alternate link`)
+    assert.ok(src.includes(`/api/v1/seo/md/${code}/`), `${page} fact sheet path`)
   }
 })

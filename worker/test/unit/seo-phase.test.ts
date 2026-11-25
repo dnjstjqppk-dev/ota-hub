@@ -38,6 +38,7 @@ test("llms briefs name the sitemap index, affiliate limits, and off-limits paths
   }
   assert.match(llmsFullText(SITE), /things-to-do\/detail\/\{id\}/);
   assert.match(llmsFullText(SITE), /Never invent phone numbers/);
+  assert.match(llmsFullText(SITE), /api\/v1\/seo\/md\/\{HOTEL\|/);
 });
 
 test("indexnow: payload shape, page urls, enqueue + pump lifecycle", async () => {

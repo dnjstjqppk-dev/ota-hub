@@ -18,6 +18,8 @@ const features = computed<string[]>(() => (Array.isArray(details.value.features)
 const price = computed(() => Number(p.value?.bundle_price_krw ?? p.value?.total_package_krw) || null)
 const original = computed(() => Number(p.value?.original_price_krw ?? p.value?.total_original_krw) || null)
 
+// S4: markdown fact sheet alternate for LLMs (hub serves it; same-origin on apex).
+useHead(() => ({ link: [{ rel: 'alternate', type: 'text/markdown', href: `/api/v1/seo/md/PACKAGE/${String(route.params.id || '')}` }] }))
 useHead(() => {
   const x = p.value
   if (!x) return { title: t('packages.list.title') }
