@@ -467,6 +467,23 @@
       { "q": "What coverage is included?", "a": "Medical, baggage, and cancellation coverage amounts differ by plan, so check the coverage amounts shown on the product screen.", "to": "/help" }
     ]
   },
+  "seoAnswer": {
+    "title": "At a glance",
+    "s1": "{name} is located in {location}.",
+    "s_checkin": "Check-in starts at {checkin}.",
+    "s_checkout": "Check-out is at {checkout}.",
+    "s_stay": "Check-in starts at {checkin}; check-out is at {checkout}.",
+    "s_free_until": "Free cancellation is available until {deadline}.",
+    "s_free": "This product offers free cancellation.",
+    "s_nonrefund": "This product is non-refundable.",
+    "s_incl": "Included: {list}.",
+    "s_price": "Bookable from {price}.",
+    "q_checkin": "What time is check-in?",
+    "q_cancel": "Can I cancel this booking?",
+    "q_incl": "What is included in the price?",
+    "listSep": ", ",
+    "join": " "
+  },
   "wishlist": {
     "save": "Save",
     "unsave": "Unsave",

@@ -253,6 +253,15 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
           </ul>
         </section>
 
+        <SeoAnswer
+          :name="hotel.name_ko || hotel.name"
+          :location="location.join(', ') || null"
+          :free-cancel="hotel.free_cancellation ? true : null"
+          :inclusions="[...(Array.isArray(hotel.amenities) ? hotel.amenities : []), ...(hotel.free_breakfast ? [$t('hotels.detail.hasBreakfast')] : [])]"
+          :price-label="minRoomPrice ? `${currency.formatKRW(minRoomPrice)} (${$t('hotels.detail.perNightTax')})` : null"
+          :path="route.path"
+        />
+
         <!-- Rooms -->
         <section aria-labelledby="h-rooms">
           <div class="mb-4 flex flex-wrap items-end justify-between gap-2">

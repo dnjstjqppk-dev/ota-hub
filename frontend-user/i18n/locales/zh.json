@@ -467,6 +467,23 @@
       { "q": "包含哪些保障？", "a": "不同计划的医疗费用、行李、取消保障额度不同，请查看产品页所示的保障金额。", "to": "/help" }
     ]
   },
+  "seoAnswer": {
+    "title": "一览",
+    "s1": "位于{location}的{name}。",
+    "s_checkin": "入住时间为{checkin}起。",
+    "s_checkout": "退房时间为{checkout}。",
+    "s_stay": "入住时间为{checkin}起，退房时间为{checkout}。",
+    "s_free_until": "在{deadline}之前可免费取消。",
+    "s_free": "该产品支持免费取消。",
+    "s_nonrefund": "该产品不可退款。",
+    "s_incl": "包含以下内容：{list}。",
+    "s_price": "最低{price}起可预订。",
+    "q_checkin": "入住时间是几点？",
+    "q_cancel": "可以取消预订吗？",
+    "q_incl": "价格包含哪些内容？",
+    "listSep": "，",
+    "join": ""
+  },
   "wishlist": {
     "save": "收藏",
     "unsave": "取消收藏",

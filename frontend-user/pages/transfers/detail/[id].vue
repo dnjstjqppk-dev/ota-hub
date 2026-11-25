@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
@@ -46,6 +47,12 @@ useHead(() => {
         <DetailHero :crumbs="[{ label: $t('common.home'), to: '/' }, { label: $t('nav.transfers'), to: '/transfers' }, { label: t.service_title }]" :eyebrow="t.vehicle_class" :title="t.service_title" :image="t.image_url || null" image-icon="transfer" :facts="facts" testid="transfer-detail" :wishlist="{ domain: 'TRANSFER', itemId: t.id, title: t.service_title, priceKrw: t.price_krw, thumbnailUrl: t.image_url || null, targetUrl: $route.fullPath }">
           <p class="mt-5 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">{{ $t('transfers.detail.note') }}</p>
         </DetailHero>
+        <SeoAnswer
+          :name="t.service_title"
+          :location="[t.airport_code, t.destination_area].filter(Boolean).join(' → ') || null"
+          :price-label="Number(t.price_krw) > 0 ? `${formatKrw(Number(t.price_krw))} (${$t('transfers.list.perVehicle')})` : null"
+          :path="route.path"
+        />
         <ReviewsSection domain="TRANSFER" :target-id="t.id" />
         <RecoRail domain="TRANSFER" :item-id="t.id" />
       </div>

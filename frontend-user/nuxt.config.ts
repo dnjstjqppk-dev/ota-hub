@@ -85,6 +85,10 @@ export default defineNuxtConfig({
             if (String(outputOptions?.dir || '').includes('prerender')) return
             const entry = bundle['index.mjs']
             if (!entry || entry.type !== 'chunk') return
+            // The nuxt dev server bundle has no default entry export — wrapping
+            // it breaks dev with a 500 (observed S3), so only wrap real worker
+            // entries (production cloudflare-module output).
+            if (!Array.isArray(entry.exports) || !entry.exports.includes('default')) return
             delete bundle['index.mjs']
             entry.fileName = 'entry.orig.mjs'
             bundle['entry.orig.mjs'] = entry

@@ -467,6 +467,23 @@
       { "q": "어떤 보장이 포함되나요?", "a": "플랜별로 의료비·휴대품·취소 보장 금액이 다르며, 상품 화면에 표시된 보장 금액을 확인하세요.", "to": "/help" }
     ]
   },
+  "seoAnswer": {
+    "title": "한눈에 보기",
+    "s1": "{location}에 있는 {name}입니다.",
+    "s_checkin": "체크인은 {checkin}부터 가능합니다.",
+    "s_checkout": "체크아웃은 {checkout}입니다.",
+    "s_stay": "체크인은 {checkin}부터, 체크아웃은 {checkout}입니다.",
+    "s_free_until": "무료 취소는 {deadline}까지 가능합니다.",
+    "s_free": "이 상품은 무료 취소가 가능합니다.",
+    "s_nonrefund": "이 상품은 환불 불가 상품입니다.",
+    "s_incl": "포함 사항은 다음과 같습니다: {list}.",
+    "s_price": "최저 {price}부터 예약할 수 있습니다.",
+    "q_checkin": "체크인 시간은 언제인가요?",
+    "q_cancel": "취소가 가능한가요?",
+    "q_incl": "가격에 무엇이 포함되나요?",
+    "listSep": ", ",
+    "join": " "
+  },
   "wishlist": {
     "save": "찜하기",
     "unsave": "찜 해제",

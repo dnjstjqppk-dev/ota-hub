@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import { createSSRApp, h } from 'vue'
 import { renderToString } from '@vue/server-renderer'
-import { attractionLd, breadcrumbLd, faqLd, itemListLd, jsonLdScript, lodgingLd, orgWebsiteLd, productLd } from '../composables/useJsonLd.ts'
+import { attractionLd, breadcrumbLd, faqLd, itemListLd, jsonLdScript, lodgingLd, orgWebsiteLd, productLd, speakableLd } from '../composables/useJsonLd.ts'
 import { seoHead, seoH1, seoTitle } from '../composables/useSeoPage.ts'
 
 const SITE = 'https://getfortrip.com'
@@ -46,6 +46,10 @@ test('json-ld builders emit valid typed graphs', () => {
   assert.equal(attractionLd({ site: SITE, path: '/t', name: 'T', city: '도쿄' })['@type'], 'TouristAttraction')
   assert.equal(itemListLd(SITE, 'Best', [{ name: 'A', path: '/a' }]).numberOfItems, 1)
   assert.ok(!jsonLdScript({ x: '<script>' }).innerHTML.includes('<'))
+  const speak = speakableLd(SITE, '/hotels/detail/H1')
+  assert.equal(speak['@type'], 'WebPage')
+  assert.equal(speak.url, `${SITE}/hotels/detail/H1`)
+  assert.deepEqual(speak.speakable.cssSelector, ['#answer-summary'])
 })
 
 // (c) semantic components compile (SFC) and carry their landmarks.
@@ -184,5 +188,126 @@ test('s2 every listed page wires seofaq with localized items', () => {
   }
   for (const f of ['faq', 'help']) {
     for (const m of page(f).matchAll(/to: '([^']+)'/g)) assert.ok(routeFile(m[1]), `${f} link target ${m[1]}`)
+  }
+})
+
+// (g) S3: answer summary keeps 2-3 sentences from real fields; speakable LD matches.
+async function compileSeoAnswer() {
+  const source = readFileSync(new URL('../components/SeoAnswer.vue', import.meta.url), 'utf8')
+  const { descriptor } = parse(source, { filename: 'SeoAnswer.vue' })
+  const script = compileScript(descriptor, { id: 'seo-answer-ssr' })
+  const tpl = compileTemplate({
+    source: descriptor.template.content, filename: 'SeoAnswer.vue', id: 'seo-answer-ssr',
+    compilerOptions: { mode: 'module', bindingMetadata: script.bindings },
+  })
+  assert.deepEqual(tpl.errors, [])
+  const dir = new URL('./.tmp-ssr-answer/', import.meta.url)
+  mkdirSync(dir, { recursive: true })
+  const scriptUrl = new URL('./.tmp-ssr-answer/SeoAnswer.script.mts', import.meta.url)
+  const tplUrl = new URL('./.tmp-ssr-answer/SeoAnswer.tpl.mts', import.meta.url)
+  writeFileSync(scriptUrl, script.content.replace(/['"]~\/composables\/useJsonLd['"]/g, "'../../composables/useJsonLd.ts'"))
+  writeFileSync(tplUrl, tpl.code)
+  return { dir, scriptUrl, tplUrl }
+}
+
+const koMessages = JSON.parse(readFileSync(new URL('../i18n/locales/ko.json', import.meta.url), 'utf8'))
+function koT(key, params = {}) {
+  const v = String(key).split('.').reduce((o, k) => o?.[k], koMessages)
+  assert.equal(typeof v, 'string', `i18n resolves ${key}`)
+  return v.replace(/\{(\w+)\}/g, (_, k) => String(params[k] ?? ''))
+}
+
+async function renderSeoAnswer(urls, props) {
+  const heads = []
+  globalThis.useHead = (entry) => heads.push(entry)
+  globalThis.useI18n = () => ({ t: koT })
+  globalThis.useRuntimeConfig = () => ({ public: { brandDomain: 'getfortrip.com' } })
+  try {
+    const { default: setup } = await import(urls.scriptUrl.href)
+    const { render } = await import(urls.tplUrl.href)
+    const app = createSSRApp({ ...setup, render }, props)
+    app.config.globalProperties.$t = (k, p) => koT(k, p)
+    app.component('SeoFaq', {
+      props: ['items', 'id'],
+      render() { return h('div', { class: 'faq-stub' }, (this.items || []).map((f) => h('div', [h('h3', { class: 'faq-q' }, f.q), h('p', { class: 'faq-a' }, f.a)]))) },
+    })
+    return { html: await renderToString(app), heads }
+  } finally {
+    delete globalThis.useHead
+    delete globalThis.useI18n
+    delete globalThis.useRuntimeConfig
+  }
+}
+
+test('seo answer renders 2-3 sentences, per-field faqs, and speakable ld', async () => {
+  const urls = await compileSeoAnswer()
+  try {
+    const { html, heads } = await renderSeoAnswer(urls, {
+      name: '테스트 호텔', location: '서울 중구', checkin: '15:00', checkout: '11:00',
+      freeCancel: true, freeCancelUntil: '체크인 전날', inclusions: ['조식', '와이파이'],
+      priceLabel: '₩85,000 (1박)', path: '/hotels/detail/H1',
+    })
+    const sum = html.match(/<p[^>]*id="answer-summary"[^>]*>(.*?)<\/p>/s)[1]
+    assert.equal(sum, '서울 중구에 있는 테스트 호텔입니다. 최저 ₩85,000 (1박)부터 예약할 수 있습니다. 무료 취소는 체크인 전날까지 가능합니다.')
+    assert.doesNotMatch(sum, /체크인은 15:00부터/)
+    assert.doesNotMatch(sum, /포함 사항은 다음과 같습니다/)
+    const qs = [...html.matchAll(/<h3 class="faq-q">(.*?)<\/h3>/gs)].map((m) => m[1])
+    assert.deepEqual(qs, ['체크인 시간은 언제인가요?', '취소가 가능한가요?', '가격에 무엇이 포함되나요?'])
+    const as = [...html.matchAll(/<p class="faq-a">(.*?)<\/p>/gs)].map((m) => m[1])
+    assert.deepEqual(as, [
+      '체크인은 15:00부터 가능합니다. 체크아웃은 11:00입니다.',
+      '무료 취소는 체크인 전날까지 가능합니다.',
+      '포함 사항은 다음과 같습니다: 조식, 와이파이.',
+    ])
+    assert.equal(heads.length, 1)
+    const ld = JSON.parse(heads[0].script[0].innerHTML)
+    assert.equal(ld['@type'], 'WebPage')
+    assert.equal(ld.url, 'https://getfortrip.com/hotels/detail/H1')
+    assert.deepEqual(ld.speakable.cssSelector, ['#answer-summary'])
+  } finally {
+    rmSync(urls.dir, { recursive: true, force: true })
+  }
+})
+
+test('seo answer omits sentences, faqs, and ld for empty fields', async () => {
+  const urls = await compileSeoAnswer()
+  try {
+    const empty = await renderSeoAnswer(urls, { name: 'X', path: '/x' })
+    assert.doesNotMatch(empty.html, /answer-summary/)
+    assert.equal(empty.heads.length, 0)
+    const partial = await renderSeoAnswer(urls, { name: 'Y', location: '도쿄', priceLabel: '¥9,000', path: '/y' })
+    const sum = partial.html.match(/<p[^>]*id="answer-summary"[^>]*>(.*?)<\/p>/s)[1]
+    assert.equal(sum, '도쿄에 있는 Y입니다. 최저 ¥9,000부터 예약할 수 있습니다.')
+    assert.doesNotMatch(partial.html, /faq-stub/)
+    assert.equal(partial.heads.length, 1)
+    const weird = await renderSeoAnswer(urls, { name: 'Z', location: '서울', inclusions: 'oops', freeCancel: 'yes', path: '/z' })
+    const wsum = weird.html.match(/<p[^>]*id="answer-summary"[^>]*>(.*?)<\/p>/s)[1]
+    assert.equal(wsum, '서울에 있는 Z입니다.')
+    assert.doesNotMatch(weird.html, /faq-stub/)
+  } finally {
+    rmSync(urls.dir, { recursive: true, force: true })
+  }
+})
+
+// (h) S3: the five detail pages wire SeoAnswer with their own real fields.
+test('s3 detail pages wire seoanswer with real fields', () => {
+  const det = (d) => readFileSync(new URL(`../pages/${d}/detail/[id].vue`, import.meta.url), 'utf8')
+  const needs = {
+    hotels: ['<SeoAnswer', 'hotel.name_ko || hotel.name', "location.join(', ')", 'hotel.free_cancellation ? true : null', 'hotel.amenities', 'minRoomPrice', ':path="route.path"'],
+    'things-to-do': ['<SeoAnswer', 'a.title', 'a.city', 'a.free_cancellation', 'a.included', 'a.price_krw', ':path="route.path"'],
+    cars: ['<SeoAnswer', 'c.vehicle_model', 'c.pickup_location', 'c.insurance_included', 'c.daily_price_krw', ':path="route.path"'],
+    transfers: ['<SeoAnswer', 't.service_title', 't.destination_area', 't.price_krw', ':path="route.path"'],
+    packages: ['<SeoAnswer', 'p.title', 'p.destination_city', 'features', 'formatKrw(price)', ':path="route.path"'],
+  }
+  for (const [d, keys] of Object.entries(needs)) {
+    const src = det(d)
+    for (const k of keys) assert.ok(src.includes(k), `${d} wires ${k}`)
+  }
+  const keys = ['title', 's1', 's_checkin', 's_checkout', 's_stay', 's_free_until', 's_free', 's_nonrefund', 's_incl', 's_price', 'q_checkin', 'q_cancel', 'q_incl', 'listSep', 'join']
+  for (const l of ['ko', 'en', 'ja', 'zh']) {
+    const m = JSON.parse(readFileSync(new URL(`../i18n/locales/${l}.json`, import.meta.url), 'utf8')).seoAnswer
+    for (const k of keys) assert.ok(typeof m[k] === 'string' && (k === 'join' || m[k].length > 0), `${l}.seoAnswer.${k}`)
+    for (const k of keys.filter((k) => k.startsWith('s_'))) assert.match(m[k], /[.!?。！？]$/, `${l}.${k} ends complete`)
+    for (const k of keys.filter((k) => k.startsWith('q_'))) assert.match(m[k], /[?？?]$/, `${l}.${k} ends asking`)
   }
 })

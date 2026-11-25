@@ -54,6 +54,13 @@ useHead(() => {
           </div>
           <p class="mt-6 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">{{ $t('packages.detail.note') }}</p>
         </DetailHero>
+        <SeoAnswer
+          :name="p.title"
+          :location="p.destination_city || null"
+          :inclusions="features"
+          :price-label="price ? `${formatKrw(price)} (${$t('packages.detail.unit')})` : null"
+          :path="route.path"
+        />
         <ReviewsSection domain="PACKAGE" :target-id="p.id" />
         <RecoRail domain="PACKAGE" :item-id="p.id" />
       </div>

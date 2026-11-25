@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { jsonLdScript } from '~/composables/useJsonLd'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
@@ -69,6 +70,14 @@ useHead(() => {
           </div>
           <p class="mt-6 rounded-2xl bg-surface-sunken p-4 text-sm text-ink-muted">{{ $t('todo.detail_kidNote') }}</p>
         </DetailHero>
+        <SeoAnswer
+          :name="a.title"
+          :location="[a.city, a.country].filter(Boolean).join(', ') || null"
+          :free-cancel="!!a.free_cancellation"
+          :inclusions="a.included || []"
+          :price-label="Number(a.price_krw) > 0 ? `${formatKrw(Number(a.price_krw))} (${$t('packages.detail.unit')})` : null"
+          :path="route.path"
+        />
         <ReviewsSection domain="ACTIVITY" :target-id="a.id" />
         <RecoRail domain="ACTIVITY" :item-id="a.id" />
       </div>

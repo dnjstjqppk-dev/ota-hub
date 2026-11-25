@@ -26,6 +26,11 @@ export function faqLd(items: FaqItem[]) {
   return { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: items.slice(0, 20).map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) }
 }
 
+/** S3: WebPage with a speakable pointer at the on-screen answer summary. */
+export function speakableLd(site: string, path: string, selectors: string[] = ['#answer-summary']) {
+  return { '@context': 'https://schema.org', '@type': 'WebPage', url: `${site}${path}`, speakable: { '@type': 'SpeakableSpecification', cssSelector: selectors } }
+}
+
 function offerOf(p: ProductInput) {
   return { '@type': 'Offer', url: `${p.site}${p.path}`, priceCurrency: p.currency || 'KRW', ...(p.priceKrw ? { price: p.priceKrw } : {}), ...(p.availability ? { availability: `https://schema.org/${p.availability}` } : {}) }
 }
