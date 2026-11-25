@@ -2,6 +2,7 @@ import type { Env } from '../env.ts';
 import { HttpError } from '../lib/http.ts';
 import { audit } from '../lib/auth.ts';
 import { newId } from '../lib/crypto.ts';
+import { enqueueIndexNow, productPageUrl } from '../seo/indexnow.ts';
 
 export interface IngestedDraft {
   id: string;
@@ -465,22 +466,22 @@ export async function publishIngestedProduct(
       INSERT INTO hotels (
         id, partner_id, name_ko, name_en, city, country, address,
         latitude, longitude, star_rating, property_type, review_score, review_count,
-        free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'HOTEL', NULL, 0, 0, 0, ?, ?, ?, '[]', '[]', ?)
+        free_cancellation, free_breakfast, base_price_krw, thumbnail_url, images_json, amenities_json, rooms_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'HOTEL', NULL, 0, 0, 0, ?, ?, ?, '[]', '[]', ?, ?)
     `).bind(
       newItemId, 'ptn_htl_01', row.title, row.title, row.city, row.country, row.address,
-      row.latitude ?? null, row.longitude ?? null, Number(row.price_minor), thumbnail, row.image_urls || '[]', now
+      row.latitude ?? null, row.longitude ?? null, Number(row.price_minor), thumbnail, row.image_urls || '[]', now, now
     ).run();
   } else {
     newItemId = newId('act');
     await env.DB.prepare(`
       INSERT INTO activities (
         id, partner_id, title, category, city, country, price_krw, review_score, review_count,
-        instant_confirmation, free_cancellation, thumbnail_url, description, packages_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, 0, 0, ?, ?, '[]', ?)
+        instant_confirmation, free_cancellation, thumbnail_url, description, packages_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, 0, 0, ?, ?, '[]', ?, ?)
     `).bind(
       newItemId, 'ptn_tour_01', row.title, domainType === 'TICKET' ? 'TOUR_PASS' : 'EXPERIENCE',
-      row.city, row.country, Number(row.price_minor), thumbnail, description, now
+      row.city, row.country, Number(row.price_minor), thumbnail, description, now, now
     ).run();
   }
 
@@ -500,6 +501,9 @@ export async function publishIngestedProduct(
     domain_type: domainType,
     published_item_id: newItemId
   });
+
+  // S8: auto-registered products join the IndexNow queue like manual creates.
+  await enqueueIndexNow(env, [productPageUrl(env, domainType === 'HOTEL' ? 'HOTEL' : 'ACTIVITY', newItemId)]).catch(() => 0);
 
   return { success: true, published_item_id: newItemId, domain_type: domainType };
 }

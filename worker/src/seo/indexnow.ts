@@ -35,6 +35,8 @@ export function productPageUrl(env: Env, domain: string, itemId: string): string
 
 /** Queue changed URLs for IndexNow submission (Bing/Yandex/Seznam + Naver via Bing). */
 export async function enqueueIndexNow(env: Env, urls: string[]): Promise<number> {
+  // S8: no key = no queueing (the pump could never submit these rows).
+  if (!env.INDEXNOW_KEY) return 0;
   const list = cleanUrls(urls);
   if (!list.length) return 0;
   try {

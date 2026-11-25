@@ -644,6 +644,8 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       cols.push(f.col);
       vals.push(coerceCatalogField(f, b[f.col]));
     }
+    cols.push("updated_at");
+    vals.push(new Date().toISOString());
     await db.prepare(`INSERT INTO ${spec.table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`).bind(...vals).run();
     await audit(env, admin.id, "CREATE_PRODUCT", m[1], id, { table: spec.table });
     // TG-15: new products must be reachable without waiting out the edge TTL.
@@ -669,6 +671,8 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
       vals.push(coerceCatalogField(f, v));
     }
     if (!sets.length) throw new HttpError(400, "EMPTY_UPDATE", "변경할 필드가 없습니다.");
+    sets.push("updated_at = ?");
+    vals.push(new Date().toISOString());
     const r = await db.prepare(`UPDATE ${spec.table} SET ${sets.join(", ")} WHERE id = ?`).bind(...vals, m[2]).run();
     if (!r.meta.changes) throw new HttpError(404, "PRODUCT_NOT_FOUND", "상품을 찾을 수 없습니다.");
     await audit(env, admin.id, "UPDATE_PRODUCT", m[1], m[2], { fields: Object.keys(b) });
@@ -698,6 +702,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     await audit(env, admin.id, "DELETE_PRODUCT", m[1], m[2], { table: spec.table });
     invalidateSearchCache();
     const purgedDelete = await purgeForMutation(env, productPurgeUrls(request, m[1], m[2]));
+    await enqueueIndexNow(env, [productPageUrl(env, m[1], m[2])]).catch(() => 0);
     return json({ success: true }, 200, { "X-Cache-Purged": String(purgedDelete) });
   }
 
@@ -758,6 +763,10 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
             vals.push(null);
           }
         }
+        if (cols.length > 1) {
+          cols.push("updated_at");
+          vals.push(new Date().toISOString());
+        }
         valid.push({ id, cols, vals, isNew });
       } catch (e: any) {
         failed.push({ index, id, error: e instanceof HttpError ? e.message : "행 처리 실패" });
@@ -785,6 +794,8 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     await audit(env, admin.id, "BULK_UPSERT_PRODUCT", spec.table, `${created + updated}/${rows.length}`, { domain: str(b.domain, 20).toUpperCase(), created, updated, failed: failed.length });
     invalidateSearchCache();
     const purgedBulk = await purgeForMutation(env, bareListUrls(request, str(b.domain, 20).toUpperCase()));
+    const bulkDomain = str(b.domain, 20).toUpperCase();
+    await enqueueIndexNow(env, valid.filter((r) => r.cols.length > 1).map((r) => productPageUrl(env, bulkDomain, r.id))).catch(() => 0);
     return json({ success: true, created, updated, failed }, 200, { "X-Cache-Purged": String(purgedBulk) });
   }
 

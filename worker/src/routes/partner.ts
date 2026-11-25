@@ -9,6 +9,7 @@ import * as S from "../services/booking-service.ts";
 import { BOOKING_STATUSES } from "../domain/state-machine.ts";
 import { pageMeta, pageParams } from "../lib/pagination.ts";
 import { likeEscape } from "../services/suggest-service.ts";
+import { enqueueIndexNow, productPageUrl } from "../seo/indexnow.ts";
 
 /** Validate partner-supplied hotel rooms. Absent input means "no rooms yet" ([]). */
 export function parseRooms(input: unknown): Array<{ id: string; name_ko: string; base_price_krw: number; available_inventory: number; max_occupancy: number }> {
@@ -468,24 +469,26 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     // fall through into activities. The extranet offers the same three.
     if (!["HOTEL", "CAR", "ACTIVITY"].includes(domain)) throw new HttpError(400, "INVALID_DOMAIN", "상품 유형은 HOTEL·CAR·ACTIVITY 중 하나여야 합니다.");
 
+    const createdAt = new Date().toISOString();
     if (domain === "HOTEL") {
       // Rooms are required for bookability (loadProduct throws ROOM_REQUIRED
       // without them), so creation accepts them and PATCH can add them later.
       const rooms = parseRooms(b.rooms);
       await db.prepare(
-        "INSERT INTO hotels (id, partner_id, name_ko, name_en, city, country, address, base_price_krw, rooms_json) VALUES (?, ?, ?, ?, ?, '대한민국', '상세 주소', ?, ?)"
-      ).bind(id, pId, title, title, city, price, JSON.stringify(rooms)).run();
+        "INSERT INTO hotels (id, partner_id, name_ko, name_en, city, country, address, base_price_krw, rooms_json, updated_at) VALUES (?, ?, ?, ?, ?, '대한민국', '상세 주소', ?, ?, ?)"
+      ).bind(id, pId, title, title, city, price, JSON.stringify(rooms), createdAt).run();
     } else if (domain === "CAR") {
       await db.prepare(
-        "INSERT INTO cars (id, partner_id, company_name, vehicle_model, pickup_location, daily_price_krw) VALUES (?, ?, ?, ?, '공항 지점', ?)"
-      ).bind(id, pId, partner.companyName || "파트너 렌터카", title, price).run();
+        "INSERT INTO cars (id, partner_id, company_name, vehicle_model, pickup_location, daily_price_krw, updated_at) VALUES (?, ?, ?, ?, '공항 지점', ?, ?)"
+      ).bind(id, pId, partner.companyName || "파트너 렌터카", title, price, createdAt).run();
     } else {
       // #69: category is NOT NULL — the old INSERT 500'd every ACTIVITY
       // create (same default the marketplace route uses).
       await db.prepare(
-        "INSERT INTO activities (id, partner_id, title, category, city, country, price_krw) VALUES (?, ?, ?, 'EXPERIENCE', ?, '대한민국', ?)"
-      ).bind(id, pId, title, city, price).run();
+        "INSERT INTO activities (id, partner_id, title, category, city, country, price_krw, updated_at) VALUES (?, ?, ?, 'EXPERIENCE', ?, '대한민국', ?, ?)"
+      ).bind(id, pId, title, city, price, createdAt).run();
     }
+    await enqueueIndexNow(env, [productPageUrl(env, domain, id)]).catch(() => 0);
     return json({ success: true, id }, 201);
   }
 
@@ -536,8 +539,8 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       if (!own) continue;
       if (rooms !== null && cfg.t !== "hotels") throw new HttpError(400, "ROOMS_HOTEL_ONLY", "객실 정보는 호텔 상품에만 설정할 수 있습니다.");
       await db.prepare(
-        `UPDATE ${cfg.t} SET ${cfg.titleCol} = COALESCE(?, ${cfg.titleCol}), ${cfg.cityCol} = COALESCE(?, ${cfg.cityCol}), ${cfg.priceCol} = COALESCE(?, ${cfg.priceCol}), is_active = COALESCE(?, is_active) WHERE id = ?`
-      ).bind(title, city, price, isActive, pid).run();
+        `UPDATE ${cfg.t} SET ${cfg.titleCol} = COALESCE(?, ${cfg.titleCol}), ${cfg.cityCol} = COALESCE(?, ${cfg.cityCol}), ${cfg.priceCol} = COALESCE(?, ${cfg.priceCol}), is_active = COALESCE(?, is_active), updated_at = ? WHERE id = ?`
+      ).bind(title, city, price, isActive, new Date().toISOString(), pid).run();
       if (rooms !== null && cfg.t === "hotels") {
         await db.prepare("UPDATE hotels SET rooms_json = ? WHERE id = ?").bind(JSON.stringify(rooms), pid).run();
       }
@@ -561,6 +564,8 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
           await db.prepare("UPDATE activities SET thumbnail_url = ? WHERE id = ?").bind(urls[0] || null, pid).run();
         }
       }
+      const patchDomain = cfg.t === "hotels" ? "HOTEL" : cfg.t === "cars" ? "CAR" : "ACTIVITY";
+      await enqueueIndexNow(env, [productPageUrl(env, patchDomain, pid)]).catch(() => 0);
       return json({ success: true, id: pid });
     }
     throw new HttpError(404, "PRODUCT_NOT_FOUND", "본인의 상품에 대해서만 수정할 수 있습니다.");
