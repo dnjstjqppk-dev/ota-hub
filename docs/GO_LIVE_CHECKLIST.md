@@ -1,7 +1,7 @@
 # Go-Live Checklist — PG 계약 후 바로 장사하기
 
-> 전제: `main` 최신이 CI로 배포되어 있고, 운영 verify 50/50이다:
-> `BASE_URL=https://ota-hub.dnjstjq0824.workers.dev VERIFY_ACK_PROD=1 TEST_ADMIN_PASSWORD='...' node scripts/verify-production.js`.
+> 전제: `main` 최신이 CI로 배포되어 있고, 운영 verify 51/51이다:
+> `BASE_URL=https://getfortrip.com VERIFY_ACK_PROD=1 TEST_ADMIN_PASSWORD='...' node scripts/verify-production.js`.
 > (기본 엄격 모드: 스킵이 있으면 실패. T41 실정산 없이 통과하려면 `VERIFY_ALLOW_SKIP=1`,
 > 실정산까지 수행하려면 `VERIFY_LIVE_SETTLE=1`을 붙인다. 운영 기본값은 읽기전용 변형
 > (T34/T36/T40은 스테이징 또는 `VERIFY_ALLOW_MUTATION=1`에서만 실제 변경). 스크립트 기본
@@ -190,14 +190,14 @@ ACTIVE에 필수인 5종: 사업자등록번호, 관광사업(여행업) 등록�
 $body = @{ legal_name = "..."; business_registration_no = "..."; travel_agency_license_no = "..."
   ecommerce_registration_no = "..."; representative_name = "..."; cs_phone = "..."
   cs_email = "..."; status = "ACTIVE" } | ConvertTo-Json
-Invoke-RestMethod -Method Patch -Uri https://ota-hub.dnjstjq0824.workers.dev/api/v1/admin/entities/ent_primary `
+Invoke-RestMethod -Method Patch -Uri https://getfortrip.com/api/v1/admin/entities/ent_primary `
   -Headers @{ Authorization = "Bearer $ADMIN_TOKEN" } -ContentType "application/json" -Body $body
 ```
 
 확인:
 
 ```powershell
-(Invoke-RestMethod 'https://ota-hub.dnjstjq0824.workers.dev/api/v1/health?verbose=1' -Headers @{ Authorization = "Bearer $ADMIN_TOKEN" }).checks.sellerEntityActive
+(Invoke-RestMethod 'https://getfortrip.com/api/v1/health?verbose=1' -Headers @{ Authorization = "Bearer $ADMIN_TOKEN" }).checks.sellerEntityActive
 # 기대: True
 ```
 
@@ -206,7 +206,7 @@ Invoke-RestMethod -Method Patch -Uri https://ota-hub.dnjstjq0824.workers.dev/api
 1. 자사 직영 계약 활성화 (시드 `ect_direct_01`, PENDING으로 심어져 있음):
 
 ```powershell
-Invoke-RestMethod -Method Patch -Uri https://ota-hub.dnjstjq0824.workers.dev/api/v1/admin/contracts/ect_direct_01 `
+Invoke-RestMethod -Method Patch -Uri https://getfortrip.com/api/v1/admin/contracts/ect_direct_01 `
   -Headers @{ Authorization = "Bearer $ADMIN_TOKEN" } -ContentType "application/json" `
   -Body '{"status":"ACTIVE"}'
 ```
@@ -421,8 +421,9 @@ https://getfortrip.com/api/v1/webhooks/toss?key=$secret
 | 1 | 사업자 ACTIVE | `sellerEntityActive: True` |
 | 2 | 직영상품 LIVE | `bookable: true` + `fulfilment_mode: LIVE` |
 | 3 | PII 키 | `piiEncryptionKey: True` (항공 판매 시) |
-| 4 | Resend | `emailProvider: RESEND` |
-| 5 | Sentry DSN | `errorReporting: SENTRY` |
-| 6 | 토스 테스트키 | `toss:SANDBOX` + 테스트 풀루프 |
-| 7 | 토스 라이브키 | `toss:LIVE` + 소액 실거래 풀루프 |
-| 8 | 웹훅 등록 | 유실 건 자동 화해 |
+| 4 | 실도메인 연결 | apex·admin·partner 200, www→apex 301, apex `/api/v1/health`·`/sitemap.xml` 200 |
+| 5 | Resend | `emailProvider: RESEND` |
+| 6 | Sentry DSN | `errorReporting: SENTRY` |
+| 7 | 토스 테스트키 | `toss:SANDBOX` + 테스트 풀루프 |
+| 8 | 토스 라이브키 | `toss:LIVE` + 소액 실거래 풀루프 |
+| 9 | 웹훅 등록 | 유실 건 자동 화해 |

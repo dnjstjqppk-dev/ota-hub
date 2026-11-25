@@ -5,8 +5,13 @@
 
 - **공식 플랫폼명**: `getfortrip`
 - **예정 도메인**: `getfortrip.com`
-- **실서버 배포**: `https://ota-hub.dnjstjq0824.workers.dev` (API + 유저 포털),
-  `https://ota-admin.dnjstjq0824.workers.dev` (어드민), `https://ota-partner.dnjstjq0824.workers.dev` (파트너)
+- **호스팅 토폴로지 (2026-11-25)**: Cloudflare 계정 1개(`f5c363135efe9b22ca66eb39f2f8e1da`)에 워커 5개.
+  - `https://getfortrip.com` → `ota-user` (apex·사용자 포털), `www` → apex 301
+  - `https://admin.getfortrip.com` → `ota-admin`, `https://partner.getfortrip.com` → `ota-partner`
+  - apex의 `/api/*`·`/out/*`·`/sitemap*`·`/llms*` → `ota-hub` (zone route, custom domain보다 먼저 실행)
+  - 연결은 각 wrangler 설정의 `routes`로 배포 시 자동 적용 (대시보드 수작업 아님)
+  - `*.dnjstjq0824.workers.dev` 유지: 스크립트·스모크·폴백 콘솔이 사용 (`workers_dev: true`)
+  - 스테이징: `https://ota-hub-staging.dnjstjq0824.workers.dev` (`ota-hub-staging` 워커 + 격리 DB, `docs/STAGING.md`)
 
 ---
 

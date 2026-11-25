@@ -185,4 +185,23 @@ stateDiagram-v2
    - KRW / JPY: 소수점 이하 반올림 (정수형)
    - USD / EUR / GBP / CNY: 소수점 둘째 자리 반올림 (`0.01` 단위)
 
+---
+
+## 🌐 5. 호스팅 토폴로지 (2026-11-25)
+
+|> Cloudflare 계정 1개(`f5c363135efe9b22ca66eb39f2f8e1da`)에 워커 5개·D1 2개·R2 2개.
+|> 도메인 zone과 같은 계정이다. 연결은 각 wrangler 설정의 `routes`로 배포 시
+|> 자동 적용된다 (대시보드 수작업 아님). 상세: `docs/GO_LIVE_CHECKLIST.md` 4단계.
+
+| 주소 | 붙은 워커 | 방식 |
+| :--- | :--- | :--- |
+| `https://getfortrip.com` | `ota-user` (사용자 포털) | custom domain |
+| `https://www.getfortrip.com` | apex로 301 | `frontend-user/server/middleware/canonical-host.ts` |
+| `https://admin.getfortrip.com` | `ota-admin` | custom domain |
+| `https://partner.getfortrip.com` | `ota-partner` | custom domain |
+| apex의 `/api/*`·`/out/*`·`/sitemap*`·`/llms*` | `ota-hub` | zone route (custom domain보다 먼저 실행) |
+
+- `*.dnjstjq0824.workers.dev` 유지: 스크립트·스모크·폴백 콘솔이 사용 (`workers_dev: true`).
+- 스테이징: `https://ota-hub-staging.dnjstjq0824.workers.dev` (`ota-hub-staging` 워커 + 격리 DB `ota_staging`).
+
 <!-- getfortrip Synchronized: 2026-10-19T00:15:00Z -->

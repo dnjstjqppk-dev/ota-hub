@@ -7,6 +7,7 @@
 - 워커: `ota-hub-staging` (wrangler.jsonc `env.staging`), 코드=main.
 - DB: `ota_staging` (격리 D1, 운영과 별개).
 - URL: `https://ota-hub-staging.dnjstjq0824.workers.dev` (2026-11-14 개통, 스모크 11/11 PASS).
+- 2026-11-25 새 계정에서 재개통, 빈 DB에 마이그레이션 58개+시드로 새로 시작(이전 스테이징 데이터 없음).
 - DB id: `73bc257d-2fe6-4fb8-89f9-6e3eb4f18545`, R2: `getfortrip-uploads-staging`.
 
 ## 1회성 준비 (사용자 1회 실행)
