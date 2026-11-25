@@ -25,6 +25,7 @@ interface Plan {
 const currency = useCurrencyStore()
 const { route, patch } = useUrlQuery()
 const { t, locale } = useI18n()
+const FAQ = useSeoFaq('insurance')
 const MIN_DAYS = 1
 const MAX_DAYS = 90
 const days = ref(qInt(route.query.days, 5, MIN_DAYS, MAX_DAYS))
@@ -131,6 +132,7 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/i
           <button type="button" class="btn-secondary mt-auto w-full cursor-not-allowed opacity-60" disabled>{{ $t('insurance.comingBtn') }}</button>
         </li>
       </ul>
+      <SeoFaq :items="FAQ" class="mt-12" />
     </div>
   </div>
 </template>

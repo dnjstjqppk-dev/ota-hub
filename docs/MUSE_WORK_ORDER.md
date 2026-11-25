@@ -83,12 +83,12 @@
 - 사용자 포털을 바꿨으면 `npm --prefix frontend-user test`와 `npm --prefix frontend-user run typecheck`를 통과시킨다.
 
 - [x] **S1 robots.txt 그룹 버그 수정 + AI 봇 정비** — 지금 이름이 있는 봇 그룹(GPTBot 등)에는 `Allow: /`만 있다. robots 규칙상 이름이 있는 그룹은 `*` 그룹을 상속하지 않으므로, 이 봇들에게는 `/my`·`/api`·`/checkout` 등도 허용된 상태다. 모든 이름 그룹에 `*` 그룹과 같은 Disallow 목록을 넣는다. 답변·검색용 봇도 같은 규칙으로 추가한다: `ChatGPT-User`, `Claude-User`, `Claude-SearchBot`, `Perplexity-User`, `Applebot`, `Applebot-Extended`, `Amazonbot`, `DuckAssistBot`, `meta-externalagent`, `Daumoa`. 학습·검색 허용 정책 자체는 지금처럼 허용으로 유지한다. 완료 조건: `frontend-user/tests`의 robots 테스트를 확장해 "모든 User-Agent 그룹이 비공개 경로를 Disallow"를 검증, 테스트 통과. → 완료: 18개 이름 그룹+`*` 전부 동일 Disallow 12종·Allow 유지, 신규 봇 10종 추가, 그룹 패리티 테스트 확장. portal test 43/43·typecheck 통과, 구버전 역검증 96건 위반 확인.
-- [ ] **S2 AEO — FAQ 실제 배선** — `SeoFaq.vue`는 어디에도 쓰이지 않아서 FAQPage 스키마가 한 번도 나가지 않는다. 다음 페이지에 연결한다.
+- [x] **S2 AEO — FAQ 실제 배선** — `SeoFaq.vue`는 어디에도 쓰이지 않아서 FAQPage 스키마가 한 번도 나가지 않는다. 다음 페이지에 연결한다.
   - 7개 도메인 랜딩(`/hotels`·`/flights`·`/trains`·`/cars`·`/transfers`·`/things-to-do`·`/packages`), `/faq`, `/help`, `/esim`, `/insurance`
   - Q&A는 이미 사이트에 있는 정책·도움말 문구(약관·환불 규정·FAQ 페이지 i18n 키)에서 페이지 주제에 맞는 것만 가져온다. 예: 취소·환불, 결제 수단, 바우처 수령, 가격에 포함된 세금.
   - 답변 첫 문장은 질문에 바로 답하는 한 문장(answer-first)으로 쓰고, 뒤에 근거 정책 페이지 링크를 붙인다.
 
-  완료 조건: 각 페이지 SSR HTML에 화면 Q&A와 1:1로 같은 FAQPage JSON-LD가 있음을 검사하는 테스트, 테스트 통과.
+  완료 조건: 각 페이지 SSR HTML에 화면 Q&A와 1:1로 같은 FAQPage JSON-LD가 있음을 검사하는 테스트, 테스트 통과. → 완료: 11페이지 배선(랜딩 6 ProductLanding 경유+todos·esim·insurance 직접+faq·help 기존문구 전환), 주제별 Q&A 3종×4로케일(정책·사이트 문구 근거)+근거 링크, SeoFaq SSR 1:1·11페이지 배선 테스트. portal test 45/45·typecheck 통과, 실빌드 SSR(/hotels 3·/faq 7) HTML≡LD 확인.
 - [ ] **S3 AEO — 상세 페이지 답변 블록 + speakable** — 호텔·투어·렌터카·픽업·패키지 상세에 "한눈에 보기" 요약을 넣는다. 2~3문장, 실데이터 필드로만 만든다: 위치·체크인/아웃·취소 규정·포함 사항·최저가 KRW. 상품 필드에 값이 있을 때만 그 상품 전용 FAQ(체크인 시간, 취소 가능 여부, 포함 사항 등)를 만든다. 요약 블록에는 `speakable`(cssSelector) WebPage 스키마를 단다. 완료 조건: 필드가 비어 있으면 해당 문장·FAQ가 출력되지 않는 테스트, 테스트 통과.
 - [ ] **S4 LLMO — 페이지별 마크다운 사실 시트** — hub에 `GET /api/v1/seo/md/{domain}/{id}`를 추가한다(apex `/api/*` route로 이미 노출됨). 응답은 `text/markdown`이고, 상품명·도시·가격(KRW, 세금 기준 명시)·판매 방식(직판/제휴)·취소 규정·평점(검증 리뷰 수와 함께, 0건이면 생략)·정규 URL·최종 갱신 시각을 담는다. 비활성·비공개 상품은 404다. 상세 페이지 `<head>`에 `<link rel="alternate" type="text/markdown" href="...">`를 넣고, `llms-full.txt`의 "Catalog detail routes"에 이 경로 패턴을 추가한다. robots.txt는 `/api/`를 막고 있으므로 모든 그룹에 `Allow: /api/v1/seo/`를 `Disallow: /api/`보다 위에 넣는다(RFC 9309 최장 일치 규칙). M1의 IndexNow 키 파일도 이 경로로 열린다. 완료 조건: 워커 유닛 테스트(형식·404·평점 0건 생략), `npm run typecheck`·`npm test` 통과.
 - [ ] **S5 GEO — llms.txt 실데이터화 + 다국어** — `llms-full.txt`에 D1에서 집계한 사실을 넣는다: 도메인별 공개 상품 수, 주요 도시 목록, 가격 범위(KRW), 지원 결제 통화, 지원 로캘, 마지막 집계 시각. 1시간 캐시이고 테이블이 없으면 그 줄만 생략한다. `/llms.txt`에 로캘 경로(`/en`·`/ja`·`/zh`) 안내를 추가한다. 회사 사실(상호·대표·주소·사업자번호)은 `runtimeConfig`나 env에 값이 있을 때만 넣는다. 지금은 비어 있으니 출력하지 않는다. 완료 조건: 빈 DB에서도 200, 숫자는 쿼리 결과와 같음을 확인하는 유닛 테스트, 테스트 통과.

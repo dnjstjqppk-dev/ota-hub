@@ -9,11 +9,12 @@ const FACTS = computed(() => [
   { icon: 'flight', title: t('flights.home.f2t'), body: t('flights.home.f2b') },
   { icon: 'lock', title: t('flights.home.f3t'), body: t('flights.home.f3b') }
 ])
+const FAQ = useSeoFaq('flights')
 useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/flights', title: t('flights.home.seoTitle'), description: t('flights.home.seoDesc') })
 </script>
 
 <template>
-  <ProductLanding tab="flights" :crumb="$t('nav.flights')" :title="$t('flights.home.heroTitle')" :subtitle="$t('flights.home.heroSub')" :facts="FACTS">
+  <ProductLanding tab="flights" :crumb="$t('nav.flights')" :title="$t('flights.home.heroTitle')" :subtitle="$t('flights.home.heroSub')" :facts="FACTS" :faq="FAQ">
     <ProductRail kind="flights" :title="$t('flights.home.railTitle')" :hint="$t('flights.home.railHint')" />
   </ProductLanding>
 </template>

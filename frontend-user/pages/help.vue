@@ -10,13 +10,15 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/h
 const auth = useAuthStore()
 
 const faqs = [
-  { q: '호텔 예약 취소 시 환불은 언제 입금되나요?', a: '무료 취소 기한 내 취소하면 환불이 승인되며, 카드사 전산에 따라 영업일 기준 3~5일 정도 걸릴 수 있습니다. 환불 상태는 내 예약 상세에서 확인할 수 있습니다.' },
+  { q: '호텔 예약 취소 시 환불은 언제 입금되나요?', a: '무료 취소 기한 내 취소하면 환불이 승인되며, 카드사 전산에 따라 영업일 기준 3~5일 정도 걸릴 수 있습니다. 환불 상태는 내 예약 상세에서 확인할 수 있습니다.', to: '/refund-policy' },
   { q: '항공권 여권 정보(이름, 번호) 변경이 가능한가요?', a: '영문 철자 오탈자는 항공사 규정에 따라 수정 가능 여부가 다릅니다. 아래 1:1 문의로 예약 번호와 함께 남겨주시면 확인해 드립니다.' },
-  { q: 'getfortrip 코인은 어떻게 적립되나요?', a: '코인은 이벤트와 고객지원을 통해 적립됩니다. 보유 코인은 멤버십 페이지에서 확인할 수 있습니다.' },
-  { q: 'eSIM은 언제 구매할 수 있나요?', a: 'eSIM 판매를 준비하고 있어요. 지금은 요금제 조회만 가능하고, 판매가 시작되면 예약 확인 이메일로 QR 코드를 보내드립니다.' }
+  { q: 'getfortrip 코인은 어떻게 적립되나요?', a: '코인은 이벤트와 고객지원을 통해 적립됩니다. 보유 코인은 멤버십 페이지에서 확인할 수 있습니다.', to: '/rewards' },
+  { q: 'eSIM은 언제 구매할 수 있나요?', a: 'eSIM 판매를 준비하고 있어요. 지금은 요금제 조회만 가능하고, 판매가 시작되면 예약 확인 이메일로 QR 코드를 보내드립니다.', to: '/esim' }
 ]
 
-const activeFaq = ref<number | null>(0)
+// S2: the same list drives the shared SeoFaq accordion, so the visible Q&A and
+// the FAQPage JSON-LD can never drift apart (all answers stay in the SSR DOM).
+const seoFaqItems = computed(() => faqs.map((f) => ({ q: f.q, a: f.a, to: (f as { to?: string }).to })))
 
 const CAT_VALUES = ['BOOKING', 'PAYMENT', 'REFUND', 'ACCOUNT', 'TECHNICAL', 'GENERAL'] as const
 const CATEGORIES = computed(() => CAT_VALUES.map((value) => ({ value, label: t(`help.cat.${value}`) })))
@@ -113,18 +115,8 @@ onMounted(() => {
       <p class="text-sm text-slate-500">{{ $t('help.sub') }}</p>
     </div>
 
-    <!-- 자주 묻는 질문 아코디언 -->
-    <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm divide-y divide-slate-100">
-      <div v-for="(f, i) in faqs" :key="f.q" class="py-4 cursor-pointer" @click="activeFaq = activeFaq === i ? null : i">
-        <div class="flex items-center justify-between font-bold text-slate-900 text-sm">
-          <span>Q. {{ f.q }}</span>
-          <span class="text-slate-400 text-lg">{{ activeFaq === i ? '−' : '+' }}</span>
-        </div>
-        <p v-if="activeFaq === i" class="text-xs text-slate-600 mt-2 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
-          {{ f.a }}
-        </p>
-      </div>
-    </div>
+    <!-- 자주 묻는 질문 아코디언 (S2: SeoFaq emits the matching FAQPage JSON-LD) -->
+    <SeoFaq :items="seoFaqItems" />
 
     <!-- 1:1 문의 작성 -->
     <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">

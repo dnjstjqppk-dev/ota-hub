@@ -67,6 +67,7 @@ useHead(() => ({
   meta: [{ name: 'description', content: t('todo.seoDesc') }]
 }))
 // P5: canonical + hreflang via the shared builder (bare path; query filters excluded from the canonical).
+const FAQ = useSeoFaq('todos')
 useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/things-to-do', title: t('todo.title'), description: t('todo.seoDesc') })
 </script>
 
@@ -133,6 +134,7 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/t
         </ul>
       </ResultsState>
       <p class="mt-4 text-xs text-ink-subtle">{{ $t('todo.ratingNote') }}</p>
+      <SeoFaq :items="FAQ" class="mt-12" />
     </div>
   </div>
 </template>

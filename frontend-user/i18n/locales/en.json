@@ -419,6 +419,54 @@
     "sustainability": { "title": "Sustainability", "description": "getfortrip's sustainable travel promise." },
     "rewards": { "title": "Rewards", "description": "Book and earn points." }
   },
+  "seoFaq": {
+    "more": "See related policy",
+    "hotels": [
+      { "q": "Can I cancel my hotel booking for a refund?", "a": "Each rate plan has its own free-cancellation deadline. Free-cancellation rates refund in full with no penalty when cancelled before the deadline on the voucher (usually 24-72 hours before check-in). Non-refundable deals charge a 100% cancellation fee.", "to": "/refund-policy" },
+      { "q": "Do hotel rates include tax?", "a": "No. Listed rates are tax-exclusive references, and the final amount including 10% tax is confirmed on the pre-payment review screen.", "to": "/terms" },
+      { "q": "Where can I find my booking voucher?", "a": "After the supplier confirms your booking, you can view and print the voucher from your booking details. No voucher is issued before confirmation.", "to": "/help" }
+    ],
+    "flights": [
+      { "q": "Can I cancel my flight ticket for a refund?", "a": "Cancellations before midnight on the ticketing day are fully refundable with no airline fee (some promo fares excluded). After ticketing, the airline's fare-rule penalty is deducted.", "to": "/refund-policy" },
+      { "q": "When do I get my e-ticket and booking reference (PNR)?", "a": "Ticketing proceeds after payment once the supplier confirms, and you can find the PNR and e-ticket number in your booking details after ticketing is complete.", "to": "/faq" },
+      { "q": "How can I pay for flights?", "a": "You can pay by credit or debit card, and all payments are processed in KRW.", "to": "/terms" }
+    ],
+    "trains": [
+      { "q": "Can I cancel train tickets online?", "a": "Yes. If you request cancellation from your bookings, the fee and refund are calculated under that booking's cancellation policy, and you can review the amounts before confirming.", "to": "/refund-policy" },
+      { "q": "How can I pay for train tickets?", "a": "You can pay by credit or debit card, and all payments are processed in KRW.", "to": "/terms" },
+      { "q": "Where can I find my train ticket?", "a": "After the supplier confirms your booking, you can check the confirmation in your booking details.", "to": "/help" }
+    ],
+    "cars": [
+      { "q": "Can I cancel my rental car for a refund?", "a": "You can cancel free of charge up to 24-48 hours before pickup, while no-shows are non-refundable.", "to": "/refund-policy" },
+      { "q": "How can I pay for rental cars?", "a": "You can pay by credit or debit card, and all payments are processed in KRW.", "to": "/terms" },
+      { "q": "Where can I find my rental confirmation?", "a": "After the supplier confirms your booking, you can view and print the voucher from your booking details.", "to": "/help" }
+    ],
+    "transfers": [
+      { "q": "Can I cancel my airport pickup for a refund?", "a": "You can cancel free of charge up to 24-48 hours before pickup, while no-shows are non-refundable.", "to": "/refund-policy" },
+      { "q": "How can I pay for airport pickups?", "a": "You can pay by credit or debit card, and all payments are processed in KRW.", "to": "/terms" },
+      { "q": "Where can I find my pickup voucher?", "a": "After the supplier confirms your booking, you can view and print the voucher from your booking details.", "to": "/help" }
+    ],
+    "todos": [
+      { "q": "Can I cancel tours and tickets for a refund?", "a": "Each product follows its own published cancellation policy: usually a full refund 3-7 days ahead and a partial refund 1-2 days ahead. E-tickets with an instantly issued QR code cannot be cancelled or exchanged after issuance.", "to": "/refund-policy" },
+      { "q": "How are tour and ticket prices calculated?", "a": "Prices are shown per person, and time-slot products apply separate adult and child fares.", "to": "/terms" },
+      { "q": "Where can I find my e-voucher?", "a": "After the supplier confirms your booking, you can view and print the e-voucher from your booking details.", "to": "/help" }
+    ],
+    "packages": [
+      { "q": "Can I cancel my package for a refund?", "a": "The fee and refund are calculated under your package booking's cancellation policy, and you can review the amounts on your bookings screen before confirming.", "to": "/refund-policy" },
+      { "q": "How are package prices calculated?", "a": "Package prices are shown per person and multiplied by the number of travelers you select.", "to": "/terms" },
+      { "q": "How can I pay for packages?", "a": "You can pay by credit or debit card, and all payments are processed in KRW.", "to": "/terms" }
+    ],
+    "esim": [
+      { "q": "Can I buy an eSIM now?", "a": "No. Only plan browsing is available right now while sales are being prepared.", "to": "/help" },
+      { "q": "How do I receive my eSIM QR code?", "a": "Once sales open, the QR code will be sent to your booking confirmation email. The plans shown now cannot be purchased yet.", "to": "/help" },
+      { "q": "How do I browse eSIM plans?", "a": "Select a country to see the plans available for use in that country.", "to": "/help" }
+    ],
+    "insurance": [
+      { "q": "Can I buy travel insurance now?", "a": "No. Only coverage details and estimated premiums can be viewed right now while sales are being prepared.", "to": "/help" },
+      { "q": "How is the premium calculated?", "a": "Select your travel dates to see an estimate multiplying the daily premium by the number of days.", "to": "/help" },
+      { "q": "What coverage is included?", "a": "Medical, baggage, and cancellation coverage amounts differ by plan, so check the coverage amounts shown on the product screen.", "to": "/help" }
+    ]
+  },
   "wishlist": {
     "save": "Save",
     "unsave": "Unsave",

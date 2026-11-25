@@ -8,11 +8,14 @@
  */
 import { computed } from 'vue'
 import { faqLd, jsonLdScript } from '~/composables/useJsonLd'
+import type { SeoFaqItem } from '~/composables/useSeoFaq'
 
-const props = withDefaults(defineProps<{ items: { q: string; a: string }[]; heading?: string; id?: string }>(), {
+const props = withDefaults(defineProps<{ items: SeoFaqItem[]; heading?: string; id?: string }>(), {
   heading: '',
   id: 'faq',
 })
+
+const localePath = useLocalePath()
 
 // Blank entries are dropped (never rendered half-empty); 20 caps the LD graph.
 const shown = computed(() => props.items.filter((f) => f.q && f.a).slice(0, 20))
@@ -41,6 +44,13 @@ useHead({ script: [jsonLdScript(faqLd(shown.value))] })
           />
         </summary>
         <p class="px-4 pb-4 text-sm leading-relaxed text-ink-muted">{{ f.a }}</p>
+        <NuxtLink
+          v-if="f.to"
+          :to="localePath(f.to)"
+          class="-mt-2 mb-4 ml-4 inline-block text-xs font-semibold text-primary hover:underline"
+        >
+          {{ $t('seoFaq.more') }}
+        </NuxtLink>
       </details>
     </div>
   </section>

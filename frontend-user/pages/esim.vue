@@ -26,6 +26,7 @@ interface Plan {
 const currency = useCurrencyStore()
 const { route, patch, isSelf } = useUrlQuery()
 const { t } = useI18n()
+const FAQ = useSeoFaq('esim')
 const plans = ref<Plan[]>([])
 const state = ref<'loading' | 'ready' | 'error'>('loading')
 const draft = ref('')
@@ -157,6 +158,7 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/e
           </div>
         </li>
       </ul>
+      <SeoFaq :items="FAQ" class="mt-12" />
     </div>
   </div>
 </template>

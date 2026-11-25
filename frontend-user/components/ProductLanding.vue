@@ -10,6 +10,7 @@ defineProps<{
   title: string
   subtitle: string
   facts: { icon: string; title: string; body: string }[]
+  faq?: { q: string; a: string; to?: string }[]
 }>()
 </script>
 
@@ -37,5 +38,7 @@ defineProps<{
         </div>
       </div>
     </section>
+
+    <SeoFaq v-if="faq?.length" :items="faq" class="mx-auto mt-16 max-w-7xl px-4 lg:px-6" />
   </div>
 </template>
