@@ -1,6 +1,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ota-hub",
+  // 2026-11-25: moved to the account that owns the getfortrip.com zone (custom
+  // domains/routes require same-account). account_id beats CLOUDFLARE_ACCOUNT_ID.
+  "account_id": "f5c363135efe9b22ca66eb39f2f8e1da",
   "main": "worker/index.ts",
   "compatibility_date": "2024-10-12",
   "compatibility_flags": ["nodejs_compat"],
@@ -27,7 +30,7 @@
     {
       "binding": "DB",
       "database_name": "ota_production",
-      "database_id": "d36231d8-4bfb-42e1-ae51-a019723e5db0",
+      "database_id": "f240d6e2-fa6e-49b8-a4f6-bcf06477288f",
       "migrations_dir": "worker/migrations"
     }
   ],
@@ -41,7 +44,7 @@
     "run_worker_first": true
   },
   "vars": {
-    "ALLOWED_ORIGINS": "https://getfortrip.com,https://www.getfortrip.com,https://admin.getfortrip.com,https://partner.getfortrip.com,https://ota-hub.dnjstjqppk.workers.dev,https://ota-user.dnjstjqppk.workers.dev,https://ota-admin.dnjstjqppk.workers.dev,https://ota-partner.dnjstjqppk.workers.dev",
+    "ALLOWED_ORIGINS": "https://getfortrip.com,https://www.getfortrip.com,https://admin.getfortrip.com,https://partner.getfortrip.com,https://ota-hub.dnjstjq0824.workers.dev,https://ota-user.dnjstjq0824.workers.dev,https://ota-admin.dnjstjq0824.workers.dev,https://ota-partner.dnjstjq0824.workers.dev",
     "PUBLIC_SITE_URL": "https://getfortrip.com",
     "PARTNER_SITE_URL": "https://partner.getfortrip.com",
     // Declared provider with no key yet: /health stays DISABLED until TOSS_SECRET_KEY
@@ -61,7 +64,7 @@
         {
           "binding": "DB",
           "database_name": "ota_staging",
-          "database_id": "56accb00-19fb-47ad-bc0e-9a2e456adda5",
+          "database_id": "73bc257d-2fe6-4fb8-89f9-6e3eb4f18545",
           "migrations_dir": "worker/migrations"
         }
       ],
@@ -70,9 +73,9 @@
       ],
       "vars": {
         "APP_ENV": "staging",
-        "ALLOWED_ORIGINS": "https://ota-hub-staging.dnjstjqppk.workers.dev",
-        "PUBLIC_SITE_URL": "https://ota-hub-staging.dnjstjqppk.workers.dev",
-        "PARTNER_SITE_URL": "https://ota-hub-staging.dnjstjqppk.workers.dev/partner/"
+        "ALLOWED_ORIGINS": "https://ota-hub-staging.dnjstjq0824.workers.dev",
+        "PUBLIC_SITE_URL": "https://ota-hub-staging.dnjstjq0824.workers.dev",
+        "PARTNER_SITE_URL": "https://ota-hub-staging.dnjstjq0824.workers.dev/partner/"
       }
     }
   }

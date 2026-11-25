@@ -262,7 +262,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     if (partnerId) {
       const token = randomToken(32);
       const expires = Math.floor(Date.now() / 1000) + 1800;
-      const site = (env.PARTNER_SITE_URL || "https://ota-partner.dnjstjqppk.workers.dev").replace(/\/+$/, "");
+      const site = (env.PARTNER_SITE_URL || "https://ota-partner.dnjstjq0824.workers.dev").replace(/\/+$/, "");
       await db.batch([
         db.prepare("INSERT INTO password_reset_tokens (token, token_hash, user_id, partner_id, email, expires_at, used) VALUES (?, ?, '', ?, ?, ?, 0)")
           .bind(newId("rst"), await sha256Hex(token), partnerId, email, expires),
@@ -983,7 +983,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 const PARTNER_OPENAPI = {
   openapi: "3.0.3",
   info: { title: "getfortrip Partner Extranet API", version: "1.0.0", description: "Server-to-server API for partner PMS/ERP integrations. Authenticate with `Authorization: Bearer gft_live_...` (issue keys in the extranet under API 연동) or a partner JWT." },
-  servers: [{ url: "/api/v1", description: "Same origin as the extranet (or https://ota-hub.dnjstjqppk.workers.dev/api/v1)" }],
+  servers: [{ url: "/api/v1", description: "Same origin as the extranet (or https://ota-hub.dnjstjq0824.workers.dev/api/v1)" }],
   paths: {
     "/partner/register": { post: { summary: "Apply for a partner account (admin approval required)", tags: ["Auth"] } },
     "/partner/login": { post: { summary: "Owner/staff login (partner JWT, 24h)", tags: ["Auth"] } },

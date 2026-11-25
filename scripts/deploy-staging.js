@@ -11,7 +11,7 @@ const path = require('path');
 
 const rootDir = path.resolve(__dirname, '..');
 const DRY_RUN = process.env.DRY_RUN === '1';
-const HUB = 'https://ota-hub-staging.dnjstjqppk.workers.dev';
+const HUB = 'https://ota-hub-staging.dnjstjq0824.workers.dev';
 
 function run(cmd, env = {}) {
   if (DRY_RUN) {

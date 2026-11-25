@@ -25,7 +25,7 @@ export default defineNuxtConfig({
         'Referrer-Policy': 'strict-origin-when-cross-origin',
         // GAP-02 (2026-11-24 audit): page CSP. Inline scripts stay allowed
         // (Nuxt SSR payload + theme boot); remote code is Toss SDK only.
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.tosspayments.com https://js.stripe.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data: blob:; font-src 'self' https://cdn.jsdelivr.net data:; connect-src 'self' https://ota-hub.dnjstjqppk.workers.dev https://getfortrip.com https://api.tosspayments.com https://log.tosspayments.com https://api.stripe.com https://*.sentry.io https://*.ingest.sentry.io; frame-src https://pay.tosspayments.com https://js.stripe.com; form-action 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.tosspayments.com https://js.stripe.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data: blob:; font-src 'self' https://cdn.jsdelivr.net data:; connect-src 'self' https://ota-hub.dnjstjq0824.workers.dev https://getfortrip.com https://api.tosspayments.com https://log.tosspayments.com https://api.stripe.com https://*.sentry.io https://*.ingest.sentry.io; frame-src https://pay.tosspayments.com https://js.stripe.com; form-action 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
       }
     },
     '/checkout': { ssr: false },

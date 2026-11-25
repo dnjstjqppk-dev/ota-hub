@@ -7,7 +7,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
   (host.startsWith('admin.')
     ? `https://${host.slice('admin.'.length)}/api/v1`
     : host.startsWith('ota-admin')
-      ? 'https://ota-hub.dnjstjqppk.workers.dev/api/v1'
+      ? 'https://ota-hub.dnjstjq0824.workers.dev/api/v1'
       : (typeof window !== 'undefined' && window.location.origin.includes('localhost')
         ? 'http://localhost:8787/api/v1'
         : '/api/v1'))

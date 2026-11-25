@@ -221,7 +221,7 @@ async function serveAssets(request: Request, env: Env, url: URL): Promise<Respon
   const isAdminHost = host.startsWith("admin.") || host.startsWith("ota-admin.");
   const isPartnerHost = host.startsWith("partner.") || host.startsWith("ota-partner.");
 
-  // 1. Admin Host Dispatching (e.g. ota-admin.dnjstjqppk.workers.dev or admin.getfortrip.com)
+  // 1. Admin Host Dispatching (e.g. ota-admin.dnjstjq0824.workers.dev or admin.getfortrip.com)
   if (isAdminHost) {
     if (path.startsWith("/admin/")) {
       return Response.redirect(`${url.origin}${path.replace(/^\/admin/, "") || "/"}`, 301);
@@ -232,7 +232,7 @@ async function serveAssets(request: Request, env: Env, url: URL): Promise<Respon
     if (idx) return idx;
   }
 
-  // 2. Partner Host Dispatching (e.g. ota-partner.dnjstjqppk.workers.dev or partner.getfortrip.com)
+  // 2. Partner Host Dispatching (e.g. ota-partner.dnjstjq0824.workers.dev or partner.getfortrip.com)
   if (isPartnerHost) {
     if (path.startsWith("/partner/")) {
       return Response.redirect(`${url.origin}${path.replace(/^\/partner/, "") || "/"}`, 301);

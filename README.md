@@ -5,8 +5,8 @@
 
 - **공식 플랫폼명**: `getfortrip`
 - **예정 도메인**: `getfortrip.com`
-- **실서버 배포**: `https://ota-hub.dnjstjqppk.workers.dev` (API + 유저 포털),
-  `https://ota-admin.dnjstjqppk.workers.dev` (어드민), `https://ota-partner.dnjstjqppk.workers.dev` (파트너)
+- **실서버 배포**: `https://ota-hub.dnjstjq0824.workers.dev` (API + 유저 포털),
+  `https://ota-admin.dnjstjq0824.workers.dev` (어드민), `https://ota-partner.dnjstjq0824.workers.dev` (파트너)
 
 ---
 

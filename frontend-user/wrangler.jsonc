@@ -4,6 +4,9 @@
   // Local: `nuxt dev` (:3000) against the hub API, or `wrangler dev` here.
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "ota-user",
+  // 2026-11-25: moved to the account that owns the getfortrip.com zone (custom
+  // domains/routes require same-account). account_id beats CLOUDFLARE_ACCOUNT_ID.
+  "account_id": "f5c363135efe9b22ca66eb39f2f8e1da",
   "main": ".output/server/index.mjs",
   "compatibility_date": "2024-10-12",
   "compatibility_flags": ["nodejs_compat"],
@@ -30,6 +33,6 @@
     // Browser API calls go to the apex /api/* route (same-origin on the apex,
     // CORS-allowed from the workers.dev preview). SSR keeps the service binding.
     "NUXT_PUBLIC_API_BASE": "https://getfortrip.com/api/v1",
-    "NUXT_API_BASE_SERVER": "https://ota-hub.dnjstjqppk.workers.dev/api/v1"
+    "NUXT_API_BASE_SERVER": "https://ota-hub.dnjstjq0824.workers.dev/api/v1"
   }
 }

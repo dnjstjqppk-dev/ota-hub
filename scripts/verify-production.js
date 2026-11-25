@@ -2,7 +2,7 @@
 /**
  * getfortrip Hardened Production Live E2E & Security Verification Suite
  * ==============================================================================
- * Tests live endpoints against https://ota-hub.dnjstjqppk.workers.dev
+ * Tests live endpoints against https://ota-hub.dnjstjq0824.workers.dev
  * Verifies P0~P3 Security Enforcements:
  *  - P0-01: Admin Backdoor Elimination (Default password rejected with 401)
  *  - P0-02: Cryptographic Secrets & Token Validation (Forged tokens rejected)
@@ -17,7 +17,7 @@
 
 const crypto = require('crypto');
 
-const PROD_HOST = 'ota-hub.dnjstjqppk.workers.dev';
+const PROD_HOST = 'ota-hub.dnjstjq0824.workers.dev';
 // #114: the suite used to default to PRODUCTION with no confirmation. There
 // is no staging worker, so the safe default is the local dev server; reaching
 // production requires naming it AND acknowledging it (env or TTY prompt).
@@ -602,9 +602,9 @@ async function runVerificationSuite() {
   await test("3-Portal Architecture: User, Admin, Partner independent URLs & Hub paths return HTTP 200", async () => {
     // Portal roots derive from env (BASE_URL for hub, *_URL for the consoles) so the
     // suite can target staging as well as production (2026-11-09 audit [m]).
-    const hub = (process.env.BASE_URL || 'https://ota-hub.dnjstjqppk.workers.dev').replace(/\/+$/, '');
-    const adminRoot = (process.env.ADMIN_URL || 'https://ota-admin.dnjstjqppk.workers.dev').replace(/\/+$/, '');
-    const partnerRoot = (process.env.PARTNER_URL || 'https://ota-partner.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+    const hub = (process.env.BASE_URL || 'https://ota-hub.dnjstjq0824.workers.dev').replace(/\/+$/, '');
+    const adminRoot = (process.env.ADMIN_URL || 'https://ota-admin.dnjstjq0824.workers.dev').replace(/\/+$/, '');
+    const partnerRoot = (process.env.PARTNER_URL || 'https://ota-partner.dnjstjq0824.workers.dev').replace(/\/+$/, '');
     for (const [label, url] of [['User portal', hub], ['Admin portal', adminRoot], ['Partner portal', partnerRoot], ['Hub /admin/ fallback', `${hub}/admin/`], ['Hub /partner/ fallback', `${hub}/partner/`]]) {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`${label} failed: HTTP ${res.status} (${url})`);
@@ -1463,10 +1463,10 @@ async function runVerificationSuite() {
   // 48. PORTAL SECURITY HEADERS + CSP (GAP-10)
   // ---------------------------------------------------------------------------
   await test('GAP-10: hub API + 3 portals send security headers incl CSP', async () => {
-    const hub = (process.env.BASE_URL || 'https://ota-hub.dnjstjqppk.workers.dev').replace(/\/+$/, '');
-    const userRoot = (process.env.USER_URL || 'https://ota-user.dnjstjqppk.workers.dev').replace(/\/+$/, '');
-    const adminRoot = (process.env.ADMIN_URL || 'https://ota-admin.dnjstjqppk.workers.dev').replace(/\/+$/, '');
-    const partnerRoot = (process.env.PARTNER_URL || 'https://ota-partner.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+    const hub = (process.env.BASE_URL || 'https://ota-hub.dnjstjq0824.workers.dev').replace(/\/+$/, '');
+    const userRoot = (process.env.USER_URL || 'https://ota-user.dnjstjq0824.workers.dev').replace(/\/+$/, '');
+    const adminRoot = (process.env.ADMIN_URL || 'https://ota-admin.dnjstjq0824.workers.dev').replace(/\/+$/, '');
+    const partnerRoot = (process.env.PARTNER_URL || 'https://ota-partner.dnjstjq0824.workers.dev').replace(/\/+$/, '');
     const api = await fetch(`${hub}/api/v1/health`);
     const apiCsp = api.headers.get('content-security-policy') || '';
     if (!apiCsp.includes("default-src 'none'")) throw new Error(`hub API CSP missing: ${apiCsp}`);
@@ -1486,7 +1486,7 @@ async function runVerificationSuite() {
   // 49. USER PORTAL SSR CATALOG (GAP-10)
   // ---------------------------------------------------------------------------
   await test('GAP-10: user portal SSR catalog renders 200 HTML', async () => {
-    const userRoot = (process.env.USER_URL || 'https://ota-user.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+    const userRoot = (process.env.USER_URL || 'https://ota-user.dnjstjq0824.workers.dev').replace(/\/+$/, '');
     for (const p of ['/hotels/list', '/cars/list', '/hotels/detail/htl_seoul_01']) {
       const r = await fetch(`${userRoot}${p}`);
       if (r.status !== 200) throw new Error(`${p} HTTP ${r.status}`);

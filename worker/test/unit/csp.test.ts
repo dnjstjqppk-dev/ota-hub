@@ -18,7 +18,7 @@ function policyOf(text: string): string {
 }
 
 const HAS = ["default-src 'self'", "frame-ancestors 'self'", "base-uri 'self'", "object-src 'none'",
-  "https://cdn.jsdelivr.net", "https://ota-hub.dnjstjqppk.workers.dev", "*.sentry.io"];
+  "https://cdn.jsdelivr.net", "https://ota-hub.dnjstjq0824.workers.dev", "*.sentry.io"];
 
 test("csp: user portal policy allows SSR inline scripts + Toss/Stripe, nothing else remote", () => {
   const csp = policyOf(read("frontend-user/nuxt.config.ts"));

@@ -7,7 +7,7 @@ const prod = env({ APP_ENV: "production", ALLOWED_ORIGINS: "" });
 
 test("CORS allows all four first-party workers.dev origins", () => {
   for (const w of ["ota-hub", "ota-user", "ota-admin", "ota-partner"]) {
-    const o = `https://${w}.dnjstjqppk.workers.dev`;
+    const o = `https://${w}.dnjstjq0824.workers.dev`;
     assert.equal(allowedOrigin(o, prod), o);
   }
 });

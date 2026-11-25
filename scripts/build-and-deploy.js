@@ -2,10 +2,10 @@
 /**
  * getfortrip Platform - Automated Rebuild & Deploy Pipeline (4 Workers, 3 Portals)
  * ==============================================================================
- * 1. ota-hub (Central API Gateway + Console Fallbacks): https://ota-hub.dnjstjqppk.workers.dev
- * 2. ota-user (User Web SSR + ISR): https://ota-user.dnjstjqppk.workers.dev (apex after GO_LIVE step 4)
- * 3. ota-admin (Dedicated Admin Console): https://ota-admin.dnjstjqppk.workers.dev
- * 4. ota-partner (Dedicated Partner Extranet): https://ota-partner.dnjstjqppk.workers.dev
+ * 1. ota-hub (Central API Gateway + Console Fallbacks): https://ota-hub.dnjstjq0824.workers.dev
+ * 2. ota-user (User Web SSR + ISR): https://ota-user.dnjstjq0824.workers.dev (apex after GO_LIVE step 4)
+ * 3. ota-admin (Dedicated Admin Console): https://ota-admin.dnjstjq0824.workers.dev
+ * 4. ota-partner (Dedicated Partner Extranet): https://ota-partner.dnjstjq0824.workers.dev
  * ==============================================================================
  */
 
@@ -81,10 +81,10 @@ try {
 
   console.log('\n==============================================================================');
   console.log('🎉 [SUCCESS] getfortrip 3 Portals successfully deployed to Cloudflare!');
-  console.log('   - User Portal:    https://ota-user.dnjstjqppk.workers.dev');
-  console.log('   - API Hub:        https://ota-hub.dnjstjqppk.workers.dev');
-  console.log('   - Admin Console:  https://ota-admin.dnjstjqppk.workers.dev');
-  console.log('   - Partner Portal: https://ota-partner.dnjstjqppk.workers.dev');
+  console.log('   - User Portal:    https://ota-user.dnjstjq0824.workers.dev');
+  console.log('   - API Hub:        https://ota-hub.dnjstjq0824.workers.dev');
+  console.log('   - Admin Console:  https://ota-admin.dnjstjq0824.workers.dev');
+  console.log('   - Partner Portal: https://ota-partner.dnjstjq0824.workers.dev');
   console.log('==============================================================================\n');
 } catch (err) {
   console.error('\n❌ [ERROR] Cloudflare build & deploy pipeline failed:');

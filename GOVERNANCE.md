@@ -16,7 +16,7 @@
    - 영문 표기 시: `getfortrip`
 3. **예정 도메인 (Scheduled Domain)**:
    - **`getfortrip.com`**
-   - 현재 배포 중인 클라우드플레어 환경(`ota-hub.dnjstjqppk.workers.dev`)에서 정식 도메인(`getfortrip.com`) 구매 및 DNS 연결 시 무중단 전환되도록 코드 레벨 상수로 분리 관리한다.
+   - 현재 배포 중인 클라우드플레어 환경(`ota-hub.dnjstjq0824.workers.dev`)에서 정식 도메인(`getfortrip.com`) 구매 및 DNS 연결 시 무중단 전환되도록 코드 레벨 상수로 분리 관리한다.
 
 ---
 

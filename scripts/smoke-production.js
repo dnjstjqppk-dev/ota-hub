@@ -13,10 +13,10 @@
  *   landing and the hub keeps the /admin/ + /partner/ fallbacks.
  */
 
-const HUB = (process.env.BASE_URL || 'https://ota-hub.dnjstjqppk.workers.dev').replace(/\/+$/, '');
-const USER = (process.env.USER_URL || 'https://ota-user.dnjstjqppk.workers.dev').replace(/\/+$/, '');
-const ADMIN = (process.env.ADMIN_URL || 'https://ota-admin.dnjstjqppk.workers.dev').replace(/\/+$/, '');
-const PARTNER = (process.env.PARTNER_URL || 'https://ota-partner.dnjstjqppk.workers.dev').replace(/\/+$/, '');
+const HUB = (process.env.BASE_URL || 'https://ota-hub.dnjstjq0824.workers.dev').replace(/\/+$/, '');
+const USER = (process.env.USER_URL || 'https://ota-user.dnjstjq0824.workers.dev').replace(/\/+$/, '');
+const ADMIN = (process.env.ADMIN_URL || 'https://ota-admin.dnjstjq0824.workers.dev').replace(/\/+$/, '');
+const PARTNER = (process.env.PARTNER_URL || 'https://ota-partner.dnjstjq0824.workers.dev').replace(/\/+$/, '');
 
 let failed = 0;
 

@@ -3478,7 +3478,7 @@ test("#127: logout clears every portal jar, including across CORS", async () => 
     }
   }
   // CORS-wrapped logout keeps three distinct clears (no comma-folding).
-  const co = await fetch(BASE + "/api/v1/auth/logout", { method: "POST", headers: { Cookie: all, Origin: "https://ota-hub.dnjstjqppk.workers.dev" } });
+  const co = await fetch(BASE + "/api/v1/auth/logout", { method: "POST", headers: { Cookie: all, Origin: "https://ota-hub.dnjstjq0824.workers.dev" } });
   assert.equal(co.headers.getSetCookie().length, 3, JSON.stringify(co.headers.getSetCookie()));
 });
 

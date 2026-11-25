@@ -4,7 +4,7 @@
 interface __BaseEnv_Env {
 	DB: D1Database;
 	ASSETS: Fetcher;
-	ALLOWED_ORIGINS: "https://getfortrip.com,https://www.getfortrip.com,https://admin.getfortrip.com,https://partner.getfortrip.com,https://ota-hub.dnjstjqppk.workers.dev,https://ota-admin.dnjstjqppk.workers.dev,https://ota-partner.dnjstjqppk.workers.dev,http://localhost:3000,http://localhost:3001,http://localhost:3002";
+	ALLOWED_ORIGINS: "https://getfortrip.com,https://www.getfortrip.com,https://admin.getfortrip.com,https://partner.getfortrip.com,https://ota-hub.dnjstjq0824.workers.dev,https://ota-admin.dnjstjq0824.workers.dev,https://ota-partner.dnjstjq0824.workers.dev,http://localhost:3000,http://localhost:3001,http://localhost:3002";
 	PUBLIC_SITE_URL: "https://getfortrip.com";
 	JWT_SECRET: string;
 	PII_ENC_KEY: string;

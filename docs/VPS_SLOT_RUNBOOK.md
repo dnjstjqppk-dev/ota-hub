@@ -24,7 +24,7 @@ ssh -i $env:USERPROFILE\.ssh\getfortrip_vps getfortrip@13.140.250.138 'cat /srv/
 ```bash
 cd /srv/getfortrip/app
 # 방법 A: git clone (권장)
-git clone https://github.com/dnjstjqppk-dev/ota-hub.git .
+git clone https://github.com/dnjstjq0824-dev/ota-hub.git .
 # 방법 B: 로컬에서 rsync (node_modules·.output 제외)
 npm ci
 node --version  # 24.x 필요 (.node-version). 없으면 관리자에게 요청.

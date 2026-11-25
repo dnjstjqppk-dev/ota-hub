@@ -6,8 +6,8 @@
 
 - 워커: `ota-hub-staging` (wrangler.jsonc `env.staging`), 코드=main.
 - DB: `ota_staging` (격리 D1, 운영과 별개).
-- URL: `https://ota-hub-staging.dnjstjqppk.workers.dev` (2026-11-14 개통, 스모크 11/11 PASS).
-- DB id: `56accb00-19fb-47ad-bc0e-9a2e456adda5`, R2: `getfortrip-uploads-staging`.
+- URL: `https://ota-hub-staging.dnjstjq0824.workers.dev` (2026-11-14 개통, 스모크 11/11 PASS).
+- DB id: `73bc257d-2fe6-4fb8-89f9-6e3eb4f18545`, R2: `getfortrip-uploads-staging`.
 
 ## 1회성 준비 (사용자 1회 실행)
 
