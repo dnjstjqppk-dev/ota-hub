@@ -1,9 +1,16 @@
+const host = typeof window !== 'undefined' ? window.location.hostname : ''
+
+// admin.<domain> calls the apex /api/* route: same-site, so the HttpOnly
+// admin jar survives reloads. ota-admin.*.workers.dev keeps the hub origin
+// (cross-site: memory Bearer only).
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
-  (typeof window !== 'undefined' && (window.location.host.startsWith('ota-admin') || window.location.host.startsWith('admin.'))
-    ? 'https://ota-hub.dnjstjqppk.workers.dev/api/v1'
-    : (typeof window !== 'undefined' && window.location.origin.includes('localhost')
-      ? 'http://localhost:8787/api/v1'
-      : '/api/v1'))
+  (host.startsWith('admin.')
+    ? `https://${host.slice('admin.'.length)}/api/v1`
+    : host.startsWith('ota-admin')
+      ? 'https://ota-hub.dnjstjqppk.workers.dev/api/v1'
+      : (typeof window !== 'undefined' && window.location.origin.includes('localhost')
+        ? 'http://localhost:8787/api/v1'
+        : '/api/v1'))
 
 export const apiUrl = (path: string = ''): string => {
   if (!path) return API_BASE_URL

@@ -109,7 +109,7 @@ function logout() {
           <p class="truncate text-sm font-extrabold tracking-tight text-ink">{{ current?.label }}</p>
         </div>
         <div class="ml-auto flex items-center gap-1.5">
-          <a href="https://ota-user.dnjstjqppk.workers.dev" target="_blank" rel="noopener" class="hidden items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-1.5 text-xs font-bold text-ink-muted transition-colors hover:border-primary hover:text-primary sm:inline-flex">사용자 사이트 <AppIcon name="external" :size="13" /></a>
+          <a href="https://getfortrip.com" target="_blank" rel="noopener" class="hidden items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-1.5 text-xs font-bold text-ink-muted transition-colors hover:border-primary hover:text-primary sm:inline-flex">사용자 사이트 <AppIcon name="external" :size="13" /></a>
           <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface text-ink-muted transition-colors hover:text-ink" :aria-label="dark ? '라이트 모드' : '다크 모드'" :title="dark ? '라이트 모드' : '다크 모드'" @click="toggleTheme"><AppIcon :name="dark ? 'sun' : 'moon'" :size="17" /></button>
         </div>
       </header>

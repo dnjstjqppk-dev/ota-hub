@@ -11,6 +11,18 @@
     "command": "node scripts/build-all.js"
   },
   "triggers": { "crons": ["*/5 * * * *"] },
+  // Domain hookup (2026-11-25): the apex belongs to ota-user (custom domain);
+  // only the hub-owned paths ride these zone routes. Routes run in front of the
+  // custom-domain worker. Declaring routes flips wrangler's workers_dev default
+  // to false, so it stays explicit — scripts, CI smoke and the fallback
+  // consoles still use ota-hub.*.workers.dev.
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "getfortrip.com/api/*", "zone_name": "getfortrip.com" },
+    { "pattern": "getfortrip.com/out/*", "zone_name": "getfortrip.com" },
+    { "pattern": "getfortrip.com/sitemap*", "zone_name": "getfortrip.com" },
+    { "pattern": "getfortrip.com/llms*", "zone_name": "getfortrip.com" }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -31,7 +43,7 @@
   "vars": {
     "ALLOWED_ORIGINS": "https://getfortrip.com,https://www.getfortrip.com,https://admin.getfortrip.com,https://partner.getfortrip.com,https://ota-hub.dnjstjqppk.workers.dev,https://ota-user.dnjstjqppk.workers.dev,https://ota-admin.dnjstjqppk.workers.dev,https://ota-partner.dnjstjqppk.workers.dev",
     "PUBLIC_SITE_URL": "https://getfortrip.com",
-    "PARTNER_SITE_URL": "https://ota-partner.dnjstjqppk.workers.dev",
+    "PARTNER_SITE_URL": "https://partner.getfortrip.com",
     // Declared provider with no key yet: /health stays DISABLED until TOSS_SECRET_KEY
     // is registered (docs/GO_LIVE_CHECKLIST.md step 6). TOSS_CLIENT_KEY and
     // EMAIL_FROM stay unset until their real values exist — no placeholders.
@@ -43,6 +55,8 @@
   "env": {
     "staging": {
       "name": "ota-hub-staging",
+      // routes are inheritable: staging must never claim the production zone.
+      "routes": [],
       "d1_databases": [
         {
           "binding": "DB",

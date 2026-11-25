@@ -1,7 +1,14 @@
+const host = typeof window !== 'undefined' ? window.location.hostname : ''
+
+// partner.<domain> calls the apex /api/* route: same-site, so the HttpOnly
+// partner jar survives reloads. Everything else (ota-partner.*.workers.dev,
+// the hub /partner/ fallback) keeps the hub origin.
 export const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL ||
-  (typeof window !== 'undefined' && window.location.origin.includes('localhost')
-    ? 'http://localhost:8787/api/v1'
-    : 'https://ota-hub.dnjstjqppk.workers.dev/api/v1')
+  (host.startsWith('partner.')
+    ? `https://${host.slice('partner.'.length)}/api/v1`
+    : (typeof window !== 'undefined' && window.location.origin.includes('localhost')
+      ? 'http://localhost:8787/api/v1'
+      : 'https://ota-hub.dnjstjqppk.workers.dev/api/v1'))
 
 export function apiUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`

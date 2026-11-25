@@ -235,31 +235,29 @@ npx wrangler secret put PII_ENC_KEY
 도메인 인증도 DNS를 요구한다. 미연결 상태에서 메일·PG를 먼저 열면 링크가
 죽은 도메인을 가리킨다(#63). DNS부터 연결한다.
 
-```powershell
-# Cloudflare 대시보드 → 각 워커 → Settings → Domains & Routes → Add Custom Domain:
-#   ota-user    → getfortrip.com (+ www)   # TG-15: SSR 포털이 apex 담당
-#   ota-admin   → admin.getfortrip.com
-#   ota-partner → partner.getfortrip.com
-# 같은 화면 → Add Route (apex의 API 경로만 hub로):
-#   getfortrip.com/api/* → ota-hub
-# (구 절차의 "apex → ota-hub"는 TG-15 이전 토폴로지라 폐기 — 2026-11-24.
-#  SSR 포털을 apex에 두지 않으면 검색·공유·브랜드 URL이 workers.dev에 남는다.)
-```
+도메인 `getfortrip.com`은 2026-11-25 Cloudflare Registrar로 등록됐다(존이 워커와 같은 Cloudflare 계정에 있어야 한다).
+연결은 대시보드 수작업이 아니라 각 wrangler 설정의 `routes`로 배포 시 자동 적용된다:
 
-그 뒤 vars가 실도메인을 가리키는지 확인하고 재배포:
-- 루트 `wrangler.jsonc`: `PUBLIC_SITE_URL=https://getfortrip.com` (이미 선언됨),
-  `PARTNER_SITE_URL`을 `https://partner.getfortrip.com`으로 변경
-  (현재 선언값은 `ota-partner` workers.dev),
-  `ALLOWED_ORIGINS`에 실도메인 4종 포함 확인 (이미 선언됨).
-- `frontend-user/wrangler.jsonc`: `NUXT_PUBLIC_API_BASE`를 `/api/v1`로 변경
-  (브라우저는 apex route 경유 same-origin 호출. SSR은 서비스 바인딩 그대로 —
-  `00.hub-binding.server.ts`, P0-1).
-- admin/partner 포털은 `VITE_API_BASE_URL` 미설정 시 workers.dev hub를 계속
-  호출한다 (CORS 허용済). 실도메인 API로 옮기려면 빌드 시
-  `VITE_API_BASE_URL=https://getfortrip.com/api/v1` 주입 후 재배포.
+| 워커 | 붙는 호스트 | 방식 |
+|---|---|---|
+| ota-user | `getfortrip.com`, `www.getfortrip.com` | custom domain (www는 `server/middleware/canonical-host.ts`가 apex로 301) |
+| ota-hub | `getfortrip.com/api/*`, `/out/*`, `/sitemap*`, `/llms*` | zone route (custom domain 워커보다 먼저 실행) |
+| ota-admin | `admin.getfortrip.com` | custom domain |
+| ota-partner | `partner.getfortrip.com` | custom domain |
 
-확인: 3개 실도메인 루트 200 + `https://getfortrip.com/api/v1/health` 200
-+ 카탈로그 목록/상세 200 (route 경유 확인).
+- 4개 설정 모두 `workers_dev: true` 명시 — routes가 있으면 wrangler 기본값이
+  workers.dev를 끄기 때문(스크립트·스모크·폴백 콘솔이 workers.dev를 쓴다).
+- 배포 토큰(`CLOUDFLARE_API_TOKEN`, CI 시크릿 포함)에 getfortrip.com 존 권한
+  **Zone:Read, DNS:Edit, Workers Routes:Edit**가 있어야 한다. 없으면 hub 배포가
+  인증 오류로 실패한다(마이그레이션은 이미 적용된 뒤).
+- vars: `PARTNER_SITE_URL=https://partner.getfortrip.com`, 사용자 포털
+  `NUXT_PUBLIC_API_BASE=https://getfortrip.com/api/v1`(SSR은 서비스 바인딩 그대로).
+  admin/partner는 호스트가 `admin.`/`partner.`이면 apex API를 호출(같은 사이트 →
+  HttpOnly 쿠키가 새로고침 후에도 유지), workers.dev 호스트는 종전대로 hub 호출.
+
+확인: `https://getfortrip.com`·`admin.`·`partner.` 루트 200, `www` → apex 301,
+`https://getfortrip.com/api/v1/health` 200, `/sitemap.xml` 200(hub 응답),
+카탈로그 목록/상세 200 (route 경유 확인).
 
 ## 5. 메일 발송 (Resend)
 

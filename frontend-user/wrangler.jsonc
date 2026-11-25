@@ -10,6 +10,13 @@
   "observability": {
     "enabled": true
   },
+  // Domain hookup (2026-11-25): apex + www (www 301s to the apex in
+  // server/middleware/canonical-host.ts). workers.dev stays on for checks.
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "getfortrip.com", "custom_domain": true },
+    { "pattern": "www.getfortrip.com", "custom_domain": true }
+  ],
   "assets": {
     "directory": ".output/public",
     "binding": "ASSETS",
@@ -20,7 +27,9 @@
   // (Error 1042). 00.hub-binding.server.ts forwards those calls here.
   "services": [{ "binding": "API", "service": "ota-hub" }],
   "vars": {
-    "NUXT_PUBLIC_API_BASE": "https://ota-hub.dnjstjqppk.workers.dev/api/v1",
+    // Browser API calls go to the apex /api/* route (same-origin on the apex,
+    // CORS-allowed from the workers.dev preview). SSR keeps the service binding.
+    "NUXT_PUBLIC_API_BASE": "https://getfortrip.com/api/v1",
     "NUXT_API_BASE_SERVER": "https://ota-hub.dnjstjqppk.workers.dev/api/v1"
   }
 }

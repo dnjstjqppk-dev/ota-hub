@@ -8,7 +8,7 @@ export const BRAND = {
   omsSubtitle: 'Global OMS & Backoffice Engine',
   companyName: 'getfortrip Inc.',
   plannedDomain: 'getfortrip.com',
-  currentDeployUrl: 'https://ota-hub.dnjstjqppk.workers.dev',
+  currentDeployUrl: 'https://getfortrip.com',
   logoUrl: '/logo.svg',
   logoWhiteUrl: '/logo-white.svg',
   symbolUrl: '/symbol.svg',

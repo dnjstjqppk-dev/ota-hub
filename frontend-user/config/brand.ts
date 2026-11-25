@@ -8,16 +8,13 @@ export const BRAND = {
   displayName: 'getfortrip',
   officialName: 'getfortrip Global Travel Platform',
   
-  // Domain configurations (prepared for getfortrip.com transition)
+  // Domain (registered 2026-11-25). No kr. subdomain: locales are path prefixes.
   plannedDomain: 'getfortrip.com',
-  plannedKoreanDomain: 'kr.getfortrip.com',
-  subdomain: 'kr',
   defaultLocale: 'ko-kr',
-  currentDeployUrl: 'https://ota-hub.dnjstjqppk.workers.dev',
+  currentDeployUrl: 'https://getfortrip.com',
   productionDomain: 'https://getfortrip.com',
   // Independent consoles (separate Workers). The in-app /partner/* pages are legacy.
-  partnerConsoleUrl: 'https://ota-partner.dnjstjqppk.workers.dev',
-  koreanLandingUrl: 'https://kr.getfortrip.com/?locale=ko-kr',
+  partnerConsoleUrl: 'https://partner.getfortrip.com',
   
   // Marketing & SEO Copy
   tagline: '전 세계 항공권, 호텔, 기차표, 렌터카 예약',
