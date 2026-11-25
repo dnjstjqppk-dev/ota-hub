@@ -67,10 +67,25 @@ test('seo components compile and keep semantic landmarks', () => {
 // (d) robots: named crawlers allowed, private paths blocked, index referenced.
 test('robots allows crawlers, blocks private paths, names the index', () => {
   const robots = readFileSync(new URL('../public/robots.txt', import.meta.url), 'utf8')
-  for (const bot of ['Googlebot', 'Yeti', 'Bingbot', 'GPTBot', 'OAI-SearchBot', 'PerplexityBot', 'ClaudeBot', 'Google-Extended']) {
+  for (const bot of ['Googlebot', 'Yeti', 'Bingbot', 'GPTBot', 'OAI-SearchBot', 'PerplexityBot', 'ClaudeBot', 'Google-Extended',
+    'ChatGPT-User', 'Claude-User', 'Claude-SearchBot', 'Perplexity-User', 'Applebot', 'Applebot-Extended', 'Amazonbot', 'DuckAssistBot', 'meta-externalagent', 'Daumoa']) {
     assert.match(robots, new RegExp(`User-Agent: ${bot}`))
   }
-  for (const p of ['/my/', '/login', '/checkout']) assert.match(robots, new RegExp(`Disallow: ${p.replace('/', '\\/')}`))
+  // S1: named groups do NOT inherit `*` (RFC 9309), so every group must carry
+  // the `*` group's full Disallow set — parse groups and compare each of them.
+  const groups = robots.split(/^User-Agent: /m).slice(1).map((g) => {
+    const [agent, ...rules] = g.split('\n').map((l) => l.trim()).filter(Boolean)
+    return { agent, rules }
+  })
+  assert.ok(groups.length >= 2)
+  const star = groups.find((g) => g.agent === '*')
+  assert.ok(star)
+  const want = star.rules.filter((r) => r.startsWith('Disallow:'))
+  assert.ok(want.length > 0)
+  for (const g of groups) {
+    for (const w of want) assert.ok(g.rules.includes(w), `${g.agent} misses ${w}`)
+    assert.ok(g.rules.includes('Allow: /'), `${g.agent} misses Allow: /`)
+  }
   assert.match(robots, /Sitemap: https:\/\/getfortrip\.com\/sitemap-index\.xml/)
 })
 

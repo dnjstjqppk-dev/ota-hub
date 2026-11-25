@@ -82,7 +82,7 @@
 - 사용자 문구는 ko/en/ja/zh 4개 로캘 모두 넣는다(`frontend-user/i18n/locales`).
 - 사용자 포털을 바꿨으면 `npm --prefix frontend-user test`와 `npm --prefix frontend-user run typecheck`를 통과시킨다.
 
-- [ ] **S1 robots.txt 그룹 버그 수정 + AI 봇 정비** — 지금 이름이 있는 봇 그룹(GPTBot 등)에는 `Allow: /`만 있다. robots 규칙상 이름이 있는 그룹은 `*` 그룹을 상속하지 않으므로, 이 봇들에게는 `/my`·`/api`·`/checkout` 등도 허용된 상태다. 모든 이름 그룹에 `*` 그룹과 같은 Disallow 목록을 넣는다. 답변·검색용 봇도 같은 규칙으로 추가한다: `ChatGPT-User`, `Claude-User`, `Claude-SearchBot`, `Perplexity-User`, `Applebot`, `Applebot-Extended`, `Amazonbot`, `DuckAssistBot`, `meta-externalagent`, `Daumoa`. 학습·검색 허용 정책 자체는 지금처럼 허용으로 유지한다. 완료 조건: `frontend-user/tests`의 robots 테스트를 확장해 "모든 User-Agent 그룹이 비공개 경로를 Disallow"를 검증, 테스트 통과.
+- [x] **S1 robots.txt 그룹 버그 수정 + AI 봇 정비** — 지금 이름이 있는 봇 그룹(GPTBot 등)에는 `Allow: /`만 있다. robots 규칙상 이름이 있는 그룹은 `*` 그룹을 상속하지 않으므로, 이 봇들에게는 `/my`·`/api`·`/checkout` 등도 허용된 상태다. 모든 이름 그룹에 `*` 그룹과 같은 Disallow 목록을 넣는다. 답변·검색용 봇도 같은 규칙으로 추가한다: `ChatGPT-User`, `Claude-User`, `Claude-SearchBot`, `Perplexity-User`, `Applebot`, `Applebot-Extended`, `Amazonbot`, `DuckAssistBot`, `meta-externalagent`, `Daumoa`. 학습·검색 허용 정책 자체는 지금처럼 허용으로 유지한다. 완료 조건: `frontend-user/tests`의 robots 테스트를 확장해 "모든 User-Agent 그룹이 비공개 경로를 Disallow"를 검증, 테스트 통과. → 완료: 18개 이름 그룹+`*` 전부 동일 Disallow 12종·Allow 유지, 신규 봇 10종 추가, 그룹 패리티 테스트 확장. portal test 43/43·typecheck 통과, 구버전 역검증 96건 위반 확인.
 - [ ] **S2 AEO — FAQ 실제 배선** — `SeoFaq.vue`는 어디에도 쓰이지 않아서 FAQPage 스키마가 한 번도 나가지 않는다. 다음 페이지에 연결한다.
   - 7개 도메인 랜딩(`/hotels`·`/flights`·`/trains`·`/cars`·`/transfers`·`/things-to-do`·`/packages`), `/faq`, `/help`, `/esim`, `/insurance`
   - Q&A는 이미 사이트에 있는 정책·도움말 문구(약관·환불 규정·FAQ 페이지 i18n 키)에서 페이지 주제에 맞는 것만 가져온다. 예: 취소·환불, 결제 수단, 바우처 수령, 가격에 포함된 세금.
