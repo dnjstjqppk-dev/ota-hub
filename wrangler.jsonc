@@ -24,7 +24,8 @@
     { "pattern": "getfortrip.com/api/*", "zone_name": "getfortrip.com" },
     { "pattern": "getfortrip.com/out/*", "zone_name": "getfortrip.com" },
     { "pattern": "getfortrip.com/sitemap*", "zone_name": "getfortrip.com" },
-    { "pattern": "getfortrip.com/llms*", "zone_name": "getfortrip.com" }
+    { "pattern": "getfortrip.com/llms*", "zone_name": "getfortrip.com" },
+    { "pattern": "getfortrip.com/rss.xml", "zone_name": "getfortrip.com" }
   ],
   "d1_databases": [
     {
