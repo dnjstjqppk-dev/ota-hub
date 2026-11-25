@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildSitemapIndex, buildUrlset, childSitemap, DOMAIN_SITEMAPS, STATIC_SITEMAP_PATHS } from "../../src/seo/sitemap-index.ts";
 import { llmsFullText, llmsText } from "../../src/seo/llms.ts";
-import { enqueueIndexNow, indexnowPayload, productPageUrl, pumpIndexNow } from "../../src/seo/indexnow.ts";
+import { enqueueIndexNow, indexnowKeyFile, indexnowPayload, productPageUrl, pumpIndexNow } from "../../src/seo/indexnow.ts";
 import { fakeDb } from "./_fakedb.ts";
 
 const env = (o: Record<string, any> = {}) => ({ PUBLIC_SITE_URL: "https://getfortrip.com", ...o }) as any;
@@ -42,7 +42,7 @@ test("llms briefs name the sitemap index, affiliate limits, and off-limits paths
 
 test("indexnow: payload shape, page urls, enqueue + pump lifecycle", async () => {
   const p = indexnowPayload(SITE, "k123", ["https://getfortrip.com/hotels", "https://getfortrip.com/hotels"]);
-  assert.deepEqual(p, { host: "getfortrip.com", key: "k123", keyLocation: "https://getfortrip.com/k123.txt", urlList: ["https://getfortrip.com/hotels"] });
+  assert.deepEqual(p, { host: "getfortrip.com", key: "k123", keyLocation: "https://getfortrip.com/api/v1/seo/indexnow/k123.txt", urlList: ["https://getfortrip.com/hotels"] });
   assert.equal(productPageUrl(env(), "ACTIVITY", "A9"), `${SITE}/things-to-do/detail/A9`);
   assert.equal(productPageUrl(env(), "ESIM", "E1"), "");
   assert.equal(productPageUrl(env(), "HOTEL", "bad id"), "");
@@ -57,4 +57,14 @@ test("indexnow: payload shape, page urls, enqueue + pump lifecycle", async () =>
   assert.deepEqual(ok, { submitted: 1, failed: 0, skipped: false });
   const fail = await pumpIndexNow(env({ DB: db, INDEXNOW_KEY: "k" }), async () => ({ ok: false, status: 429 }));
   assert.deepEqual(fail, { submitted: 0, failed: 1, skipped: false });
+});
+
+test("indexnow key file: exact match 200 text/plain, mismatch or unset key 404", async () => {
+  const ok = indexnowKeyFile(env({ INDEXNOW_KEY: "k123" }), "k123");
+  assert.equal(ok.status, 200);
+  assert.ok(ok.headers.get("Content-Type")!.includes("text/plain"));
+  assert.equal(await ok.text(), "k123");
+  assert.equal(indexnowKeyFile(env({ INDEXNOW_KEY: "k123" }), "other").status, 404);
+  assert.equal(indexnowKeyFile(env({}), "k123").status, 404);
+  assert.equal(indexnowKeyFile(env({ INDEXNOW_KEY: "" }), "").status, 404);
 });

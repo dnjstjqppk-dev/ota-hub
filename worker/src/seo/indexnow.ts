@@ -6,10 +6,19 @@ const MAX_ATTEMPTS = 5;
 
 export interface IndexNowPayload { host: string; key: string; keyLocation: string; urlList: string[]; }
 
-/** IndexNow request body. keyLocation proves key ownership (served at /{key}.txt). */
+/** IndexNow request body. keyLocation proves key ownership (M1: hub-served at /api/v1/seo/indexnow/{key}.txt). */
 export function indexnowPayload(site: string, key: string, urls: string[]): IndexNowPayload {
   const host = site.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-  return { host, key, keyLocation: `https://${host}/${key}.txt`, urlList: [...new Set(urls)] };
+  return { host, key, keyLocation: `https://${host}/api/v1/seo/indexnow/${key}.txt`, urlList: [...new Set(urls)] };
+}
+
+/** M1: serve the IndexNow key file. Exact match only; mismatch or unset key = 404. */
+export function indexnowKeyFile(env: Env, keyFromPath: string): Response {
+  const key = env.INDEXNOW_KEY || "";
+  if (!key || keyFromPath !== key) {
+    return new Response("Not Found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  }
+  return new Response(key, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
 }
 
 const cleanUrls = (urls: string[]) => [...new Set(urls)].filter((u) => /^https:\/\/[A-Za-z0-9.-]+\/\S{0,2000}$/.test(u)).slice(0, 1000);

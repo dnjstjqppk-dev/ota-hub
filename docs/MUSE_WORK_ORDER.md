@@ -51,7 +51,7 @@
 
 ## 카드
 
-- [ ] **M1 IndexNow 키 파일 실제로 서빙** — 지금 `worker/src/seo/indexnow.ts`의 `keyLocation`은 `https://{host}/{key}.txt`인데, 이 경로를 서빙하는 곳이 없다. apex는 `ota-user`가 받고, hub에는 핸들러가 없다. 그래서 `INDEXNOW_KEY`를 넣는 순간 소유 검증이 실패한다. `keyLocation`을 hub가 받는 경로인 `https://{host}/api/v1/seo/indexnow/{key}.txt`로 바꾼다. hub는 경로의 key가 `env.INDEXNOW_KEY`와 정확히 같을 때만 `text/plain` 본문 = key로 200을 돌려주고, 아니면 404를 돌려준다. 키가 없을 때도 404다. 완료 조건: 페이로드의 keyLocation, 일치 200, 불일치·미설정 404를 확인하는 유닛 테스트 추가, `npm run typecheck`·`npm test` 통과.
+- [x] **M1 IndexNow 키 파일 실제로 서빙** — 지금 `worker/src/seo/indexnow.ts`의 `keyLocation`은 `https://{host}/{key}.txt`인데, 이 경로를 서빙하는 곳이 없다. apex는 `ota-user`가 받고, hub에는 핸들러가 없다. 그래서 `INDEXNOW_KEY`를 넣는 순간 소유 검증이 실패한다. `keyLocation`을 hub가 받는 경로인 `https://{host}/api/v1/seo/indexnow/{key}.txt`로 바꾼다. hub는 경로의 key가 `env.INDEXNOW_KEY`와 정확히 같을 때만 `text/plain` 본문 = key로 200을 돌려주고, 아니면 404를 돌려준다. 키가 없을 때도 404다. 완료 조건: 페이로드의 keyLocation, 일치 200, 불일치·미설정 404를 확인하는 유닛 테스트 추가, `npm run typecheck`·`npm test` 통과. → 완료: keyLocation을 `/api/v1/seo/indexnow/{key}.txt`로 변경, hub 핸들러+유닛 테스트 추가, typecheck 0오류·npm test 370pass/0fail/5skip.
 - [ ] **M2 스모크에 실도메인 점검 추가** — `scripts/smoke-production.js`에 `SITE_URL` 환경변수를 추가한다. 기본값은 `https://getfortrip.com`이고, 빈 문자열이면 아래 점검을 건너뛴다. 추가할 GET 점검(전부 읽기 전용, `redirect: 'manual'`):
   - apex 루트 200 HTML
   - `https://www.<도메인>/hotels?probe=1` → 301, Location이 apex의 같은 경로·쿼리

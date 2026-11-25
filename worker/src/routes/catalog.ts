@@ -10,6 +10,7 @@ import { optionalUser, rateLimit } from "../lib/auth.ts";
 import { hotelRatePlans, supplierBookabilityMap, type Bookability } from "../services/catalog.ts";
 import { airportsForCityCode, airportsForPlaceName, likeEscape, parseDomain, suggest } from "../services/suggest-service.ts";
 import { catalogSnapshot } from "./seo.ts";
+import { indexnowKeyFile } from "../seo/indexnow.ts";
 import { db } from "../db/database.ts";
 import { trackEvent } from "../lib/analytics.ts";
 import { SEARCH_DOMAINS, unifiedSearch } from "../services/search-service.ts";
@@ -89,6 +90,12 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
   if (path === "/api/v1/seo/snapshot") {
     const snap = await catalogSnapshot(env);
     return json({ success: true, generatedAt: new Date().toISOString(), ...snap }, 200, { "Cache-Control": "public, max-age=3600" });
+  }
+
+  // M1: IndexNow key file (hub-served; apex /{key}.txt is owned by ota-user so it cannot live there).
+  {
+    const km = path.match(/^\/api\/v1\/seo\/indexnow\/([^/]+)\.txt$/);
+    if (km) return indexnowKeyFile(env, km[1]);
   }
 
   // Legal document version registry (bodies live in the versioned frontend pages).
