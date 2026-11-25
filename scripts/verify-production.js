@@ -18,6 +18,9 @@
 const crypto = require('crypto');
 
 const PROD_HOST = 'ota-hub.dnjstjq0824.workers.dev';
+// 2026-11-25: the real domain fronts the same production hub (apex /api/* route),
+// so it must trip the same read-only + acknowledgement guard.
+const PROD_DOMAIN = 'getfortrip.com';
 // #114: the suite used to default to PRODUCTION with no confirmation. There
 // is no staging worker, so the safe default is the local dev server; reaching
 // production requires naming it AND acknowledging it (env or TTY prompt).
@@ -30,7 +33,7 @@ const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:8799';
 //     by default; full mutation runs on non-prod targets, or on production
 //     only with VERIFY_ALLOW_MUTATION=1. T41's live settle stays separately
 //     gated behind VERIFY_LIVE_SETTLE=1 (real money).
-const isProdTarget = [PROD_HOST].some((h) => BASE_URL.includes(h));
+const isProdTarget = [PROD_HOST, PROD_DOMAIN].some((h) => BASE_URL.includes(h));
 const ALLOW_MUTATION = process.env.VERIFY_ALLOW_MUTATION === '1' || (!isProdTarget && process.env.VERIFY_ALLOW_MUTATION !== '0');
 const ALLOW_SKIP = process.env.VERIFY_ALLOW_SKIP === '1';
 
