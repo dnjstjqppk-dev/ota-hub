@@ -122,6 +122,11 @@ export interface Env {
   REPLICA_MAX_LAG_MS?: string;
   /** TG-20: operator-declared primary region code (e.g. "ICN"). Surfaced on /status; no routing behavior in v1. */
   PRIMARY_REGION?: string;
+  /** S5: public company facts for llms-full.txt. Unset = the lines are omitted (pre-registration). */
+  COMPANY_NAME?: string;
+  COMPANY_CEO?: string;
+  COMPANY_ADDRESS?: string;
+  COMPANY_BIZ_NO?: string;
   /**
    * TG-21: Workers AI binding (optional). The real Ai binding satisfies
    * this structural shape; absent = rule fallbacks everywhere (local dev
