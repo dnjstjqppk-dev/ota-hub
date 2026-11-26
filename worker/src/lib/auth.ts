@@ -11,6 +11,8 @@ export interface AuthUser {
   tier?: string;
   staffId?: string;
   staffRole?: string;
+  /** Partner principal authenticated by an integration API key (no JWT, no staff row). */
+  viaApiKey?: boolean;
 }
 
 export function jwtSecret(env: Env): string {
@@ -157,7 +159,9 @@ export async function requirePartner(request: Request, env: Env): Promise<AuthUs
       throw new HttpError(403, "PARTNER_SUSPENDED", "승인 대기 중이거나 비활성화된 파트너 계정입니다.");
     }
     await rateLimit(request, env, "partner", 300, 60);
-    return { id: k.id, email: k.email, role: "PARTNER", partnerId: k.id, companyName: p.company_name || k.companyName };
+    // 2026-11-27 review: an API key is NOT the owner — it gets its own
+    // INTEGRATION role so owner-only surfaces (staff, keys, webhook, bank) refuse it.
+    return { id: k.id, email: k.email, role: "PARTNER", partnerId: k.id, companyName: p.company_name || k.companyName, viaApiKey: true, staffRole: "INTEGRATION" };
   }
   if (u.role !== "PARTNER" && u.role !== "ADMIN") throw new HttpError(403, "FORBIDDEN", "파트너 권한이 없습니다.");
   const p = await env.DB.prepare(
@@ -167,12 +171,16 @@ export async function requirePartner(request: Request, env: Env): Promise<AuthUs
     throw new HttpError(403, "PARTNER_SUSPENDED", "승인 대기 중이거나 비활성화된 파트너 계정입니다.");
   }
   if (u.staffId) {
-    const s = await env.DB.prepare("SELECT is_active FROM partner_staff WHERE id = ? AND partner_id = ?").bind(u.staffId, u.id).first<any>();
+    const s = await env.DB.prepare("SELECT is_active, role FROM partner_staff WHERE id = ? AND partner_id = ?").bind(u.staffId, u.id).first<any>();
     if (!s || s.is_active !== 1) throw new HttpError(403, "STAFF_DEACTIVATED", "비활성화된 직원 계정입니다. 다시 로그인해주세요.");
+    // 2026-11-27 review: the role comes from the database, never the JWT claim,
+    // so a demotion takes effect on the next request (same rule as requireAdmin).
+    await rateLimit(request, env, "partner", 300, 60);
+    return { ...u, staffRole: String(s.role || "STAFF"), viaApiKey: false, partnerId: u.id, companyName: p?.company_name || 'GetForTrip 입점 파트너' };
   }
   // #179: the extranet's authed surface shares one bound (see requireAdmin).
   await rateLimit(request, env, "partner", 300, 60);
-  return { ...u, partnerId: u.id, companyName: p?.company_name || 'GetForTrip 입점 파트너' };
+  return { ...u, viaApiKey: false, partnerId: u.id, companyName: p?.company_name || 'GetForTrip 입점 파트너' };
 }
 
 /**

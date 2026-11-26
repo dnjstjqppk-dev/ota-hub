@@ -8,9 +8,12 @@
  * booking is created for the new dates. The new booking is paid normally —
  * no second payment movement ever lands on one booking.
  *
- * Safety order inside confirm: the new booking is created FIRST (nothing
- * consumed on failure), the old booking is cancelled after. Either half
- * failing leaves the customer whole or better.
+ * Safety order (2026-11-27 review — two phases): confirm only CREATES the new
+ * booking (status stays EXECUTING with new_booking_id set). The old booking is
+ * cancelled by finalizeChangeAfterCapture() once the NEW booking's payment is
+ * captured. A declined card or a lapsed payment window therefore never leaves
+ * the customer with no booking and a cancellation fee; the abandoned request
+ * is closed as CANCELLED and the old booking stays untouched.
  */
 import type { Env } from "../env.ts";
 import type { AuthUser } from "../lib/auth.ts";
@@ -72,6 +75,20 @@ export async function confirmChange(env: Env, user: AuthUser, requestId: string,
   if (r.status === "EXECUTED" && r.new_booking_id) {
     return { oldBooking: await serializeBooking(env, (await getBooking(env, r.booking_id))!, user), newBookingId: r.new_booking_id };
   }
+  if (r.status === "EXECUTING" && r.new_booking_id) {
+    // Phase 1 already ran: the new booking is waiting for its payment.
+    const nb = await getBooking(env, r.new_booking_id);
+    if (nb && nb.status === "AWAITING_PAYMENT") {
+      return { oldBooking: await serializeBooking(env, (await getBooking(env, r.booking_id))!, user), newBookingId: r.new_booking_id };
+    }
+    if (!nb || ["EXPIRED", "FAILED", "CANCELLED"].includes(nb.status)) {
+      // The new booking died unpaid; its quote is consumed, so this request is
+      // closed. The old booking was never touched.
+      await env.DB.prepare("UPDATE change_requests SET status = 'CANCELLED' WHERE id = ? AND status = 'EXECUTING'").bind(r.id).run();
+      throw new HttpError(409, "CHANGE_EXPIRED", "새 예약의 결제 시간이 지나 일정 변경이 취소되었습니다. 기존 예약은 그대로 유지됩니다. 다시 요청해 주세요.");
+    }
+    return { oldBooking: await serializeBooking(env, (await getBooking(env, r.booking_id))!, user), newBookingId: r.new_booking_id };
+  }
   if (r.status !== "APPROVED") throw new HttpError(409, "CHANGE_NOT_APPROVED", "아직 실행할 수 없는 요청입니다.");
   const claimed = await env.DB.prepare("UPDATE change_requests SET status = 'EXECUTING' WHERE id = ? AND status = 'APPROVED'").bind(r.id).run();
   if (!claimed.meta.changes) {
@@ -107,14 +124,34 @@ export async function confirmChange(env: Env, user: AuthUser, requestId: string,
       quoteId: r.new_quote_id, contact: body.contact, travelers,
       specialRequests: body.specialRequests, consents: body.consents,
     }, `chg_${r.id}_${Date.now().toString(36)}`.slice(0, 80));
-    const waived = r.type === "INVOLUNTARY";
-    const old = await cancelByCustomer(env, user, r.booking_id, waived ? { feeWaived: true, waiveReason: `INVOLUNTARY:${r.id}` } : {});
-    await env.DB.prepare("UPDATE change_requests SET status = 'EXECUTED', new_booking_id = ?, executed_at = ? WHERE id = ?")
-      .bind(created.booking.id, new Date().toISOString(), r.id).run();
-    return { oldBooking: old, newBookingId: created.booking.id };
+    // Phase 1 ends here: the old booking stays live until the new one is paid.
+    await env.DB.prepare("UPDATE change_requests SET new_booking_id = ? WHERE id = ?").bind(created.booking.id, r.id).run();
+    return { oldBooking: await serializeBooking(env, b, user), newBookingId: created.booking.id };
   } catch (e) {
     await env.DB.prepare("UPDATE change_requests SET status = 'APPROVED' WHERE id = ? AND status = 'EXECUTING'").bind(r.id).run();
     throw e;
+  }
+}
+
+/**
+ * Phase 2: called after a booking's payment is captured. When that booking is
+ * the replacement of an EXECUTING change request, the old booking is cancelled
+ * now (fee waived for approved involuntary changes) and the request completes.
+ * Never throws into the payment path: a failure leaves the request EXECUTING
+ * (visible to ops in the change-request console) and is reported to the caller.
+ */
+export async function finalizeChangeAfterCapture(env: Env, newBookingId: string): Promise<"NONE" | "EXECUTED" | "FAILED"> {
+  const r = await env.DB.prepare("SELECT * FROM change_requests WHERE new_booking_id = ? AND status = 'EXECUTING'").bind(newBookingId).first<any>();
+  if (!r) return "NONE";
+  try {
+    const owner: AuthUser = { id: r.user_id, email: "", role: "USER" };
+    const waived = r.type === "INVOLUNTARY";
+    await cancelByCustomer(env, owner, r.booking_id, waived ? { feeWaived: true, waiveReason: `INVOLUNTARY:${r.id}` } : {});
+    await env.DB.prepare("UPDATE change_requests SET status = 'EXECUTED', executed_at = ? WHERE id = ? AND status = 'EXECUTING'")
+      .bind(new Date().toISOString(), r.id).run();
+    return "EXECUTED";
+  } catch {
+    return "FAILED";
   }
 }
 

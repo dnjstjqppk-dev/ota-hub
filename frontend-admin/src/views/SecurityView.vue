@@ -13,6 +13,7 @@ const busy = ref(false)
 const secret = ref('')
 const otpauthUrl = ref('')
 const code = ref('')
+const offCode = ref('')
 
 async function refresh() {
   loading.value = true
@@ -61,12 +62,15 @@ async function confirm() {
 }
 
 async function disable() {
+  // The API requires a current code to turn a confirmed factor off.
+  if (!offCode.value.trim()) { toast('현재 인증 코드를 입력해 주세요.', 'danger'); return }
   busy.value = true
   try {
-    await api('/admin/mfa', { method: 'DELETE' })
+    await api('/admin/mfa', { method: 'DELETE', json: { code: offCode.value.trim() } })
     status.value = { enrolled: false, pending: false }
     secret.value = ''
     otpauthUrl.value = ''
+    offCode.value = ''
     toast('2단계 인증을 껐어요.')
   } catch (e: any) {
     toast(e.message || '해제에 실패했어요.', 'danger')
@@ -94,7 +98,11 @@ refresh()
     <div v-else-if="status?.enrolled" class="card space-y-3 p-5">
       <p class="text-sm font-bold text-success">2단계 인증 사용 중</p>
       <p class="text-xs text-ink-subtle">로그인할 때마다 인증 앱 코드를 입력해야 해요.</p>
-      <button type="button" class="btn-secondary" :disabled="busy" @click="disable">2단계 인증 끄기</button>
+      <label for="mfa-off-code" class="label">끄려면 현재 인증 앱 코드를 입력하세요</label>
+      <div class="flex items-center gap-2">
+        <input id="mfa-off-code" v-model="offCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" class="input max-w-40" placeholder="123456" />
+        <button type="button" class="btn-secondary" :disabled="busy" @click="disable">2단계 인증 끄기</button>
+      </div>
     </div>
     <div v-else class="card space-y-4 p-5">
       <p class="text-sm font-bold">2단계 인증 {{ status?.pending ? '등록 진행 중' : '미사용' }}</p>

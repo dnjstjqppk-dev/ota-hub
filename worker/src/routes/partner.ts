@@ -312,9 +312,11 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
   // Role split (2026-11-09 audit [M]): the owner has no staff row; MANAGER and
   // STAFF come from partner_staff. Money infrastructure (bank details, staff
   // management) is OWNER-only; order decisions need MANAGER or above.
-  const staffRole = partner.staffId ? String(partner.staffRole || "STAFF").toUpperCase() : "OWNER";
+  // API-key integrations (PMS/channel managers) are INTEGRATION: they may
+  // decide orders like a MANAGER but never act as the OWNER.
+  const staffRole = partner.viaApiKey ? "INTEGRATION" : partner.staffId ? String(partner.staffRole || "STAFF").toUpperCase() : "OWNER";
   const isOwner = staffRole === "OWNER";
-  const canDecideOrders = isOwner || staffRole === "MANAGER";
+  const canDecideOrders = isOwner || staffRole === "MANAGER" || staffRole === "INTEGRATION";
   const needOwner = () => { if (!isOwner) throw new HttpError(403, "OWNER_ONLY", "대표 계정만 수행할 수 있습니다."); };
 
   // 3. Partner Dashboard Metrics

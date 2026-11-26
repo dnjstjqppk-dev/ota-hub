@@ -61,10 +61,17 @@ export async function handleWebhooks(request: Request, env: Env, url: URL): Prom
   const status = str(data.status, 30).toUpperCase();
   if (!eventType || !orderId) throw new HttpError(400, "INVALID_WEBHOOK", "eventType과 data.orderId가 필요합니다.");
 
-  // Dedupe redeliveries: same order + key + status is the same fact.
-  const eventId = `${orderId}:${paymentKey || "-"}:${status || eventType}`.slice(0, 200);
+  // Dedupe redeliveries: same order + key + status is the same fact. 2026-11-27
+  // review: successive partial cancels of ONE payment share order/key/status
+  // (PARTIAL_CANCELED), so the latest cancel's transactionKey joins the id, and
+  // cancel hints never short-circuit on a duplicate — they always re-query the
+  // PG (applyExternalCancel works on cumulative amounts, so a rerun is a no-op).
+  const cancels = Array.isArray(data.cancels) ? data.cancels : [];
+  const lastCancelKey = cancels.length ? str(cancels[cancels.length - 1]?.transactionKey, 64) : "";
+  const eventId = `${orderId}:${paymentKey || "-"}:${status || eventType}${lastCancelKey ? `:${lastCancelKey}` : ""}`.slice(0, 200);
+  const isCancelHint = /CANCEL|CHARGEBACK|ABORTED|EXPIRED/.test(`${eventType} ${status}`.toUpperCase());
   const dup = await env.DB.prepare("SELECT outcome FROM payment_events WHERE provider = 'toss' AND event_id = ?").bind(eventId).first<{ outcome: string | null }>();
-  if (dup) {
+  if (dup && !isCancelHint) {
     // Same oracle rule as fresh events: an unknown order stays indistinguishable.
     const action = dup.outcome === "IGNORED_UNKNOWN_ORDER" ? "NO_UNKNOWN_PAYMENT" : dup.outcome;
     return json({ success: true, duplicate: true, reconciled: dup.outcome === "RECONCILED", action, outcome: action });
@@ -87,9 +94,7 @@ export async function handleWebhooks(request: Request, env: Env, url: URL): Prom
   // B1: a cancel hint re-queries CAPTURED payments; a PG-confirmed external
   // cancel is recorded (money already moved — never executed twice).
   let externalApplied = 0;
-  const hint = `${eventType} ${status}`.toUpperCase();
-  const cancelHint = /CANCEL|CHARGEBACK|ABORTED|EXPIRED/.test(hint);
-  if (cancelHint) {
+  if (isCancelHint) {
     const captured = await env.DB.prepare("SELECT id, provider, provider_payment_key, amount_minor FROM payments WHERE booking_id = ? AND status IN ('CAPTURED', 'PARTIALLY_REFUNDED') ORDER BY created_at").bind(b.id).all<any>();
     // Multi-PG: each payment is re-queried through its OWN provider; rows with
     // an unresolvable provider fall back to the default, then skip quietly.
@@ -157,13 +162,17 @@ async function stripeWebhook(request: Request, env: Env, url: URL): Promise<Resp
       await stripeRecord(env, eventId, eventType, body, "UNVERIFIED_DISPUTE");
       return json({ success: true, reconciled: false, action: "UNVERIFIED_DISPUTE" });
     }
-    const pay = await env.DB.prepare("SELECT id, booking_id FROM payments WHERE provider = 'stripe' AND provider_payment_key = ?").bind(d.paymentIntentId).first<any>();
+    const pay = await env.DB.prepare("SELECT id, booking_id, amount_minor, refunded_minor FROM payments WHERE provider = 'stripe' AND provider_payment_key = ?").bind(d.paymentIntentId).first<any>();
     if (!pay) {
       await stripeRecord(env, eventId, eventType, body, "IGNORED_UNKNOWN_ORDER");
       return json({ success: true, duplicate: false, reconciled: false, action: "NO_UNKNOWN_PAYMENT" });
     }
+    // applyExternalCancel takes a CUMULATIVE cancelled amount; a dispute reports
+    // only the disputed part, so add what was already refunded (2026-11-27 review:
+    // a chargeback after a partial refund was dropped as ALREADY_APPLIED).
+    const cumulative = Math.min(Number(pay.refunded_minor || 0) + d.amountMinor, Number(pay.amount_minor || 0));
     const applied = await applyExternalCancel(env, pay.booking_id, {
-      paymentId: pay.id, canceledMinor: d.amountMinor, cancelReason: `CHARGEBACK:${d.reason}`.slice(0, 200), transactionKey: d.id,
+      paymentId: pay.id, canceledMinor: cumulative, cancelReason: `CHARGEBACK:${d.reason}`.slice(0, 200), transactionKey: d.id,
     });
     const outcome = applied === "APPLIED" ? "RECONCILED_EXTERNAL_CANCEL" : applied;
     await stripeRecord(env, eventId, eventType, body, outcome);

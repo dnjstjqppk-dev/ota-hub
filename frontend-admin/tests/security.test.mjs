@@ -13,7 +13,7 @@ assert.deepEqual(errors, [])
 const script = compileScript(descriptor, { id: 'security-test' })
 const template = compileTemplate({ source: descriptor.template.content, filename, id: 'security-test', compilerOptions: { bindingMetadata: script.bindings } })
 assert.deepEqual(template.errors, [])
-const code = transformSync(descriptor.scriptSetup.content.replace(/^import .*$/gm, '') + '\n;globalThis.page = { status, loading, busy, secret, otpauthUrl, code, refresh, enroll, confirm, disable, copy };', { loader: 'ts', format: 'cjs' }).code
+const code = transformSync(descriptor.scriptSetup.content.replace(/^import .*$/gm, '') + '\n;globalThis.page = { status, loading, busy, secret, otpauthUrl, code, offCode, refresh, enroll, confirm, disable, copy };', { loader: 'ts', format: 'cjs' }).code
 
 function setup() {
   const calls = []
@@ -36,6 +36,7 @@ function setup() {
         return { confirmed: true }
       }
       if (path === '/admin/mfa') {
+        if (init.json?.code !== '123456') throw new Error('현재 인증 코드를 입력해야 2단계 인증을 끌 수 있습니다.')
         enrolled = false
         pending = false
         return { enrolled: false }
@@ -73,7 +74,12 @@ test('mfa console: disable turns it off', async () => {
   await p.enroll()
   p.code.value = '123456'
   await p.confirm()
+  // 2026-11-27: turning a confirmed factor off needs the current code.
+  await p.disable()
+  assert.equal(p.status.value.enrolled, true, 'no code: nothing is sent')
+  assert.ok(!p.calls.some((c) => c.path === '/admin/mfa' && c.init.method === 'DELETE'))
+  p.offCode.value = '123456'
   await p.disable()
   assert.equal(p.status.value.enrolled, false)
-  assert.ok(p.calls.some((c) => c.path === '/admin/mfa' && c.init.method === 'DELETE'))
+  assert.ok(p.calls.some((c) => c.path === '/admin/mfa' && c.init.method === 'DELETE' && c.init.json?.code === '123456'))
 })

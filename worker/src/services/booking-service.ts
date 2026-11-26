@@ -106,6 +106,21 @@ export function moneyLog(event: string, fields: Record<string, unknown> = {}): v
   console.log(JSON.stringify({ ts: nowIso(), svc: "money", event, ...fields }));
 }
 
+/**
+ * GAP-08 phase 2 (2026-11-27): once a replacement booking's payment is
+ * captured, the change request cancels the booking it replaces. Lazy import —
+ * change-service imports this module. Never throws into the capture path.
+ */
+async function finalizeReplacedBooking(env: Env, bookingId: string): Promise<void> {
+  try {
+    const { finalizeChangeAfterCapture } = await import("./change-service.ts");
+    const out = await finalizeChangeAfterCapture(env, bookingId);
+    if (out !== "NONE") moneyLog("change.finalized", { newBookingId: bookingId, outcome: out });
+  } catch (e) {
+    moneyLog("change.finalize_error", { newBookingId: bookingId, error: String((e as Error)?.message || e).slice(0, 200) });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Low-level helpers
 // ---------------------------------------------------------------------------
@@ -880,20 +895,46 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   const number = newBookingNumber();
   // Deduct coins before the booking batch so a lost balance race never creates
   // an underfunded booking; compensated below if the batch itself fails.
+  let coinsDeducted = false;
   if (coinsMinor > 0) {
     const spent = await db.prepare("UPDATE users SET trip_coins = trip_coins - ? WHERE id = ? AND trip_coins >= ?").bind(coinsMinor, user.id, coinsMinor).run();
     if (!spent.meta.changes) throw new HttpError(409, "INSUFFICIENT_COINS", "보유 코인이 부족합니다. 금액을 다시 확인해주세요.");
+    coinsDeducted = true;
   }
+  // Returns THIS attempt's coin deduction (idempotent). 2026-11-27 review: every
+  // exit between the deduction and a committed booking must call it — coupon
+  // replay, COUPON_UNAVAILABLE, PROMO_EXHAUSTED, SLOT_SOLD_OUT and any throw
+  // while building the batch used to leave the coins gone with no booking.
+  const refundCoins = async (referenceId: string) => {
+    if (!coinsDeducted) return;
+    coinsDeducted = false;
+    await db.prepare("UPDATE users SET trip_coins = trip_coins + ? WHERE id = ?").bind(coinsMinor, user.id).run();
+    await db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, 'COIN_SPENT_COMPENSATED', ?)")
+      .bind(newId("coin"), user.id, coinsMinor, referenceId).run();
+  };
   // #14: consume the coupon claim + promo cap atomically (conditional UPDATEs:
   // concurrent bookings cannot double-spend one claim or overshoot the cap).
-  // Compensated below if the batch itself fails, like coins.
+  // Compensated below if anything fails before the booking commits, like coins.
   let couponConsumed: string | null = null;
   let promoCounted: string | null = null;
+  const compensatePromo = async () => {
+    if (couponConsumed) await db.prepare("UPDATE user_coupons SET is_used = 0 WHERE user_id = ? AND coupon_code = ?").bind(user.id, couponConsumed).run();
+    if (promoCounted) await db.prepare("UPDATE promotions SET used_count = used_count - 1 WHERE code = ? AND used_count > 0").bind(promoCounted).run();
+    couponConsumed = null;
+    promoCounted = null;
+  };
+  let slotClaim: { slotId: string; qty: number } | null = null;
+  let stmts: Stmt[];
+  try {
   if (quote.promotion_code) {
     const c = await db.prepare("UPDATE user_coupons SET is_used = 1 WHERE user_id = ? AND coupon_code = ? AND is_used = 0").bind(user.id, quote.promotion_code).run();
     if (!c.meta.changes) {
       const w = await db.prepare("SELECT id FROM bookings WHERE user_id = ? AND idempotency_key = ?").bind(user.id, idemKey).first<{ id: string }>();
-      if (w) return { replayed: true, booking: await serializeBooking(env, (await getBooking(env, w.id))!, user) };
+      if (w) {
+        // A concurrent twin won: return this attempt's coins, replay the winner.
+        await refundCoins(w.id);
+        return { replayed: true, booking: await serializeBooking(env, (await getBooking(env, w.id))!, user) };
+      }
       throw new HttpError(409, "COUPON_UNAVAILABLE", "쿠폰이 이미 사용되었거나 회수되었습니다. 쿠폰함에서 확인해주세요.");
     }
     couponConsumed = quote.promotion_code;
@@ -905,12 +946,6 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
     }
     promoCounted = quote.promotion_code;
   }
-  const compensatePromo = async () => {
-    if (couponConsumed) await db.prepare("UPDATE user_coupons SET is_used = 0 WHERE user_id = ? AND coupon_code = ?").bind(user.id, couponConsumed).run();
-    if (promoCounted) await db.prepare("UPDATE promotions SET used_count = used_count - 1 WHERE code = ? AND used_count > 0").bind(promoCounted).run();
-    couponConsumed = null;
-    promoCounted = null;
-  };
   const lockExpires = new Date(Date.now() + PAYMENT_WINDOW_MS).toISOString();
   // #80: explicit partner attribution — the booking carries the product's
   // owning partner only when it names a real partners row. Supplier codes,
@@ -920,12 +955,11 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
   // #104: claim the slot seats atomically (conditional UPDATE — exactly one
   // concurrent booking wins each seat). Compensated below if the batch fails,
   // like coins and promos.
-  let slotClaim: { slotId: string; qty: number } | null = null;
   if (freshSlot) {
     await claimSlotSeats(db, freshSlot.slotId, slotQty);
     slotClaim = { slotId: freshSlot.slotId, qty: slotQty };
   }
-  const stmts: Stmt[] = [
+  stmts = [
     db.prepare(
       `INSERT INTO bookings (id, user_id, partner_id, booking_number, domain_type, item_id, title, discount_amount_krw,
         total_price, currency, status, customer_name, customer_email, customer_phone, details_json, inventory_lock_expires_at,
@@ -982,6 +1016,13 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
       ).bind(newId("hld"), id, quote.domain_type, t.itemId, t.unitKey, t.date, t.itemId, t.date, t.unitKey, t.unitKey, t.capacity, t.itemId, t.unitKey, t.date, nowIso(), qty, qty, lockExpires),
     );
   }
+  } catch (e) {
+    // Anything that throws before the batch runs: undo slot, promo and coins.
+    if (slotClaim) await releaseSlotSeats(db, slotClaim.slotId, slotClaim.qty);
+    await compensatePromo();
+    await refundCoins(id);
+    throw e;
+  }
   try {
     await runBatch(db, stmts);
   } catch (e) {
@@ -989,21 +1030,13 @@ export async function createBooking(env: Env, user: AuthUser, body: any, idemKey
     const winner = await env.DB.prepare("SELECT id FROM bookings WHERE user_id = ? AND idempotency_key = ?").bind(user.id, idemKey).first<{ id: string }>();
     if (slotClaim) await releaseSlotSeats(db, slotClaim.slotId, slotClaim.qty);
     if (winner) {
-      if (coinsMinor > 0) {
-        // The winner already spent its own coins: return this attempt's deduct.
-        await db.prepare("UPDATE users SET trip_coins = trip_coins + ? WHERE id = ?").bind(coinsMinor, user.id).run();
-        await db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, 'COIN_SPENT_COMPENSATED', ?)")
-          .bind(newId("coin"), user.id, coinsMinor, winner.id).run();
-      }
+      // The winner already spent its own coins: return this attempt's deduct.
+      await refundCoins(winner.id);
       await compensatePromo();
       return { replayed: true, booking: await serializeBooking(env, (await getBooking(env, winner.id))!, user) };
     }
-    if (coinsMinor > 0) {
-      // No booking was created: return the pre-deducted coins.
-      await db.prepare("UPDATE users SET trip_coins = trip_coins + ? WHERE id = ?").bind(coinsMinor, user.id).run();
-      await db.prepare("INSERT INTO coin_ledger (id, user_id, delta, reason, reference_id) VALUES (?, ?, ?, 'COIN_SPENT_COMPENSATED', ?)")
-        .bind(newId("coin"), user.id, coinsMinor, id).run();
-    }
+    // No booking was created: return the pre-deducted coins.
+    await refundCoins(id);
     await compensatePromo();
     throw e;
   }
@@ -1404,6 +1437,7 @@ export async function confirmPayment(env: Env, user: AuthUser, body: any, tctx: 
     ]);
     cur = await fulfil(env, await mustGet(env, b.id), tctx, parentSpanId);
     moneyLog("payment.captured", { bookingId: b.id, paymentId, amountMinor: r.amountMinor, provider: provider.name });
+    await finalizeReplacedBooking(env, b.id);
     return { alreadyProcessed: false, booking: await serializeBooking(env, cur, user) };
   }
 
@@ -2082,6 +2116,7 @@ export async function reconcilePaymentByLookup(env: Env, paymentId: string): Pro
       ...hookEnqueueStmts(env.DB, hook, "booking.created", hookSnapshot(b, "PAYMENT_AUTHORIZED", { paid_minor: r.amountMinor, payment_id: p.id })),
     ]);
     await fulfil(env, await mustGet(env, b.id));
+    await finalizeReplacedBooking(env, b.id);
     return "RECONCILED";
   }
   if (r.outcome === "NOT_CAPTURED") {
@@ -2632,6 +2667,14 @@ export async function adminSupplierDecision(env: Env, decider: AuthUser, booking
     return issue(env, await mustGet(env, b.id));
   }
   if (decision === "REJECT") {
+    // 2026-11-27 review: payment_status stays 'UNPAID' while a PG call is
+    // UNKNOWN/PROCESSING (timeout, 3DS) — the money may already be captured.
+    // Failing the booking here would strand it (reconcile skips non-MANUAL_REVIEW
+    // bookings), so the payment must be reconciled first.
+    const inFlight = await db.prepare("SELECT id FROM payments WHERE booking_id = ? AND status IN ('UNKNOWN', 'PROCESSING') LIMIT 1").bind(b.id).first<{ id: string }>();
+    if (inFlight) {
+      throw new HttpError(409, "PAYMENT_UNRESOLVED", "결제 결과가 아직 확인되지 않았습니다. 결제 대사(reconcile) 후 다시 거절해 주세요.");
+    }
     if (b.payment_status !== "CAPTURED") {
       await runBatch(db, [
         ...transition(db, b, "FAILED", actor, note || "OPERATOR_REJECTED_UNPAID"),

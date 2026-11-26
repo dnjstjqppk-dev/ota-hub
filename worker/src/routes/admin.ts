@@ -1319,16 +1319,18 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
 
   // #100: TOTP second factor for admin logins. Enroll stores the secret
   // unconfirmed (shown once); only a confirmed secret gates /admin/login.
-  if (path === "/api/v1/admin/mfa/status" && method === "GET") {
-    const row = await db.prepare("SELECT confirmed_at FROM admin_mfa_secrets WHERE user_id = ?").bind(admin.id).first<{ confirmed_at: string | null }>();
-    return json({ success: true, enrolled: !!row, confirmed: !!row?.confirmed_at });
-  }
+  // 2026-11-27 review: a duplicate status handler above this one shadowed it
+  // (pending enrolments read as "enrolled"); the console reads enrolled/pending.
   if (path === "/api/v1/admin/mfa/status" && method === "GET") {
     const row = await db.prepare("SELECT confirmed_at FROM admin_mfa_secrets WHERE user_id = ?").bind(admin.id).first<{ confirmed_at: string | null }>();
     return json({ success: true, enrolled: Boolean(row?.confirmed_at), pending: Boolean(row && !row.confirmed_at) });
   }
   if (path === "/api/v1/admin/mfa/enroll" && method === "POST") {
     await rateLimit(request, env, "mfa_enroll", 5, 3600);
+    // A confirmed factor is never silently replaced: a stolen session could
+    // otherwise reset it to unconfirmed (= off). Disable it with a code first.
+    const existing = await db.prepare("SELECT confirmed_at FROM admin_mfa_secrets WHERE user_id = ?").bind(admin.id).first<{ confirmed_at: string | null }>();
+    if (existing?.confirmed_at) throw new HttpError(409, "MFA_ALREADY_ENABLED", "2단계 인증이 이미 켜져 있습니다. 먼저 현재 코드로 해제해 주세요.");
     const secret = newTotpSecret();
     await db.prepare("INSERT INTO admin_mfa_secrets (user_id, secret_b32, created_at, confirmed_at) VALUES (?, ?, CURRENT_TIMESTAMP, NULL) ON CONFLICT(user_id) DO UPDATE SET secret_b32 = excluded.secret_b32, created_at = excluded.created_at, confirmed_at = NULL")
       .bind(admin.id, secret).run();
@@ -1348,6 +1350,15 @@ export async function handleAdmin(request: Request, env: Env, url: URL): Promise
     return json({ success: true, confirmed: true });
   }
   if (path === "/api/v1/admin/mfa" && method === "DELETE") {
+    await rateLimit(request, env, "mfa_confirm", 10, 300);
+    // Turning off a confirmed factor needs a current code (stolen-session guard).
+    const row = await db.prepare("SELECT secret_b32, confirmed_at FROM admin_mfa_secrets WHERE user_id = ?").bind(admin.id).first<{ secret_b32: string; confirmed_at: string | null }>();
+    if (row?.confirmed_at) {
+      const b = await readJson(request).catch(() => ({} as any));
+      if (!(await verifyTotp(row.secret_b32, String(b?.code || "")))) {
+        throw new HttpError(403, "INVALID_TOTP_CODE", "현재 인증 코드를 입력해야 2단계 인증을 끌 수 있습니다.");
+      }
+    }
     await db.prepare("DELETE FROM admin_mfa_secrets WHERE user_id = ?").bind(admin.id).run();
     await audit(env, admin.id, "ADMIN_MFA_DISABLED", "AUTH", admin.id, null);
     return json({ success: true, enrolled: false });

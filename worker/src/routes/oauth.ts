@@ -16,7 +16,7 @@
 import type { Env } from "../env.ts";
 import { isNonProduction } from "../env.ts";
 import { HttpError, allowedOrigin, clientIp, json, readJson, str } from "../lib/http.ts";
-import { audit, authCookie, jwtSecret, rateLimit } from "../lib/auth.ts";
+import { authCookie, jwtSecret, rateLimit } from "../lib/auth.ts";
 import { newId, randomToken, signJwt, verifyJwt } from "../lib/crypto.ts";
 import { ephemeral } from "../lib/ephemeral.ts";
 import { consentStmts, currentVersions } from "../lib/consents.ts";
@@ -244,19 +244,13 @@ export async function handleOAuth(request: Request, env: Env, url: URL): Promise
     const linked = await db.prepare(
       "SELECT u.* FROM user_identities i JOIN users u ON u.id = i.user_id WHERE i.provider = ? AND i.provider_user_id = ?",
     ).bind(PROVIDER, prof.sub).first<any>();
-    let user = linked;
-    if (!user && prof.email && prof.emailVerified) {
-      const byEmail = await db.prepare("SELECT * FROM users WHERE email = ?").bind(prof.email).first<any>();
-      if (byEmail && byEmail.role === "USER" && (byEmail.status || "ACTIVE") === "ACTIVE") {
-        await db.prepare("INSERT INTO user_identities (id, user_id, provider, provider_user_id, email) VALUES (?, ?, ?, ?, ?)")
-          .bind(newId("uid"), byEmail.id, PROVIDER, prof.sub, prof.email).run();
-        await audit(env, byEmail.id, "SOCIAL_LINKED", "USER", byEmail.id, { provider: PROVIDER, by: "verified_email" });
-        user = byEmail;
-      } else if (byEmail) {
-        return redirect(landing(back.origin, back.path, null, "EMAIL_IN_USE"), [clear]);
-      }
-    } else if (!user && prof.email) {
-      // Unverified e-mail that already belongs to someone: never link, never duplicate.
+    const user = linked;
+    if (!user && prof.email) {
+      // An existing account with this e-mail is NEVER auto-linked, even when
+      // the provider verified the address (2026-11-27 review): we never proved
+      // that the account's creator owns it (/auth/register and oauth/complete
+      // accept any typed e-mail), so linking would log the real owner into a
+      // pre-registered attacker account. They sign in with the password instead.
       if (await db.prepare("SELECT id FROM users WHERE email = ?").bind(prof.email).first()) {
         return redirect(landing(back.origin, back.path, null, "EMAIL_IN_USE"), [clear]);
       }

@@ -19,6 +19,16 @@ const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": 
 const DOC_TYPES: Record<string, string> = { ...IMAGE_TYPES, "application/pdf": "pdf" };
 const MAX_BYTES = 8 * 1024 * 1024;
 
+/**
+ * 2026-11-27 review: the ADMIN branch must re-read the role (and status) from
+ * the database like requireAdmin — a JWT claim survives a demotion for 12h.
+ */
+async function isDbAdmin(env: Env, user: { id: string; role: string } | null): Promise<boolean> {
+  if (!user || user.role !== "ADMIN") return false;
+  const row = await env.DB.prepare("SELECT role, status FROM users WHERE id = ?").bind(user.id).first<{ role: string; status: string | null }>();
+  return !!row && row.role === "ADMIN" && (row.status || "ACTIVE") === "ACTIVE";
+}
+
 function extFor(purpose: string, contentType: string): string | null {
   const table = purpose === "BUSINESS_CERT" || purpose === "BANK_CERT" ? DOC_TYPES : IMAGE_TYPES;
   return table[contentType] || null;
@@ -52,6 +62,7 @@ export async function handleUploads(request: Request, env: Env, url: URL): Promi
     let ownerType = "PARTNER";
     let ownerId = "";
     if (user.role === "ADMIN") {
+      if (!(await isDbAdmin(env, user))) throw new HttpError(403, "FORBIDDEN", "관리자 권한이 없습니다.");
       ownerType = purpose === "REVIEW_PHOTO" || purpose === "MOMENT_PHOTO" ? "USER" : "PARTNER";
       ownerId = str(form?.get("ownerId"), 64) || (ownerType === "PARTNER" ? "getfortrip" : user.id);
     } else if (user.role === "PARTNER") {
@@ -83,17 +94,21 @@ export async function handleUploads(request: Request, env: Env, url: URL): Promi
   if (m && method === "GET") {
     const row = await env.DB.prepare("SELECT * FROM uploads WHERE id = ?").bind(m[1]).first<any>();
     if (!row) throw new HttpError(404, "UPLOAD_NOT_FOUND", "파일을 찾을 수 없습니다.");
-    if (row.purpose === "BUSINESS_CERT" || row.purpose === "BANK_CERT") {
+    const privateDoc = row.purpose === "BUSINESS_CERT" || row.purpose === "BANK_CERT";
+    if (privateDoc) {
       const user = await getAuthUser(request, env);
       const ownerId = (user as any)?.partnerId || user?.id;
-      if (!user || (user.role !== "ADMIN" && ownerId !== row.owner_id)) {
+      const allowed = !!user && (ownerId === row.owner_id ? user.role !== "ADMIN" || (await isDbAdmin(env, user)) : await isDbAdmin(env, user));
+      if (!allowed) {
         throw new HttpError(403, "FORBIDDEN", "이 서류를 볼 권한이 없습니다.");
       }
     }
     if (!env.UPLOADS) throw new HttpError(503, "UPLOADS_UNAVAILABLE", "파일 저장소가 설정되지 않았습니다.");
     const obj = await env.UPLOADS.get(row.object_key);
     if (!obj) throw new HttpError(404, "UPLOAD_NOT_FOUND", "파일을 찾을 수 없습니다.");
-    return new Response(obj.body, { status: 200, headers: { "Content-Type": row.content_type, "Cache-Control": "public, max-age=31536000, immutable" } });
+    // Onboarding docs (bank/business PII) must never land in a shared cache.
+    const cacheControl = privateDoc ? "private, no-store" : "public, max-age=31536000, immutable";
+    return new Response(obj.body, { status: 200, headers: { "Content-Type": row.content_type, "Cache-Control": cacheControl } });
   }
 
   return null;

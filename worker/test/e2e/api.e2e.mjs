@@ -4619,16 +4619,35 @@ test("GAP-08 change: voluntary reissue reprices, executes, and retickets", async
   const done = await api("POST", `/api/v1/change-requests/${req.data.requestId}/confirm`, { token: U.token, body: { contact, travelers: tv, consents: TXC } });
   assert.equal(done.status, 200, JSON.stringify(done.data));
   assert.ok(done.data.newBookingId && done.data.newBookingId !== b.id);
-  const old = (await api("GET", `/api/v1/bookings/${b.id}`, { token: U.token })).data.booking;
-  assert.equal(old.status, "CANCELLED"); // discount economy is non-refundable: full forfeit, no refund row
-  assert.equal(sql(`SELECT COUNT(*) AS c FROM refunds WHERE booking_id = '${b.id}'`)[0].c, 0);
+  // Two-phase (2026-11-27): the old booking stays live until the new one is paid.
+  assert.equal((await api("GET", `/api/v1/bookings/${b.id}`, { token: U.token })).data.booking.status, "TICKETED");
+  assert.equal(sql(`SELECT status FROM change_requests WHERE id = '${req.data.requestId}'`)[0].status, "EXECUTING");
+  const again = await api("POST", `/api/v1/change-requests/${req.data.requestId}/confirm`, { token: U.token, body: { contact, travelers: tv, consents: TXC } });
+  assert.equal(again.data.newBookingId, done.data.newBookingId, "confirm is idempotent while the new booking awaits payment");
   const nb = (await api("GET", `/api/v1/bookings/${done.data.newBookingId}`, { token: U.token })).data.booking;
   assert.equal(nb.status, "AWAITING_PAYMENT");
   const p2 = await pay(U.token, nb);
   assert.equal(p2.data.booking.status, "TICKETED");
+  const old = (await api("GET", `/api/v1/bookings/${b.id}`, { token: U.token })).data.booking;
+  assert.equal(old.status, "CANCELLED"); // discount economy is non-refundable: full forfeit, no refund row
+  assert.equal(sql(`SELECT COUNT(*) AS c FROM refunds WHERE booking_id = '${b.id}'`)[0].c, 0);
   const row = sql(`SELECT status, new_booking_id FROM change_requests WHERE id = '${req.data.requestId}'`)[0];
   assert.equal(row.status, "EXECUTED");
   assert.equal(row.new_booking_id, done.data.newBookingId);
+});
+
+test("GAP-08 change: an unpaid replacement never cancels the old booking", async () => {
+  const { U, b, tv } = await ticketedFlight("chgunpaid", "flt_ke703", 72);
+  const req = await api("POST", `/api/v1/bookings/${b.id}/change-request`, { token: U.token, body: { type: "VOLUNTARY", newStartDate: fday(92) } });
+  assert.equal(req.status, 201, JSON.stringify(req.data));
+  const done = await api("POST", `/api/v1/change-requests/${req.data.requestId}/confirm`, { token: U.token, body: { contact, travelers: tv, consents: TXC } });
+  assert.equal(done.status, 200, JSON.stringify(done.data));
+  // The replacement lapses unpaid.
+  sql(`UPDATE bookings SET status = 'EXPIRED' WHERE id = '${done.data.newBookingId}'`);
+  const retry = await api("POST", `/api/v1/change-requests/${req.data.requestId}/confirm`, { token: U.token, body: { contact, travelers: tv, consents: TXC } });
+  assert.equal(retry.data.code, "CHANGE_EXPIRED");
+  assert.equal((await api("GET", `/api/v1/bookings/${b.id}`, { token: U.token })).data.booking.status, "TICKETED");
+  assert.equal(sql(`SELECT status FROM change_requests WHERE id = '${req.data.requestId}'`)[0].status, "CANCELLED");
 });
 
 test("GAP-08 change: voluntary hotel change refunds the old stay in full", async () => {
@@ -4638,11 +4657,12 @@ test("GAP-08 change: voluntary hotel change refunds the old stay in full", async
   assert.equal(req.status, 201, JSON.stringify(req.data));
   const done = await api("POST", `/api/v1/change-requests/${req.data.requestId}/confirm`, { token: U.token, body: { contact, travelers: lead, consents: TXC } });
   assert.equal(done.status, 200, JSON.stringify(done.data));
-  const paid = (await api("GET", `/api/v1/bookings/${b.id}`, { token: U.token })).data.booking.paidMinor;
-  assert.equal(sql(`SELECT amount_minor AS a FROM refunds WHERE booking_id = '${b.id}'`)[0].a, paid);
   const nb = (await api("GET", `/api/v1/bookings/${done.data.newBookingId}`, { token: U.token })).data.booking;
   assert.equal(nb.status, "AWAITING_PAYMENT");
   assert.equal((await pay(U.token, nb)).data.booking.status, "VOUCHER_ISSUED");
+  // The old stay is refunded only once the replacement is paid.
+  const paid = (await api("GET", `/api/v1/bookings/${b.id}`, { token: U.token })).data.booking.paidMinor;
+  assert.equal(sql(`SELECT amount_minor AS a FROM refunds WHERE booking_id = '${b.id}'`)[0].a, paid);
 });
 
 test("GAP-08 change: involuntary needs approval; guards hold", async () => {
@@ -4656,6 +4676,8 @@ test("GAP-08 change: involuntary needs approval; guards hold", async () => {
   assert.equal(ap.status, 200, JSON.stringify(ap.data));
   const done = await api("POST", `/api/v1/change-requests/${req.data.requestId}/confirm`, { token: U.token, body: { contact, reuseTravelers: true, consents: TXC } });
   assert.equal(done.status, 200, JSON.stringify(done.data));
+  const inb = (await api("GET", `/api/v1/bookings/${done.data.newBookingId}`, { token: U.token })).data.booking;
+  assert.equal((await pay(U.token, inb)).data.booking.status, "TICKETED");
   const fee = sql(`SELECT cancellation_fee_minor AS f FROM bookings WHERE id = '${b.id}'`)[0].f;
   assert.equal(Number(fee || 0), 0, "involuntary change waives the fee");
   const paid = (await api("GET", `/api/v1/bookings/${b.id}`, { token: U.token })).data.booking.paidMinor;

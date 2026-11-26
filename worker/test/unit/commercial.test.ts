@@ -199,3 +199,52 @@ test("oauth: disabled providers 404 and unknown paths fall through", async () =>
   assert.deepEqual(((await list!.json()) as any).providers, []);
   assert.equal(await handleOAuth(req("https://api.test/api/v1/auth/login"), env, new URL("https://api.test/api/v1/auth/login")), null);
 });
+
+// ---------------------------------------------------------------------------
+// 2026-11-27 full-codebase review regressions
+// ---------------------------------------------------------------------------
+test("oauth: a verified provider e-mail never auto-links an existing account", async () => {
+  const inserts: string[] = [];
+  const db = fakeDb({
+    first: (sql) => (/FROM users WHERE email/.test(sql) ? { id: "usr_victim", role: "USER", status: "ACTIVE" } : null),
+    run: (sql) => { if (/INSERT INTO user_identities/.test(sql)) inserts.push(sql); return { meta: { changes: 1 } }; },
+  });
+  const env = oauthEnv(db);
+  const { state, cookie } = await startFlow(env);
+  const restore = mockKakao({ id: 99, kakao_account: { email: "victim@b.co", is_email_verified: true, is_email_valid: true } });
+  try {
+    const u = `https://api.test/api/v1/auth/oauth/kakao/callback?code=c&state=${state}`;
+    const r = await handleOAuth(req(u, { headers: { Cookie: cookie } }), env, new URL(u));
+    const loc = new URL(r!.headers.get("Location")!);
+    assert.equal(loc.searchParams.get("error"), "EMAIL_IN_USE");
+    assert.equal(new URLSearchParams(loc.hash.slice(1)).get("handoff"), null, "no login handoff for the pre-registered account");
+    assert.deepEqual(inserts, [], "no identity row is linked");
+  } finally {
+    restore();
+  }
+});
+
+test("partner auth: API keys are INTEGRATION, staff roles come from the database", async () => {
+  const { requirePartner } = await import("../../src/lib/auth.ts");
+  const { signJwt } = await import("../../src/lib/crypto.ts");
+  const partnerRow = { id: "ptn_1", company_name: "Acme", is_active: 1, profile_status: "ACTIVE" };
+  const db = fakeDb({
+    first: (sql) => {
+      if (/FROM partner_api_keys/.test(sql)) return { id: "ptn_1", email: "p@acme.co", company_name: "Acme" };
+      if (/FROM partners p/.test(sql)) return partnerRow;
+      if (/FROM partner_staff/.test(sql)) return { is_active: 1, role: "STAFF" };
+      return null;
+    },
+    run: () => ({ meta: { changes: 1 } }),
+  });
+  const env = { APP_ENV: "test", JWT_SECRET: SECRET, DB: db, EPHEMERAL: memStore() } as any;
+  const key = `gft_live_${"a".repeat(32)}`;
+  const viaKey = await requirePartner(new Request("https://api.test/x", { headers: { Authorization: `Bearer ${key}` } }), env);
+  assert.equal(viaKey.viaApiKey, true);
+  assert.equal(viaKey.staffRole, "INTEGRATION");
+  // A token minted while the staffer was MANAGER: the DB now says STAFF.
+  const jwt = await signJwt({ id: "ptn_1", email: "s@acme.co", role: "PARTNER", staffId: "stf_1", staffRole: "MANAGER" }, SECRET);
+  const staff = await requirePartner(new Request("https://api.test/x", { headers: { Authorization: `Bearer ${jwt}` } }), env);
+  assert.equal(staff.staffRole, "STAFF", "demotion applies without waiting for the JWT to expire");
+  assert.equal(staff.viaApiKey, false);
+});
