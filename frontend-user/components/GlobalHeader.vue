@@ -204,7 +204,7 @@ onBeforeUnmount(() => {
             <button type="button" role="menuitem" class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink-muted hover:bg-surface-sunken hover:text-danger" @click="logout"><AppIcon name="logout" :size="18" />{{ t('header.logout') }}</button>
           </div>
         </div>
-        <NuxtLink v-else :to="$localePath(`/login?redirect=${encodeURIComponent(route.fullPath)}`)" class="hidden h-10 items-center rounded-full bg-ink px-5 text-sm font-bold text-ink-inverse transition hover:bg-primary hover:text-primary-ink md:flex">
+        <NuxtLink v-else rel="nofollow" :to="$localePath(`/login?redirect=${encodeURIComponent(route.fullPath)}`)" class="hidden h-10 items-center rounded-full bg-ink px-5 text-sm font-bold text-ink-inverse transition hover:bg-primary hover:text-primary-ink md:flex">
           {{ t('nav.login') }}
         </NuxtLink>
 
@@ -239,7 +239,7 @@ onBeforeUnmount(() => {
             </div>
             <div v-else class="flex items-center justify-between rounded-card bg-primary-soft p-4">
               <p class="text-sm font-medium text-ink">{{ t('header.loginPrompt') }}</p>
-              <NuxtLink :to="localePath(`/login?redirect=${encodeURIComponent(route.fullPath)}`)" class="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-ink">{{ t('nav.login') }}</NuxtLink>
+              <NuxtLink rel="nofollow" :to="localePath(`/login?redirect=${encodeURIComponent(route.fullPath)}`)" class="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-ink">{{ t('nav.login') }}</NuxtLink>
             </div>
 
             <p class="mb-3 mt-6 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">{{ t('header.products') }}</p>

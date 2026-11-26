@@ -24,7 +24,7 @@ const isSubmitting = ref(false)
 
 const { t } = useI18n()
 const rawRedirect = (route.query.redirect as string) || ''
-useHead({ title: t('auth.regTitle') })
+useHead({ title: t('auth.regTitle'), meta: [{ name: 'robots', content: 'noindex' }] })
 const redirectPath = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/my'
 
 const handleRegister = async () => {

@@ -1,4 +1,5 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import { readFileSync } from 'node:fs'
 declare const process: {
   env: Record<string, string | undefined>
 }
@@ -9,10 +10,57 @@ declare const process: {
 // snapshot (gen-seo-snapshot.mjs / prerender-routes.json, C7-era) is gone:
 // new products are reachable without a rebuild, and /sitemap.xml already
 // reads D1 live (worker/src/routes/seo.ts).
-export default defineNuxtConfig({
-  ssr: true,
+
+// Per-page render rules (ko paths). Locale-prefixed copies are generated below
+// (strategy prefix_except_default), so a rule here applies to /en|/ja|/zh too.
+const PAGE_RULES: Record<string, Record<string, unknown>> = {
   // Private, query-driven pages render client-side only. A prerendered copy would hydrate with the
   // build-time route (no query string), so e.g. /checkout?domain=... or the PG return URL lost its params.
+  '/checkout': { ssr: false },
+  '/checkout/**': { ssr: false },
+  '/booking/**': { ssr: false },
+  '/my': { ssr: false },
+  '/my/**': { ssr: false },
+  '/reset-password': { ssr: false },
+  '/login': { ssr: false },
+  '/register': { ssr: false },
+  '/status': { ssr: false },
+  // TG-15: catalog renders on demand. NOTE (2026-11-27): on the cloudflare-module
+  // preset `isr` caches nothing by itself — it only switches on _payload.json
+  // extraction. The edge cache lives in edge/edge-guard.mjs (Cache API).
+  '/hotels': { isr: 3600 },
+  '/hotels/**': { isr: 3600 },
+  '/flights': { isr: 3600 },
+  '/flights/**': { isr: 3600 },
+  '/trains': { isr: 3600 },
+  '/trains/**': { isr: 3600 },
+  '/cars': { isr: 3600 },
+  '/cars/**': { isr: 3600 },
+  '/transfers': { isr: 3600 },
+  '/transfers/**': { isr: 3600 },
+  '/things-to-do': { isr: 3600 },
+  '/things-to-do/**': { isr: 3600 },
+  '/packages': { isr: 3600 },
+  '/packages/**': { isr: 3600 },
+  '/deals': { isr: 3600 },
+  '/trip-best': { isr: 3600 },
+  // P5: affiliate landings + help content are public and cacheable.
+  '/esim': { isr: 3600 },
+  '/insurance': { isr: 3600 },
+  '/faq': { isr: 3600 },
+  '/help': { isr: 3600 }
+}
+const LOCALE_PREFIXES = ['en', 'ja', 'zh']
+function localizeRules(rules: Record<string, Record<string, unknown>>) {
+  const out: Record<string, Record<string, unknown>> = { ...rules }
+  for (const loc of LOCALE_PREFIXES) {
+    for (const [path, rule] of Object.entries(rules)) out[`/${loc}${path}`] = rule
+  }
+  return out
+}
+
+export default defineNuxtConfig({
+  ssr: true,
   routeRules: {
     // P1-1 (2026-11-22 audit): ota-user sent zero security headers. Mirrors
     // worker SECURITY_HEADERS, plus the GAP-02 page CSP below (SSR-compatible:
@@ -28,37 +76,10 @@ export default defineNuxtConfig({
         'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.tosspayments.com https://js.stripe.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data: blob:; font-src 'self' https://cdn.jsdelivr.net data:; connect-src 'self' https://ota-hub.dnjstjq0824.workers.dev https://getfortrip.com https://api.tosspayments.com https://log.tosspayments.com https://api.stripe.com https://*.sentry.io https://*.ingest.sentry.io; frame-src https://pay.tosspayments.com https://js.stripe.com; form-action 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
       }
     },
-    '/checkout': { ssr: false },
-    '/checkout/**': { ssr: false },
-    '/booking/**': { ssr: false },
-    '/my': { ssr: false },
-    '/my/**': { ssr: false },
-    '/reset-password': { ssr: false },
-    '/login': { ssr: false },
-    '/register': { ssr: false },
-    '/status': { ssr: false },
-    // TG-15: catalog renders on demand, cached at the edge for 1h (SWR).
-    '/hotels': { isr: 3600 },
-    '/hotels/**': { isr: 3600 },
-    '/flights': { isr: 3600 },
-    '/flights/**': { isr: 3600 },
-    '/trains': { isr: 3600 },
-    '/trains/**': { isr: 3600 },
-    '/cars': { isr: 3600 },
-    '/cars/**': { isr: 3600 },
-    '/transfers': { isr: 3600 },
-    '/transfers/**': { isr: 3600 },
-    '/things-to-do': { isr: 3600 },
-    '/things-to-do/**': { isr: 3600 },
-    '/packages': { isr: 3600 },
-    '/packages/**': { isr: 3600 },
-    '/deals': { isr: 3600 },
-    '/trip-best': { isr: 3600 },
-    // P5: affiliate landings + help content are public and cacheable (hourly SWR).
-    '/esim': { isr: 3600 },
-    '/insurance': { isr: 3600 },
-    '/faq': { isr: 3600 },
-    '/help': { isr: 3600 }
+    // 2026-11-27 CPU incident: these used to cover the ko (unprefixed) paths
+    // only, so /en/login, /zh/register, /ja/my … ran a full SSR on every hit
+    // (56% of ota-user CPU). localizeRules() repeats each rule per prefix.
+    ...localizeRules(PAGE_RULES)
   },
   nitro: {
     // cloudflare-module (ES modules + nodejs_compat). The plain 'cloudflare'
@@ -74,7 +95,7 @@ export default defineNuxtConfig({
     // never sees www asset requests (www/robots.txt → 200, a duplicate signal
     // for crawlers). This renames the built entry to entry.orig.mjs and emits
     // a wrapper index.mjs (wrangler "main" is unchanged) that 301s www.* hosts
-    // and delegates everything else untouched. Non-www traffic is unaffected.
+    // and runs the edge guard (edge/edge-guard.mjs) before delegating to Nuxt.
     rollupConfig: {
       plugins: [
         {
@@ -92,24 +113,27 @@ export default defineNuxtConfig({
             delete bundle['index.mjs']
             entry.fileName = 'entry.orig.mjs'
             bundle['entry.orig.mjs'] = entry
+            // 2026-11-27: the wrapper also runs edge/edge-guard.mjs (scanner 404s +
+            // Cache API edge cache) in front of Nuxt. The build tag versions the
+            // cache keys so a deploy never serves HTML pointing at old assets.
+            const buildTag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+            this.emitFile({
+              type: 'asset',
+              fileName: 'edge-guard.mjs',
+              source: readFileSync(new URL('./edge/edge-guard.mjs', import.meta.url), 'utf8')
+            })
             this.emitFile({
               type: 'asset',
               fileName: 'index.mjs',
               source: [
                 "import orig from './entry.orig.mjs';",
+                "import { createEdgeFetch } from './edge-guard.mjs';",
                 'const target = orig && orig.default ? orig.default : orig;',
                 'const wrapped = { ...target };',
                 'for (const k of Object.keys(wrapped)) {',
                 "  if (k !== 'fetch' && typeof wrapped[k] === 'function') wrapped[k] = wrapped[k].bind(target);",
                 '}',
-                'wrapped.fetch = async (request, env, ctx) => {',
-                '  const url = new URL(request.url);',
-                '  const host = url.hostname.toLowerCase();',
-                "  if (host.startsWith('www.')) {",
-                '    return Response.redirect(`https://${host.slice(4)}${url.pathname}${url.search}`, 301);',
-                '  }',
-                '  return target.fetch(request, env, ctx);',
-                '};',
+                `wrapped.fetch = createEdgeFetch(target, ${JSON.stringify(buildTag)});`,
                 'export default wrapped;',
                 ''
               ].join('\n')
