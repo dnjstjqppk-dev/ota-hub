@@ -26,7 +26,7 @@ assert.deepEqual(template.errors, [])
 // SSR itself is covered by the build + ISR smoke.
 const setupBody = descriptor.scriptSetup.content
   .replace(/^import .*$/gm, '')
-  .replace(/^await useAsyncData.*$/gm, '')
+  .replace(/^await (useAsyncData|useSsrLoad).*$/gm, '')
   .replace(/^if \(state\.value.*$/gm, '')
 const code = transformSync(setupBody + '\n;globalThis.page = { benefitText, boundText, discountTypeLabel };', { loader: 'ts', format: 'cjs' }).code
 

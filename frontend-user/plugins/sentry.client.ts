@@ -101,7 +101,11 @@ export default defineNuxtPlugin((nuxtApp) => {
     }
   }
 
-  nuxtApp.vueApp.config.errorHandler = (err) => send(err)
+  // Subscribe, never replace: Nuxt's own vueApp errorHandler records
+  // initial-load errors in payload.error (error.vue + console). Replacing it
+  // hid those failures whenever a DSN was set (2026-11-27 review).
+  nuxtApp.hook('vue:error', (err: unknown) => send(err))
+  nuxtApp.hook('app:error', (err: unknown) => send(err))
   window.addEventListener('error', (ev) => send(ev.error || ev.message))
   window.addEventListener('unhandledrejection', (ev) => send(ev.reason))
 })

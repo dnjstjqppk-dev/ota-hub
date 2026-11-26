@@ -128,6 +128,10 @@ function buildTravelers() {
   travelers.value = list
 }
 
+// Fallback when sessionStorage is blocked: one random key per quote for this
+// page's lifetime. Never derive the key from the quote id — cart ids carry
+// ':' and ',' (rejected by the API's [A-Za-z0-9_-]{16,80} rule).
+const memIdemKeys = new Map<string, string>()
 function idemKeyFor(quoteId: string) {
   const k = `gft_idem_${quoteId}`
   try {
@@ -136,7 +140,11 @@ function idemKeyFor(quoteId: string) {
     const v = `chk_${crypto.randomUUID().replace(/-/g, '')}`
     sessionStorage.setItem(k, v)
     return v
-  } catch { return `chk_${quoteId}` }
+  } catch {
+    let v = memIdemKeys.get(quoteId)
+    if (!v) { v = `chk_${crypto.randomUUID().replace(/-/g, '')}`; memIdemKeys.set(quoteId, v) }
+    return v
+  }
 }
 
 const datesReady = computed(() => !!startDate.value && (!needsEnd || endDate.value > startDate.value) && (!returnItemId || returnDate.value >= startDate.value))
@@ -312,6 +320,7 @@ async function pay() {
 function goLogin() { router.push(localePath(`/login?redirect=${encodeURIComponent(route.fullPath)}`)) }
 
 onMounted(async () => {
+  cart.hydrate()
   today.value = todayIso()
   timer = setInterval(() => (now.value = Date.now()), 1000)
   await auth.initAuth()
@@ -477,7 +486,7 @@ onBeforeUnmount(() => { clearInterval(timer); unmountStripeCard() })
           </div>
           <label v-if="!perPersonTravelers" class="mt-4 block"><span class="field-label">{{ $t('checkout.specialReq') }}</span><textarea v-model="specialRequests" :disabled="step === 'payment'" rows="2" maxlength="500" :class="FIELD" /></label>
 
-          <div v-if="quote.fulfilmentMode === 'SIMULATED' && step === 'travelers'" class="mt-4 rounded-2xl border border-warning/30 bg-warning-soft p-4 text-sm text-ink">
+          <div v-if="quote?.fulfilmentMode === 'SIMULATED' && step === 'travelers'" class="mt-4 rounded-2xl border border-warning/30 bg-warning-soft p-4 text-sm text-ink">
             <p class="mb-2 font-semibold">{{ $t('checkout.simTitle') }}</p>
             <label class="mr-4">{{ $t('checkout.simSupplier') }}
               <select v-model="simSupplier" class="ml-1 rounded-lg border border-line bg-surface px-2 py-1" data-testid="sim-supplier"><option value="confirm">{{ $t('checkout.simConfirm') }}</option><option value="fail">{{ $t('checkout.simFail') }}</option><option value="timeout">{{ $t('checkout.simTimeout') }}</option><option value="pending">{{ $t('checkout.simPending') }}</option></select>

@@ -4,12 +4,13 @@
  * leg, so stale facts here can never overcharge. One checkout pays all legs
  * at once; the server splits settlement per vendor.
  */
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useCartStore } from '~/stores/cart'
 import { formatKrw } from '~/composables/useApi'
 import { fmtDay } from '~/composables/useUrlQuery'
 
 const cart = useCartStore()
+onMounted(() => cart.hydrate())
 const canCheckout = computed(() => cart.legs.length >= 2)
 const checkoutTo = computed(() => ({ path: '/checkout', query: { cart: cart.ids.join(',') } }))
 

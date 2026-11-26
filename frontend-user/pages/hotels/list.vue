@@ -165,7 +165,7 @@ function detailLink(h: any) {
 watch(() => route.fullPath, () => { if (!route.path.endsWith('/hotels/list')) return; syncDraft(); load() })
 // TG-15: SSR the first paint (ISR caches it); the watcher re-loads on client query changes.
 // A server-side failure must 503 (uncached), never bake an error shell into the edge cache.
-await useAsyncData('tg15-hotels-list', () => load())
+await useSsrLoad('tg15-hotels-list', load, { hotels, state })
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {
   const elements = hotels.value

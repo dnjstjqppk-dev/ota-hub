@@ -77,7 +77,7 @@ function book(t: any) { router.push(localePath({ path: '/checkout', query: { dom
 watch(() => route.fullPath, () => { if (isSelf()) syncDraft() })
 watch(() => [q.value.airport, q.value.destination], () => { if (isSelf()) load() })
 // TG-15: SSR the first paint (ISR caches it); the watcher re-loads on client query changes.
-await useAsyncData('tg15-transfers-list', () => load())
+await useSsrLoad('tg15-transfers-list', load, { items, state })
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())

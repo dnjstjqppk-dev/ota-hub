@@ -1,7 +1,11 @@
 // frontend-user/stores/wishlist.ts
 import { defineStore } from 'pinia'
 import { useAuthStore } from './auth'
-import { useApiUrl } from '~/composables/useApi'
+import { apiFetch } from '~/composables/useApi'
+
+// 2026-11-27 review: syncs ride apiFetch (cookie jar + in-memory token) and are
+// gated on isLoggedIn only — the JWT is memory-only (#35), so after a reload
+// authStore.token is '' and the old token-gated calls silently never ran.
 
 export interface WishlistItem {
   id: string
@@ -46,13 +50,11 @@ export const useWishlistStore = defineStore('wishlist', {
       } catch (e) {}
 
       const authStore = useAuthStore()
-      if (authStore.isLoggedIn && authStore.token) {
+      if (authStore.isLoggedIn) {
         try {
-          const res = await fetch(useApiUrl('/wishlist'), {
-            headers: { Authorization: `Bearer ${authStore.token}` }
-          })
+          const res = await apiFetch('/wishlist')
           if (res.ok) {
-            const json = await res.json()
+            const json: any = res.data
             // Merge: server wins, but items saved while logged out are kept.
             const serverItems = (Array.isArray(json.wishlist) ? json.wishlist : []).map((w: any) => ({
               id: w.id,
@@ -80,11 +82,8 @@ export const useWishlistStore = defineStore('wishlist', {
         if (typeof window !== 'undefined') {
           localStorage.setItem('getfortrip_wishlist', JSON.stringify(this.items))
         }
-        if (authStore.isLoggedIn && authStore.token) {
-          fetch(useApiUrl(`/wishlist/${removed.itemId}`), {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${authStore.token}` }
-          }).catch(() => {})
+        if (authStore.isLoggedIn) {
+          apiFetch(`/wishlist/${encodeURIComponent(removed.itemId)}`, { method: 'DELETE' }).catch(() => {})
         }
         return false
       } else {
@@ -97,19 +96,10 @@ export const useWishlistStore = defineStore('wishlist', {
         if (typeof window !== 'undefined') {
           localStorage.setItem('getfortrip_wishlist', JSON.stringify(this.items))
         }
-        if (authStore.isLoggedIn && authStore.token) {
-          fetch(useApiUrl('/wishlist'), {
+        if (authStore.isLoggedIn) {
+          apiFetch('/wishlist', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${authStore.token}`
-            },
-            body: JSON.stringify({
-              domainType: item.domainType,
-              itemId: item.itemId,
-              itemTitle: item.title,
-              metadata: item
-            })
+            body: { domainType: item.domainType, itemId: item.itemId, itemTitle: item.title, metadata: item }
           }).catch(() => {})
         }
         return true

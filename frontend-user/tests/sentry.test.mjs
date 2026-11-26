@@ -14,7 +14,8 @@ function load(publicEnv) {
   const sent = []
   const listeners = {}
   let plugin = null
-  const nuxtApp = { vueApp: { config: {} } }
+  const hooks = {}
+  const nuxtApp = { vueApp: { config: {} }, hooks, hook: (name, fn) => { hooks[name] = fn } }
   const sandbox = {
     console,
     URL,
@@ -33,8 +34,11 @@ function load(publicEnv) {
 
 test('sentry: user portal reports with release when a DSN is set', () => {
   const { sent, nuxtApp, sandbox } = load({ sentryDsn: 'https://key@example.com/9', sentryEnv: 'test', sentryRelease: 'rel-9' })
-  assert.equal(typeof nuxtApp.vueApp.config.errorHandler, 'function')
-  nuxtApp.vueApp.config.errorHandler(runInNewContext('new Error("shop blew up")', sandbox))
+  // Nuxt's own errorHandler stays in place; the plugin only subscribes.
+  assert.equal(nuxtApp.vueApp.config.errorHandler, undefined)
+  assert.equal(typeof nuxtApp.hooks['vue:error'], 'function')
+  assert.equal(typeof nuxtApp.hooks['app:error'], 'function')
+  nuxtApp.hooks['vue:error'](runInNewContext('new Error("shop blew up")', sandbox))
   assert.equal(sent.length, 1)
   const payload = JSON.parse(String(sent[0].init.body).split('\n')[2])
   assert.equal(payload.release, 'rel-9')
@@ -45,5 +49,6 @@ test('sentry: user portal reports with release when a DSN is set', () => {
 test('sentry: user portal installs nothing without a DSN', () => {
   const { nuxtApp, listeners } = load({ sentryDsn: '', sentryEnv: 'test', sentryRelease: 'rel-9' })
   assert.equal(nuxtApp.vueApp.config.errorHandler, undefined)
+  assert.deepEqual(Object.keys(nuxtApp.hooks), [])
   assert.deepEqual(Object.keys(listeners), [])
 })

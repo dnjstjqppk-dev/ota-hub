@@ -56,6 +56,7 @@ watch(() => route.fullPath, closeAll)
 watch(drawer, (open) => { if (typeof document !== 'undefined') document.documentElement.style.overflow = open ? 'hidden' : '' })
 
 onMounted(() => {
+  cart.hydrate()
   currency.fetchRates()
   try { dark.value = localStorage.getItem('getfortrip_theme') === 'dark' } catch {}
   applyTheme()

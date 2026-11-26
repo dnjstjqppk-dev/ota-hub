@@ -6,7 +6,7 @@
  * price for `unitLabel`; nothing here estimates taxes or totals the server has not confirmed.
  */
 import { computed, onMounted, ref, watch } from 'vue'
-import { apiFetch, formatKrw, useApiUrl } from '~/composables/useApi'
+import { apiFetch, formatKrw } from '~/composables/useApi'
 const { t, te, locale } = useI18n()
 import { daysBetween, fmtDay, qDate, qInt, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 import { appendOutlinkContext } from '~/composables/useOutlinkQuery'
@@ -85,12 +85,16 @@ const outlinkUrl = computed(() => {
   if (!outlinkPath.value) return ''
   const q = route.query as Record<string, unknown>
   const one = (v: unknown) => (typeof v === 'string' ? v : '')
-  return useApiUrl(appendOutlinkContext(outlinkPath.value, {
+  // Always the PUBLIC API base: during SSR useApiUrl() returns the server-only
+  // hub origin, hydration keeps that href, and the edge cache would hand it to
+  // every visitor (2026-11-27 review).
+  const publicBase = String((useRuntimeConfig().public as any).apiBase || '/api/v1').replace(/\/+$/, '')
+  return publicBase + appendOutlinkContext(outlinkPath.value, {
     dest: one(q.dest), origin: one(q.origin),
     startDate: startDate.value, ...(props.dateMode === 'range' && endDate.value ? { endDate: endDate.value } : {}),
     ...(props.people ? { adults: adults.value, ...(children.value ? { children: children.value } : {}) } : {}),
     rooms: one(q.rooms), cabin: one(q.cabin),
-  }))
+  })
 })
 /** Phase 1 trade type: server-computed bookability decides, never client guesses. */
 const tradeType = computed<'DIRECT' | 'AFFILIATE' | null>(() => {

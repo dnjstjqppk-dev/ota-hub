@@ -31,7 +31,7 @@ const fetchBest = async () => {
 }
 
 // TG-15: SSR the first paint (ISR caches it).
-await useAsyncData('tg15-trip-best', () => fetchBest())
+await useSsrLoad('tg15-trip-best', fetchBest, { hotels, state })
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 </script>
 

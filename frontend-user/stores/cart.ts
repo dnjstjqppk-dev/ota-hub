@@ -31,25 +31,38 @@ function load(): CartLeg[] {
 }
 
 export const useCartStore = defineStore('cart', {
-  state: () => ({ legs: load() as CartLeg[], adding: false, error: '' as string }),
+  // 2026-11-27 review: legs start EMPTY on both server and client so SSR and
+  // hydration render the same markup; hydrate() loads localStorage after mount
+  // (GlobalHeader/cart/checkout call it in onMounted; every mutation calls it
+  // first so a pre-mount add can never overwrite the saved cart).
+  state: () => ({ legs: [] as CartLeg[], hydrated: false, adding: false, error: '' as string }),
   getters: {
     count: (s) => s.legs.length,
     totalMinor: (s) => s.legs.reduce((n, l) => n + (l.totalMinor || 0), 0),
     ids: (s) => s.legs.map((l) => l.quoteId),
   },
   actions: {
+    hydrate() {
+      if (this.hydrated || typeof window === 'undefined') return
+      this.hydrated = true
+      const saved = load()
+      if (saved.length) this.legs = [...saved, ...this.legs.filter((l) => !saved.some((s) => s.quoteId === l.quoteId))]
+    },
     persist() {
       try { localStorage.setItem(KEY, JSON.stringify(this.legs)) } catch {}
     },
     remove(quoteId: string) {
+      this.hydrate()
       this.legs = this.legs.filter((l) => l.quoteId !== quoteId)
       this.persist()
     },
     clear() {
+      this.hydrate()
       this.legs = []
       this.persist()
     },
     async add(input: LegQuoteInput): Promise<boolean> {
+      this.hydrate()
       this.error = ''
       if (this.legs.length >= 8) { this.error = '장바구니에는 최대 8개까지 담을 수 있습니다.'; return false }
       this.adding = true

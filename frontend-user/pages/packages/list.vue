@@ -53,7 +53,7 @@ function detailLink(p: any) { const x = q.value; return { path: `/packages/detai
 
 watch(() => route.fullPath, () => { if (!isSelf()) return; syncDraft(); load() })
 // TG-15: SSR the first paint (ISR caches it); the watcher re-loads on client query changes.
-await useAsyncData('tg15-packages-list', () => load())
+await useSsrLoad('tg15-packages-list', load, { items, state })
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())

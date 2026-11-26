@@ -60,7 +60,7 @@ const fetchPromotions = async () => {
 }
 
 // TG-15: SSR the first paint (ISR caches it).
-await useAsyncData('tg15-deals', () => fetchPromotions())
+await useSsrLoad('tg15-deals', fetchPromotions, { promotions, state })
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 </script>
 

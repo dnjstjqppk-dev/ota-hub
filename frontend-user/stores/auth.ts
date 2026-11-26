@@ -60,10 +60,14 @@ export const useAuthStore = defineStore('auth', {
             return
           }
         }
-        this.clearLocal()
+        // Only an explicit auth refusal ends the session. A 5xx/429 from a
+        // flaky hub must not log the user out mid-checkout (2026-11-27 review):
+        // keep the cached profile and let the next real API call decide.
+        if (res.ok || res.status === 401 || res.status === 403) this.clearLocal()
+        else this.keepCachedSession()
       } catch (e) {
         console.warn('Failed to restore auth session', e)
-        this.clearLocal()
+        this.keepCachedSession()
       }
     },
     login(userObj: UserProfile, token: string = '') {
@@ -86,6 +90,8 @@ export const useAuthStore = defineStore('auth', {
     // then revokes the JWT and clears the HttpOnly jar via the cookie.
     async logout() {
       this.clearLocal()
+      // The next person on this browser must not inherit the saved hearts.
+      if (import.meta.client) { try { localStorage.removeItem('getfortrip_wishlist') } catch {} }
       if (import.meta.client) {
         try {
           await fetch(useApiUrl('/auth/logout'), {
@@ -95,6 +101,10 @@ export const useAuthStore = defineStore('auth', {
           })
         } catch {}
       }
+    },
+    keepCachedSession() {
+      if (this.user?.email) this.isLoggedIn = true
+      else this.clearLocal()
     },
     clearLocal() {
       this.user = null

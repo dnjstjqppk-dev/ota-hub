@@ -187,6 +187,14 @@ async function confirmChange() {
 }
 
 const printVoucher = () => window.print()
+/** Supplier-provided links: https only (Vue does not sanitize :href — no javascript:). */
+function httpsOnly(urls: unknown): string[] {
+  if (!Array.isArray(urls)) return []
+  return urls.filter((u): u is string => {
+    if (typeof u !== 'string') return false
+    try { return new URL(u).protocol === 'https:' } catch { return false }
+  })
+}
 
 onMounted(load)
 onBeforeUnmount(() => clearTimeout(pollTimer))
@@ -236,7 +244,7 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
                 <p v-if="it.artefacts.lpa">{{ $t('booking.detail.lpa') }}: <span class="font-mono font-bold">{{ it.artefacts.lpa }}</span> <button type="button" class="ml-1 rounded border border-line px-1.5 py-0.5 text-xs" @click="copyText(it.artefacts.lpa)">{{ copied === it.artefacts.lpa ? $t('booking.detail.copied') : $t('booking.detail.copy') }}</button></p>
                 <p v-if="it.artefacts.qr">{{ $t('booking.detail.qrInfo') }}: <span class="font-mono break-all">{{ it.artefacts.qr }}</span></p>
                 <p v-for="(c, ci) in it.artefacts.codes" :key="ci">{{ $t('booking.detail.credNo') }}: <span class="font-mono font-bold">{{ c }}</span></p>
-                <p v-for="(u, ui) in it.artefacts.pdfUrls" :key="ui"><a :href="u" target="_blank" rel="noopener" class="font-semibold text-primary underline">{{ $t('booking.detail.pdfOpen') }}</a></p>
+                <p v-for="(u, ui) in httpsOnly(it.artefacts.pdfUrls)" :key="ui"><a :href="u" target="_blank" rel="noopener" class="font-semibold text-primary underline">{{ $t('booking.detail.pdfOpen') }}</a></p>
               </dd>
             </template>
             <template v-if="it.supplier_reference"><dt class="text-ink-subtle">{{ $t('booking.detail.supRef') }}</dt><dd class="font-mono text-ink">{{ it.supplier_reference }}</dd></template>

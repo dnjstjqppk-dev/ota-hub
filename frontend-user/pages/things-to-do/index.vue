@@ -60,7 +60,7 @@ const RESET = { category: '', instant: '', freeCancel: '' }
 
 watch(() => route.fullPath, () => { if (isSelf()) load() })
 // TG-15: SSR the first paint (ISR caches it); the watcher re-loads on client query changes.
-await useAsyncData('tg15-things-list', () => load())
+await useSsrLoad('tg15-things-list', load, { items, categories, state })
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onBeforeUnmount(() => ctrl?.abort())
 useHead(() => ({

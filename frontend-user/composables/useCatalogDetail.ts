@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { apiFetch } from '~/composables/useApi'
+import { useSsrLoad } from '~/composables/useSsrLoad'
 
 /**
  * Loads one catalog product from the API. `fallback` is the build-time snapshot entry for the SAME id:
@@ -19,7 +20,7 @@ export async function useCatalogDetail(apiPath: string, id: string, fallback: Re
     state.value = fallback ? 'ok' : 'error'
   }
 
-  await useAsyncData(`tg15-detail-${apiPath}-${id}`, () => load())
+  await useSsrLoad(`tg15-detail-${apiPath}-${id}`, load, { item, state, liveOk })
   if (import.meta.server && !liveOk.value) {
     if (state.value === 'notfound') throw createError({ statusCode: 404, statusMessage: 'Product not found' })
     throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })

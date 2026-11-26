@@ -189,7 +189,7 @@ async function loadLive() {
 }
 // TG-15: SSR the first paint (ISR caches it). Server-side misses 404 and
 // server-side failures 503 — a stale shell must never bake into the edge cache.
-await useAsyncData(`tg15-hotel-${hotelId}`, () => loadLive())
+await useSsrLoad(`tg15-hotel-${hotelId}`, loadLive, { hotel, notFound, ratesState, loading })
 if (import.meta.server) {
   if (notFound.value) throw createError({ statusCode: 404, statusMessage: 'Product not found' })
   if (ratesState.value !== 'ok') throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
