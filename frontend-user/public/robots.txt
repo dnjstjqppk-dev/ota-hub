@@ -50,6 +50,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: Yeti
 Allow: /
@@ -93,6 +96,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: Bingbot
 Allow: /
@@ -136,6 +142,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: GPTBot
 Allow: /
@@ -179,6 +188,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: OAI-SearchBot
 Allow: /
@@ -222,6 +234,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: PerplexityBot
 Allow: /
@@ -265,6 +280,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: ClaudeBot
 Allow: /
@@ -308,6 +326,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: Google-Extended
 Allow: /
@@ -351,6 +372,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: ChatGPT-User
 Allow: /
@@ -394,6 +418,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: Claude-User
 Allow: /
@@ -437,6 +464,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: Claude-SearchBot
 Allow: /
@@ -480,6 +510,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: Perplexity-User
 Allow: /
@@ -523,6 +556,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: Applebot
 Allow: /
@@ -566,6 +602,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: Applebot-Extended
 Allow: /
@@ -609,6 +648,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: Amazonbot
 Allow: /
@@ -652,6 +694,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: DuckAssistBot
 Allow: /
@@ -695,6 +740,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: meta-externalagent
 Allow: /
@@ -738,6 +786,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: Daumoa
 Allow: /
@@ -781,6 +832,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 User-Agent: *
 Allow: /
@@ -824,6 +878,9 @@ Disallow: /admin/
 Allow: /api/v1/seo/
 Disallow: /api/
 Disallow: /oauth/
+Disallow: /en/oauth/
+Disallow: /ja/oauth/
+Disallow: /zh/oauth/
 
 Sitemap: https://getfortrip.com/sitemap-index.xml
 Sitemap: https://getfortrip.com/sitemap.xml

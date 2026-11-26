@@ -11,6 +11,10 @@ declare const process: {
 // new products are reachable without a rebuild, and /sitemap.xml already
 // reads D1 live (worker/src/routes/seo.ts).
 
+// ssr:false shells cannot carry a noindex <meta> in their HTML (useHead runs
+// client-side only), so crawlers that do fetch them get it as a header.
+const NOINDEX = { 'X-Robots-Tag': 'noindex' }
+
 // Per-page render rules (ko paths). Locale-prefixed copies are generated below
 // (strategy prefix_except_default), so a rule here applies to /en|/ja|/zh too.
 const PAGE_RULES: Record<string, Record<string, unknown>> = {
@@ -21,9 +25,9 @@ const PAGE_RULES: Record<string, Record<string, unknown>> = {
   '/booking/**': { ssr: false },
   '/my': { ssr: false },
   '/my/**': { ssr: false },
-  '/reset-password': { ssr: false },
-  '/login': { ssr: false },
-  '/register': { ssr: false },
+  '/reset-password': { ssr: false, headers: NOINDEX },
+  '/login': { ssr: false, headers: NOINDEX },
+  '/register': { ssr: false, headers: NOINDEX },
   '/status': { ssr: false },
   // TG-15: catalog renders on demand. NOTE (2026-11-27): on the cloudflare-module
   // preset `isr` caches nothing by itself — it only switches on _payload.json

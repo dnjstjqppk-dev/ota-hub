@@ -2,7 +2,7 @@
 import { strict as assert } from 'node:assert'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { cacheKeyFor, createEdgeFetch, edgeCacheClass, isScannerPath, rootLocale } from '../edge/edge-guard.mjs'
+import { CACHE_PAGES, CACHE_SECTIONS, LOCALES, SHELL_PAGES, cacheKeyFor, createEdgeFetch, edgeCacheClass, isScannerPath, rootLocale } from '../edge/edge-guard.mjs'
 
 test('scanner probes are recognised, real pages are not', () => {
   for (const p of ['/.env', '/.env.production', '/.git/config', '/wp-includes/wlwmanifest.xml', '/wp-login.php', '/xmlrpc.php', '/phpmyadmin/', '/config.yml', '/backup.sql', '/cgi-bin/x', '/vendor/phpunit/a', '/index.php']) {
@@ -25,20 +25,28 @@ test('cache classes: public pages, shells, ko root, private pages', () => {
   }
 })
 
-test('root locale follows cookie, then Accept-Language q order, else ko', () => {
+test('root locale matches i18n 10: cookie, then first header tag (q ignored, untrimmed), else ko', () => {
   const h = (o) => new Headers(o)
   assert.equal(rootLocale(h({})), 'ko')
   assert.equal(rootLocale(h({ 'accept-language': 'en-US,en;q=0.9' })), 'en')
   assert.equal(rootLocale(h({ 'accept-language': 'ko-KR,ko;q=0.9,en;q=0.8' })), 'ko')
-  assert.equal(rootLocale(h({ 'accept-language': 'fr-FR,ja;q=0.5,en;q=0.7' })), 'en')
+  // @intlify/utils parseAcceptLanguage ignores q-values: header order wins.
+  assert.equal(rootLocale(h({ 'accept-language': 'fr-FR,ja;q=0.5,en;q=0.7' })), 'ja')
+  assert.equal(rootLocale(h({ 'accept-language': 'en;q=0.8,ko;q=0.9' })), 'en')
+  // Tags are not trimmed, so " en" never matches (i18n falls back to ko too).
+  assert.equal(rootLocale(h({ 'accept-language': 'fr, en' })), 'ko')
+  assert.equal(rootLocale(h({ 'accept-language': '*,zh-TW' })), 'zh')
   assert.equal(rootLocale(h({ 'accept-language': 'fr-FR' })), 'ko')
   assert.equal(rootLocale(h({ cookie: 'a=1; getfortrip_locale=zh', 'accept-language': 'ko' })), 'zh')
   assert.equal(rootLocale(h({ cookie: 'getfortrip_locale=xx', 'accept-language': 'ja' })), 'ja')
 })
 
-test('cache keys are build-versioned; shells drop the query', () => {
-  assert.equal(cacheKeyFor('https://getfortrip.com/hotels?city=tokyo', 'v1'), 'https://getfortrip.com/hotels?city=tokyo&__ecv=v1')
-  assert.equal(cacheKeyFor('https://getfortrip.com/en/login?redirect=%2Fhotels', 'v1', true), 'https://getfortrip.com/en/login?__ecv=v1')
+test('cache keys are build-versioned in the path; shells drop the query', () => {
+  assert.equal(cacheKeyFor('https://getfortrip.com/hotels?city=tokyo', 'v1'), 'https://getfortrip.com/__edge/v1/hotels?city=tokyo')
+  assert.equal(cacheKeyFor('https://getfortrip.com/en/login?redirect=%2Fhotels', 'v1', true), 'https://getfortrip.com/__edge/v1/en/login')
+  // A client-supplied query can never collapse onto another URL's key.
+  assert.notEqual(cacheKeyFor('https://getfortrip.com/hotels?city=tokyo&__ecv=v1', 'v1'), cacheKeyFor('https://getfortrip.com/hotels?city=tokyo', 'v1'))
+  assert.equal(edgeCacheClass('/__edge/v1/hotels'), null)
 })
 
 function memoryCache() {
@@ -120,7 +128,7 @@ test('robots.txt blocks the locale copies of private paths in every group', () =
   const groups = robots.split(/^User-Agent: /m).slice(1)
   for (const g of groups) {
     for (const loc of ['en', 'ja', 'zh']) {
-      for (const p of ['/login', '/register', '/my', '/checkout']) assert.match(g, new RegExp(`^Disallow: /${loc}${p}$`, 'm'), `${g.split('\n')[0]} ${loc}${p}`)
+      for (const p of ['/login', '/register', '/my', '/checkout', '/oauth/']) assert.match(g, new RegExp(`^Disallow: /${loc}${p}$`, 'm'), `${g.split('\n')[0]} ${loc}${p}`)
     }
   }
 })
@@ -129,4 +137,16 @@ test('nuxt route rules are repeated for every locale prefix', () => {
   const cfg = readFileSync(new URL('../nuxt.config.ts', import.meta.url), 'utf8')
   assert.match(cfg, /\.\.\.localizeRules\(PAGE_RULES\)/)
   assert.match(cfg, /const LOCALE_PREFIXES = \['en', 'ja', 'zh'\]/)
+})
+
+test('edge guard lists stay in sync with nuxt.config (locales, isr pages, ssr:false shells)', () => {
+  const cfg = readFileSync(new URL('../nuxt.config.ts', import.meta.url), 'utf8')
+  const i18nCodes = [...cfg.matchAll(/\{ code: '([a-z-]+)'/g)].map((m) => m[1]).sort()
+  assert.deepEqual([...LOCALES].sort(), i18nCodes)
+  const prefixes = /const LOCALE_PREFIXES = \[([^\]]*)\]/.exec(cfg)[1].match(/[a-z-]+/g).sort()
+  assert.deepEqual(LOCALES.filter((l) => l !== 'ko').sort(), prefixes)
+  const rules = cfg.slice(cfg.indexOf('const PAGE_RULES'), cfg.indexOf('const LOCALE_PREFIXES'))
+  const isr = [...rules.matchAll(/'\/([a-z-]+)(?:\/\*\*)?': \{ isr:/g)].map((m) => m[1])
+  assert.deepEqual([...new Set(isr)].sort(), [...CACHE_SECTIONS, ...CACHE_PAGES].sort())
+  for (const sp of SHELL_PAGES) assert.match(rules, new RegExp(`'/${sp}': \{ ssr: false`))
 })

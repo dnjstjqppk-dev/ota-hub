@@ -37,11 +37,11 @@ export function isScannerPath(pathname) {
 
 // Public pages whose HTML depends only on path + query (mirrors the `isr`
 // entries of PAGE_RULES in nuxt.config.ts).
-const CACHE_SECTIONS = ['hotels', 'flights', 'trains', 'cars', 'transfers', 'things-to-do', 'packages']
-const CACHE_PAGES = ['deals', 'trip-best', 'esim', 'insurance', 'faq', 'help']
+export const CACHE_SECTIONS = ['hotels', 'flights', 'trains', 'cars', 'transfers', 'things-to-do', 'packages']
+export const CACHE_PAGES = ['deals', 'trip-best', 'esim', 'insurance', 'faq', 'help']
 // ssr:false shells: the HTML ignores the query (?redirect=… is read client-side),
 // so every /xx/login?redirect=<page> variant shares one cache entry.
-const SHELL_PAGES = ['login', 'register']
+export const SHELL_PAGES = ['login', 'register']
 const alt = (list) => list.join('|')
 const SECTION_RE = new RegExp('^/(?:' + alt(CACHE_SECTIONS) + ')(?:/.*)?$')
 const PAGE_RE = new RegExp('^/(?:' + alt(CACHE_PAGES) + ')/?$')
@@ -75,33 +75,38 @@ function readCookie(header, name) {
 }
 
 /**
- * Which locale @nuxtjs/i18n would pick on "/" (cookie first, then the
- * best-q Accept-Language match, else ko). Only 'ko' may get the cached root;
- * anyone else goes to Nuxt, which answers with the 302 to /en, /ja or /zh.
+ * Which locale @nuxtjs/i18n would pick on "/": the cookie first, then the
+ * Accept-Language header exactly as i18n 10 reads it (@intlify/utils
+ * parseAcceptLanguage + findBrowserLocale): q-values are IGNORED, tags are
+ * taken in header order and NOT trimmed, and the first tag whose base
+ * language is a locale wins; no match → ko. Only 'ko' may get the cached
+ * root; anyone else goes to Nuxt, which answers with the 302.
  */
 export function rootLocale(headers) {
   const fromCookie = readCookie(headers.get('cookie'), LOCALE_COOKIE)
   if (LOCALES.includes(fromCookie)) return fromCookie
-  const langs = String(headers.get('accept-language') || '')
+  const tags = String(headers.get('accept-language') || '')
     .split(',')
-    .map((part, idx) => {
-      const [tag, ...params] = part.trim().split(';')
-      const qp = params.find((x) => x.trim().startsWith('q='))
-      const q = qp ? Number(qp.trim().slice(2)) : 1
-      return { lang: tag.trim().toLowerCase().split('-')[0], q: Number.isFinite(q) ? q : 0, idx }
-    })
-    .filter((x) => x.lang && x.q > 0)
-    .sort((a, b) => b.q - a.q || a.idx - b.idx)
-  for (const { lang } of langs) if (LOCALES.includes(lang)) return lang
+    .map((tag) => tag.split(';')[0])
+    .filter((tag) => !(tag === '*' || tag === ''))
+  for (const tag of tags) {
+    const lang = tag.split('-')[0].toLowerCase()
+    if (LOCALES.includes(lang)) return lang
+  }
   return 'ko'
 }
 
-/** Cache key: the request URL tagged with the build version (old HTML points at deleted /_nuxt assets). */
+/**
+ * Cache key: the request URL under a build-version PATH prefix (old HTML
+ * points at deleted /_nuxt assets). A client cannot forge the prefix onto a
+ * cacheable page — /__edge/<v>/… is never itself a cacheable path — and the
+ * query is kept verbatim, so no two client URLs share a key.
+ */
 export function cacheKeyFor(url, version, dropQuery = false) {
   const u = new URL(url)
   u.hash = ''
   if (dropQuery) u.search = ''
-  u.searchParams.set('__ecv', version)
+  u.pathname = `/__edge/${version}${u.pathname}`
   return u.toString()
 }
 
@@ -111,19 +116,21 @@ function setCookiesOf(headers) {
   return one ? [one] : []
 }
 
-/**
- * Decide whether a response may be stored. Returns the response to put in the
- * cache (headers rewritten) or null.
- */
-export function storableCopy(response) {
-  if (response.status !== 200) return null
+/** True when a response may be stored (checked on headers, before any clone). */
+export function isStorable(response) {
+  if (response.status !== 200) return false
   const type = response.headers.get('content-type') || ''
-  if (!/^(text\/html|application\/json)/i.test(type)) return null
+  if (!/^(text\/html|application\/json)/i.test(type)) return false
   const cc = (response.headers.get('cache-control') || '').toLowerCase()
-  if (/no-store|no-cache|private/.test(cc)) return null
-  const cookies = setCookiesOf(response.headers)
+  if (/no-store|no-cache|private/.test(cc)) return false
   // Anything but the locale preference cookie means the response is per-user.
-  if (cookies.some((c) => !c.trim().startsWith(`${LOCALE_COOKIE}=`))) return null
+  return !setCookiesOf(response.headers).some((c) => !c.trim().startsWith(`${LOCALE_COOKIE}=`))
+}
+
+/** The copy to put in the cache (headers rewritten), or null when not storable. */
+export function storableCopy(response) {
+  if (!isStorable(response)) return null
+  const cookies = setCookiesOf(response.headers)
   const headers = new Headers(response.headers)
   headers.delete('set-cookie')
   if (cookies.length) headers.set(STASHED_COOKIE, cookies[0])
@@ -172,8 +179,10 @@ export function createEdgeFetch(target, version, cacheProvider = () => globalThi
     }
 
     const response = await target.fetch(request, env, ctx)
+    // Decide on headers first: cloning a response nobody stores would tee and
+    // buffer its body for a branch that is never read.
+    if (!isStorable(response)) return response
     const copy = storableCopy(response.clone())
-    if (!copy) return response
     const put = cache.put(key, copy).catch(() => {})
     if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(put)
     const headers = new Headers(response.headers)
