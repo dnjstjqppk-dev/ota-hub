@@ -271,7 +271,13 @@ function onDocPointer(e: Event) {
   if (root.value?.contains(t) || panel.value?.contains(t)) return
   open.value = false
 }
-function onScroll() { if (open.value) fitPanel() }
+let fitRaf = 0
+function onScroll() {
+  // fitPanel reads layout (getBoundingClientRect); without a rAF gate every
+  // scroll tick while the panel is open forces a synchronous reflow.
+  if (!open.value || fitRaf) return
+  fitRaf = requestAnimationFrame(() => { fitRaf = 0; if (open.value) fitPanel() })
+}
 function onOnline() { if (state.value === 'offline') retry() }
 
 onMounted(() => {
@@ -287,6 +293,7 @@ onBeforeUnmount(() => {
   window.visualViewport?.removeEventListener('resize', fitPanel)
   window.removeEventListener('scroll', onScroll, { capture: true })
   window.removeEventListener('resize', fitPanel)
+  if (fitRaf) cancelAnimationFrame(fitRaf)
   if (timer) clearTimeout(timer)
   controller?.abort()
 })
@@ -385,7 +392,7 @@ const statusText = computed(() => {
       :style="panelStyle"
       class="fixed z-[70] animate-pop-in overflow-hidden rounded-card border border-line bg-surface-raised shadow-pop sm:min-w-[24rem]"
     >
-      <ul :id="listId" role="listbox" class="overflow-y-auto overscroll-contain py-2" :style="{ maxHeight: panelMax + 'px' }">
+      <ul :id="listId" role="listbox" class="sheet-scroll overflow-y-auto overscroll-contain py-2" :style="{ maxHeight: panelMax + 'px' }">
         <!-- Empty query: recent searches, then editorial suggestions -->
         <template v-if="!query">
           <li v-if="recent.length" role="presentation" class="flex items-center justify-between px-4 pb-1 pt-2">

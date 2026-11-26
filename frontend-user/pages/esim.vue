@@ -109,7 +109,7 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/e
           <div class="field-box flex-1"><label for="esim-q" class="field-label">{{ $t('esim.countryLabel') }}</label><SearchAutocomplete v-model="draft" input-id="esim-q" domain="esim" variant="bare" :placeholder="$t('esim.countryPh')" @select="onSelect" @enter="onEnter" /></div>
           <button type="submit" class="btn-primary min-h-[52px] rounded-2xl px-6 text-base" :aria-label="$t('common.search')"><AppIcon name="search" :size="18" /><span class="hidden sm:inline">{{ $t('esim.find') }}</span></button>
         </form>
-        <div v-if="countries.length" class="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div v-if="countries.length" class="chip-rail -mx-4 mt-4 flex gap-2 px-4 pb-1">
           <button type="button" class="chip" :aria-pressed="!picked" @click="clear">{{ $t('common.all') }}</button>
           <button v-for="c in countries" :key="c.code" type="button" class="chip" :aria-pressed="picked?.code === c.code" @click="pick(c.code, c.name)">{{ c.name }}</button>
         </div>

@@ -102,7 +102,7 @@ function logout() {
     </aside>
 
     <div class="flex min-w-0 flex-1 flex-col">
-      <header class="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-canvas/85 px-4 backdrop-blur-xl lg:px-6">
+      <header class="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-canvas/90 px-4 backdrop-blur-md lg:px-6">
         <button type="button" class="btn-ghost btn-sm -ml-2 px-2 lg:hidden" aria-label="메뉴 열기" aria-controls="admin-nav" :aria-expanded="drawer" @click="drawer = true"><AppIcon name="menu" :size="20" /></button>
         <div class="flex items-center gap-2">
           <span class="h-2 w-2 rounded-full bg-primary" />

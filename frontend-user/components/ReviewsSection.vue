@@ -178,7 +178,7 @@ onMounted(async () => {
           <span>{{ new Date(r.created_at).toLocaleDateString(tag) }}</span>
         </div>
         <p class="mt-1.5 whitespace-pre-line break-words text-sm leading-relaxed text-ink">{{ r.comment }}</p>
-        <div v-if="r.photos?.length" class="mt-3 flex gap-2 overflow-x-auto pb-1">
+        <div v-if="r.photos?.length" class="chip-rail mt-3 flex gap-2 pb-1">
           <button v-for="(p, i) in r.photos" :key="p" type="button" class="shrink-0 overflow-hidden rounded-xl" :aria-label="t('reviews.photoZoom', { i: i + 1 })" @click="lightbox = { list: r.photos.map(assetUrl), i }">
             <SmartImg :src="assetUrl(p)" alt="" icon="camera" img-class="h-20 w-20 object-cover sm:h-24 sm:w-24" />
           </button>

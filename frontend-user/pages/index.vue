@@ -99,8 +99,8 @@ const PROMISES = computed(() => [
       <div class="relative overflow-hidden rounded-[32px] bg-midnight-900 px-6 pb-28 pt-10 text-white shadow-pop sm:px-10 sm:pt-14 lg:px-14 lg:pb-32 lg:pt-16">
         <!-- Subtle Meridian atmospheric glow & compass arcs -->
         <div class="pointer-events-none absolute inset-0" aria-hidden="true">
-          <div class="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-primary/35 blur-3xl" />
-          <div class="absolute -bottom-24 left-1/3 h-80 w-80 rounded-full bg-coral-500/20 blur-3xl" />
+          <div class="absolute -right-24 -top-24 h-96 w-96 rounded-full" style="background: radial-gradient(closest-side, rgb(13 107 94 / 0.35), transparent)" />
+          <div class="absolute -bottom-24 left-1/3 h-80 w-80 rounded-full" style="background: radial-gradient(closest-side, rgb(208 90 52 / 0.2), transparent)" />
           <svg class="absolute inset-0 h-full w-full text-horizon-300/15" viewBox="0 0 1200 460" preserveAspectRatio="xMidYMid slice">
             <circle cx="1020" cy="120" r="240" fill="none" stroke="currentColor" stroke-width="1" />
             <circle cx="1020" cy="120" r="340" fill="none" stroke="currentColor" stroke-width="0.8" stroke-dasharray="6 8" />
@@ -129,10 +129,10 @@ const PROMISES = computed(() => [
 
     <!-- Categories: Editorial Pill Rail -->
     <nav class="mx-auto mt-10 max-w-7xl px-4 lg:px-6" :aria-label="$t('header.navAria')">
-      <ul class="-mx-4 flex gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-9 sm:px-0 [&::-webkit-scrollbar]:hidden">
+      <ul class="chip-rail -mx-4 flex gap-2.5 px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-9 sm:overflow-visible sm:px-0">
         <li v-for="c in CATEGORIES" :key="c.key" class="shrink-0">
-          <NuxtLink :to="$localePath(c.to)" class="group flex w-[82px] flex-col items-center gap-2 rounded-2xl border border-transparent py-3 text-center text-xs font-bold text-ink-muted transition-all hover:border-line hover:bg-surface hover:text-ink hover:shadow-card sm:w-auto">
-            <span class="flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-surface text-primary shadow-sm transition-all group-hover:-translate-y-0.5 group-hover:border-primary/40 group-hover:bg-primary group-hover:text-primary-ink"><AppIcon :name="c.icon" :size="21" /></span>
+          <NuxtLink :to="$localePath(c.to)" class="group flex w-[82px] flex-col items-center gap-2 rounded-2xl border border-transparent py-3 text-center text-xs font-bold text-ink-muted transition hover:border-line hover:bg-surface hover:text-ink sm:w-auto sm:hover:shadow-card">
+            <span class="flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-surface text-primary shadow-sm transition sm:group-hover:-translate-y-0.5 sm:group-hover:border-primary/40 sm:group-hover:bg-primary sm:group-hover:text-primary-ink"><AppIcon :name="c.icon" :size="21" /></span>
             {{ $t('nav.' + c.key) }}
           </NuxtLink>
         </li>
@@ -166,7 +166,7 @@ const PROMISES = computed(() => [
           <h2 id="h-dest" class="mt-1 text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ $t('home.destTitle') }}</h2>
         </div>
       </div>
-      <div class="-mx-4 flex snap-x gap-3.5 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 lg:grid-cols-12 [&::-webkit-scrollbar]:hidden">
+      <div class="rail -mx-4 flex gap-3.5 px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 lg:grid-cols-12">
         <NuxtLink
           v-for="(d, idx) in DESTINATIONS"
           :key="d.key"
@@ -176,7 +176,7 @@ const PROMISES = computed(() => [
             idx === 0 || idx === 5 ? 'lg:col-span-3 lg:aspect-[4/5]' : 'lg:col-span-3 lg:aspect-[4/5]'
           ]"
         >
-          <SmartImg :src="d.img" :alt="$t('home.destAlt', { name: $t(`home.destName.${d.key}`) })" img-class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+          <SmartImg :src="d.img" :alt="$t('home.destAlt', { name: $t(`home.destName.${d.key}`) })" img-class="h-full w-full object-cover sm:transition-transform sm:duration-500 sm:group-hover:scale-105" />
           <div class="absolute inset-0 bg-gradient-to-t from-midnight-950/85 via-midnight-950/15 to-transparent" />
           <div class="absolute inset-x-0 bottom-0 p-4 text-white">
             <span class="inline-block rounded-full bg-white/15 px-2.5 py-0.5 text-2xs font-semibold text-white/90 backdrop-blur-md">{{ $t(`home.destCountry.${d.key}`) }}</span>
@@ -208,10 +208,10 @@ const PROMISES = computed(() => [
         <button type="button" class="btn-secondary mt-3" @click="loadHotels">{{ $t('common.retry') }}</button>
       </div>
       <p v-else-if="!hotels.length" class="rounded-card border border-dashed border-line-strong bg-surface p-8 text-center text-sm text-ink-muted">{{ $t('home.hotelsEmpty') }}</p>
-      <div v-else class="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
-        <NuxtLink v-for="h in hotels" :key="h.id" :to="$localePath(`/hotels/detail/${h.id}`)" class="group w-[78vw] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-card border border-line bg-surface shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-pop sm:w-auto sm:max-w-none">
+      <div v-else class="rail -mx-4 flex gap-4 px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-4">
+        <NuxtLink v-for="h in hotels" :key="h.id" :to="$localePath(`/hotels/detail/${h.id}`)" class="group w-[78vw] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-card border border-line bg-surface shadow-card transition-[border-color,box-shadow] duration-200 hover:border-line-strong sm:w-auto sm:max-w-none sm:transition-all sm:hover:-translate-y-0.5 sm:hover:shadow-pop">
           <div class="relative aspect-[4/3] overflow-hidden bg-surface-sunken">
-            <SmartImg :src="h.thumbnail_url" :alt="h.name_ko" icon="hotel" img-class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+            <SmartImg :src="h.thumbnail_url" :alt="h.name_ko" icon="hotel" img-class="h-full w-full object-cover sm:transition-transform sm:duration-500 sm:group-hover:scale-105" />
             <span v-if="h.free_cancellation" class="absolute left-3 top-3 rounded-full bg-surface/95 px-2.5 py-1 text-2xs font-bold text-success shadow-sm backdrop-blur">{{ $t('hotels.list.freeCancel') }}</span>
           </div>
           <div class="p-4">
@@ -248,7 +248,7 @@ const PROMISES = computed(() => [
         <button type="button" class="ml-2 font-bold text-primary" @click="loadActivities">{{ $t('common.retry') }}</button>
       </div>
       <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <NuxtLink v-for="a in activities" :key="a.id" :to="$localePath(`/things-to-do/detail/${a.id}`)" class="group flex gap-3.5 rounded-card border border-line bg-surface p-3.5 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-pop">
+        <NuxtLink v-for="a in activities" :key="a.id" :to="$localePath(`/things-to-do/detail/${a.id}`)" class="group flex gap-3.5 rounded-card border border-line bg-surface p-3.5 shadow-card transition-[border-color,box-shadow] duration-200 hover:border-line-strong sm:transition-all sm:hover:-translate-y-0.5 sm:hover:shadow-pop">
           <SmartImg :src="a.thumbnail_url" :alt="a.title" icon="ticket" img-class="h-24 w-24 shrink-0 rounded-xl object-cover" />
           <div class="flex min-w-0 flex-col">
             <p class="text-2xs font-bold uppercase tracking-wide text-ink-subtle">{{ a.city }}</p>

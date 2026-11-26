@@ -54,7 +54,7 @@ useHead({ script: [jsonLdScript({ '@context': 'https://schema.org', '@type': 'We
           회사는 서비스 운영을 위해 아래와 같이 개인정보 처리를 위탁하며, 일부 수탁자는 국외 사업자입니다.
           이전은 서비스 이용 시점에 암호화 통신으로 수시로 이루어지며, 아래 보유 기간이 지나면 파기됩니다.
         </p>
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto overscroll-x-contain [touch-action:pan-x_pan-y]">
           <table class="w-full border-collapse border border-slate-300 text-left">
             <thead>
               <tr class="bg-slate-100 dark:bg-slate-800">

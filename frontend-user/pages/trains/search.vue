@@ -145,7 +145,7 @@ useHead(() => {
         </label>
       </div>
 
-      <div v-if="types.length > 1 || seats.length > 1" class="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
+      <div v-if="types.length > 1 || seats.length > 1" class="chip-rail -mx-4 mb-3 flex gap-2 px-4 pb-1 lg:hidden">
         <button type="button" class="chip" :aria-pressed="activeCount > 0" @click="sheet = true"><AppIcon name="menu" :size="16" />{{ $t('hotels.list.filter') }}<span v-if="activeCount" class="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1 text-2xs text-primary-ink">{{ activeCount }}</span></button>
         <button v-for="t in types" :key="t" type="button" class="chip" :aria-pressed="q.type === t" @click="patch({ type: q.type === t ? '' : t })">{{ t }}</button>
       </div>
@@ -164,7 +164,7 @@ useHead(() => {
             <template #empty-actions><button v-if="activeCount" type="button" class="btn-primary" @click="patch(RESET)">{{ $t('hotels.list.resetFilters') }}</button></template>
             <ul class="space-y-3">
               <li v-for="t in filtered" :key="t.id">
-                <article class="card flex flex-col gap-4 p-4 transition-shadow hover:shadow-pop sm:p-5 md:flex-row md:items-center">
+                <article class="card defer-paint flex flex-col gap-4 p-4 transition-shadow hover:shadow-pop sm:p-5 md:flex-row md:items-center">
                   <div class="grid min-w-0 flex-1 grid-cols-[auto_1fr_auto] items-center gap-3 sm:gap-5">
                     <div><p class="text-lg font-bold text-ink tabular">{{ t.departure_time }}</p><p class="max-w-[8rem] truncate text-xs font-semibold text-ink-muted">{{ t.departure_station }}</p></div>
                     <div class="text-center"><p class="text-xs text-ink-subtle">{{ hm(Number(t.duration_minutes)) }}</p><div class="relative my-1 h-px bg-line-strong"><span class="absolute -top-1 right-0 h-2 w-2 rounded-full bg-primary" /></div></div>

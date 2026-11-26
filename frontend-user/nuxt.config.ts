@@ -196,7 +196,7 @@ export default defineNuxtConfig({
       },
       meta: [
         { charset: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
         { name: 'description', content: 'getfortrip에서 전 세계 호텔, 항공권, 기차표, 렌터카, 투어 티켓 및 eSIM을 비교하고 간편하게 예약하세요.' },
         { property: 'og:site_name', content: 'getfortrip' },
         { property: 'og:title', content: 'getfortrip - 전 세계 스마트 여행 예약 플랫폼' },

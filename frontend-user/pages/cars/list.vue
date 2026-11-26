@@ -132,7 +132,7 @@ useHead(() => {
         </label>
       </div>
 
-      <div class="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div class="chip-rail -mx-4 mb-3 flex gap-2 px-4 pb-1">
         <button v-for="t in TYPES" :key="t.id" type="button" class="chip" :aria-pressed="q.type === t.id" @click="patch({ vehicleType: t.id })">{{ t.label }}</button>
         <button type="button" class="chip" :aria-pressed="q.auto" @click="patch({ transmission: q.auto ? '' : 'AUTO' })">{{ $t('cars.list.autoOnly') }}</button>
       </div>
@@ -145,7 +145,7 @@ useHead(() => {
         </template>
         <ul class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <li v-for="c in items" :key="c.id">
-            <article class="card group relative flex h-full flex-col overflow-hidden transition-shadow hover:shadow-pop">
+            <article class="card defer-paint group relative flex h-full flex-col overflow-hidden transition-shadow hover:shadow-pop">
               <SmartImg :src="c.image_url" :alt="c.vehicle_model" icon="car" img-class="aspect-[16/10] w-full object-cover" />
               <div class="flex flex-1 flex-col p-4">
                 <p class="text-xs text-ink-subtle">{{ c.company_name }}</p>

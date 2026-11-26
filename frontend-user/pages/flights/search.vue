@@ -258,12 +258,12 @@ useHead(() => {
       </p>
 
       <!-- Date strip -->
-      <div v-if="strip.length" class="-mx-4 mb-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div v-if="strip.length" class="chip-rail -mx-4 mb-4 flex gap-1.5 px-4 pb-1">
         <button v-for="s in strip" :key="s.d" type="button" :aria-pressed="s.on" :disabled="s.disabled" class="seg min-w-[84px] flex-1 py-2.5 disabled:pointer-events-none disabled:opacity-30" @click="pickDay(s.d)">{{ s.label }}</button>
       </div>
 
       <!-- Phone filter chips -->
-      <div class="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
+      <div class="chip-rail -mx-4 mb-3 flex gap-2 px-4 pb-1 lg:hidden">
         <button type="button" class="chip" :aria-pressed="activeCount > 0" @click="sheet = true"><AppIcon name="menu" :size="16" />{{ $t('hotels.list.filter') }}<span v-if="activeCount" class="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1 text-2xs text-primary-ink">{{ activeCount }}</span></button>
         <button type="button" class="chip" :aria-pressed="q.stops === 0" @click="patch({ stops: q.stops === 0 ? '' : '0' })">{{ $t('flights.search.nonstop') }}</button>
         <button type="button" class="chip" :aria-pressed="q.slots.includes('morning')" @click="toggleList('slots', 'morning')">{{ $t('flights.search.morningDep') }}</button>
@@ -299,7 +299,7 @@ useHead(() => {
             </template>
             <ul class="space-y-3">
               <li v-for="f in filtered" :key="f.id">
-                <article class="card group relative flex flex-col gap-4 p-4 transition-shadow hover:shadow-pop sm:p-5 md:flex-row md:items-center">
+                <article class="card defer-paint group relative flex flex-col gap-4 p-4 transition-shadow hover:shadow-pop sm:p-5 md:flex-row md:items-center">
                   <div class="flex min-w-0 flex-1 items-center gap-4">
                     <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-xs font-bold text-ink-muted" aria-hidden="true">{{ f.airline_code || '✈' }}</span>
                     <div class="grid min-w-0 flex-1 grid-cols-[auto_1fr_auto] items-center gap-3 sm:gap-5">

@@ -124,7 +124,7 @@ const handleLogout = () => {
 
     <!-- Main Content Area -->
     <main class="flex min-w-0 flex-1 flex-col overflow-y-auto">
-      <header v-if="!isPublicPage" class="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-surface/90 px-4 backdrop-blur lg:hidden">
+      <header v-if="!isPublicPage" class="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-surface/95 px-4 backdrop-blur-sm lg:hidden">
         <button type="button" class="-ml-1 rounded-lg p-2 text-ink-muted transition hover:bg-surface-sunken hover:text-ink" aria-label="메뉴 열기" aria-controls="partner-nav" :aria-expanded="drawer" @click="drawer = true"><AppIcon name="menu" :size="22" /></button>
         <p class="truncate text-sm font-bold text-ink">{{ currentLabel }}</p>
         <img src="/symbol.svg" alt="getfortrip" class="ml-auto h-7 w-7 rounded-lg object-contain" />

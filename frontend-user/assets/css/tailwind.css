@@ -90,10 +90,10 @@
 
   /* Toggle chip / segmented option. State comes from aria-pressed so a11y and visuals never disagree. */
   .chip {
-    @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-surface px-3.5 py-2 text-sm font-semibold text-ink-muted transition-all hover:border-line-strong hover:text-ink;
+    @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-surface px-3.5 py-2 text-sm font-semibold text-ink-muted transition hover:border-line-strong hover:text-ink;
   }
   .seg {
-    @apply rounded-xl border border-line px-2 py-2 text-center text-sm font-semibold text-ink-muted transition-all hover:border-line-strong hover:text-ink;
+    @apply rounded-xl border border-line px-2 py-2 text-center text-sm font-semibold text-ink-muted transition hover:border-line-strong hover:text-ink;
   }
   .chip[aria-pressed="true"], .seg[aria-pressed="true"] {
     @apply border-primary bg-primary-soft text-primary shadow-sm;
@@ -101,18 +101,65 @@
 
   /* Search-bar field shell that wraps a bare SearchAutocomplete with a small label. */
   .field-box {
-    @apply relative flex min-h-[54px] flex-col justify-center rounded-2xl border border-line bg-surface-sunken/60 px-4 py-1.5 transition-all focus-within:border-primary focus-within:bg-surface focus-within:shadow-focus hover:border-line-strong hover:bg-surface;
+    @apply relative flex min-h-[54px] flex-col justify-center rounded-2xl border border-line bg-surface-sunken/60 px-4 py-1.5 transition focus-within:border-primary focus-within:bg-surface focus-within:shadow-focus hover:border-line-strong hover:bg-surface;
   }
   .field-label {
     @apply mb-0.5 block text-2xs font-bold uppercase tracking-wider text-ink-subtle;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-primary-ink shadow-sm transition-all hover:bg-primary-hover hover:shadow-card active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-primary-ink shadow-sm transition hover:bg-primary-hover hover:shadow-card active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-line bg-surface px-5 py-2.5 text-sm font-semibold text-ink transition-all hover:border-line-strong hover:bg-surface-sunken active:scale-[0.99];
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-line bg-surface px-5 py-2.5 text-sm font-semibold text-ink transition hover:border-line-strong hover:bg-surface-sunken active:scale-[0.99];
   }
   .card {
     @apply rounded-card border border-line bg-surface transition-shadow;
   }
+
+  /*
+   * Swipe rails (mobile horizontal scrollers). One shared recipe so every rail
+   * behaves the same: momentum scroll, no scroll-chaining into the page,
+   * proximity snap (never traps a swipe mid-gesture), hidden scrollbar.
+   * `.rail` snaps card edges; `.chip-rail` is free-scrolling for filter chips.
+   */
+  .rail {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: 1rem;
+    scrollbar-width: none;
+    touch-action: pan-x pan-y;
+  }
+  .rail::-webkit-scrollbar { display: none; }
+  .rail > .snap-start { scroll-margin-inline: 0; }
+  .chip-rail {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    touch-action: pan-x pan-y;
+  }
+  .chip-rail::-webkit-scrollbar { display: none; }
+  /*
+   * Vertical sheet/panel scrollers (filter sheets, drawers, pickers, threads).
+   * Contained so a fling inside never yanks the page behind the sheet.
+   */
+  .sheet-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+}
+
+@layer utilities {
+  /* Long result cards render only near the viewport (100-item lists stay smooth). */
+  .defer-paint {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 240px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail { scroll-snap-type: none; }
 }

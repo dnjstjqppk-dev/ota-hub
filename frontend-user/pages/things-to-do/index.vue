@@ -104,7 +104,7 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/t
         </label>
       </div>
 
-      <div class="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div class="chip-rail -mx-4 mb-4 flex gap-2 px-4 pb-1">
         <button type="button" class="chip" :aria-pressed="!q.category" @click="patch({ category: '' })">{{ $t('common.all') }}</button>
         <button v-for="c in categories" :key="c" type="button" class="chip" :aria-pressed="q.category === c" @click="patch({ category: q.category === c ? '' : c })">{{ catLabel(c) }}</button>
         <span class="mx-1 w-px shrink-0 bg-line" aria-hidden="true" />
@@ -119,8 +119,8 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/t
         </template>
         <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <li v-for="a in items" :key="a.id">
-            <article class="card group relative flex h-full flex-col overflow-hidden transition-shadow hover:shadow-pop">
-              <SmartImg :src="a.thumbnail_url || a.image_url" :alt="a.title" icon="ticket" img-class="aspect-[4/3] w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+            <article class="card defer-paint group relative flex h-full flex-col overflow-hidden transition-shadow hover:shadow-pop">
+              <SmartImg :src="a.thumbnail_url || a.image_url" :alt="a.title" icon="ticket" img-class="aspect-[4/3] w-full object-cover sm:transition-transform sm:duration-500 sm:group-hover:scale-105" />
               <div class="flex flex-1 flex-col p-4">
                 <p class="text-xs text-ink-subtle">{{ [a.city, catLabel(a.category)].filter(Boolean).join(' · ') }}</p>
                 <h3 class="mt-1 line-clamp-2 text-sm font-bold leading-snug text-ink"><NuxtLink :to="$localePath(`/things-to-do/detail/${a.id}`)" class="after:absolute after:inset-0 group-hover:text-primary">{{ a.title }}</NuxtLink></h3>

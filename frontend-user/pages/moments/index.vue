@@ -221,7 +221,7 @@ onMounted(() => {
             <p class="text-xs text-slate-600 leading-relaxed">{{ m.content }}</p>
           </div>
 
-          <div v-if="m.photos.length" class="flex gap-2">
+          <div v-if="m.photos.length" class="chip-rail flex gap-2 pb-1 [&>*]:shrink-0">
             <SmartImg v-for="p in m.photos" :key="p" :src="p" class="w-32 h-24 rounded-2xl object-cover" :alt="$t('moments.photoAlt')" />
           </div>
         </article>

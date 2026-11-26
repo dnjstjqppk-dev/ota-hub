@@ -9,7 +9,7 @@ withDefaults(defineProps<{ caption: string; columns: string[]; rows: string[][];
 </script>
 
 <template>
-  <div class="overflow-x-auto">
+  <div class="overflow-x-auto overscroll-x-contain [touch-action:pan-x_pan-y]">
     <table class="w-full border-collapse text-sm">
       <caption class="py-2 text-left text-base font-extrabold text-ink">{{ caption }}</caption>
       <thead>

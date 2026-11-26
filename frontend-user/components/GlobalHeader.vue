@@ -75,7 +75,7 @@ onBeforeUnmount(() => {
 <template>
   <header
     ref="headerEl"
-    :class="['sticky top-0 z-40 border-b bg-canvas/85 backdrop-blur-2xl transition-all duration-200', scrolled ? 'border-line shadow-card' : 'border-line/50']"
+    :class="['sticky top-0 z-40 border-b bg-canvas/90 backdrop-blur-md transition-[border-color,box-shadow,background-color] duration-200', scrolled ? 'border-line shadow-card' : 'border-line/50']"
   >
     <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-50 focus:rounded-full focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-ink">{{ t('header.skip') }}</a>
     <div class="mx-auto flex h-[68px] max-w-7xl items-center gap-5 px-4 lg:px-6">
@@ -90,7 +90,7 @@ onBeforeUnmount(() => {
           v-for="c in primary"
           :key="c.key"
           :to="$localePath(c.to)"
-          :class="['relative rounded-full px-3.5 py-1.5 text-sm font-semibold transition-all', isActive(c.to) ? 'bg-primary text-primary-ink shadow-sm' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink']"
+          :class="['relative rounded-full px-3.5 py-1.5 text-sm font-semibold transition', isActive(c.to) ? 'bg-primary text-primary-ink shadow-sm' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink']"
         >
           {{ t('nav.' + c.key) }}
         </NuxtLink>
@@ -99,7 +99,7 @@ onBeforeUnmount(() => {
             type="button"
             :aria-expanded="pop === 'more'"
             aria-haspopup="menu"
-            :class="['flex items-center gap-1 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-all', pop === 'more' ? 'bg-surface-sunken text-ink' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink']"
+            :class="['flex items-center gap-1 rounded-full px-3.5 py-1.5 text-sm font-semibold transition', pop === 'more' ? 'bg-surface-sunken text-ink' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink']"
             @click="toggle('more')"
           >
             {{ t('header.more') }} <AppIcon name="chevron-down" :size="15" :class="['transition-transform', pop === 'more' && 'rotate-180']" />
@@ -122,7 +122,7 @@ onBeforeUnmount(() => {
           <button
             type="button"
             :aria-expanded="pop === 'region'"
-            class="flex h-10 items-center gap-2 rounded-full border border-line bg-surface px-3.5 text-xs font-bold text-ink-muted transition-all hover:border-line-strong hover:text-ink"
+            class="flex h-10 items-center gap-2 rounded-full border border-line bg-surface px-3.5 text-xs font-bold text-ink-muted transition hover:border-line-strong hover:text-ink"
             @click="toggle('region')"
           >
             <AppIcon name="globe" :size="16" class="text-primary" />
@@ -204,7 +204,7 @@ onBeforeUnmount(() => {
             <button type="button" role="menuitem" class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink-muted hover:bg-surface-sunken hover:text-danger" @click="logout"><AppIcon name="logout" :size="18" />{{ t('header.logout') }}</button>
           </div>
         </div>
-        <NuxtLink v-else :to="$localePath(`/login?redirect=${encodeURIComponent(route.fullPath)}`)" class="hidden h-10 items-center rounded-full bg-ink px-5 text-sm font-bold text-ink-inverse transition-all hover:bg-primary hover:text-primary-ink md:flex">
+        <NuxtLink v-else :to="$localePath(`/login?redirect=${encodeURIComponent(route.fullPath)}`)" class="hidden h-10 items-center rounded-full bg-ink px-5 text-sm font-bold text-ink-inverse transition hover:bg-primary hover:text-primary-ink md:flex">
           {{ t('nav.login') }}
         </NuxtLink>
 
@@ -228,7 +228,7 @@ onBeforeUnmount(() => {
             </span>
             <button type="button" class="flex h-10 w-10 items-center justify-center rounded-xl text-ink-muted hover:bg-surface-sunken" :aria-label="t('header.closeMenu')" @click="drawer = false"><AppIcon name="close" /></button>
           </div>
-          <div class="flex-1 overflow-y-auto overscroll-contain px-5 pb-8 pt-5">
+          <div class="sheet-scroll flex-1 overflow-y-auto overscroll-contain px-5 pb-8 pt-5">
             <div v-if="auth.isLoggedIn && auth.user" class="flex items-center gap-3 rounded-card bg-surface-sunken p-4">
               <span class="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-base font-bold text-primary-ink">{{ initial }}</span>
               <div class="min-w-0 flex-1">

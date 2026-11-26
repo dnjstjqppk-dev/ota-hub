@@ -64,7 +64,7 @@ onMounted(load)
       <p v-if="loading" class="text-ink-subtle">{{ $t('common.loading') }}</p>
       <p v-else-if="failed" class="text-ink-muted">{{ $t('messages.loadFail') }} <button type="button" class="font-semibold text-primary underline" @click="load">{{ $t('common.retry') }}</button></p>
       <template v-else>
-        <ol v-if="thread.messages.length" ref="list" class="max-h-80 space-y-3 overflow-y-auto pr-1" :aria-label="$t('messages.list')">
+        <ol v-if="thread.messages.length" ref="list" class="sheet-scroll max-h-80 space-y-3 overflow-y-auto overscroll-contain pr-1" :aria-label="$t('messages.list')">
           <li v-for="m in thread.messages" :key="m.id" class="flex" :class="m.mine ? 'justify-end' : 'justify-start'">
             <div class="max-w-[85%]">
               <p class="mb-0.5 text-2xs text-ink-subtle" :class="m.mine && 'text-right'">{{ m.mine ? $t('inquiry.me') : m.senderLabel }} · {{ fmt(m.createdAt) }}</p>

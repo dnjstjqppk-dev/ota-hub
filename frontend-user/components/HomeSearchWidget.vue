@@ -103,7 +103,7 @@ function submit() {
 }
 
 function pickTab(t: Tab) { tab.value = t; errors.value = {} }
-const BOX = 'relative flex min-h-[64px] flex-col justify-center rounded-2xl border bg-surface-sunken/50 px-4 py-2.5 transition-all focus-within:border-primary focus-within:bg-surface focus-within:shadow-focus hover:bg-surface'
+const BOX = 'relative flex min-h-[64px] flex-col justify-center rounded-2xl border bg-surface-sunken/50 px-4 py-2.5 transition focus-within:border-primary focus-within:bg-surface focus-within:shadow-focus hover:bg-surface'
 const box = (field: string) => [BOX, errors.value[field] ? 'border-danger' : 'border-line hover:border-line-strong']
 const LABEL = 'mb-0.5 block text-2xs font-bold uppercase tracking-wider text-ink-subtle'
 </script>
@@ -111,14 +111,14 @@ const LABEL = 'mb-0.5 block text-2xs font-bold uppercase tracking-wider text-ink
 <template>
   <section class="relative rounded-[28px] border border-line/90 bg-surface-raised p-3.5 shadow-pop sm:p-5" :aria-label="t('home.search.title')">
     <!-- Tabs: Meridian segmented rail -->
-    <div v-if="!fixed" class="-mx-1 mb-3.5 flex gap-1 overflow-x-auto rounded-2xl bg-surface-sunken/80 p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
+    <div v-if="!fixed" class="chip-rail -mx-1 mb-3.5 flex gap-1 rounded-2xl bg-surface-sunken/80 p-1.5" role="tablist">
       <button
         v-for="t in TABS"
         :key="t.id"
         type="button"
         role="tab"
         :aria-selected="tab === t.id"
-        :class="['flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-all', tab === t.id ? 'bg-surface text-primary shadow-card' : 'text-ink-muted hover:text-ink']"
+        :class="['flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition', tab === t.id ? 'bg-surface text-primary shadow-card' : 'text-ink-muted hover:text-ink']"
         @click="pickTab(t.id)"
       >
         <AppIcon :name="t.icon" :size="17" />{{ $t('nav.' + t.id) }}

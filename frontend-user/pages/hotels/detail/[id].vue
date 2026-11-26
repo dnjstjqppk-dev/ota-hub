@@ -397,7 +397,7 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
     </div>
 
     <!-- Phone bottom bar -->
-    <div class="fixed inset-x-0 bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 md:bottom-0 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur lg:hidden">
+    <div class="fixed inset-x-0 bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 border-t border-line bg-surface px-4 py-3 md:bottom-0 lg:hidden">
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-3">
         <div class="min-w-0 text-sm">
           <p v-if="nights" class="truncate font-semibold text-ink">{{ fmt(stay.checkIn) }} · {{ $t('hotels.detail.nights', { n: nights }) }}</p>

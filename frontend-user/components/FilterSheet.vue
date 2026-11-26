@@ -19,7 +19,7 @@ onBeforeUnmount(() => { document.documentElement.style.overflow = '' })
         <h2 class="text-base font-bold text-ink">{{ title || $t('search.filters') }}</h2>
         <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" :aria-label="$t('common.close')" @click="emit('close')"><AppIcon name="close" /></button>
       </div>
-      <div class="flex-1 overflow-y-auto overscroll-contain px-5 py-4"><slot /></div>
+      <div class="sheet-scroll flex-1 overflow-y-auto overscroll-contain px-5 py-4"><slot /></div>
       <div class="flex gap-2 border-t border-line px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
         <button type="button" class="rounded-xl px-4 py-3 text-sm font-semibold text-ink-muted hover:bg-surface-sunken" @click="emit('reset')">{{ $t('search.reset') }}</button>
         <button type="button" class="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-primary-ink hover:bg-primary-hover" @click="emit('close')">{{ applyLabel }}</button>

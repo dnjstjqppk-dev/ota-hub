@@ -95,15 +95,31 @@ function disabled(day: string) {
   if (isRange.value && a.value && !b.value && day > a.value && diff(a.value, day) > props.maxRange) return true
   return false
 }
-function state(day: string) {
+interface CellVM { dis: boolean; start: boolean; end: boolean; today: boolean; band: string; sunday: boolean; label: string }
+/**
+ * Per-day view models, computed in ONE pass over the visible months.
+ * The phone sheet renders ~300 day buttons; calling state()/disabled()/fmtLong()
+ * from the template re-parsed dates and rebuilt Intl formatters thousands of
+ * times per render (every hover included), which stalled sheet open and scroll.
+ */
+const cellVM = computed(() => {
+  const m = new Map<string, CellVM>()
+  const today = todayIso()
   const end = b.value || (isRange.value && a.value && hover.value > a.value && !disabled(hover.value) ? hover.value : '')
-  const start = day === a.value
-  const isEnd = !!end && day === end
-  const inRange = !!a.value && !!end && day > a.value && day < end
-  // Range band behind the day circle: full width inside the range, half width at the ends.
-  const band = !isRange.value || !end || (start && isEnd) ? '' : inRange ? 'before:inset-x-0' : start ? 'before:left-1/2 before:right-0' : isEnd ? 'before:left-0 before:right-1/2' : ''
-  return { start, end: isEnd, inRange, today: day === todayIso(), band }
-}
+  for (const month of months.value) {
+    for (const day of month.cells) {
+      if (!day) continue
+      const start = day === a.value
+      const isEnd = !!end && day === end
+      const inRange = !!a.value && !!end && day > a.value && day < end
+      // Range band behind the day circle: full width inside the range, half width at the ends.
+      const band = !isRange.value || !end || (start && isEnd) ? '' : inRange ? 'before:inset-x-0' : start ? 'before:left-1/2 before:right-0' : isEnd ? 'before:left-0 before:right-1/2' : ''
+      m.set(day, { dis: disabled(day), start, end: isEnd, today: day === today, band, sunday: fromIso(day).getDay() === 0, label: fmtLong(day) })
+    }
+  }
+  return m
+})
+const vm = (day: string) => cellVM.value.get(day)!
 
 // ------------------------------------------------------------------ interaction
 function pick(day: string) {
@@ -170,7 +186,14 @@ function onDoc(e: Event) {
   if (trigger.value?.contains(t) || panel.value?.contains(t)) return
   open.value = false
 }
-function onScroll() { if (open.value) place() }
+let placeRaf = 0
+function onScroll() {
+  // The phone sheet is fixed to the viewport: nothing to reposition, so skip the
+  // layout read entirely. Desktop repositions at most once per frame.
+  if (!open.value || isPhone.value) return
+  if (placeRaf) return
+  placeRaf = requestAnimationFrame(() => { placeRaf = 0; if (open.value && !isPhone.value) place() })
+}
 
 watch(open, (v) => { if (isPhone.value) document.documentElement.style.overflow = v ? 'hidden' : '' })
 onMounted(() => {
@@ -184,6 +207,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKey)
   window.removeEventListener('scroll', onScroll, { capture: true })
   window.removeEventListener('resize', onScroll)
+  if (placeRaf) cancelAnimationFrame(placeRaf)
   document.documentElement.style.overflow = ''
 })
 
@@ -254,7 +278,7 @@ const summary = computed(() => {
           <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink hover:bg-surface-sunken disabled:opacity-25" :disabled="!canNext" :aria-label="t('search.nextMonth')" @click="viewMonth = addMonths(viewMonth, 1)"><AppIcon name="chevron-right" /></button>
         </div>
 
-        <div :class="isPhone ? 'flex-1 overflow-y-auto overscroll-contain px-4 pb-4' : 'grid grid-cols-1 gap-8 sm:grid-cols-2'">
+        <div :class="isPhone ? 'sheet-scroll flex-1 overflow-y-auto overscroll-contain px-4 pb-4' : 'grid grid-cols-1 gap-8 sm:grid-cols-2'">
           <section v-for="m in months" :key="m.key" :class="isPhone && 'pt-5'">
             <h3 :class="['mb-2 text-sm font-bold text-ink', isPhone ? 'px-1' : 'text-center']">{{ m.title }}</h3>
             <div v-if="!isPhone" class="mb-1 grid grid-cols-7 text-center text-2xs font-semibold text-ink-subtle">
@@ -265,25 +289,25 @@ const summary = computed(() => {
                 <span v-if="!day" aria-hidden="true" />
                 <div
                   v-else
-                  :class="['relative flex h-11 items-center justify-center', state(day).band && ['before:absolute before:inset-y-1 before:bg-primary-soft', state(day).band]]"
+                  :class="['relative flex h-11 items-center justify-center', vm(day).band && ['before:absolute before:inset-y-1 before:bg-primary-soft', vm(day).band]]"
                 >
                   <button
                     type="button"
                     :data-day="day"
                     :tabindex="day === focusDay ? 0 : -1"
-                    :disabled="disabled(day)"
-                    :aria-label="fmtLong(day)"
-                    :aria-pressed="state(day).start || state(day).end"
-                    :aria-current="state(day).today ? 'date' : undefined"
+                    :disabled="vm(day).dis"
+                    :aria-label="vm(day).label"
+                    :aria-pressed="vm(day).start || vm(day).end"
+                    :aria-current="vm(day).today ? 'date' : undefined"
                     :class="['relative z-[1] flex h-10 w-10 flex-col items-center justify-center rounded-full text-sm font-semibold tabular transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                      state(day).start || state(day).end ? 'bg-primary text-primary-ink' : disabled(day) ? 'cursor-not-allowed text-ink-subtle/40 line-through decoration-transparent' : 'text-ink hover:bg-surface-sunken',
-                      !state(day).start && !state(day).end && !disabled(day) && fromIso(day).getDay() === 0 && 'text-danger/80']"
+                      vm(day).start || vm(day).end ? 'bg-primary text-primary-ink' : vm(day).dis ? 'cursor-not-allowed text-ink-subtle/40 line-through decoration-transparent' : 'text-ink hover:bg-surface-sunken',
+                      !vm(day).start && !vm(day).end && !vm(day).dis && vm(day).sunday && 'text-danger/80']"
                     @click="pick(day)"
                     @pointerenter="hover = day"
                     @focus="focusDay = day"
                   >
                     {{ Number(day.slice(8)) }}
-                    <span v-if="state(day).today" :class="['absolute bottom-1 h-1 w-1 rounded-full', state(day).start || state(day).end ? 'bg-primary-ink' : 'bg-primary']" />
+                    <span v-if="vm(day).today" :class="['absolute bottom-1 h-1 w-1 rounded-full', vm(day).start || vm(day).end ? 'bg-primary-ink' : 'bg-primary']" />
                   </button>
                 </div>
               </template>

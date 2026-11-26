@@ -38,7 +38,7 @@ useHead({ meta: [{ name: 'robots', content: 'noindex' }] })
 <template>
   <div class="mx-auto max-w-6xl px-4 pb-24 pt-6 lg:px-6 lg:pt-10">
     <div class="grid gap-6 lg:grid-cols-[220px_1fr]">
-      <nav class="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:mx-0 lg:block lg:space-y-1 lg:overflow-visible lg:px-0 [&::-webkit-scrollbar]:hidden" :aria-label="$t('my.nav')">
+      <nav class="chip-rail -mx-4 flex gap-1.5 px-4 pb-1 lg:mx-0 lg:block lg:space-y-1 lg:overflow-visible lg:px-0" :aria-label="$t('my.nav')">
         <div v-if="auth.user" class="mb-4 hidden rounded-card border border-line bg-surface p-4 lg:block">
           <p class="truncate font-bold text-ink">{{ auth.user.fullName || $t('my.member') }}</p>
           <p class="truncate text-xs text-ink-subtle">{{ auth.user.email }}</p>

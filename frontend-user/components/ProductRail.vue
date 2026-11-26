@@ -75,10 +75,10 @@ const hasImages = computed(() => !['flights', 'trains'].includes(props.kind))
       <span class="text-ink-muted">{{ t('landing.railError') }}</span>
       <button type="button" class="ml-2 font-semibold text-primary" @click="load">{{ t('common.retry') }}</button>
     </div>
-    <ul v-else class="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
+    <ul v-else class="rail -mx-4 flex gap-4 px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-4">
       <li v-for="c in shown" :key="c.key" class="w-[78vw] max-w-[300px] shrink-0 snap-start sm:w-auto sm:max-w-none">
         <NuxtLink :to="$localePath(c.to)" class="card group flex h-full flex-col overflow-hidden transition-shadow hover:shadow-pop">
-          <SmartImg v-if="hasImages" :src="c.img" :alt="c.title" :icon="c.icon" img-class="aspect-[16/10] w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+          <SmartImg v-if="hasImages" :src="c.img" :alt="c.title" :icon="c.icon" img-class="aspect-[16/10] w-full object-cover sm:transition-transform sm:duration-500 sm:group-hover:scale-105" />
           <div class="flex flex-1 flex-col p-4">
             <span v-if="!hasImages" class="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary"><AppIcon :name="c.icon" /></span>
             <p class="line-clamp-1 text-xs text-ink-subtle">{{ c.eyebrow }}</p>

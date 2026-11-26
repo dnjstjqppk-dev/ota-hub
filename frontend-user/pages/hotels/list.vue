@@ -248,7 +248,7 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
       </div>
 
       <!-- Phone: filter button + quick chips -->
-      <div class="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
+      <div class="chip-rail -mx-4 mb-3 flex gap-2 px-4 pb-1 lg:hidden">
         <button type="button" :class="[...chip(activeFilters.length > 0), 'shrink-0 whitespace-nowrap']" @click="sheet = true">
           <AppIcon name="menu" :size="16" />{{ $t('hotels.list.filter') }}<span v-if="activeFilters.length" class="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1 text-2xs text-primary-ink tabular">{{ activeFilters.length }}</span>
         </button>
@@ -312,9 +312,9 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
           <!-- List -->
           <ul v-else class="space-y-3">
             <li v-for="h in hotels" :key="h.id">
-              <article class="group relative flex flex-col overflow-hidden rounded-card border border-line bg-surface transition-shadow hover:shadow-pop sm:flex-row">
+              <article class="defer-paint group relative flex flex-col overflow-hidden rounded-card border border-line bg-surface transition-shadow hover:shadow-pop sm:flex-row">
                 <div class="relative aspect-[16/10] shrink-0 overflow-hidden bg-surface-sunken sm:aspect-auto sm:w-64 md:w-72">
-                  <SmartImg :src="h.thumbnail_url" :alt="h.name_ko" icon="hotel" img-class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 sm:absolute sm:inset-0" />
+                  <SmartImg :src="h.thumbnail_url" :alt="h.name_ko" icon="hotel" img-class="h-full w-full object-cover sm:absolute sm:inset-0 sm:transition-transform sm:duration-500 sm:group-hover:scale-105" />
                 </div>
                 <div class="flex min-w-0 flex-1 flex-col p-4 sm:p-5">
                   <div class="flex items-start justify-between gap-3">
@@ -380,7 +380,7 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
           <h2 class="text-base font-bold text-ink">{{ $t('hotels.list.filter') }}</h2>
           <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" :aria-label="$t('common.close')" @click="sheet = false"><AppIcon name="close" /></button>
         </div>
-        <div class="flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+        <div class="sheet-scroll flex-1 overflow-y-auto overscroll-contain px-5 py-4">
           <HotelFilterPanel :q="q" :types="TYPES" :price-steps="PRICE_STEPS" @set="setQuery" />
         </div>
         <div class="flex gap-2 border-t border-line px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">

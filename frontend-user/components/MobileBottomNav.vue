@@ -17,7 +17,7 @@ const active = (i: typeof items[number]) => (i.exact ? bare(route.path) === i.to
 
 <template>
   <nav
-    class="fixed inset-x-3 bottom-3 z-40 grid grid-cols-5 rounded-2xl border border-line bg-surface/95 p-1 shadow-pop backdrop-blur-xl md:hidden"
+    class="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 grid grid-cols-5 rounded-2xl border border-line bg-surface/95 p-1 shadow-pop backdrop-blur-md md:hidden"
     :aria-label="$t('mobile.menu')"
   >
     <NuxtLink
@@ -25,7 +25,7 @@ const active = (i: typeof items[number]) => (i.exact ? bare(route.path) === i.to
       :key="i.to"
       :to="$localePath(i.to)"
       :aria-current="active(i) ? 'page' : undefined"
-      :class="['flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl text-2xs font-bold transition-all active:scale-95', active(i) ? 'bg-primary-soft text-primary' : 'text-ink-subtle']"
+      :class="['flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl text-2xs font-bold transition active:scale-95', active(i) ? 'bg-primary-soft text-primary' : 'text-ink-subtle']"
     >
       <AppIcon :name="i.icon" :size="20" :stroke="active(i) ? 2.2 : 1.8" />
       {{ $t('mobile.' + i.key) }}

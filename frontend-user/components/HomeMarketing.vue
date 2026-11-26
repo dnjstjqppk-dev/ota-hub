@@ -19,6 +19,22 @@ function go(i: number) {
   const n = hero.value.length
   active.value = n ? (i + n) % n : 0
 }
+// Phone swipe: horizontal drag flips the banner, vertical scroll stays native
+// (touch-action: pan-y on the viewport lets the browser keep vertical panning).
+let touchX: number | null = null
+function onTouchStart(e: TouchEvent) {
+  stopAuto()
+  touchX = e.touches[0]?.clientX ?? null
+}
+function onTouchEnd(e: TouchEvent) {
+  const x = e.changedTouches[0]?.clientX ?? null
+  if (touchX !== null && x !== null) {
+    const dx = x - touchX
+    if (Math.abs(dx) > 40) go(active.value + (dx < 0 ? 1 : -1))
+  }
+  touchX = null
+  startAuto()
+}
 function startAuto() {
   stopAuto()
   if (hero.value.length > 1 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) timer = setInterval(() => go(active.value + 1), 6000)
@@ -38,8 +54,8 @@ const linkAttrs = (u: string | null) => (isExternal(u) ? { href: u, target: '_bl
   <div>
     <!-- Hero banners -->
     <section v-if="hero.length" class="mx-auto mt-10 max-w-7xl px-4 lg:px-6" aria-roledescription="carousel" :aria-label="$t('home.mkt.carousel')" data-testid="mkt-hero" @mouseenter="stopAuto" @mouseleave="startAuto" @focusin="stopAuto">
-      <div class="relative overflow-hidden rounded-card bg-midnight-900">
-        <div class="flex transition-transform duration-500 ease-out" :style="{ transform: `translateX(-${active * 100}%)` }">
+      <div class="relative select-none overflow-hidden rounded-card bg-midnight-900 [touch-action:pan-y]" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd">
+        <div class="flex transition-transform duration-500 ease-out will-change-transform" :style="{ transform: `translateX(-${active * 100}%)` }">
           <component :is="isExternal(s.linkUrl) ? 'a' : (s.linkUrl ? NuxtLinkCmp : 'div')"
             v-for="(s, i) in hero" :key="s.id" v-bind="s.linkUrl ? linkAttrs(s.linkUrl) : {}"
             class="relative block w-full shrink-0" :aria-hidden="i !== active" :tabindex="i === active ? 0 : -1"
@@ -58,7 +74,7 @@ const linkAttrs = (u: string | null) => (isExternal(u) ? { href: u, target: '_bl
           <button type="button" class="absolute right-2 top-1/2 hidden h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-ink shadow-card sm:grid" :aria-label="$t('home.mkt.nextBanner')" @click="go(active + 1)"><AppIcon name="chevron-right" :size="20" /></button>
           <div class="absolute bottom-3 right-4 flex items-center gap-1">
             <button v-for="(s, i) in hero" :key="s.id" type="button" class="grid h-6 w-6 place-items-center" :aria-label="$t('home.mkt.viewBanner', { n: i + 1 })" :aria-current="i === active" @click="go(i)">
-              <span class="h-1.5 rounded-full transition-all" :class="i === active ? 'w-5 bg-white' : 'w-1.5 bg-white/50'" />
+              <span class="h-1.5 rounded-full transition-[width,background-color]" :class="i === active ? 'w-5 bg-white' : 'w-1.5 bg-white/50'" />
             </button>
           </div>
         </template>
@@ -83,7 +99,7 @@ const linkAttrs = (u: string | null) => (isExternal(u) ? { href: u, target: '_bl
     <section v-if="picks.length" class="mx-auto mt-16 max-w-7xl px-4 lg:px-6" aria-labelledby="h-picks" data-testid="mkt-picks">
       <h2 id="h-picks" class="text-xl font-bold tracking-tight text-ink sm:text-2xl">{{ $t('home.mkt.picks') }}</h2>
       <p class="mt-1 text-sm text-ink-muted">{{ $t('home.mkt.picksSub') }}</p>
-      <ul class="-mx-4 mt-5 flex snap-x gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:px-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
+      <ul class="rail -mx-4 mt-5 flex gap-4 px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-4">
         <li v-for="s in picks" :key="s.id" class="w-[72%] shrink-0 snap-start sm:w-auto">
           <NuxtLink :to="isExternal(s.linkUrl) ? (s.linkUrl || '/') : $localePath(s.linkUrl || '/')" class="group block overflow-hidden rounded-card border border-line bg-surface transition-shadow hover:shadow-card">
             <SmartImg :src="assetUrl(s.imageUrl)" :alt="s.product?.title || s.title" :icon="DOMAIN_ICON[s.product?.domainType || ''] || 'map-pin'" img-class="aspect-[4/3] w-full object-cover" />
