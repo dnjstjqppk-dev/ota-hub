@@ -48,7 +48,7 @@ const addDays = (s: string, n: number) => { const d = fromIso(s); d.setDate(d.ge
 const addMonths = (s: string, n: number) => { const d = fromIso(s); return toIso(new Date(d.getFullYear(), d.getMonth() + n, 1)) }
 const diff = (x: string, y: string) => Math.round((fromIso(y).getTime() - fromIso(x).getTime()) / 86400000)
 const todayIso = () => toIso(new Date())
-const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN', 'zh-hant': 'zh-Hant' }
 // Weekday narrow names per locale (ko matches the legacy single-char row exactly).
 const WEEK = computed(() => {
   const tag = LOCALE_TAG[locale.value] || 'ko-KR'
@@ -80,7 +80,10 @@ function monthGrid(first: string) {
   const cells: (string | null)[] = Array(lead).fill(null)
   for (let i = 1; i <= days; i++) cells.push(toIso(new Date(d.getFullYear(), d.getMonth(), i)))
   while (cells.length % 7) cells.push(null)
-  return { key: first, title: `${d.getFullYear()}년 ${d.getMonth() + 1}월`, cells }
+  const monthTitle = locale.value === 'ko'
+    ? `${d.getFullYear()}년 ${d.getMonth() + 1}월`
+    : new Intl.DateTimeFormat(LOCALE_TAG[locale.value] || 'en-US', { year: 'numeric', month: 'long' }).format(d)
+  return { key: first, title: monthTitle, cells }
 }
 const months = computed(() => {
   const first = viewMonth.value || minDay.value.slice(0, 8) + '01'

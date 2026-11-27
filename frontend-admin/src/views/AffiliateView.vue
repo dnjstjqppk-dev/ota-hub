@@ -25,7 +25,7 @@ function patch(change: Record<string, string>) {
   for (const [k, v] of Object.entries({ ...route.query, ...change })) if (typeof v === 'string' && v) next[k] = v
   router.replace({ query: next })
 }
-const tab = computed(() => (qv('tab') === 'conversions' ? 'conversions' : qv('tab') === 'partners' ? 'partners' : 'clicks'))
+const tab = computed(() => (qv('tab') === 'conversions' ? 'conversions' : qv('tab') === 'partners' ? 'partners' : qv('tab') === 'dashboard' ? 'dashboard' : 'clicks'))
 const q = computed(() => qv('q'))
 const partner = computed(() => qv('partner'))
 const status = computed(() => qv('status'))
@@ -35,6 +35,10 @@ watch(q, (v) => { draft.value = v })
 
 const summary = useResource(async () => (await api('/admin/affiliate/summary')).summary || { clicks: 0, conversions: 0, gmv: 0, commission: 0 },
   { clicks: 0, conversions: 0, gmv: 0, commission: 0 } as any)
+const dashboard = useResource(async () => {
+  const j = await api('/admin/affiliate/dashboard')
+  return j.partners || j.byPartner || j.rows || []
+}, [] as any[])
 const total = ref(0)
 const totalPages = ref(1)
 const list = useResource(async () => {
@@ -49,8 +53,17 @@ const list = useResource(async () => {
   totalPages.value = j.totalPages || 1
   return (tab.value === 'clicks' ? j.clicks : j.conversions) || []
 }, [] as any[])
-watch([tab, q, partner, status, page], () => { if (tab.value === 'partners') partners.reload(); else list.reload() })
-onMounted(() => { summary.reload(); partners.reload(); if (tab.value !== 'partners') list.reload() })
+watch([tab, q, partner, status, page], () => {
+  if (tab.value === 'partners') partners.reload()
+  else if (tab.value === 'dashboard') dashboard.reload()
+  else list.reload()
+})
+onMounted(() => {
+  summary.reload()
+  partners.reload()
+  if (tab.value === 'dashboard') dashboard.reload()
+  else if (tab.value !== 'partners') list.reload()
+})
 
 // #24: partner registry.
 const partners = useResource(async () => (await api('/admin/affiliate/partners')).partners || [], [] as any[])
@@ -127,13 +140,34 @@ const convRate = computed(() => {
       <div class="rounded-card border border-line bg-surface p-4"><p class="text-2xs text-ink-subtle">예상 커미션</p><p class="text-xl font-black tabular text-ink">{{ krw(summary.data.value.commission) }}</p></div>
     </div>
 
-    <div class="mb-4 flex gap-1.5" role="group" aria-label="제휴 화면">
+    <div class="mb-4 flex flex-wrap gap-1.5" role="group" aria-label="제휴 화면">
       <button type="button" class="chip" :aria-pressed="tab === 'clicks'" @click="patch({ tab: '', page: '' })">클릭 로그</button>
       <button type="button" class="chip" :aria-pressed="tab === 'conversions'" @click="patch({ tab: 'conversions', page: '' })">전환 로그</button>
+      <button type="button" class="chip" :aria-pressed="tab === 'dashboard'" @click="patch({ tab: 'dashboard', page: '' })">파트너별 성과</button>
       <button type="button" class="chip" :aria-pressed="tab === 'partners'" @click="patch({ tab: 'partners', page: '' })">제휴사 등록</button>
     </div>
 
-    <div v-if="tab === 'partners'" class="mb-4 space-y-4">
+    <div v-if="tab === 'dashboard'" class="mb-4">
+      <StatePanel :state="dashboard.state.value" :error="dashboard.error.value" :empty="!dashboard.data.value.length" empty-text="집계된 제휴 성과가 없어요." @retry="dashboard.reload()">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>제휴사</th><th class="text-right">클릭</th><th class="text-right">전환</th><th class="text-right">CVR</th><th class="text-right">GMV</th><th class="text-right">커미션</th></tr></thead>
+            <tbody>
+              <tr v-for="row in dashboard.data.value" :key="row.partner_id || row.partner">
+                <td class="font-semibold">{{ row.partner_name || row.partner_id || row.partner }}</td>
+                <td class="text-right tabular">{{ Number(row.clicks || 0).toLocaleString() }}</td>
+                <td class="text-right tabular">{{ Number(row.conversions || 0).toLocaleString() }}</td>
+                <td class="text-right font-semibold tabular text-primary">{{ Number(row.clicks) ? `${((Number(row.conversions || 0) / Number(row.clicks)) * 100).toFixed(1)}%` : '0.0%' }}</td>
+                <td class="text-right tabular">{{ krw(row.gmv || row.gmv_minor || 0) }}</td>
+                <td class="text-right font-bold tabular text-success">{{ krw(row.commission || row.commission_minor || 0) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </StatePanel>
+    </div>
+
+    <div v-else-if="tab === 'partners'" class="mb-4 space-y-4">
       <div v-if="lastSecret" class="rounded-card border border-warning bg-warning-soft p-4" role="status">
         <p class="text-sm font-black text-ink">'{{ lastSecret.id }}' 시크릿 (지금 한 번만 표시돼요. 잃어버리면 교체하세요.)</p>
         <p class="mt-1 select-all font-mono text-sm font-bold text-ink">{{ lastSecret.secret }}</p>
@@ -185,7 +219,7 @@ const convRate = computed(() => {
       </select>
     </div>
 
-    <StatePanel v-if="tab !== 'partners'" :state="list.state.value" :error="list.error.value" :empty="!list.data.value.length" empty-text="조건에 맞는 로그가 없어요." @retry="list.reload()">
+    <StatePanel v-if="tab === 'clicks' || tab === 'conversions'" :state="list.state.value" :error="list.error.value" :empty="!list.data.value.length" empty-text="조건에 맞는 로그가 없어요." @retry="list.reload()">
       <div class="table-wrap">
         <table v-if="tab === 'clicks'" class="table">
           <thead><tr><th>클릭 ID</th><th>상품</th><th>제휴사</th><th>서브 ID</th><th>상태</th><th>발생 시각</th></tr></thead>

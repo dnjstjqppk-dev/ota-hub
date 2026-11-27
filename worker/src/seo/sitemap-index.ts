@@ -25,14 +25,34 @@ export function buildSitemapIndex(site: string, names: string[], lastmod: string
   return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${items.join("\n")}\n</sitemapindex>`;
 }
 
-const HREF_LANGS = ["ko", "en", "ja", "zh"] as const;
+const SUBDOMAIN_ALTERNATES = [
+  { hreflang: "ko-KR", sub: "kr", locale: "ko-kr" },
+  { hreflang: "ja-JP", sub: "jp", locale: "ja-jp" },
+  { hreflang: "en-GB", sub: "uk", locale: "en-gb" },
+  { hreflang: "zh-HK", sub: "hk", locale: "zh-hk" },
+  { hreflang: "zh-TW", sub: "tw", locale: "zh-tw" },
+  { hreflang: "en-US", sub: "www", locale: "en-us" },
+] as const;
 
-/** S8: locale alternates per URL (ko has no prefix; x-default points at the ko URL). */
+function subdomainOrigin(base: string, sub: string): string {
+  try {
+    const u = new URL(base);
+    const root = u.hostname.replace(/^(www|kr|jp|uk|hk|tw)\./i, "");
+    return `${u.protocol}//${sub}.${root}${u.port ? `:${u.port}` : ""}`;
+  } catch {
+    return base;
+  }
+}
+
+/** S8: country-subdomain locale alternates per URL (x-default points at www global URL). */
 function hreflangLinks(base: string, path: string): string {
-  const href = (prefix: string) => xmlEscape(`${base}${prefix}${path}`);
-  return [`<xhtml:link rel="alternate" hreflang="x-default" href="${href("")}"/>`,
-    `<xhtml:link rel="alternate" hreflang="ko" href="${href("")}"/>`,
-    ...HREF_LANGS.slice(1).map((l) => `<xhtml:link rel="alternate" hreflang="${l}" href="${href(`/${l}`)}"/>`)].join("");
+  const normPath = path ? (path.startsWith("/") ? path : `/${path}`) : "/";
+  const sep = normPath.includes("?") ? "&" : "?";
+  const href = (sub: string, locale: string) => xmlEscape(`${subdomainOrigin(base, sub)}${normPath}${sep}locale=${locale}`);
+  return [
+    ...SUBDOMAIN_ALTERNATES.map((a) => `<xhtml:link rel="alternate" hreflang="${a.hreflang}" href="${href(a.sub, a.locale)}"/>`),
+    `<xhtml:link rel="alternate" hreflang="x-default" href="${href("www", "en-us")}"/>`,
+  ].join("");
 }
 
 const URLSET_OPEN = `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">`;

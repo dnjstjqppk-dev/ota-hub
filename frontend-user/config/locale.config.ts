@@ -7,7 +7,7 @@
 
 export type SubdomainKey = 'kr' | 'jp' | 'uk' | 'hk' | 'tw' | 'www'
 export type LocaleCode = 'ko-kr' | 'ja-jp' | 'en-gb' | 'zh-hk' | 'zh-tw' | 'en-us'
-export type I18nBundle = 'ko' | 'en' | 'ja' | 'zh'
+export type I18nBundle = 'ko' | 'en' | 'ja' | 'zh' | 'zh-hant'
 export type CurrencyCode = 'KRW' | 'USD' | 'JPY' | 'GBP' | 'HKD' | 'TWD' | 'EUR' | 'CNY'
 
 export interface SubdomainConfig {
@@ -62,14 +62,14 @@ export const SUBDOMAINS: readonly SubdomainConfig[] = Object.freeze([
   Object.freeze({ sub: 'kr', host: `kr.${SITE_DOMAIN}`, locale: 'ko-kr', hreflang: 'ko-KR', ogLocale: 'ko_KR', i18n: 'ko', curr: 'KRW', countries: Object.freeze(['KR']), label: '한국어 (KR)' }),
   Object.freeze({ sub: 'jp', host: `jp.${SITE_DOMAIN}`, locale: 'ja-jp', hreflang: 'ja-JP', ogLocale: 'ja_JP', i18n: 'ja', curr: 'JPY', countries: Object.freeze(['JP']), label: '日本語 (JP)' }),
   Object.freeze({ sub: 'uk', host: `uk.${SITE_DOMAIN}`, locale: 'en-gb', hreflang: 'en-GB', ogLocale: 'en_GB', i18n: 'en', curr: 'GBP', countries: Object.freeze(['GB', 'UK']), label: 'English (UK)' }),
-  Object.freeze({ sub: 'hk', host: `hk.${SITE_DOMAIN}`, locale: 'zh-hk', hreflang: 'zh-HK', ogLocale: 'zh_HK', i18n: 'zh', curr: 'HKD', countries: Object.freeze(['HK', 'MO']), label: '繁體中文 (HK)' }),
-  Object.freeze({ sub: 'tw', host: `tw.${SITE_DOMAIN}`, locale: 'zh-tw', hreflang: 'zh-TW', ogLocale: 'zh_TW', i18n: 'zh', curr: 'TWD', countries: Object.freeze(['TW']), label: '繁體中文 (TW)' }),
+  Object.freeze({ sub: 'hk', host: `hk.${SITE_DOMAIN}`, locale: 'zh-hk', hreflang: 'zh-HK', ogLocale: 'zh_HK', i18n: 'zh-hant', curr: 'HKD', countries: Object.freeze(['HK', 'MO']), label: '繁體中文 (HK)' }),
+  Object.freeze({ sub: 'tw', host: `tw.${SITE_DOMAIN}`, locale: 'zh-tw', hreflang: 'zh-TW', ogLocale: 'zh_TW', i18n: 'zh-hant', curr: 'TWD', countries: Object.freeze(['TW']), label: '繁體中文 (TW)' }),
   Object.freeze({ sub: 'www', host: `www.${SITE_DOMAIN}`, locale: 'en-us', hreflang: 'en-US', ogLocale: 'en_US', i18n: 'en', curr: 'USD', countries: Object.freeze([]), label: 'English (Global)' }),
 ])
 
 export const DEFAULT_SUBDOMAIN: SubdomainKey = 'www'
 export const SUPPORTED_CURRENCIES: readonly CurrencyCode[] = Object.freeze(['KRW', 'USD', 'JPY', 'GBP', 'HKD', 'TWD', 'EUR', 'CNY'])
-export const I18N_BUNDLES: readonly I18nBundle[] = Object.freeze(['ko', 'en', 'ja', 'zh'])
+export const I18N_BUNDLES: readonly I18nBundle[] = Object.freeze(['ko', 'en', 'ja', 'zh', 'zh-hant'])
 
 export const SUBDOMAIN_MAP: Record<SubdomainKey, SubdomainConfig> = Object.freeze(
   Object.fromEntries(SUBDOMAINS.map((e) => [e.sub, e])) as Record<SubdomainKey, SubdomainConfig>

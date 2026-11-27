@@ -15,7 +15,7 @@ import { apiFetch, formatKrw, formatMinor } from '~/composables/useApi'
 import { fmtDay, qDate, qInt, todayIso } from '~/composables/useUrlQuery'
 const localePath = useLocalePath()
 const { t, locale } = useI18n()
-const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN', 'zh-hant': 'zh-Hant' }
 useHead({ title: t('checkout.title') })
 
 const route = useRoute()
@@ -46,6 +46,7 @@ const adults = ref(qInt(q.adults, domain === 'HOTEL' ? 2 : 1, 1, 9))
 const children = ref(qInt(q.children, 0, 0, 8))
 const infants = ref(qInt(q.infants, 0, 0, 4))
 const promotionCode = ref('')
+const myCoupons = ref<any[]>([])
 const useCoins = ref(0)
 const coinBalance = computed(() => auth.user?.tripCoins || 0)
 
@@ -329,6 +330,12 @@ onMounted(async () => {
   if (!contact.value.name) contact.value.name = auth.user?.fullName || ''
   if (!contact.value.email) contact.value.email = auth.user?.email || ''
   if (!contact.value.phone) contact.value.phone = auth.user?.phoneNumber || ''
+  try {
+    const lv = await apiFetch('/legal')
+    if (lv.ok) for (const d of lv.data.documents || []) legalVersions.value[d.slug] = d.version
+  } catch { /* consent checkboxes stay disabled without versions */ }
+  // Resume existing AWAITING_PAYMENT booking before validating domain/itemId (supports GAP-08 change-confirm redirects).
+  if (q.bookingId) { await resumeBooking(String(q.bookingId)); return }
   if (!cartMode.value && (!DOMAIN_LABEL.value[domain] || !itemId)) { error.value = t('checkout.badItem'); return }
   if (cartMode.value) {
     if (cartLegs.value.length !== cartIds.value.length) { error.value = t('checkout.cartLost'); return }
@@ -336,14 +343,15 @@ onMounted(async () => {
     adults.value = p0.adults; children.value = p0.children; infants.value = p0.infants || 0
     buildTravelers()
     step.value = 'travelers'
+  } else {
+    try {
+      const cr = await apiFetch('/user/coupons')
+      const list = cr.ok ? ((cr.data as any).coupons || (cr.data as any).data || []) : []
+      myCoupons.value = list.filter((c: any) => !c.used_at && (!c.valid_until || Date.parse(c.valid_until) > Date.now()))
+    } catch { myCoupons.value = [] }
   }
-  try {
-    const lv = await apiFetch('/legal')
-    if (lv.ok) for (const d of lv.data.documents || []) legalVersions.value[d.slug] = d.version
-  } catch { /* consent checkboxes stay disabled without versions */ }
-  if (q.bookingId) await resumeBooking(String(q.bookingId))
   // Arriving from a product page with dates already chosen: price it right away.
-  else if (!cartMode.value && datesReady.value) await getQuote()
+  if (!cartMode.value && datesReady.value) await getQuote()
 })
 
 /** Re-enter the payment step for an existing booking that is still awaiting payment (e.g. after a declined card). */
@@ -426,6 +434,17 @@ onBeforeUnmount(() => { clearInterval(timer); unmountStripeCard() })
             <label class="sm:col-span-2">
               <span class="field-label">{{ $t('checkout.couponOpt') }}</span>
               <input v-model="promotionCode" type="text" :disabled="!!quote" :class="[FIELD, 'uppercase']" :placeholder="$t('checkout.couponPh')" />
+              <div v-if="myCoupons.length && !quote" class="mt-2 flex flex-wrap gap-1.5">
+                <button
+                  v-for="c in myCoupons.slice(0, 5)"
+                  :key="c.code"
+                  type="button"
+                  :class="['chip !py-1 !text-xs', promotionCode.toUpperCase() === String(c.code || '').toUpperCase() ? 'border-primary bg-primary-soft text-primary' : '']"
+                  @click="promotionCode = promotionCode === c.code ? '' : c.code"
+                >
+                  {{ c.code }} · {{ c.title }}
+                </button>
+              </div>
             </label>
             <div class="rounded-2xl border border-line bg-surface-sunken p-3.5 sm:col-span-2">
               <div class="flex flex-wrap items-center justify-between gap-2">
@@ -552,7 +571,7 @@ onBeforeUnmount(() => { clearInterval(timer); unmountStripeCard() })
         <div class="card p-5">
           <p class="text-xs font-semibold text-primary">{{ DOMAIN_LABEL[domain] }}</p>
           <p class="mt-1 font-bold leading-snug text-ink">{{ quote.title }}</p>
-          <p class="mt-1 text-sm text-ink-muted">{{ fmtDay(quote.serviceStart, true) }}<template v-if="quote.serviceEnd && quote.serviceEnd !== quote.serviceStart"> → {{ fmtDay(quote.serviceEnd, true) }}</template></p>
+          <p class="mt-1 text-sm text-ink-muted">{{ fmtDay(quote.serviceStart, true, locale) }}<template v-if="quote.serviceEnd && quote.serviceEnd !== quote.serviceStart"> → {{ fmtDay(quote.serviceEnd, true, locale) }}</template></p>
           <dl class="mt-4 space-y-2 border-t border-line pt-4 text-sm">
             <div v-for="l in quote.lines" :key="l.code + l.label" class="flex justify-between gap-3">
               <dt class="text-ink-muted">{{ l.label }}</dt><dd :class="['tabular', l.amountMinor < 0 ? 'font-semibold text-success' : 'text-ink']">{{ formatKrw(l.amountMinor) }}</dd>

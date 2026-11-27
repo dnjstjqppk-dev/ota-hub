@@ -5,7 +5,7 @@
  * checkout, where the server prices the stay. Only catalogue facts are shown: no default check-in
  * times, invented facilities or cancellation deadlines. Rates are offered only after the live API answers.
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
@@ -13,13 +13,25 @@ import { getHotelById } from '~/data/hotelCatalog'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
 import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
+import { useRecentlyViewed } from '~/composables/useRecentlyViewed'
 import { useCartStore } from '~/stores/cart'
 
 const route = useRoute()
 const router = useRouter()
 const currency = useCurrencyStore()
+const recent = useRecentlyViewed()
 const { t, locale } = useI18n()
-const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN', 'zh-hant': 'zh-Hant' }
+const displayTitle = computed(() => {
+  const h = hotel.value
+  if (!h) return ''
+  return locale.value === 'ko' ? (h.name_ko || h.name) : (h.name_en || h.name_ko || h.name)
+})
+const secondaryTitle = computed(() => {
+  const h = hotel.value
+  if (!h) return ''
+  return locale.value === 'ko' ? (h.name_en || '') : (h.name_ko && h.name_ko !== displayTitle.value ? h.name_ko : '')
+})
 
 const hotelId = String(route.params.id || route.query.hotelId || route.query.id || '')
 // Static catalogue is only a first paint (and SEO); never substitute a different hotel for an unknown id.
@@ -61,7 +73,18 @@ const WEEKDAYS: Record<string, string[]> = {
   en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   ja: ['日', '月', '火', '水', '木', '金', '土'],
   zh: ['日', '一', '二', '三', '四', '五', '六'],
+  'zh-hant': ['日', '一', '二', '三', '四', '五', '六'],
 }
+const lightboxIdx = ref<number | null>(null)
+function onLightboxKey(e: KeyboardEvent) {
+  if (lightboxIdx.value === null) return
+  if (e.key === 'Escape') lightboxIdx.value = null
+  else if (e.key === 'ArrowRight') lightboxIdx.value = (lightboxIdx.value + 1) % gallery.value.length
+  else if (e.key === 'ArrowLeft') lightboxIdx.value = (lightboxIdx.value - 1 + gallery.value.length) % gallery.value.length
+}
+const hasCoords = computed(() => Number.isFinite(Number(hotel.value?.latitude)) && Number.isFinite(Number(hotel.value?.longitude)) && Number(hotel.value?.latitude) !== 0)
+const googleMapsUrl = computed(() => hasCoords.value ? `https://www.google.com/maps/search/?api=1&query=${hotel.value.latitude},${hotel.value.longitude}` : '')
+const naverMapsUrl = computed(() => hasCoords.value ? `https://map.naver.com/p/search/${encodeURIComponent(hotel.value?.name_ko || hotel.value?.address || '')}` : '')
 function fmt(s: string) { const [y = NaN, m = NaN, d = NaN] = s.split('-').map(Number); const wk = (WEEKDAYS[locale.value] || WEEKDAYS.ko || [])[new Date(y, m - 1, d).getDay()] ?? ''; return t('hotels.detail.fmtDay', { m, d, w: wk }) }
 /**
  * Mirrors the server rule (worker/src/domain/pricing.ts cancellationPolicyFor): free until 24h before
@@ -173,7 +196,14 @@ useHead(() => {
 async function loadLive() {
   if (!hotelId) { loading.value = false; notFound.value = true; return }
   try {
-    const res = await fetch(useApiUrl(`/hotels/${encodeURIComponent(hotelId)}`), { signal: AbortSignal.timeout(8000) })
+    const qp = new URLSearchParams()
+    if (stay.value.checkIn && stay.value.checkOut) {
+      qp.set('checkIn', stay.value.checkIn)
+      qp.set('checkOut', stay.value.checkOut)
+      qp.set('rooms', String(stay.value.rooms))
+    }
+    const qs = qp.toString()
+    const res = await fetch(useApiUrl(`/hotels/${encodeURIComponent(hotelId)}${qs ? `?${qs}` : ''}`), { signal: AbortSignal.timeout(8000) })
     if (res.ok) {
       const json = await res.json()
       if (json.data) { hotel.value = { ...(hotel.value || {}), ...json.data }; ratesState.value = 'ok' }
@@ -195,9 +225,25 @@ if (import.meta.server) {
   if (notFound.value) throw createError({ statusCode: 404, statusMessage: 'Product not found' })
   if (ratesState.value !== 'ok') throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 }
+watch(() => [stay.value.checkIn, stay.value.checkOut, stay.value.rooms], () => {
+  if (import.meta.client && stay.value.checkIn && stay.value.checkOut) void loadLive()
+})
 onMounted(() => {
   const d = new Date(); today.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  window.addEventListener('keydown', onLightboxKey)
+  if (hotel.value?.id) {
+    recent.record({
+      domain: 'HOTEL',
+      id: hotel.value.id,
+      title: displayTitle.value || hotel.value.name_ko || hotel.value.name,
+      subtitle: [hotel.value.city, hotel.value.country].filter(Boolean).join(', '),
+      image: gallery.value[0] || null,
+      priceKrw: minRoomPrice.value || hotel.value.base_price_krw || null,
+      path: `/hotels/detail/${hotel.value.id}`,
+    })
+  }
 })
+onBeforeUnmount(() => { if (import.meta.client) window.removeEventListener('keydown', onLightboxKey) })
 
 const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.value?.city ? { city: hotel.value.city } : {}), ...route.query } }))
 </script>
@@ -228,8 +274,8 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
           <span>{{ typeLabel(hotel.property_type) || $t('hotels.list.stay') }}</span>
           <span v-if="hotel.city" class="text-ink-subtle">· {{ [hotel.city, hotel.country].filter(Boolean).join(', ') }}</span>
         </p>
-        <h1 class="mt-1 text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ hotel.name_ko || hotel.name }}</h1>
-        <p v-if="hotel.name_en" class="mt-0.5 text-sm text-ink-subtle">{{ hotel.name_en }}</p>
+        <h1 class="mt-1 text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ displayTitle }}</h1>
+        <p v-if="secondaryTitle" class="mt-0.5 text-sm text-ink-subtle">{{ secondaryTitle }}</p>
         <p v-if="hotel.address" class="mt-2 flex items-start gap-1 text-sm text-ink-muted"><AppIcon name="map-pin" :size="16" class="mt-0.5 text-ink-subtle" />{{ hotel.address }}</p>
       </div>
       <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap sm:gap-3">
@@ -246,10 +292,28 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
       </div>
     </header>
 
-    <!-- Gallery -->
-    <div class="mt-5 grid h-64 gap-2 overflow-hidden rounded-card sm:h-[420px] sm:grid-cols-4 sm:grid-rows-2">
-      <SmartImg :src="gallery[0]" :alt="$t('hotels.detail.mainPhoto', { name: hotel.name_ko })" icon="hotel" :img-class="['h-full w-full object-cover', gallery.length > 1 ? 'sm:col-span-2 sm:row-span-2' : 'sm:col-span-4 sm:row-span-2'].join(' ')" />
-      <SmartImg v-for="(img, i) in gallery.slice(1, 5)" :key="img" :src="img" :alt="$t('hotels.detail.photoN', { name: hotel.name_ko, n: i + 2 })" icon="hotel" :img-class="['hidden h-full w-full object-cover sm:block', gallery.length === 2 ? 'sm:col-span-2 sm:row-span-2' : gallery.length === 3 ? 'sm:col-span-2' : ''].join(' ')" />
+    <!-- Gallery (clickable fullscreen lightbox) -->
+    <div class="relative mt-5 grid h-64 gap-2 overflow-hidden rounded-card sm:h-[420px] sm:grid-cols-4 sm:grid-rows-2">
+      <button type="button" :class="['group relative h-full w-full overflow-hidden text-left', gallery.length > 1 ? 'sm:col-span-2 sm:row-span-2' : 'sm:col-span-4 sm:row-span-2']" @click="gallery.length && (lightboxIdx = 0)">
+        <SmartImg :src="gallery[0]" :alt="$t('hotels.detail.mainPhoto', { name: displayTitle })" icon="hotel" img-class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+      </button>
+      <button
+        v-for="(img, i) in gallery.slice(1, 5)"
+        :key="img"
+        type="button"
+        :class="['group relative hidden h-full w-full overflow-hidden text-left sm:block', gallery.length === 2 ? 'sm:col-span-2 sm:row-span-2' : gallery.length === 3 ? 'sm:col-span-2' : '']"
+        @click="lightboxIdx = i + 1"
+      >
+        <SmartImg :src="img" :alt="$t('hotels.detail.photoN', { name: displayTitle, n: i + 2 })" icon="hotel" img-class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+      </button>
+      <button
+        v-if="gallery.length > 1"
+        type="button"
+        class="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-midnight-950/75 px-3.5 py-1.5 text-xs font-bold text-white backdrop-blur-md transition hover:bg-midnight-950"
+        @click="lightboxIdx = 0"
+      >
+        <AppIcon name="camera" :size="14" />{{ $t('hotels.detail.viewAllPhotos', { n: gallery.length }) }}
+      </button>
     </div>
 
     <div class="mt-8 grid gap-8 lg:grid-cols-[1fr_360px]">
@@ -348,6 +412,27 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
           </ul>
         </section>
 
+        <!-- Location & Map Card (real coordinates, zero third-party iframe overhead) -->
+        <section v-if="hasCoords || hotel.address" aria-labelledby="h-loc" class="card overflow-hidden p-5 sm:p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 id="h-loc" class="text-xl font-bold tracking-tight text-ink">{{ $t('hotels.detail.locationTitle') }}</h2>
+              <p v-if="hotel.address" class="mt-1 text-sm text-ink-muted">{{ hotel.address }}</p>
+            </div>
+            <div v-if="hasCoords" class="flex flex-wrap gap-2">
+              <a :href="googleMapsUrl" target="_blank" rel="noopener" class="btn-secondary !px-3.5 !py-2 !text-xs"><AppIcon name="map-pin" :size="14" />Google Maps</a>
+              <a :href="naverMapsUrl" target="_blank" rel="noopener" class="btn-secondary !px-3.5 !py-2 !text-xs"><AppIcon name="compass" :size="14" />Naver Map</a>
+            </div>
+          </div>
+          <div v-if="hasCoords" class="relative mt-4 flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-line bg-surface-sunken px-6 py-8 text-center">
+            <div class="pointer-events-none absolute inset-0 opacity-20" style="background-image: radial-gradient(circle at 1px 1px, rgb(var(--gft-primary)) 1px, transparent 0); background-size: 20px 20px;" aria-hidden="true" />
+            <span class="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-ink shadow-card"><AppIcon name="map-pin" :size="22" /></span>
+            <p class="relative mt-3 font-bold text-ink">{{ displayTitle }}</p>
+            <p class="relative mt-1 font-mono text-xs text-ink-subtle tabular">{{ Number(hotel.latitude).toFixed(5) }}°N, {{ Number(hotel.longitude).toFixed(5) }}°E</p>
+            <p v-if="hotel.subway_nearby" class="relative mt-1.5 text-xs font-medium text-primary">{{ hotel.subway_nearby }}</p>
+          </div>
+        </section>
+
         <!-- Ratings breakdown (only when the catalogue has it) -->
         <section v-if="subScores.length" aria-labelledby="h-scores">
           <h2 id="h-scores" class="mb-4 text-xl font-bold tracking-tight text-ink">{{ $t('hotels.detail.scoresTitle') }}</h2>
@@ -396,6 +481,24 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
         </div>
       </aside>
     </div>
+
+    <!-- Fullscreen Photo Lightbox -->
+    <Teleport to="body">
+      <div v-if="lightboxIdx !== null && gallery.length" class="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-midnight-950/95 p-4 backdrop-blur-md" role="dialog" aria-modal="true" :aria-label="displayTitle" @click.self="lightboxIdx = null">
+        <button type="button" class="absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25" :aria-label="$t('common.close')" @click="lightboxIdx = null">✕</button>
+        <img :src="gallery[lightboxIdx] || ''" :alt="displayTitle" class="max-h-[78vh] max-w-full rounded-2xl object-contain shadow-pop" />
+        <template v-if="gallery.length > 1">
+          <button type="button" class="absolute left-4 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25" :aria-label="$t('reviews.prevPhoto')" @click="lightboxIdx = (lightboxIdx - 1 + gallery.length) % gallery.length"><AppIcon name="chevron-right" :size="20" class="rotate-180" /></button>
+          <button type="button" class="absolute right-4 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25" :aria-label="$t('reviews.nextPhoto')" @click="lightboxIdx = (lightboxIdx + 1) % gallery.length"><AppIcon name="chevron-right" :size="20" /></button>
+          <p class="mt-3 text-sm font-semibold text-white/80 tabular">{{ lightboxIdx + 1 }} / {{ gallery.length }}</p>
+          <div class="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1">
+            <button v-for="(img, idx) in gallery" :key="img" type="button" :class="['h-14 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition', idx === lightboxIdx ? 'border-primary' : 'border-transparent opacity-60 hover:opacity-100']" @click="lightboxIdx = idx">
+              <img :src="img" alt="" class="h-full w-full object-cover" />
+            </button>
+          </div>
+        </template>
+      </div>
+    </Teleport>
 
     <!-- Phone bottom bar -->
     <div class="fixed inset-x-0 bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 border-t border-line bg-surface px-4 py-3 md:bottom-0 lg:hidden">

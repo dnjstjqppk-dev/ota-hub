@@ -30,7 +30,8 @@
     "home": "Home",
     "breadcrumb": "Breadcrumb",
     "dismissToast": "Dismiss notification",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "pending": "Coming soon"
   },
   "hotels": {
     "list": {
@@ -86,7 +87,13 @@
       "stayTotal": "{n} nights · {rooms} rooms ≈ {v}",
       "priceTbd": "Check rate",
       "searching": "Searching…",
-      "viewCount": "View {n} stays"
+      "viewCount": "View {n} stays",
+      "compare": "Compare",
+      "comparing": "Comparing",
+      "compareNow": "Compare Selected",
+      "compareTitle": "Compare Hotels Side by Side",
+      "compareMetric": "Metric",
+      "soldOutDates": "Sold out for selected dates"
     },
     "home": {
       "seoTitle": "Hotel booking",
@@ -159,7 +166,9 @@
       "viewRooms": "View rooms",
       "barPrice": "{v}~/night · tax extra",
       "notFoundF": "Couldn't find that stay",
-      "findOther": "Find other stays"
+      "findOther": "Find other stays",
+      "viewAllPhotos": "View all {n} photos",
+      "locationTitle": "Location & Map"
     },
     "filters": {
       "grade": "Star rating",
@@ -407,65 +416,209 @@
       "title": "Flights, Hotels, Trains & Car Rentals",
       "description": "Book flights, hotels, train tickets, rental cars, airport transfers, and tours on getfortrip. Final prices confirmed before payment; bookings confirmed only after supplier confirmation."
     },
-    "terms": { "title": "Terms of Service", "description": "getfortrip terms of service (Korean version is authoritative)." },
-    "privacy": { "title": "Privacy Policy", "description": "getfortrip privacy policy (Korean version is authoritative)." },
-    "refund": { "title": "Cancellation & Refund Policy", "description": "Booking cancellation and refund rules." },
-    "cookies": { "title": "Cookie Policy", "description": "How getfortrip uses cookies." },
-    "help": { "title": "Help Center", "description": "Help for bookings, payments and cancellations." },
-    "faq": { "title": "FAQ", "description": "Frequently asked questions and answers." },
-    "about": { "title": "About Us", "description": "About getfortrip." },
-    "careers": { "title": "Careers", "description": "Join the getfortrip team." },
-    "news": { "title": "News", "description": "Latest news from getfortrip." },
-    "safety": { "title": "Travel Safety", "description": "Guidance for safe travel." },
-    "sustainability": { "title": "Sustainability", "description": "getfortrip's sustainable travel promise." },
-    "rewards": { "title": "Rewards", "description": "Book and earn points." }
+    "terms": {
+      "title": "Terms of Service",
+      "description": "getfortrip terms of service (Korean version is authoritative)."
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "description": "getfortrip privacy policy (Korean version is authoritative)."
+    },
+    "refund": {
+      "title": "Cancellation & Refund Policy",
+      "description": "Booking cancellation and refund rules."
+    },
+    "cookies": {
+      "title": "Cookie Policy",
+      "description": "How getfortrip uses cookies."
+    },
+    "help": {
+      "title": "Help Center",
+      "description": "Help for bookings, payments and cancellations."
+    },
+    "faq": {
+      "title": "FAQ",
+      "description": "Frequently asked questions and answers."
+    },
+    "about": {
+      "title": "About Us",
+      "description": "About getfortrip."
+    },
+    "careers": {
+      "title": "Careers",
+      "description": "Join the getfortrip team."
+    },
+    "news": {
+      "title": "News",
+      "description": "Latest news from getfortrip."
+    },
+    "safety": {
+      "title": "Travel Safety",
+      "description": "Guidance for safe travel."
+    },
+    "sustainability": {
+      "title": "Sustainability",
+      "description": "getfortrip's sustainable travel promise."
+    },
+    "rewards": {
+      "title": "Rewards",
+      "description": "Book and earn points."
+    }
   },
   "seoFaq": {
     "more": "See related policy",
     "hotels": [
-      { "q": "Can I cancel my hotel booking for a refund?", "a": "Each rate plan has its own free-cancellation deadline. Free-cancellation rates refund in full with no penalty when cancelled before the deadline on the voucher (usually 24-72 hours before check-in). Non-refundable deals charge a 100% cancellation fee.", "to": "/refund-policy" },
-      { "q": "Do hotel rates include tax?", "a": "No. Listed rates are tax-exclusive references, and the final amount including 10% tax is confirmed on the pre-payment review screen.", "to": "/terms" },
-      { "q": "Where can I find my booking voucher?", "a": "After the supplier confirms your booking, you can view and print the voucher from your booking details. No voucher is issued before confirmation.", "to": "/help" }
+      {
+        "q": "Can I cancel my hotel booking for a refund?",
+        "a": "Each rate plan has its own free-cancellation deadline. Free-cancellation rates refund in full with no penalty when cancelled before the deadline on the voucher (usually 24-72 hours before check-in). Non-refundable deals charge a 100% cancellation fee.",
+        "to": "/refund-policy"
+      },
+      {
+        "q": "Do hotel rates include tax?",
+        "a": "No. Listed rates are tax-exclusive references, and the final amount including 10% tax is confirmed on the pre-payment review screen.",
+        "to": "/terms"
+      },
+      {
+        "q": "Where can I find my booking voucher?",
+        "a": "After the supplier confirms your booking, you can view and print the voucher from your booking details. No voucher is issued before confirmation.",
+        "to": "/help"
+      }
     ],
     "flights": [
-      { "q": "Can I cancel my flight ticket for a refund?", "a": "Cancellations before midnight on the ticketing day are fully refundable with no airline fee (some promo fares excluded). After ticketing, the airline's fare-rule penalty is deducted.", "to": "/refund-policy" },
-      { "q": "When do I get my e-ticket and booking reference (PNR)?", "a": "Ticketing proceeds after payment once the supplier confirms, and you can find the PNR and e-ticket number in your booking details after ticketing is complete.", "to": "/faq" },
-      { "q": "How can I pay for flights?", "a": "You can pay by credit or debit card, and all payments are processed in KRW.", "to": "/terms" }
+      {
+        "q": "Can I cancel my flight ticket for a refund?",
+        "a": "Cancellations before midnight on the ticketing day are fully refundable with no airline fee (some promo fares excluded). After ticketing, the airline's fare-rule penalty is deducted.",
+        "to": "/refund-policy"
+      },
+      {
+        "q": "When do I get my e-ticket and booking reference (PNR)?",
+        "a": "Ticketing proceeds after payment once the supplier confirms, and you can find the PNR and e-ticket number in your booking details after ticketing is complete.",
+        "to": "/faq"
+      },
+      {
+        "q": "How can I pay for flights?",
+        "a": "You can pay by credit or debit card, and all payments are processed in KRW.",
+        "to": "/terms"
+      }
     ],
     "trains": [
-      { "q": "Can I cancel train tickets online?", "a": "Yes. If you request cancellation from your bookings, the fee and refund are calculated under that booking's cancellation policy, and you can review the amounts before confirming.", "to": "/refund-policy" },
-      { "q": "How can I pay for train tickets?", "a": "You can pay by credit or debit card, and all payments are processed in KRW.", "to": "/terms" },
-      { "q": "Where can I find my train ticket?", "a": "After the supplier confirms your booking, you can check the confirmation in your booking details.", "to": "/help" }
+      {
+        "q": "Can I cancel train tickets online?",
+        "a": "Yes. If you request cancellation from your bookings, the fee and refund are calculated under that booking's cancellation policy, and you can review the amounts before confirming.",
+        "to": "/refund-policy"
+      },
+      {
+        "q": "How can I pay for train tickets?",
+        "a": "You can pay by credit or debit card, and all payments are processed in KRW.",
+        "to": "/terms"
+      },
+      {
+        "q": "Where can I find my train ticket?",
+        "a": "After the supplier confirms your booking, you can check the confirmation in your booking details.",
+        "to": "/help"
+      }
     ],
     "cars": [
-      { "q": "Can I cancel my rental car for a refund?", "a": "You can cancel free of charge up to 24-48 hours before pickup, while no-shows are non-refundable.", "to": "/refund-policy" },
-      { "q": "How can I pay for rental cars?", "a": "You can pay by credit or debit card, and all payments are processed in KRW.", "to": "/terms" },
-      { "q": "Where can I find my rental confirmation?", "a": "After the supplier confirms your booking, you can view and print the voucher from your booking details.", "to": "/help" }
+      {
+        "q": "Can I cancel my rental car for a refund?",
+        "a": "You can cancel free of charge up to 24-48 hours before pickup, while no-shows are non-refundable.",
+        "to": "/refund-policy"
+      },
+      {
+        "q": "How can I pay for rental cars?",
+        "a": "You can pay by credit or debit card, and all payments are processed in KRW.",
+        "to": "/terms"
+      },
+      {
+        "q": "Where can I find my rental confirmation?",
+        "a": "After the supplier confirms your booking, you can view and print the voucher from your booking details.",
+        "to": "/help"
+      }
     ],
     "transfers": [
-      { "q": "Can I cancel my airport pickup for a refund?", "a": "You can cancel free of charge up to 24-48 hours before pickup, while no-shows are non-refundable.", "to": "/refund-policy" },
-      { "q": "How can I pay for airport pickups?", "a": "You can pay by credit or debit card, and all payments are processed in KRW.", "to": "/terms" },
-      { "q": "Where can I find my pickup voucher?", "a": "After the supplier confirms your booking, you can view and print the voucher from your booking details.", "to": "/help" }
+      {
+        "q": "Can I cancel my airport pickup for a refund?",
+        "a": "You can cancel free of charge up to 24-48 hours before pickup, while no-shows are non-refundable.",
+        "to": "/refund-policy"
+      },
+      {
+        "q": "How can I pay for airport pickups?",
+        "a": "You can pay by credit or debit card, and all payments are processed in KRW.",
+        "to": "/terms"
+      },
+      {
+        "q": "Where can I find my pickup voucher?",
+        "a": "After the supplier confirms your booking, you can view and print the voucher from your booking details.",
+        "to": "/help"
+      }
     ],
     "todos": [
-      { "q": "Can I cancel tours and tickets for a refund?", "a": "Each product follows its own published cancellation policy: usually a full refund 3-7 days ahead and a partial refund 1-2 days ahead. E-tickets with an instantly issued QR code cannot be cancelled or exchanged after issuance.", "to": "/refund-policy" },
-      { "q": "How are tour and ticket prices calculated?", "a": "Prices are shown per person, and time-slot products apply separate adult and child fares.", "to": "/terms" },
-      { "q": "Where can I find my e-voucher?", "a": "After the supplier confirms your booking, you can view and print the e-voucher from your booking details.", "to": "/help" }
+      {
+        "q": "Can I cancel tours and tickets for a refund?",
+        "a": "Each product follows its own published cancellation policy: usually a full refund 3-7 days ahead and a partial refund 1-2 days ahead. E-tickets with an instantly issued QR code cannot be cancelled or exchanged after issuance.",
+        "to": "/refund-policy"
+      },
+      {
+        "q": "How are tour and ticket prices calculated?",
+        "a": "Prices are shown per person, and time-slot products apply separate adult and child fares.",
+        "to": "/terms"
+      },
+      {
+        "q": "Where can I find my e-voucher?",
+        "a": "After the supplier confirms your booking, you can view and print the e-voucher from your booking details.",
+        "to": "/help"
+      }
     ],
     "packages": [
-      { "q": "Can I cancel my package for a refund?", "a": "The fee and refund are calculated under your package booking's cancellation policy, and you can review the amounts on your bookings screen before confirming.", "to": "/refund-policy" },
-      { "q": "How are package prices calculated?", "a": "Package prices are shown per person and multiplied by the number of travelers you select.", "to": "/terms" },
-      { "q": "How can I pay for packages?", "a": "You can pay by credit or debit card, and all payments are processed in KRW.", "to": "/terms" }
+      {
+        "q": "Can I cancel my package for a refund?",
+        "a": "The fee and refund are calculated under your package booking's cancellation policy, and you can review the amounts on your bookings screen before confirming.",
+        "to": "/refund-policy"
+      },
+      {
+        "q": "How are package prices calculated?",
+        "a": "Package prices are shown per person and multiplied by the number of travelers you select.",
+        "to": "/terms"
+      },
+      {
+        "q": "How can I pay for packages?",
+        "a": "You can pay by credit or debit card, and all payments are processed in KRW.",
+        "to": "/terms"
+      }
     ],
     "esim": [
-      { "q": "Can I buy an eSIM now?", "a": "No. Only plan browsing is available right now while sales are being prepared.", "to": "/help" },
-      { "q": "How do I receive my eSIM QR code?", "a": "Once sales open, the QR code will be sent to your booking confirmation email. The plans shown now cannot be purchased yet.", "to": "/help" },
-      { "q": "How do I browse eSIM plans?", "a": "Select a country to see the plans available for use in that country.", "to": "/help" }
+      {
+        "q": "Can I buy an eSIM now?",
+        "a": "No. Only plan browsing is available right now while sales are being prepared.",
+        "to": "/help"
+      },
+      {
+        "q": "How do I receive my eSIM QR code?",
+        "a": "Once sales open, the QR code will be sent to your booking confirmation email. The plans shown now cannot be purchased yet.",
+        "to": "/help"
+      },
+      {
+        "q": "How do I browse eSIM plans?",
+        "a": "Select a country to see the plans available for use in that country.",
+        "to": "/help"
+      }
     ],
     "insurance": [
-      { "q": "Can I buy travel insurance now?", "a": "No. Only coverage details and estimated premiums can be viewed right now while sales are being prepared.", "to": "/help" },
-      { "q": "How is the premium calculated?", "a": "Select your travel dates to see an estimate multiplying the daily premium by the number of days.", "to": "/help" },
-      { "q": "What coverage is included?", "a": "Medical, baggage, and cancellation coverage amounts differ by plan, so check the coverage amounts shown on the product screen.", "to": "/help" }
+      {
+        "q": "Can I buy travel insurance now?",
+        "a": "No. Only coverage details and estimated premiums can be viewed right now while sales are being prepared.",
+        "to": "/help"
+      },
+      {
+        "q": "How is the premium calculated?",
+        "a": "Select your travel dates to see an estimate multiplying the daily premium by the number of days.",
+        "to": "/help"
+      },
+      {
+        "q": "What coverage is included?",
+        "a": "Medical, baggage, and cancellation coverage amounts differ by plan, so check the coverage amounts shown on the product screen.",
+        "to": "/help"
+      }
     ]
   },
   "seoAnswer": {
@@ -536,7 +689,10 @@
     "badType": "Only JPG, PNG, or WEBP photos.",
     "tooBig": "Each photo must be ≤ 8MB.",
     "uploadFailed": "Couldn't upload the photo.",
-    "uploadOffline": "Photo upload failed (network)."
+    "uploadOffline": "Photo upload failed (network).",
+    "digestTitle": "Traveler Review Summary",
+    "digestPros": "Highlights",
+    "digestCons": "Things to note"
   },
   "reco": {
     "section": "Recommended",
@@ -809,7 +965,8 @@
       "printReceipt": "Print receipt",
       "history": "History",
       "created": "Created",
-      "printVoucher": "Print voucher"
+      "printVoucher": "Print voucher",
+      "addCalendar": "Add to Calendar (.ics)"
     }
   },
   "landing": {
@@ -927,8 +1084,8 @@
     "withdrawTitle": "Delete account",
     "withdrawNote1": "Deleting destroys personal data immediately; coins, coupons, wishlist and alerts are all lost. Transaction records are kept 5 years per e-commerce law.",
     "withdrawNote2": "You can't delete while bookings or refunds are in progress.",
-    "withdrawTypePh": "Type “탈퇴합니다”",
-    "withdrawNeedPhrase": "Please type “탈퇴합니다” to confirm.",
+    "withdrawTypePh": "Type “DELETE”",
+    "withdrawNeedPhrase": "Please type “DELETE” exactly to confirm.",
     "withdrawNeedPw": "Please enter your password.",
     "withdrawPw": "Confirm password",
     "withdrawFail": "Couldn't delete your account.",
@@ -948,7 +1105,8 @@
     "alertTarget": "Target {v}",
     "alertAtReg": "At registration {v}",
     "alertDelete": "Delete price alert",
-    "moving": "Moving to bookings..."
+    "moving": "Moving to bookings...",
+    "withdrawPhrase": "DELETE"
   },
   "inquiry": {
     "sendFail": "Couldn't send your reply.",
@@ -1194,7 +1352,9 @@
     "totalCount": "{n} items total",
     "needTwo": "Add 2+ items for bundle checkout. Single items book straight from the product page.",
     "checkoutAll": "Pay for all",
-    "clear": "Clear"
+    "clear": "Clear",
+    "maxLegs": "You can add up to 8 items to your trip cart.",
+    "addFailed": "Could not add this item to your cart."
   },
   "payReturn": {
     "title": "Confirming payment",
@@ -1441,7 +1601,11 @@
     "emptyHint": "New promos will show up here.",
     "valid": "Valid until {d}",
     "copied": "✓ Copied",
-    "copy": "Copy code"
+    "copy": "Copy code",
+    "claimNow": "Claim Coupon",
+    "claimed": "Claimed",
+    "loginToClaim": "Please sign in first to claim this coupon.",
+    "claimFail": "Could not claim coupon. Please try again shortly."
   },
   "status": {
     "title": "Service status",
@@ -1674,13 +1838,11 @@
       "phOrigin": "City or airport",
       "phPkg": "City or country",
       "phKeyword": "City, landmark, theme park, experience",
-      "phKeyword": "City, landmark, theme park, experience",
       "phStation": "e.g. Seoul Station",
       "phStationArr": "e.g. Busan Station",
       "phTransferAirport": "e.g. Incheon Airport",
       "phTransferArea": "Area, hotel, landmark",
       "departDate": "Departure date",
-      "phTransferArea": "Area, hotel, landmark",
       "checkIn": "Check-in",
       "checkOut": "Check-out",
       "needDest": "Enter a destination.",
@@ -1699,7 +1861,10 @@
       "needCarPlace": "Enter a pickup location.",
       "dropoffAfter": "Drop-off must be after pickup.",
       "needAirport": "Enter an airport."
-    }
+    },
+    "recentlyViewed": "Recently Viewed",
+    "clearRecent": "Clear history",
+    "quickSearch": "Search all"
   },
   "search": {
     "loadingResults": "Loading",
@@ -1761,6 +1926,209 @@
       "offline": "You're offline",
       "offlineHint": "We'll retry automatically when you're back.",
       "emptyHint": "Try a city, airport, or station name. Korean initials and English work too."
+    }
+  },
+  "brand": {
+    "defaultTitle": "getfortrip - Smart Global Travel & OTA Booking"
+  },
+  "errorPage": {
+    "notFoundTitle": "Page not found",
+    "genericTitle": "Something went wrong",
+    "notFoundDesc": "The address may have changed or been removed. Use the links below to continue.",
+    "genericDesc": "We apologize for the inconvenience. Please try again shortly or contact our Help Center.",
+    "goHome": "Back to Home",
+    "goBack": "Go Back",
+    "help": "Help Center"
+  },
+  "searchPage": {
+    "eyebrow": "Unified Global Search",
+    "title": "Where are you headed next?",
+    "desc": "Search hotels, flights, trains, rental cars, airport transfers, tours, and packages across the entire getfortrip catalog.",
+    "placeholder": "Search city, hotel name, airport code (ICN, NRT), or tour...",
+    "sortRank": "Recommended",
+    "sortPriceAsc": "Price: Low to High",
+    "sortPriceDesc": "Price: High to Low",
+    "sortRating": "Top Rated",
+    "anyPrice": "Any price",
+    "anyRating": "Any rating",
+    "resultCount": "{n} results found",
+    "empty": "No travel products match your search",
+    "emptyHint": "Try a different keyword or relax your filters."
+  },
+  "aboutPage": {
+    "heroTitle": "Your Trusted Smart Global Travel Partner",
+    "heroSub": "{brand} is a full-service OTA platform where you can search, compare, and book hotels, flights, trains, rental cars, airport transfers, and tours in one place.",
+    "p1Title": "Transparent Pricing",
+    "p1Desc": "Every tax and fee is clearly itemized before payment—no hidden checkout surprises.",
+    "p2Title": "Verified Confirmation & E-Vouchers",
+    "p2Desc": "Access your PNR confirmation number and digital voucher directly from My Bookings as soon as your trip is confirmed.",
+    "p3Title": "Dedicated Support Center",
+    "p3Desc": "Submit 1:1 inquiries for itinerary changes, cancellations, and urgent travel assistance.",
+    "s1Val": "100+ Cities",
+    "s1Label": "Global Hotels & Resorts",
+    "s2Val": "Smart Compare",
+    "s2Label": "Major FSC & LCC Airlines",
+    "s3Val": "Seamless Mobility",
+    "s3Label": "Rental Cars & Airport Transfers",
+    "s4Val": "Digital E-Tickets",
+    "s4Label": "Paperless Mobile Vouchers"
+  },
+  "faqItems": {
+    "q1": {
+      "q": "What documents do I need at hotel check-in?",
+      "a": "Present your getfortrip digital voucher (or printout) along with a valid passport or government photo ID at the front desk. A credit card in the guest’s name may be required for incidentals."
+    },
+    "q2": {
+      "q": "How do I check breakfast inclusion or request a bed type?",
+      "a": "Breakfast depends on the rate plan you select during booking. Specific bed preferences (King/Twin) can be submitted via special requests or our Help Center and are subject to hotel availability."
+    },
+    "q3": {
+      "q": "When is my flight e-ticket issued?",
+      "a": "Once payment succeeds and the supplier confirms the booking, your PNR and e-ticket numbers appear automatically in your booking detail page."
+    },
+    "q4": {
+      "q": "Where can I check baggage allowance?",
+      "a": "Free checked baggage allowances are listed on flight search results and detail pages. Extra baggage can be purchased directly from the airline or at the airport counter."
+    },
+    "q5": {
+      "q": "Which payment methods are supported?",
+      "a": "We support credit/debit cards, bank transfers, and virtual accounts. Converted display prices are shown alongside the final binding settlement amount at checkout."
+    },
+    "q6": {
+      "q": "When will I receive my refund after cancellation?",
+      "a": "Refunds for eligible cancellations are submitted to the payment gateway immediately and typically reflect on your card statement within 3–5 business days."
+    },
+    "q7": {
+      "q": "How can I use getfortrip Coins (G-Coin)?",
+      "a": "G-Coins are valued at 1 Coin = ₩1 and can be redeemed toward eligible bookings during checkout up to your available balance."
+    }
+  },
+  "helpFaq": {
+    "q1": {
+      "q": "When will I get my refund after cancelling a hotel?",
+      "a": "Cancellations within the free-cancellation window are approved immediately and typically settle back to your card within 3–5 business days. Track status anytime in My Bookings."
+    },
+    "q2": {
+      "q": "Can I modify passport details or passenger names on a flight?",
+      "a": "Name-correction eligibility depends on airline fare rules. Please submit a 1:1 inquiry below with your booking number so our team can check for you."
+    },
+    "q3": {
+      "q": "How do I earn getfortrip Coins?",
+      "a": "Coins are awarded through promotions and customer care programs. View your balance anytime on the Rewards page."
+    },
+    "q4": {
+      "q": "When will eSIM checkout become available?",
+      "a": "We are finalizing carrier integrations for eSIM checkout. You can browse live plans now, and QR delivery will launch once sales open."
+    }
+  },
+  "safetyPage": {
+    "heroTitle": "Safe Travel Guide & Emergency Support",
+    "heroSub": "From pre-departure checklists to on-trip emergencies, {brand} is with you every step of the way.",
+    "checkTitle": "4-Step Pre-Departure Checklist",
+    "c1Head": "Passport Validity:",
+    "c1Body": "Most countries require at least 6 months of remaining validity from your arrival date.",
+    "c2Head": "Visas & Electronic Travel Authorization (ETA):",
+    "c2Body": "Verify entry filings such as US ESTA, Visit Japan Web, or EU ETIAS before departure.",
+    "c3Head": "Travel Insurance:",
+    "c3Body": "Prepare coverage for unexpected medical emergencies, trip delays, or lost luggage abroad.",
+    "c4Head": "Save E-Vouchers Offline:",
+    "c4Body": "Print your voucher or export your itinerary (.ics) from My Bookings before travelling in case of limited connectivity.",
+    "emergTitle": "On-Trip Emergency Assistance",
+    "emergBody": "If you encounter check-in issues or flight disruptions, reach out via our Help Center with your booking number for prioritized follow-up."
+  },
+  "sustainPage": {
+    "heroTitle": "{brand}’s Commitment to Sustainable Travel",
+    "heroSub": "We publish only verified practices actively operating across getfortrip today.",
+    "c1Title": "100% Paperless E-Vouchers",
+    "c1Body": "Every confirmed reservation delivers a digital voucher and calendar export in My Bookings—eliminating unnecessary paper printouts.",
+    "c2Title": "Empowering Local Travel Partners",
+    "c2Body": "Independent local tour guides, boutique stays, and mobility operators onboard directly onto our extranet with transparent settlement."
+  },
+  "legal": {
+    "effective": "Effective Date: {d}",
+    "terms": {
+      "title": "{brand} Terms of Service",
+      "a1Title": "Article 1 (Purpose)",
+      "a1Body": "These Terms govern the rights, obligations, and responsibilities between {brand} Inc. (\"Company\") and users of its online travel platform services.",
+      "a2Title": "Article 2 (Definitions)",
+      "a2Body": "1. \"Service\" refers to the search, booking, payment, and itinerary management platform for hotels, flights, trains, rental cars, airport transfers, tours, and packages. eSIM and travel insurance currently offer plan browsing only.\n2. \"User\" refers to members and guests using the Service.\n3. \"Supplier/Partner\" refers to airlines, hotels, rail operators, and local agencies providing travel services.\n4. \"Direct\" products are sold directly by the Company; \"Brokered\" products are fulfilled by partners with payment/booking mediated by the Company.",
+      "a3Title": "Article 3 (Sales Models & Platform Role)",
+      "a3Body": "1. For Direct products, the Company acts as the merchant of record.\n2. For Brokered products, the Company mediates checkout and booking fulfilment while the supplier provides the underlying travel service.\n3. Affiliate links redirect to partner sites governed by the partner’s own terms.\n4. Each order clearly displays its sales model on the booking detail page.",
+      "a4Title": "Article 4 (Formation of Contract)",
+      "a4Body": "A travel contract is formed once payment is completed and a booking confirmation (PNR or digital voucher) is issued.",
+      "a5Title": "Article 5 (Cancellations & Refunds)",
+      "a5Body": "Product-specific cancellation tiers shown on the detail page and voucher take precedence. Cancellations within the free-cancellation window receive a 100% refund.",
+      "a6Title": "Article 6 (Pricing & Fees)",
+      "a6Body": "1. Reference prices reflect base conditions; applicable taxes (10% on hotels, cars, transfers) and final totals are confirmed server-side at checkout.\n2. Converted currency displays are indicative; the final billed amount at checkout is binding.",
+      "a7Title": "Article 7 (Limitation of Liability)",
+      "a7Body": "1. In force majeure events (severe weather, carrier suspension, government restrictions), the Company assists with refunds of paid amounts.\n2. Users are responsible for accurate passport and passenger details.",
+      "a8Title": "Article 8 (Dispute Resolution)",
+      "a8Body": "Disputes shall be resolved in good faith under the laws of the Republic of Korea.",
+      "addendumTitle": "Addendum (Amendments)",
+      "addendumBody": "Updates are announced at least 7 days in advance (30 days for material adverse changes). Version {v} takes effect on {d}."
+    },
+    "privacy": {
+      "title": "{brand} Privacy Policy",
+      "s1Title": "1. Purpose of Collection & Use",
+      "s1Body": "{brand} Inc. collects only the minimum personal data required for travel bookings, ticketing, identity verification, payment settlement, and customer support.",
+      "s2Title": "2. Personal Data Collected",
+      "s2Body": "• Sign-up: Name, email address, phone number, hashed password\n• Bookings & Ticketing: Legal English name, birth date, gender, nationality, passport number & expiry (when required for international flights)\n• Payment: Card issuer and approval metadata (card numbers are tokenized by PCI-DSS gateways and never stored on our servers)\n• Automatic: IP address, browser/device metadata, cookies, usage logs",
+      "s3Title": "3. Third-Party Provision",
+      "s3Body": "To fulfill bookings and issue tickets, necessary traveler and contact details are provided to the booked hotel, airline, rail, car, or tour supplier and our payment gateways (Toss Payments / Stripe).",
+      "s4Title": "4. Data Processing Delegation & International Transfers",
+      "s4Intro": "To operate globally, the Company delegates specific infrastructure processing to the providers below:",
+      "colProcessor": "Processor (Country)",
+      "colPurpose": "Purpose",
+      "colData": "Transferred Data",
+      "colRetention": "Retention Period",
+      "proc_cf_name": "Cloudflare, Inc. (USA & Global)",
+      "proc_cf_task": "Hosting, CDN & Security",
+      "proc_cf_data": "Access logs, IP address, edge cache metadata",
+      "proc_cf_ret": "Until account deletion or contract termination",
+      "proc_toss_name": "Toss Payments Co., Ltd. (South Korea)",
+      "proc_toss_task": "Payment authorization, refunds & settlement",
+      "proc_toss_data": "Order ID, amount, approval metadata, contact info",
+      "proc_toss_ret": "5 years (E-Commerce Act)",
+      "proc_resend_name": "Resend (USA)",
+      "proc_resend_task": "Transactional booking & payment emails",
+      "proc_resend_data": "Recipient email, booking number, notification body",
+      "proc_resend_ret": "Up to 30 days after dispatch",
+      "proc_sentry_name": "Sentry (USA)",
+      "proc_sentry_task": "Error monitoring & reliability",
+      "proc_sentry_data": "Error logs, device/browser metadata (no passport/card data)",
+      "proc_sentry_ret": "Up to 90 days",
+      "s4Outro": "Users who do not consent to international transfers may stop processing at any time by withdrawing their account.",
+      "s5Title": "5. Retention & Destruction",
+      "s5Body": "• Booking & payment records: 5 years (statutory)\n• Consumer dispute records: 3 years\n• Access logs: 3 months\n• Account profile: Destroyed immediately upon account withdrawal (excluding statutory records)",
+      "s6Title": "6. Cookies & Preference Storage",
+      "s6Body": "We use essential cookies for authentication/security and functional cookies for region, language, and currency preferences. See our Cookie Policy for details.",
+      "s7Title": "7. User Rights",
+      "s7Body": "You may request access, correction, deletion, or suspension of your personal data anytime via My Profile or {email}.",
+      "s8Title": "8. Security Safeguards",
+      "s8Body": "We enforce HTTPS/TLS encryption in transit, PBKDF2 password hashing, AES-256-GCM passport encryption, and strict RBAC access controls.",
+      "s9Title": "9. Chief Privacy Officer",
+      "s9Body": "Privacy Officer: {name} ({dept}) · Contact: {phone} · {email}."
+    },
+    "cookies": {
+      "title": "{brand} Cookie Policy",
+      "s1Title": "1. Why We Use Cookies",
+      "s1Body": "{brand} uses cookies and browser storage to deliver a fast, secure, and localized travel booking experience across regional subdomains.",
+      "s2Title": "2. Types of Cookies We Use",
+      "s2Body": "• Essential Cookies: Login sessions, CSRF/security tokens, and checkout cart persistence\n• Functional Cookies: Regional subdomain, language (locale), currency (curr), and recently viewed items\n• Performance Cookies: Error diagnostics and page speed optimization",
+      "s3Title": "3. Managing Cookie Preferences",
+      "s3Body": "You can manage or block cookies in your browser settings. Disabling essential cookies may limit sign-in and booking checkout functionality."
+    },
+    "refund": {
+      "title": "Cancellation & Refund Policy by Category",
+      "intro": "{brand} follows transparent cancellation standards and supports self-service cancellation in My Bookings. Product-specific cancellation tiers shown on the detail page take priority. (Effective: {d})",
+      "hotelTitle": "Hotels & Stays",
+      "hotelBody": "• Free Cancellation: 100% refund when cancelled before the deadline stated on your voucher (typically 24–72h before check-in).\n• Non-Refundable Rates: Cannot be modified or refunded once confirmed.\n• Settlement Time: Refunds typically appear on your card statement within 3–5 business days.",
+      "flightTitle": "Flights",
+      "flightBody": "• Same-Day Void: Eligible tickets cancelled before midnight on the date of issuance may be refunded without airline penalty (excluding select promo fares).\n• Post-Issuance: Refunded after deducting applicable airline fare penalties.\n• Involuntary Disruption: Full waiver support upon carrier cancellation confirmation.",
+      "mobilityTitle": "Rental Cars, Trains & Tours",
+      "mobilityBody": "• Cars & Airport Transfers: Free cancellation up to 24–48h before pickup; no-shows are non-refundable.\n• Tours & Experiences: Full or partial refund per the product’s cancellation schedule.\n• Instant E-Tickets: Once QR tickets are issued, cancellations or exchanges are restricted by supplier rules.",
+      "otherTitle": "Packages, eSIM, Insurance & No-Shows",
+      "otherBody": "• Packages: The stricter cancellation rule among bundled flight/hotel components applies.\n• eSIM & Insurance (once sales launch): Free cancellation prior to QR activation or coverage start.\n• No-Shows: Unused reservations without prior cancellation are non-refundable."
     }
   }
 }

@@ -3,12 +3,14 @@ import { ref } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { apiFetch } from '~/composables/useApi'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/trip-best', title: t('best.seoTitle'), description: t('best.seoDesc') })
 
 const currencyStore = useCurrencyStore()
 const hotels = ref<any[]>([])
 const state = ref<'loading' | 'ready' | 'error'>('loading')
+
+const displayName = (h: any) => (locale.value === 'ko' ? (h.name_ko || h.name) : (h.name_en || h.name_ko || h.name))
 
 function lowestPrice(h: any): number | null {
   if (typeof h.base_price_krw === 'number' && h.base_price_krw > 0) return h.base_price_krw
@@ -36,14 +38,18 @@ if (state.value === 'error' && import.meta.server) throw createError({ statusCod
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto px-4 py-8 space-y-8">
-    <div class="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 rounded-3xl p-8 text-white space-y-2 shadow-xl">
-      <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-black/20 rounded-full text-xs font-black uppercase tracking-wider">
-        <AppIcon name="trophy" :size="14" /> getfortrip Hotel Ranking
-      </span>
-      <h1 class="text-3xl font-black">{{ $t('best.hero') }}</h1>
-      <p class="text-xs text-amber-100 font-medium">{{ $t('best.heroSub') }}</p>
-    </div>
+  <div class="mx-auto max-w-6xl space-y-7 px-4 pb-24 pt-6 lg:px-6 lg:pb-16">
+    <section class="relative overflow-hidden rounded-[28px] bg-midnight-900 p-7 text-white shadow-pop sm:p-10">
+      <div class="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-accent/30 blur-3xl" aria-hidden="true" />
+      <div class="pointer-events-none absolute -bottom-24 left-1/4 h-64 w-64 rounded-full bg-primary/35 blur-3xl" aria-hidden="true" />
+      <div class="relative max-w-2xl space-y-2.5">
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-2xs font-bold uppercase tracking-wider text-horizon-300">
+          <AppIcon name="trophy" :size="13" /> getfortrip Curated Ranking
+        </span>
+        <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-4xl">{{ $t('best.hero') }}</h1>
+        <p class="text-sm text-white/75">{{ $t('best.heroSub') }}</p>
+      </div>
+    </section>
 
     <ResultsState
       :state="state"
@@ -55,33 +61,33 @@ if (state.value === 'error' && import.meta.server) throw createError({ statusCod
       @retry="fetchBest"
     >
       <div class="space-y-4">
-        <div v-for="(h, idx) in hotels" :key="h.id" class="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm hover:shadow-xl transition">
-          <div class="flex w-full min-w-0 items-center gap-3 md:w-auto md:gap-6">
-            <div :class="['w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl text-white shadow-md shrink-0', idx === 0 ? 'bg-amber-500' : idx === 1 ? 'bg-slate-400' : 'bg-amber-700']">
+        <article v-for="(h, idx) in hotels" :key="h.id" class="card group flex flex-col items-center justify-between gap-5 p-5 transition hover:border-primary/40 hover:shadow-pop md:flex-row">
+          <div class="flex w-full min-w-0 items-center gap-3 md:w-auto md:gap-5">
+            <div :class="['flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl font-display text-lg font-extrabold tabular shadow-sm', idx === 0 ? 'bg-accent text-white' : idx === 1 ? 'bg-primary text-primary-ink' : 'bg-surface-sunken text-ink']">
               {{ idx + 1 }}
             </div>
-            <SmartImg :src="h.thumbnail_url" class="h-16 w-20 shrink-0 rounded-2xl object-cover md:h-20 md:w-28" :alt="h.name_ko" />
+            <SmartImg :src="h.thumbnail_url" img-class="h-16 w-20 shrink-0 rounded-2xl object-cover md:h-20 md:w-28" icon="hotel" :alt="displayName(h)" />
             <div class="min-w-0">
-              <div class="text-xs text-slate-400 font-semibold">{{ h.city }}, {{ h.country }}</div>
-              <h3 class="break-words text-base font-black text-slate-900 md:text-lg">{{ h.name_ko }}</h3>
-              <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span v-if="h.review_score != null" class="px-2 py-0.5 bg-trip-blue text-white rounded text-[11px] font-bold">{{ $t('best.score', { v: h.review_score }) }}</span>
-                <span v-else class="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[11px] font-bold">{{ $t('hotels.list.newBadge') }}</span>
-                <span class="text-xs text-slate-500 font-medium">{{ $t('todo.reviewCount', { n: $n(Number(h.review_count || 0)) }) }}</span>
+              <p class="text-xs font-semibold text-primary">{{ [h.city, h.country].filter(Boolean).join(', ') }}</p>
+              <h2 class="break-words text-base font-extrabold text-ink group-hover:text-primary md:text-lg">{{ displayName(h) }}</h2>
+              <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                <span v-if="h.review_score != null" class="rounded-lg bg-primary-soft px-2 py-0.5 text-2xs font-bold text-primary tabular">{{ $t('best.score', { v: Number(h.review_score).toFixed(1) }) }}</span>
+                <span v-else class="rounded-lg bg-surface-sunken px-2 py-0.5 text-2xs font-bold text-ink-muted">{{ $t('hotels.list.newBadge') }}</span>
+                <span class="text-xs text-ink-muted">{{ $t('todo.reviewCount', { n: $n(Number(h.review_count || 0)) }) }}</span>
               </div>
             </div>
           </div>
 
-          <div class="text-right flex items-center gap-4">
-            <div>
-              <div class="text-xs text-slate-400">{{ $t('best.lowest') }}</div>
-              <div class="text-2xl font-black text-trip-blue">{{ lowestPrice(h) == null ? '-' : currencyStore.formatKRW(lowestPrice(h)!) }}</div>
+          <div class="flex w-full items-center justify-between gap-4 border-t border-line pt-4 md:w-auto md:border-t-0 md:pt-0">
+            <div class="md:text-right">
+              <p class="text-2xs text-ink-subtle">{{ $t('best.lowest') }}</p>
+              <p class="text-xl font-extrabold tabular text-ink">{{ lowestPrice(h) == null ? '-' : currencyStore.formatKRW(lowestPrice(h)!) }}</p>
             </div>
-            <NuxtLink :to="$localePath(`/hotels/detail/${h.id}`)" class="px-5 py-2.5 bg-trip-blue text-white text-xs font-bold rounded-xl shadow-md">
+            <NuxtLink :to="$localePath(`/hotels/detail/${h.id}`)" class="btn-primary !px-5 !py-2.5 !text-xs">
               {{ $t('best.detail') }}
             </NuxtLink>
           </div>
-        </div>
+        </article>
       </div>
     </ResultsState>
   </div>

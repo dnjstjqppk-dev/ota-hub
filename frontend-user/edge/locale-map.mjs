@@ -68,7 +68,7 @@ export const SUBDOMAIN_LIST = Object.freeze([
     locale: 'zh-hk',
     hreflang: 'zh-HK',
     ogLocale: 'zh_HK',
-    i18n: 'zh',
+    i18n: 'zh-hant',
     curr: 'HKD',
     countries: Object.freeze(['HK', 'MO']),
     label: '繁體中文 (HK)',
@@ -79,7 +79,7 @@ export const SUBDOMAIN_LIST = Object.freeze([
     locale: 'zh-tw',
     hreflang: 'zh-TW',
     ogLocale: 'zh_TW',
-    i18n: 'zh',
+    i18n: 'zh-hant',
     curr: 'TWD',
     countries: Object.freeze(['TW']),
     label: '繁體中文 (TW)',
@@ -99,7 +99,7 @@ export const SUBDOMAIN_LIST = Object.freeze([
 
 export const DEFAULT_SUBDOMAIN = 'www'
 export const SUPPORTED_CURRENCIES = Object.freeze(['KRW', 'USD', 'JPY', 'GBP', 'HKD', 'TWD', 'EUR', 'CNY'])
-export const I18N_BUNDLES = Object.freeze(['ko', 'en', 'ja', 'zh'])
+export const I18N_BUNDLES = Object.freeze(['ko', 'en', 'ja', 'zh', 'zh-hant'])
 
 export const SUBDOMAIN_BY_KEY = Object.freeze(
   Object.fromEntries(SUBDOMAIN_LIST.map((entry) => [entry.sub, entry]))

@@ -37,11 +37,11 @@ test("child sitemap: per-url lastmod, hreflang alternates, pre-0059 fallback", a
   const body = await (await childSitemap(env({ DB: db }), "sitemap-hotels.xml"))!.text();
   assert.match(body, /\/hotels\/detail\/H1<\/loc><lastmod>2026-11-20<\/lastmod>/);
   assert.doesNotMatch(body, /\/hotels\/detail\/H2<\/loc><lastmod>/);
-  assert.ok(body.includes(`<xhtml:link rel="alternate" hreflang="x-default" href="${SITE}/hotels/detail/H1"/>`));
-  assert.ok(body.includes(`<xhtml:link rel="alternate" hreflang="ko" href="${SITE}/hotels/detail/H1"/>`));
-  assert.ok(body.includes(`<xhtml:link rel="alternate" hreflang="ja" href="${SITE}/ja/hotels/detail/H1"/>`));
+  assert.ok(body.includes(`<xhtml:link rel="alternate" hreflang="x-default" href="https://www.getfortrip.com/hotels/detail/H1?locale=en-us"/>`));
+  assert.ok(body.includes(`<xhtml:link rel="alternate" hreflang="ko-KR" href="https://kr.getfortrip.com/hotels/detail/H1?locale=ko-kr"/>`));
+  assert.ok(body.includes(`<xhtml:link rel="alternate" hreflang="ja-JP" href="https://jp.getfortrip.com/hotels/detail/H1?locale=ja-jp"/>`));
   assert.match(body, /xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/);
-  assert.equal(body.match(/<xhtml:link/g)!.length, 10);
+  assert.equal(body.match(/<xhtml:link/g)!.length, 14);
   const s = await (await childSitemap(env({ DB: db }), "sitemap-static.xml"))!.text();
   assert.match(s, new RegExp(`<loc>${SITE}/esim</loc><lastmod>\\d{4}-\\d{2}-\\d{2}</lastmod><xhtml:link`));
   const legacy = fakeDb({ all: (sql: string) => {

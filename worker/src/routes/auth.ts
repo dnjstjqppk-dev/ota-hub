@@ -22,6 +22,7 @@ export function publicUser(u: any) {
 export const SOCIAL_ONLY_HASH = "oauth:no-password";
 export const isSocialOnlyHash = (h: string | null | undefined) => typeof h === "string" && h.startsWith("oauth:");
 export const WITHDRAW_PHRASE = "탈퇴합니다";
+export const WITHDRAW_PHRASES = new Set([WITHDRAW_PHRASE, "DELETE", "退会します", "注销账户", "註銷帳戶"]);
 
 export async function issueSession(env: Env, u: any, request?: Request) {
   const token = await signJwt({ id: u.id, email: u.email, fullName: u.full_name, role: u.role || "USER", tier: u.tier }, jwtSecret(env));
@@ -248,7 +249,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     if (full.status === "DELETED") throw new HttpError(409, "ALREADY_WITHDRAWN", "이미 탈퇴한 계정입니다.");
     if (isSocialOnlyHash(full.password_hash)) {
       // CR-06: a social-only account has no password to re-enter; it re-confirms with a typed phrase.
-      if (String(body.confirm || "").trim() !== WITHDRAW_PHRASE) {
+      if (!WITHDRAW_PHRASES.has(String(body.confirm || "").trim())) {
         throw new HttpError(400, "CONFIRM_REQUIRED", `탈퇴하려면 "${WITHDRAW_PHRASE}"를 정확히 입력해주세요.`);
       }
     } else {

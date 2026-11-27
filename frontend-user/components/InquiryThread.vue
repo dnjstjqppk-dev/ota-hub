@@ -47,7 +47,7 @@ async function send() {
   toast.success(t('inquiry.sent'))
   emit('changed')
 }
-const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN', 'zh-hant': 'zh-Hant' }
 const fmt = (s: string) => new Date(s).toLocaleString(LOCALE_TAG[locale.value] || 'ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 async function handoff() {
   if (handing.value) return

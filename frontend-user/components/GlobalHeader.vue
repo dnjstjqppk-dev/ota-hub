@@ -77,7 +77,7 @@ async function selectRegion(entry: typeof LOCALES[number]) {
       return
     }
   }
-  await setI18nLocale(entry.id as 'ko' | 'en' | 'ja' | 'zh')
+  await setI18nLocale(entry.id as 'ko' | 'en' | 'ja' | 'zh' | 'zh-hant')
   currency.setCurrency(entry.curr)
   await router.replace({ path, query: { ...route.query, locale: entry.locale, curr: entry.curr } })
 }
@@ -119,7 +119,7 @@ onBeforeUnmount(() => {
 <template>
   <header
     ref="headerEl"
-    :class="['sticky top-0 z-40 border-b bg-canvas/90 backdrop-blur-md transition-[border-color,box-shadow,background-color] duration-200', scrolled ? 'border-line shadow-card' : 'border-line/50']"
+    :class="['sticky top-0 z-40 border-b bg-canvas/85 backdrop-blur-xl transition-[border-color,box-shadow,background-color] duration-200 print:hidden', scrolled ? 'border-line shadow-card' : 'border-line/50']"
   >
     <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-50 focus:rounded-full focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-ink">{{ t('header.skip') }}</a>
     <div class="mx-auto flex h-[68px] max-w-7xl items-center gap-5 px-4 lg:px-6">
@@ -161,6 +161,15 @@ onBeforeUnmount(() => {
       </nav>
 
       <div class="ml-auto flex items-center gap-1.5">
+        <NuxtLink
+          :to="$localePath('/search')"
+          class="flex h-10 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-xs font-bold text-ink-muted transition hover:border-primary/50 hover:text-primary"
+          :aria-label="t('home.quickSearch')"
+          :title="t('home.quickSearch')"
+        >
+          <AppIcon name="search" :size="15" />
+          <span class="hidden xl:inline">{{ t('home.quickSearch') }}</span>
+        </NuxtLink>
         <!-- Region: currency + language -->
         <div class="relative hidden sm:block">
           <button

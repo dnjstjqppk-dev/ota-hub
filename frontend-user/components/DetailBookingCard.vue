@@ -6,8 +6,10 @@
  * price for `unitLabel`; nothing here estimates taxes or totals the server has not confirmed.
  */
 import { computed, onMounted, ref, watch } from 'vue'
-import { apiFetch, formatKrw } from '~/composables/useApi'
+import { apiFetch } from '~/composables/useApi'
+import { useCurrencyStore } from '~/stores/currency'
 const { t, te, locale } = useI18n()
+const currency = useCurrencyStore()
 import { daysBetween, fmtDay, qDate, qInt, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 import { appendOutlinkContext } from '~/composables/useOutlinkQuery'
 import { useCartStore } from '~/stores/cart'
@@ -135,7 +137,7 @@ defineExpose({ askDates })
       <TradeTypeBadge v-if="tradeType" :trade-type="tradeType" />
       <div>
         <p class="text-xs text-ink-subtle">{{ unitLabel }} {{ t('detail.card.refPrice') }}</p>
-        <p class="text-2xl font-extrabold text-ink tabular" data-testid="ref-price">{{ priceKrw ? formatKrw(priceKrw) : t('detail.card.noPrice') }}</p>
+        <p class="text-2xl font-extrabold text-ink tabular" data-testid="ref-price">{{ priceKrw ? currency.formatKRW(priceKrw) : t('detail.card.noPrice') }}</p>
         <p class="mt-1 text-xs text-ink-subtle">{{ item.price_notice || t('detail.card.refPriceDefault') }} · {{ t('detail.card.priceNotice') }}</p>
       </div>
 
@@ -158,7 +160,7 @@ defineExpose({ askDates })
               :class="['rounded-lg border px-3 py-1.5 text-xs font-semibold tabular', slotStart === s.start_time ? 'border-primary bg-primary-soft text-primary' : 'border-line text-ink hover:bg-surface-sunken', slotLeft(s) <= 0 ? 'cursor-not-allowed opacity-40' : '']"
               @click="slotStart = slotStart === s.start_time ? '' : s.start_time"
             >
-              {{ s.start_time }}{{ s.end_time ? `–${s.end_time}` : '' }} · {{ slotLeft(s) }}{{ t('detail.card.slotSeats') }} · {{ t('search.adults') }} {{ formatKrw(s.price_adult_minor) }}
+              {{ s.start_time }}{{ s.end_time ? `–${s.end_time}` : '' }} · {{ slotLeft(s) }}{{ t('detail.card.slotSeats') }} · {{ t('search.adults') }} {{ currency.formatKRW(s.price_adult_minor) }}
             </button>
           </div>
         </div>
@@ -192,7 +194,7 @@ defineExpose({ askDates })
         <span v-else class="block rounded-full bg-surface-sunken py-3 text-center text-sm font-semibold text-ink-subtle">{{ t('detail.card.overLimit') }}</span>
         <button v-if="datesReady && !overCapacity && !slotStart" type="button" class="btn-secondary mt-2 w-full py-3" :disabled="cart.adding" data-testid="add-cart" @click="addToCart">{{ cart.adding ? t('detail.card.adding') : addedTick ? t('detail.card.added') : t('detail.card.addCart') }}</button>
         <p v-if="slotStart" class="text-xs text-ink-subtle">{{ t('detail.card.slotSingle') }}</p>
-        <p v-if="cart.error" class="text-xs font-medium text-danger" role="alert">{{ cart.error }}</p>
+        <p v-if="cart.error" class="text-xs font-medium text-danger" role="alert">{{ cart.error === 'MAX_CART_LEGS' ? t('cart.maxLegs') : cart.error === 'CART_ADD_FAILED' ? t('cart.addFailed') : cart.error }}</p>
         <p v-if="highlight && !datesReady" class="text-sm font-medium text-primary" role="status">{{ dateMode === 'range' ? t('detail.card.pickRange', { a: startText, b: endText }) : t('detail.card.pickSingle', { a: startText }) }}</p>
       </template>
       <template v-else>

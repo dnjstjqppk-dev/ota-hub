@@ -101,6 +101,21 @@ const WEEKDAYS: Record<string, string[]> = {
   en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   ja: ['日', '月', '火', '水', '木', '金', '土'],
   zh: ['日', '一', '二', '三', '四', '五', '六'],
+  'zh-hant': ['日', '一', '二', '三', '四', '五', '六'],
+}
+const hotelDisplayName = (h: any) => (locale.value === 'ko' ? (h.name_ko || h.name) : (h.name_en || h.name_ko || h.name))
+const hotelSubName = (h: any) => (locale.value === 'ko' ? h.name_en : (h.name_ko && h.name_ko !== hotelDisplayName(h) ? h.name_ko : ''))
+
+// Side-by-side comparison (up to 3 hotels)
+const compareIds = ref<string[]>([])
+const compareOpen = ref(false)
+const comparedHotels = computed(() => compareIds.value.map((id) => hotels.value.find((h) => h.id === id)).filter(Boolean))
+function toggleCompare(id: string) {
+  if (compareIds.value.includes(id)) {
+    compareIds.value = compareIds.value.filter((x) => x !== id)
+  } else if (compareIds.value.length < 3) {
+    compareIds.value = [...compareIds.value, id]
+  }
 }
 function shortDate(s: string) { const [y = NaN, m = NaN, d = NaN] = s.split('-').map(Number); const dt = new Date(y, m - 1, d); const wk = WEEKDAYS[locale.value] || WEEKDAYS.ko || []; return `${m}.${pad(d)}(${wk[dt.getDay()] ?? ''})` }
 const nights = computed(() => (q.value.checkIn && q.value.checkOut ? Math.round((Date.parse(q.value.checkOut) - Date.parse(q.value.checkIn)) / 86400000) : 0))
@@ -122,6 +137,7 @@ async function load() {
   const x = q.value
   const p = new URLSearchParams({ limit: '100', sortBy: x.sort })
   if (x.city) p.set('city', x.city)
+  if (x.checkIn && x.checkOut) { p.set('checkIn', x.checkIn); p.set('checkOut', x.checkOut); p.set('rooms', String(x.rooms)) }
   if (x.star) p.set('star', String(x.star))
   if (x.score) p.set('minScore', String(x.score))
   if (x.type) p.set('propertyType', x.type)
@@ -326,16 +342,25 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
                         <span>{{ TYPE_LABEL[h.property_type] || $t('hotels.list.stay') }}</span>
                       </p>
                       <h2 class="mt-1 text-lg font-bold leading-snug text-ink">
-                        <NuxtLink :to="$localePath(detailLink(h))" class="after:absolute after:inset-0 group-hover:text-primary">{{ h.name_ko }}</NuxtLink>
+                        <NuxtLink :to="$localePath(detailLink(h))" class="after:absolute after:inset-0 group-hover:text-primary">{{ hotelDisplayName(h) }}</NuxtLink>
                       </h2>
-                      <p v-if="h.name_en" class="truncate text-xs text-ink-subtle">{{ h.name_en }}</p>
+                      <p v-if="hotelSubName(h)" class="truncate text-xs text-ink-subtle">{{ hotelSubName(h) }}</p>
                     </div>
-                    <div v-if="Number(h.review_score) > 0" class="flex shrink-0 flex-col items-end">
-                      <span class="rounded-lg bg-primary px-2 py-1 text-sm font-bold text-primary-ink tabular">{{ Number(h.review_score).toFixed(1) }}</span>
-                      <span v-if="h.review_count" class="mt-1 text-2xs text-ink-subtle tabular">{{ $t('hotels.list.verifiedReviews', { n: $n(Number(h.review_count)) }) }}</span>
-                    </div>
-                    <div v-else class="flex shrink-0 flex-col items-end">
-                      <span class="rounded-lg bg-surface-sunken px-2 py-1 text-xs font-bold text-ink-muted">{{ $t('hotels.list.newBadge') }}</span>
+                    <div class="relative z-10 flex shrink-0 items-start gap-2">
+                      <button
+                        type="button"
+                        :aria-pressed="compareIds.includes(h.id)"
+                        :disabled="!compareIds.includes(h.id) && compareIds.length >= 3"
+                        :class="['rounded-lg border px-2 py-1 text-2xs font-bold transition', compareIds.includes(h.id) ? 'border-primary bg-primary-soft text-primary' : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink disabled:opacity-40']"
+                        @click.stop="toggleCompare(h.id)"
+                      >{{ compareIds.includes(h.id) ? $t('hotels.list.comparing') : $t('hotels.list.compare') }}</button>
+                      <div v-if="Number(h.review_score) > 0" class="flex shrink-0 flex-col items-end">
+                        <span class="rounded-lg bg-primary px-2 py-1 text-sm font-bold text-primary-ink tabular">{{ Number(h.review_score).toFixed(1) }}</span>
+                        <span v-if="h.review_count" class="mt-1 text-2xs text-ink-subtle tabular">{{ $t('hotels.list.verifiedReviews', { n: $n(Number(h.review_count)) }) }}</span>
+                      </div>
+                      <div v-else class="flex shrink-0 flex-col items-end">
+                        <span class="rounded-lg bg-surface-sunken px-2 py-1 text-xs font-bold text-ink-muted">{{ $t('hotels.list.newBadge') }}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -353,7 +378,8 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
                     <ul class="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold">
                       <li v-if="h.free_cancellation" class="flex items-center gap-1 text-success"><AppIcon name="check" :size="14" />{{ $t('hotels.list.freeCancel') }}</li>
                       <li v-if="h.free_breakfast" class="flex items-center gap-1 text-success"><AppIcon name="check" :size="14" />{{ $t('hotels.list.breakfast') }}</li>
-                      <li v-if="h.bookable === false" class="flex items-center gap-1 text-warning">{{ $t('hotels.list.notBookableNow') }}</li>
+                      <li v-if="h.date_available === false" class="flex items-center gap-1 text-danger">{{ $t('hotels.list.soldOutDates') }}</li>
+                      <li v-else-if="h.bookable === false" class="flex items-center gap-1 text-warning">{{ $t('hotels.list.notBookableNow') }}</li>
                     </ul>
                     <div v-if="fromPrice(h)" class="shrink-0 text-right">
                       <p class="text-2xs text-ink-subtle">{{ $t('hotels.list.perNightRef') }}</p>
@@ -369,6 +395,80 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
         </div>
       </div>
     </div>
+
+    <!-- Floating comparison tray -->
+    <div v-if="comparedHotels.length" class="fixed inset-x-4 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-3xl items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-surface/95 px-4 py-3 shadow-pop backdrop-blur-md md:bottom-5">
+      <div class="flex min-w-0 items-center gap-2 overflow-x-auto">
+        <span class="shrink-0 rounded-full bg-primary-soft px-2.5 py-1 text-xs font-bold text-primary">{{ comparedHotels.length }}/3</span>
+        <span v-for="ch in comparedHotels" :key="ch.id" class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface-sunken px-2.5 py-1 text-xs font-semibold text-ink">
+          <span class="max-w-[120px] truncate">{{ hotelDisplayName(ch) }}</span>
+          <button type="button" :aria-label="$t('common.close')" @click="toggleCompare(ch.id)"><AppIcon name="close" :size="12" /></button>
+        </span>
+      </div>
+      <div class="flex shrink-0 items-center gap-2">
+        <button type="button" class="text-xs font-semibold text-ink-muted hover:text-ink" @click="compareIds = []">{{ $t('hotels.list.reset') }}</button>
+        <button type="button" :disabled="comparedHotels.length < 2" class="btn-primary !px-4 !py-2 !text-xs" @click="compareOpen = true">{{ $t('hotels.list.compareNow') }}</button>
+      </div>
+    </div>
+
+    <!-- Comparison modal -->
+    <Teleport to="body">
+      <div v-if="compareOpen && comparedHotels.length >= 2" class="fixed inset-0 z-[75] flex items-center justify-center bg-midnight-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" :aria-label="$t('hotels.list.compareTitle')" @click.self="compareOpen = false">
+        <div class="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border border-line bg-surface shadow-pop animate-pop-in">
+          <div class="flex items-center justify-between border-b border-line px-6 py-4">
+            <h2 class="text-lg font-extrabold text-ink">{{ $t('hotels.list.compareTitle') }}</h2>
+            <button type="button" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" :aria-label="$t('common.close')" @click="compareOpen = false"><AppIcon name="close" /></button>
+          </div>
+          <div class="overflow-auto p-6">
+            <table class="w-full min-w-[540px] border-collapse text-left text-sm">
+              <thead>
+                <tr class="border-b border-line">
+                  <th class="w-32 py-3 pr-4 text-xs font-bold uppercase tracking-wider text-ink-subtle">{{ $t('hotels.list.compareMetric') }}</th>
+                  <th v-for="ch in comparedHotels" :key="ch.id" class="px-3 py-3 align-top">
+                    <div class="h-24 overflow-hidden rounded-xl bg-surface-sunken">
+                      <SmartImg :src="ch.thumbnail_url" :alt="hotelDisplayName(ch)" icon="hotel" img-class="h-full w-full object-cover" />
+                    </div>
+                    <p class="mt-2 font-bold text-ink">{{ hotelDisplayName(ch) }}</p>
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-line">
+                <tr>
+                  <td class="py-3 pr-4 text-xs font-semibold text-ink-subtle">{{ $t('hotels.list.perNightRef') }}</td>
+                  <td v-for="ch in comparedHotels" :key="ch.id" class="px-3 py-3 font-extrabold tabular text-primary">{{ fromPrice(ch) ? currency.formatKRW(fromPrice(ch)!) : $t('hotels.list.priceTbd') }}</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 text-xs font-semibold text-ink-subtle">{{ $t('hotels.filter.star') }}</td>
+                  <td v-for="ch in comparedHotels" :key="ch.id" class="px-3 py-3 text-ink">{{ Number(ch.star_rating) > 0 ? `${ch.star_rating}★` : '—' }}</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 text-xs font-semibold text-ink-subtle">{{ $t('hotels.filter.score') }}</td>
+                  <td v-for="ch in comparedHotels" :key="ch.id" class="px-3 py-3 font-bold tabular text-ink">{{ Number(ch.review_score) > 0 ? `${Number(ch.review_score).toFixed(1)} / 5` : $t('hotels.list.newBadge') }}</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 text-xs font-semibold text-ink-subtle">{{ $t('hotels.list.freeCancel') }}</td>
+                  <td v-for="ch in comparedHotels" :key="ch.id" class="px-3 py-3 font-semibold" :class="ch.free_cancellation ? 'text-success' : 'text-ink-subtle'">{{ ch.free_cancellation ? '✓' : '—' }}</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 text-xs font-semibold text-ink-subtle">{{ $t('hotels.list.breakfast') }}</td>
+                  <td v-for="ch in comparedHotels" :key="ch.id" class="px-3 py-3 font-semibold" :class="ch.free_breakfast ? 'text-success' : 'text-ink-subtle'">{{ ch.free_breakfast ? '✓' : '—' }}</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 text-xs font-semibold text-ink-subtle">{{ $t('hotels.detail.amenTitle') }}</td>
+                  <td v-for="ch in comparedHotels" :key="ch.id" class="px-3 py-3 text-xs text-ink-muted">{{ (ch.amenities || []).slice(0, 4).join(', ') || '—' }}</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4" />
+                  <td v-for="ch in comparedHotels" :key="ch.id" class="px-3 py-3">
+                    <NuxtLink :to="$localePath(detailLink(ch))" class="btn-primary w-full !py-2 !text-xs" @click="compareOpen = false">{{ $t('hotels.detail.viewRooms') }}</NuxtLink>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Phone filter sheet -->
     <Teleport to="body">

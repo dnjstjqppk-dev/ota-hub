@@ -1,78 +1,75 @@
 <script setup lang="ts">
 import { BRAND } from '~/config/brand'
 const { t } = useI18n()
-useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/about', title: t('seo.about.title'), description: t('seo.about.description'), koOnly: true })
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/about', title: t('seo.about.title'), description: t('seo.about.description') })
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto px-4 py-12 space-y-12">
-    <!-- 상단 히어로 -->
-    <div class="text-center space-y-4">
-      <span class="px-3.5 py-1 bg-blue-50 text-trip-blue rounded-full text-xs font-black uppercase tracking-wider">
-        About {{ BRAND.name }}
-      </span>
-      <h1 class="text-3xl sm:text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
-        전 세계를 연결하는 가장 신뢰할 수 있는 스마트 여행 파트너
-      </h1>
-      <p class="text-sm sm:text-base text-slate-600 dark:text-slate-300 max-w-2xl mx-auto leading-relaxed">
-        {{ BRAND.name }}은 호텔, 항공권, 기차표, 렌터카, 공항픽업, 투어·티켓까지 여행 상품을 한 곳에서 검색하고 예약할 수 있는 OTA 플랫폼입니다.
-      </p>
-    </div>
-
-    <!-- 핵심 가치 3대 기둥 -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
-        <div class="w-12 h-12 rounded-2xl bg-blue-50 text-trip-blue flex items-center justify-center text-2xl font-black">
-          💎
-        </div>
-        <h3 class="text-lg font-black text-slate-900 dark:text-slate-100">안심 특가 & 투명한 요금</h3>
-        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-          숨겨진 추가 비용 없이 결제 단계에서 최종 금액을 명확하게 제시합니다.
+  <div class="mx-auto max-w-5xl space-y-12 px-4 pb-24 pt-8 lg:px-6 lg:pb-16">
+    <!-- Hero -->
+    <section class="relative overflow-hidden rounded-[28px] bg-midnight-900 px-6 py-12 text-center text-white shadow-pop sm:px-12">
+      <div class="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-primary/35 blur-3xl" aria-hidden="true" />
+      <div class="pointer-events-none absolute -bottom-24 -right-20 h-72 w-72 rounded-full bg-accent/25 blur-3xl" aria-hidden="true" />
+      <div class="relative mx-auto max-w-2xl space-y-4">
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3.5 py-1 text-2xs font-bold uppercase tracking-widest text-horizon-300">
+          About {{ BRAND.name }}
+        </span>
+        <h1 class="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+          {{ $t('aboutPage.heroTitle') }}
+        </h1>
+        <p class="text-sm leading-relaxed text-white/75 sm:text-base">
+          {{ $t('aboutPage.heroSub', { brand: BRAND.name }) }}
         </p>
       </div>
+    </section>
 
-      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
-        <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl font-black">
-          🛡️
+    <!-- 3 Pillars -->
+    <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+      <article class="card space-y-3 p-6">
+        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+          <AppIcon name="shield" :size="22" />
         </div>
-        <h3 class="text-lg font-black text-slate-900 dark:text-slate-100">예약 확정 안내 & 안심 케어</h3>
-        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-          예약이 확정되면 PNR 확정 번호와 모바일 전자 바우처를 예약 상세에서 확인하실 수 있습니다.
-        </p>
-      </div>
+        <h2 class="text-lg font-extrabold text-ink">{{ $t('aboutPage.p1Title') }}</h2>
+        <p class="text-sm leading-relaxed text-ink-muted">{{ $t('aboutPage.p1Desc') }}</p>
+      </article>
 
-      <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm space-y-3">
-        <div class="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center text-2xl font-black">
-          🎧
+      <article class="card space-y-3 p-6">
+        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-success-soft text-success">
+          <AppIcon name="check" :size="22" />
         </div>
-        <h3 class="text-lg font-black text-slate-900 dark:text-slate-100">도움 센터 지원</h3>
-        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-          도움 센터 문의를 통해 예약 변경 및 취소를 지원합니다.
-        </p>
-      </div>
+        <h2 class="text-lg font-extrabold text-ink">{{ $t('aboutPage.p2Title') }}</h2>
+        <p class="text-sm leading-relaxed text-ink-muted">{{ $t('aboutPage.p2Desc') }}</p>
+      </article>
+
+      <article class="card space-y-3 p-6">
+        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-accent">
+          <AppIcon name="support" :size="22" />
+        </div>
+        <h2 class="text-lg font-extrabold text-ink">{{ $t('aboutPage.p3Title') }}</h2>
+        <p class="text-sm leading-relaxed text-ink-muted">{{ $t('aboutPage.p3Desc') }}</p>
+      </article>
     </div>
 
-    <!-- 플랫폼 서비스 특징 및 표준 운영 체계 -->
-    <div class="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white rounded-3xl p-8 sm:p-10 shadow-xl border border-slate-800">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-        <div>
-          <div class="text-2xl sm:text-3xl font-black text-blue-400 font-mono">100+ 도시</div>
-          <div class="text-xs text-slate-300 mt-1 font-bold">국내외 호텔 & 리조트 연동</div>
+    <!-- Platform Stats -->
+    <section class="relative overflow-hidden rounded-[28px] border border-line bg-surface p-8 shadow-card sm:p-10">
+      <div class="grid grid-cols-2 gap-6 text-center md:grid-cols-4">
+        <div class="space-y-1">
+          <div class="font-display text-2xl font-extrabold text-primary sm:text-3xl">{{ $t('aboutPage.s1Val') }}</div>
+          <div class="text-xs font-semibold text-ink-muted">{{ $t('aboutPage.s1Label') }}</div>
         </div>
-        <div>
-          <div class="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">한눈에 비교</div>
-          <div class="text-xs text-slate-300 mt-1 font-bold">주요 FSC & LCC 항공권</div>
+        <div class="space-y-1">
+          <div class="font-display text-2xl font-extrabold text-success sm:text-3xl">{{ $t('aboutPage.s2Val') }}</div>
+          <div class="text-xs font-semibold text-ink-muted">{{ $t('aboutPage.s2Label') }}</div>
         </div>
-        <div>
-          <div class="text-2xl sm:text-3xl font-black text-amber-400 font-mono">안심 모빌리티</div>
-          <div class="text-xs text-slate-300 mt-1 font-bold">렌터카 & 공항 픽업 네트워크</div>
+        <div class="space-y-1">
+          <div class="font-display text-2xl font-extrabold text-accent sm:text-3xl">{{ $t('aboutPage.s3Val') }}</div>
+          <div class="text-xs font-semibold text-ink-muted">{{ $t('aboutPage.s3Label') }}</div>
         </div>
-        <div>
-          <div class="text-2xl sm:text-3xl font-black text-purple-400 font-mono">모바일 e-티켓</div>
-          <div class="text-xs text-slate-300 mt-1 font-bold">모바일 전자 바우처</div>
+        <div class="space-y-1">
+          <div class="font-display text-2xl font-extrabold text-ink sm:text-3xl">{{ $t('aboutPage.s4Val') }}</div>
+          <div class="text-xs font-semibold text-ink-muted">{{ $t('aboutPage.s4Label') }}</div>
         </div>
       </div>
-    </div>
+    </section>
   </div>
 </template>
-

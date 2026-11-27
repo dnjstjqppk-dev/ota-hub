@@ -110,7 +110,7 @@ useHead(() => {
           <AppIcon name="train" class="text-ink-subtle" />
           <span class="min-w-0 flex-1">
             <span class="block truncate font-bold text-ink">{{ q.dep && q.arr ? `${q.dep} → ${q.arr}` : $t('trains.search.whereTo') }}</span>
-            <span class="block truncate text-xs text-ink-muted">{{ $t('trains.search.phoneSummary', { date: q.date ? fmtDay(q.date) : $t('hotels.list.whenTbd'), n: pax }) }}</span>
+            <span class="block truncate text-xs text-ink-muted">{{ $t('trains.search.phoneSummary', { date: q.date ? fmtDay(q.date, false, locale) : $t('hotels.list.whenTbd'), n: pax }) }}</span>
           </span>
           <span class="text-sm font-semibold text-primary">{{ $t('hotels.list.change') }}</span>
         </button>
@@ -136,7 +136,7 @@ useHead(() => {
         <div>
           <nav class="mb-1 flex items-center gap-1 text-xs text-ink-subtle" :aria-label="$t('common.breadcrumb')"><NuxtLink :to="$localePath('/')" class="hover:text-ink">{{ $t('common.home') }}</NuxtLink><AppIcon name="chevron-right" :size="12" /><NuxtLink :to="$localePath('/trains')" class="hover:text-ink">{{ $t('nav.trains') }}</NuxtLink></nav>
           <h1 class="text-xl font-bold tracking-tight text-ink sm:text-2xl">{{ q.dep && q.arr ? `${q.dep} → ${q.arr}` : $t('trains.search.h1all') }} <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ $t('flights.search.count', { n: filtered.length }) }}</span></h1>
-          <p v-if="q.date" class="mt-0.5 text-sm text-ink-muted">{{ $t('trains.search.rideOn', { d: fmtDay(q.date, true) }) }}</p>
+          <p v-if="q.date" class="mt-0.5 text-sm text-ink-muted">{{ $t('trains.search.rideOn', { d: fmtDay(q.date, true, locale) }) }}</p>
         </div>
         <label class="flex items-center gap-2 text-sm text-ink-muted">
           <span class="hidden sm:inline">{{ $t('hotels.list.sort') }}</span>

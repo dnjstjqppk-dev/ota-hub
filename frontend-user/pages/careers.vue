@@ -7,25 +7,24 @@ useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/c
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto px-4 py-12 space-y-10">
-    <div class="text-center space-y-3">
-      <span class="px-3.5 py-1 bg-blue-50 text-trip-blue rounded-full text-xs font-black uppercase tracking-wider">
+  <div class="mx-auto max-w-4xl space-y-8 px-4 pb-24 pt-8 lg:px-6 lg:pb-16">
+    <div class="space-y-3 text-center">
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-3.5 py-1 text-2xs font-bold uppercase tracking-wider text-primary">
         Careers at {{ BRAND.name }}
       </span>
-      <h1 class="text-3xl sm:text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
+      <h1 class="font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
         {{ $t('careers.h1') }}
       </h1>
-      <p class="text-sm text-slate-500 dark:text-slate-400 max-w-xl mx-auto">
+      <p class="mx-auto max-w-xl text-sm text-ink-muted">
         {{ $t('careers.sub') }}
       </p>
     </div>
 
-    <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700/90 shadow-sm p-8 text-center">
-      <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">{{ $t('careers.none') }}</p>
-      <NuxtLink :to="$localePath('/help')" class="mt-4 inline-block px-4 py-2.5 bg-trip-blue hover:bg-blue-600 text-white rounded-xl text-xs font-black shadow-sm transition">
+    <div class="card p-8 text-center">
+      <p class="text-sm font-semibold text-ink">{{ $t('careers.none') }}</p>
+      <NuxtLink :to="$localePath('/help')" class="btn-primary mt-5 !text-xs">
         {{ $t('careers.cta') }}
       </NuxtLink>
     </div>
   </div>
 </template>
-

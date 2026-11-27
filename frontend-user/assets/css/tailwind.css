@@ -3,61 +3,60 @@
 @tailwind utilities;
 
 /*
- * getfortrip "Meridian" design tokens (RGB channels, consumed by tailwind.config.js).
- * Original editorial travel palette: Warm Porcelain canvas, Deep Obsidian Pine ink,
- * Botanical Meridian Teal primary, Burnished Terracotta accent.
- * Light is the default; `.dark` on <html> switches every semantic token.
+ * getfortrip "Solstice Atelier" design tokens (RGB channels, consumed by tailwind.config.js).
+ * Crisp Alabaster Pearl canvas, Deep Midnight Ink typography, Electric Cobalt primary,
+ * Solar Coral Sunset accent. Light is default; `.dark` on <html> switches every semantic token.
  */
 @layer base {
   :root {
-    --gft-canvas: 248 246 241;
+    --gft-canvas: 245 247 252;
     --gft-surface: 255 255 255;
     --gft-surface-raised: 255 255 255;
-    --gft-surface-sunken: 241 237 229;
-    --gft-ink: 18 24 23;
-    --gft-ink-muted: 74 86 83;
-    --gft-ink-subtle: 120 132 128;
-    --gft-ink-inverse: 250 248 244;
-    --gft-line: 228 222 212;
-    --gft-line-strong: 202 194 181;
-    --gft-primary: 13 107 94;
-    --gft-primary-hover: 9 84 74;
-    --gft-primary-soft: 231 245 242;
+    --gft-surface-sunken: 235 240 250;
+    --gft-ink: 12 19 38;
+    --gft-ink-muted: 70 83 110;
+    --gft-ink-subtle: 118 133 163;
+    --gft-ink-inverse: 248 250 255;
+    --gft-line: 220 227 242;
+    --gft-line-strong: 193 204 227;
+    --gft-primary: 41 72 255;
+    --gft-primary-hover: 27 54 224;
+    --gft-primary-soft: 237 240 255;
     --gft-primary-ink: 255 255 255;
-    --gft-accent: 208 90 52;
-    --gft-accent-soft: 253 240 234;
-    --gft-success: 16 128 84;
-    --gft-success-soft: 230 247 239;
-    --gft-warning: 180 112 12;
-    --gft-warning-soft: 254 245 224;
-    --gft-danger: 198 46 58;
-    --gft-danger-soft: 253 236 238;
+    --gft-accent: 255 87 51;
+    --gft-accent-soft: 255 240 236;
+    --gft-success: 15 157 110;
+    --gft-success-soft: 230 248 241;
+    --gft-warning: 202 122 10;
+    --gft-warning-soft: 254 246 226;
+    --gft-danger: 220 38 72;
+    --gft-danger-soft: 254 236 240;
     color-scheme: light;
   }
 
   .dark {
-    --gft-canvas: 11 16 16;
-    --gft-surface: 18 25 25;
-    --gft-surface-raised: 24 34 33;
-    --gft-surface-sunken: 14 20 20;
-    --gft-ink: 242 240 235;
-    --gft-ink-muted: 168 179 175;
-    --gft-ink-subtle: 116 128 124;
-    --gft-ink-inverse: 11 16 16;
-    --gft-line: 37 49 48;
-    --gft-line-strong: 56 72 70;
-    --gft-primary: 45 191 168;
-    --gft-primary-hover: 72 212 189;
-    --gft-primary-soft: 16 46 42;
-    --gft-primary-ink: 11 16 16;
-    --gft-accent: 235 123 86;
-    --gft-accent-soft: 56 28 20;
-    --gft-success: 52 201 140;
-    --gft-success-soft: 12 44 33;
-    --gft-warning: 240 176 64;
-    --gft-warning-soft: 52 38 10;
-    --gft-danger: 255 110 122;
-    --gft-danger-soft: 58 18 24;
+    --gft-canvas: 6 10 23;
+    --gft-surface: 14 21 43;
+    --gft-surface-raised: 21 31 61;
+    --gft-surface-sunken: 10 15 32;
+    --gft-ink: 243 246 255;
+    --gft-ink-muted: 155 170 208;
+    --gft-ink-subtle: 109 127 168;
+    --gft-ink-inverse: 6 10 23;
+    --gft-line: 30 43 79;
+    --gft-line-strong: 48 67 118;
+    --gft-primary: 102 128 255;
+    --gft-primary-hover: 133 155 255;
+    --gft-primary-soft: 21 32 77;
+    --gft-primary-ink: 6 10 23;
+    --gft-accent: 255 119 89;
+    --gft-accent-soft: 61 25 20;
+    --gft-success: 45 212 156;
+    --gft-success-soft: 12 46 36;
+    --gft-warning: 245 184 65;
+    --gft-warning-soft: 54 39 11;
+    --gft-danger: 255 107 132;
+    --gft-danger-soft: 64 19 29;
     color-scheme: dark;
   }
 
@@ -82,13 +81,18 @@
       transition-duration: 0.01ms !important;
     }
   }
+
+  @media print {
+    body {
+      background: #ffffff !important;
+      color: #0c1326 !important;
+    }
+  }
 }
 
 @layer components {
-  /* Numbers that line up: prices, dates, booking codes. */
   .tabular { font-variant-numeric: tabular-nums; }
 
-  /* Toggle chip / segmented option. State comes from aria-pressed so a11y and visuals never disagree. */
   .chip {
     @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-surface px-3.5 py-2 text-sm font-semibold text-ink-muted transition hover:border-line-strong hover:text-ink;
   }
@@ -99,9 +103,8 @@
     @apply border-primary bg-primary-soft text-primary shadow-sm;
   }
 
-  /* Search-bar field shell that wraps a bare SearchAutocomplete with a small label. */
   .field-box {
-    @apply relative flex min-h-[54px] flex-col justify-center rounded-2xl border border-line bg-surface-sunken/60 px-4 py-1.5 transition focus-within:border-primary focus-within:bg-surface focus-within:shadow-focus hover:border-line-strong hover:bg-surface;
+    @apply relative flex min-h-[54px] flex-col justify-center rounded-2xl border border-line bg-surface-sunken/70 px-4 py-1.5 transition focus-within:border-primary focus-within:bg-surface focus-within:shadow-focus hover:border-line-strong hover:bg-surface;
   }
   .field-label {
     @apply mb-0.5 block text-2xs font-bold uppercase tracking-wider text-ink-subtle;
@@ -116,12 +119,6 @@
     @apply rounded-card border border-line bg-surface transition-shadow;
   }
 
-  /*
-   * Swipe rails (mobile horizontal scrollers). One shared recipe so every rail
-   * behaves the same: momentum scroll, no scroll-chaining into the page,
-   * proximity snap (never traps a swipe mid-gesture), hidden scrollbar.
-   * `.rail` snaps card edges; `.chip-rail` is free-scrolling for filter chips.
-   */
   .rail {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -141,10 +138,6 @@
     touch-action: pan-x pan-y;
   }
   .chip-rail::-webkit-scrollbar { display: none; }
-  /*
-   * Vertical sheet/panel scrollers (filter sheets, drawers, pickers, threads).
-   * Contained so a fling inside never yanks the page behind the sheet.
-   */
   .sheet-scroll {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
@@ -153,7 +146,6 @@
 }
 
 @layer utilities {
-  /* Long result cards render only near the viewport (100-item lists stay smooth). */
   .defer-paint {
     content-visibility: auto;
     contain-intrinsic-size: auto 240px;

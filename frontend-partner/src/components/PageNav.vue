@@ -21,7 +21,7 @@ function go(p: number) {
       v-for="p in window_"
       :key="p"
       type="button"
-      :class="['btn-sm rounded-lg px-2.5 py-1 text-xs font-bold tabular', p === page ? 'bg-primary text-white' : 'btn-ghost']"
+      :class="['btn-sm rounded-lg px-2.5 py-1 text-xs font-bold tabular', p === page ? 'bg-primary text-primary-ink' : 'btn-ghost']"
       :aria-current="p === page ? 'page' : undefined"
       @click="go(p)"
     >{{ p }}</button>

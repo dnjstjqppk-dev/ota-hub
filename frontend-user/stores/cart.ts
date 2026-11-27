@@ -64,11 +64,11 @@ export const useCartStore = defineStore('cart', {
     async add(input: LegQuoteInput): Promise<boolean> {
       this.hydrate()
       this.error = ''
-      if (this.legs.length >= 8) { this.error = '장바구니에는 최대 8개까지 담을 수 있습니다.'; return false }
+      if (this.legs.length >= 8) { this.error = 'MAX_CART_LEGS'; return false }
       this.adding = true
       try {
         const r = await apiFetch('/quotes', { method: 'POST', body: buildLegQuoteBody(input) as any })
-        if (!r.ok) { this.error = (r.data as any)?.error || '담기에 실패했습니다.'; return false }
+        if (!r.ok) { this.error = (r.data as any)?.error || 'CART_ADD_FAILED'; return false }
         const q = (r.data as any).quote
         this.legs = [...this.legs.filter((l) => l.quoteId !== q.quoteId), {
           quoteId: q.quoteId, domain: input.domain, title: input.title,

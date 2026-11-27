@@ -65,9 +65,10 @@ const withdrawing = ref(false)
 const withdrawPw = ref('')
 const confirmText = ref('')
 const withdrawError = ref('')
+const withdrawPhrase = computed(() => t('my.withdrawPhrase'))
 async function withdraw() {
   withdrawError.value = ''
-  if (confirmText.value.trim() !== '탈퇴합니다') { withdrawError.value = t('my.withdrawNeedPhrase'); return }
+  if (confirmText.value.trim() !== withdrawPhrase.value) { withdrawError.value = t('my.withdrawNeedPhrase'); return }
   if (hasPassword.value && !withdrawPw.value) { withdrawError.value = t('my.withdrawNeedPw'); return }
   withdrawing.value = true
   const r = await apiFetch('/auth/me/withdraw', { method: 'POST', body: hasPassword.value ? { password: withdrawPw.value, reason: 'USER_REQUEST_PROFILE' } : { confirm: confirmText.value.trim(), reason: 'USER_REQUEST_PROFILE' } })
@@ -107,7 +108,7 @@ const FIELD = 'w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 tex
       <div class="mt-3 space-y-3 text-sm text-ink">
         <p>{{ $t('my.withdrawNote1') }}</p>
         <p>{{ $t('my.withdrawNote2') }}</p>
-        <label class="block"><span class="field-label">{{ $t('my.withdrawTypePh') }}</span><input v-model="confirmText" placeholder="탈퇴합니다" :class="FIELD" data-testid="withdraw-confirm" /></label>
+        <label class="block"><span class="field-label">{{ $t('my.withdrawTypePh') }}</span><input v-model="confirmText" :placeholder="withdrawPhrase" :class="FIELD" data-testid="withdraw-confirm" /></label>
         <label v-if="hasPassword" class="block"><span class="field-label">{{ $t('my.withdrawPw') }}</span><input v-model="withdrawPw" type="password" autocomplete="current-password" :class="FIELD" data-testid="withdraw-password" /></label>
         <p v-if="withdrawError" role="alert" class="rounded-xl bg-danger-soft px-4 py-2.5 font-medium text-danger">{{ withdrawError }}</p>
         <button type="button" :disabled="withdrawing" class="rounded-xl bg-danger px-5 py-2.5 font-bold text-white disabled:opacity-40" data-testid="withdraw-submit" @click="withdraw">{{ withdrawing ? $t('my.processing') : $t('my.withdrawGo') }}</button>

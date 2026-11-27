@@ -19,9 +19,9 @@ const PAGES = [
   { path: '/', alternates: 7 },
   { path: '/hotels', alternates: 7 },
   { path: '/hotels/detail/htl_seoul_01', alternates: 7 },
-  { path: '/faq', alternates: 2 },
-  { path: '/terms', alternates: 2 },
-  { path: '/help', alternates: 2 },
+  { path: '/faq', alternates: 7 },
+  { path: '/terms', alternates: 7 },
+  { path: '/help', alternates: 7 },
   { path: '/esim', alternates: 7 },
 ];
 

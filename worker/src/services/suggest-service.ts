@@ -194,8 +194,31 @@ export function rankPlaces(index: IndexedPlace[], rawQ: string, domain: SuggestD
 
 // ------------------------------------------------------------------ presentation
 
-const TYPE_LABEL: Record<PlaceType, string> = {
-  COUNTRY: "국가", CITY: "도시", REGION: "지역", AIRPORT: "공항", STATION: "기차역", PORT: "크루즈 항구", LANDMARK: "명소",
+type SuggestLang = "ko" | "en" | "ja" | "zh" | "zh-hant";
+
+function resolveSuggestLang(raw?: string | null): SuggestLang {
+  const s = String(raw || "").toLowerCase();
+  if (s.startsWith("zh-hant") || s.startsWith("zh-tw") || s.startsWith("zh-hk")) return "zh-hant";
+  if (s.startsWith("zh")) return "zh";
+  if (s.startsWith("ja")) return "ja";
+  if (s.startsWith("en")) return "en";
+  return "ko";
+}
+
+const TYPE_LABEL_BY_LANG: Record<SuggestLang, Record<PlaceType, string>> = {
+  ko: { COUNTRY: "국가", CITY: "도시", REGION: "지역", AIRPORT: "공항", STATION: "기차역", PORT: "크루즈 항구", LANDMARK: "명소" },
+  en: { COUNTRY: "Country", CITY: "City", REGION: "District", AIRPORT: "Airport", STATION: "Station", PORT: "Cruise Port", LANDMARK: "Landmark" },
+  ja: { COUNTRY: "国", CITY: "都市", REGION: "エリア", AIRPORT: "空港", STATION: "駅", PORT: "クルーズ港", LANDMARK: "観光名所" },
+  zh: { COUNTRY: "国家", CITY: "城市", REGION: "区域", AIRPORT: "机场", STATION: "车站", PORT: "邮轮港", LANDMARK: "地标" },
+  "zh-hant": { COUNTRY: "國家", CITY: "城市", REGION: "區域", AIRPORT: "機場", STATION: "車站", PORT: "郵輪港", LANDMARK: "地標" },
+};
+
+const PRODUCT_BADGE_BY_LANG: Record<SuggestLang, { hotel: string; hotelStar: (n: number) => string; activity: string; car: string; transfer: string; pkg: string; flight: string; train: string; esimSub: string }> = {
+  ko: { hotel: "호텔", hotelStar: (n) => `${n}성급 호텔`, activity: "투어·티켓", car: "렌터카", transfer: "공항 이동", pkg: "패키지", flight: "운항편", train: "열차", esimSub: "eSIM 요금제 보기" },
+  en: { hotel: "Hotel", hotelStar: (n) => `${n}-Star Hotel`, activity: "Tours & Tickets", car: "Rental Car", transfer: "Airport Transfer", pkg: "Package", flight: "Flight", train: "Train", esimSub: "View eSIM plans" },
+  ja: { hotel: "ホテル", hotelStar: (n) => `${n}つ星ホテル`, activity: "ツアー・チケット", car: "レンタカー", transfer: "空港送迎", pkg: "パッケージ", flight: "航空便", train: "列車", esimSub: "eSIMプランを見る" },
+  zh: { hotel: "酒店", hotelStar: (n) => `${n}星级酒店`, activity: "玩乐门票", car: "租车", transfer: "接送机", pkg: "度假套餐", flight: "航班", train: "列车", esimSub: "查看 eSIM 套餐" },
+  "zh-hant": { hotel: "飯店", hotelStar: (n) => `${n}星級飯店`, activity: "玩樂門票", car: "租車", transfer: "機場接送", pkg: "自由行套票", flight: "航班", train: "列車", esimSub: "查看 eSIM 方案" },
 };
 
 /** Where selecting a place leads for each search box, matching the query params the pages read. */
@@ -222,21 +245,24 @@ export function placeTargetUrl(row: PlaceRow, domain: SuggestDomain, byId: Map<s
   }
 }
 
-export function placeSuggestion(row: PlaceRow, domain: SuggestDomain, byId: Map<string, PlaceRow>, score: number): Suggestion {
+export function placeSuggestion(row: PlaceRow, domain: SuggestDomain, byId: Map<string, PlaceRow>, score: number, rawLocale?: string): Suggestion {
+  const lang = resolveSuggestLang(rawLocale);
   const parent = row.parent_id ? byId.get(row.parent_id) : undefined;
   const country = byId.get(`ctr_${row.country_code}`);
-  const where = [parent && parent.id !== country?.id ? parent.name_ko : null, country && country.id !== row.id ? country.name_ko : null].filter(Boolean).join(", ");
+  const pickName = (r: PlaceRow) => (lang === "ko" ? r.name_ko : (r.name_en || r.name_ko));
+  const where = [parent && parent.id !== country?.id ? pickName(parent) : null, country && country.id !== row.id ? pickName(country) : null].filter(Boolean).join(", ");
   // Codes matter where travellers know them: airports everywhere, city codes only in flight search.
   const showCode = row.code && (row.place_type === "AIRPORT" || (row.place_type === "CITY" && domain === "flights"));
   const codeLabel = showCode ? ` (${row.code})` : "";
-  const title = `${row.name_ko}${codeLabel}`;
-  const subtitle = [row.name_en, where].filter(Boolean).join(" · ");
+  const title = `${pickName(row)}${codeLabel}`;
+  const secondary = lang === "ko" ? row.name_en : (row.name_ko !== pickName(row) ? row.name_ko : "");
+  const subtitle = [secondary, where].filter(Boolean).join(" · ");
   // Flight boxes keep the code in the input so the search API receives an exact IATA code.
-  const value = domain === "flights" && row.code ? `${row.name_ko} (${row.code})` : row.name_ko;
+  const value = domain === "flights" && row.code ? `${pickName(row)} (${row.code})` : row.name_ko;
   return {
     id: row.id, kind: "place", type: row.place_type.toLowerCase(), place_type: row.place_type,
     code: row.code, country_code: row.country_code, title, subtitle, value,
-    target_url: placeTargetUrl(row, domain, byId), domain, badge: TYPE_LABEL[row.place_type],
+    target_url: placeTargetUrl(row, domain, byId), domain, badge: TYPE_LABEL_BY_LANG[lang][row.place_type],
     score: Math.round(score),
   };
 }
@@ -294,56 +320,61 @@ export async function airportsForPlaceName(env: Env, text: string): Promise<stri
     .map((p) => p.row.code as string);
 }
 
-type ProductQuery = { domains: SuggestDomain[]; sql: string; params: (q: string) => unknown[]; map: (r: any) => Omit<Suggestion, "score" | "domain"> & { domain?: string } };
+type ProductQuery = { domains: SuggestDomain[]; sql: string; params: (q: string) => unknown[]; map: (r: any, lang: SuggestLang) => Omit<Suggestion, "score" | "domain"> & { domain?: string } };
 
 const PRODUCT_QUERIES: ProductQuery[] = [
   {
     domains: ["all", "hotels"],
     sql: "SELECT id, name_ko, name_en, city, country, star_rating FROM hotels WHERE name_ko LIKE ? ESCAPE '\\' OR name_en LIKE ? ESCAPE '\\' OR address LIKE ? ESCAPE '\\' OR neighborhood LIKE ? ESCAPE '\\' LIMIT 6",
     params: (q) => [q, q, q, q],
-    map: (h) => ({ id: h.id, kind: "product", type: "hotel", title: h.name_ko, subtitle: [h.name_en, h.city, h.country].filter(Boolean).join(" · "), value: h.name_ko, target_url: `/hotels/detail/${encodeURIComponent(h.id)}`, badge: h.star_rating ? `${h.star_rating}성급 호텔` : "호텔", domain: "hotels" }),
+    map: (h, lang) => {
+      const b = PRODUCT_BADGE_BY_LANG[lang];
+      const title = lang === "ko" ? h.name_ko : (h.name_en || h.name_ko);
+      const alt = lang === "ko" ? h.name_en : (h.name_ko !== title ? h.name_ko : "");
+      return { id: h.id, kind: "product", type: "hotel", title, subtitle: [alt, h.city, h.country].filter(Boolean).join(" · "), value: h.name_ko, target_url: `/hotels/detail/${encodeURIComponent(h.id)}`, badge: h.star_rating ? b.hotelStar(h.star_rating) : b.hotel, domain: "hotels" };
+    },
   },
   {
     domains: ["all", "things-to-do"],
     sql: "SELECT id, title, city, country, category FROM activities WHERE title LIKE ? ESCAPE '\\' OR category LIKE ? ESCAPE '\\' LIMIT 5",
     params: (q) => [q, q],
-    map: (a) => ({ id: a.id, kind: "product", type: "activity", title: a.title, subtitle: [a.city, a.country].filter(Boolean).join(" · "), value: a.title, target_url: `/things-to-do/detail/${encodeURIComponent(a.id)}`, badge: "투어·티켓", domain: "things-to-do" }),
+    map: (a, lang) => ({ id: a.id, kind: "product", type: "activity", title: a.title, subtitle: [a.city, a.country].filter(Boolean).join(" · "), value: a.title, target_url: `/things-to-do/detail/${encodeURIComponent(a.id)}`, badge: PRODUCT_BADGE_BY_LANG[lang].activity, domain: "things-to-do" }),
   },
   {
     domains: ["all", "cars"],
     sql: "SELECT id, company_name, vehicle_model, vehicle_type, pickup_location FROM cars WHERE company_name LIKE ? ESCAPE '\\' OR vehicle_model LIKE ? ESCAPE '\\' OR pickup_location LIKE ? ESCAPE '\\' LIMIT 4",
     params: (q) => [q, q, q],
-    map: (c) => ({ id: c.id, kind: "product", type: "car", title: `${c.company_name} · ${c.vehicle_model}`, subtitle: [c.pickup_location, c.vehicle_type].filter(Boolean).join(" · "), value: c.pickup_location || c.company_name, target_url: `/cars/detail/${encodeURIComponent(c.id)}`, badge: "렌터카", domain: "cars" }),
+    map: (c, lang) => ({ id: c.id, kind: "product", type: "car", title: `${c.company_name} · ${c.vehicle_model}`, subtitle: [c.pickup_location, c.vehicle_type].filter(Boolean).join(" · "), value: c.pickup_location || c.company_name, target_url: `/cars/detail/${encodeURIComponent(c.id)}`, badge: PRODUCT_BADGE_BY_LANG[lang].car, domain: "cars" }),
   },
   {
     domains: ["all", "transfers"],
     sql: "SELECT id, service_title, airport_code, destination_area FROM transfers WHERE service_title LIKE ? ESCAPE '\\' OR destination_area LIKE ? ESCAPE '\\' LIMIT 4",
     params: (q) => [q, q],
-    map: (t) => ({ id: t.id, kind: "product", type: "transfer", code: t.airport_code, title: t.service_title, subtitle: `${t.airport_code} → ${t.destination_area}`, value: t.destination_area, target_url: `/transfers/detail/${encodeURIComponent(t.id)}`, badge: "공항 이동", domain: "transfers" }),
+    map: (t, lang) => ({ id: t.id, kind: "product", type: "transfer", code: t.airport_code, title: t.service_title, subtitle: `${t.airport_code} → ${t.destination_area}`, value: t.destination_area, target_url: `/transfers/detail/${encodeURIComponent(t.id)}`, badge: PRODUCT_BADGE_BY_LANG[lang].transfer, domain: "transfers" }),
   },
   {
     domains: ["all", "packages"],
     sql: "SELECT id, title, destination_city FROM packages WHERE title LIKE ? ESCAPE '\\' OR destination_city LIKE ? ESCAPE '\\' LIMIT 4",
     params: (q) => [q, q],
-    map: (p) => ({ id: p.id, kind: "product", type: "package", title: p.title, subtitle: p.destination_city || "", value: p.destination_city || p.title, target_url: `/packages/detail/${encodeURIComponent(p.id)}`, badge: "패키지", domain: "packages" }),
+    map: (p, lang) => ({ id: p.id, kind: "product", type: "package", title: p.title, subtitle: p.destination_city || "", value: p.destination_city || p.title, target_url: `/packages/detail/${encodeURIComponent(p.id)}`, badge: PRODUCT_BADGE_BY_LANG[lang].pkg, domain: "packages" }),
   },
   {
     domains: ["all", "flights"],
     sql: "SELECT id, flight_number, airline_name, departure_airport, arrival_airport FROM flights WHERE flight_number LIKE ? ESCAPE '\\' OR airline_name LIKE ? ESCAPE '\\' LIMIT 4",
     params: (q) => [q, q],
-    map: (f) => ({ id: f.id, kind: "product", type: "flight", code: f.arrival_airport, title: `${f.airline_name} ${f.flight_number}`, subtitle: `${f.departure_airport} → ${f.arrival_airport}`, value: `${f.arrival_airport}`, target_url: `/flights/search?origin=${encodeURIComponent(f.departure_airport)}&dest=${encodeURIComponent(f.arrival_airport)}`, badge: "운항편", domain: "flights" }),
+    map: (f, lang) => ({ id: f.id, kind: "product", type: "flight", code: f.arrival_airport, title: `${f.airline_name} ${f.flight_number}`, subtitle: `${f.departure_airport} → ${f.arrival_airport}`, value: `${f.arrival_airport}`, target_url: `/flights/search?origin=${encodeURIComponent(f.departure_airport)}&dest=${encodeURIComponent(f.arrival_airport)}`, badge: PRODUCT_BADGE_BY_LANG[lang].flight, domain: "flights" }),
   },
   {
     domains: ["all", "trains"],
     sql: "SELECT id, train_number, train_type, departure_station, arrival_station FROM trains WHERE train_number LIKE ? ESCAPE '\\' OR train_type LIKE ? ESCAPE '\\' LIMIT 4",
     params: (q) => [q, q],
-    map: (t) => ({ id: t.id, kind: "product", type: "train", title: `${t.train_type} ${t.train_number}`, subtitle: `${t.departure_station} → ${t.arrival_station}`, value: t.departure_station, target_url: `/trains/search?dep=${encodeURIComponent(t.departure_station)}&arr=${encodeURIComponent(t.arrival_station)}`, badge: "열차", domain: "trains" }),
+    map: (t, lang) => ({ id: t.id, kind: "product", type: "train", title: `${t.train_type} ${t.train_number}`, subtitle: `${t.departure_station} → ${t.arrival_station}`, value: t.departure_station, target_url: `/trains/search?dep=${encodeURIComponent(t.departure_station)}&arr=${encodeURIComponent(t.arrival_station)}`, badge: PRODUCT_BADGE_BY_LANG[lang].train, domain: "trains" }),
   },
   {
     domains: ["all", "esim"],
     sql: "SELECT DISTINCT country_code, country_name FROM esim_plans WHERE is_active = 1 AND (country_name LIKE ? ESCAPE '\\' OR country_code LIKE ? ESCAPE '\\') LIMIT 4",
     params: (q) => [q, q],
-    map: (e) => ({ id: `esim_${e.country_code}`, kind: "product", type: "esim", code: e.country_code, country_code: e.country_code, title: `${e.country_name} eSIM`, subtitle: "eSIM 요금제 보기", value: e.country_name, target_url: `/esim?country=${encodeURIComponent(e.country_code)}`, badge: "eSIM", domain: "esim" }),
+    map: (e, lang) => ({ id: `esim_${e.country_code}`, kind: "product", type: "esim", code: e.country_code, country_code: e.country_code, title: `${e.country_name} eSIM`, subtitle: PRODUCT_BADGE_BY_LANG[lang].esimSub, value: e.country_name, target_url: `/esim?country=${encodeURIComponent(e.country_code)}`, badge: "eSIM", domain: "esim" }),
   },
 ];
 
@@ -352,14 +383,15 @@ export interface SuggestResult {
   degraded: boolean;   // places table unavailable: only product matches returned
 }
 
-export async function suggest(env: Env, rawQ: string, domain: SuggestDomain, limit = 10): Promise<SuggestResult> {
+export async function suggest(env: Env, rawQ: string, domain: SuggestDomain, limit = 10, rawLocale?: string): Promise<SuggestResult> {
+  const lang = resolveSuggestLang(rawLocale);
   const q = String(rawQ || "").trim().slice(0, 60);
   const places = await loadPlaces(env);
   const items: Suggestion[] = [];
 
   if (places) {
     for (const { p, score } of rankPlaces(places.index, q, domain, limit)) {
-      items.push(placeSuggestion(p.row, domain, places.byId, score));
+      items.push(placeSuggestion(p.row, domain, places.byId, score, lang));
     }
   }
 
@@ -369,7 +401,7 @@ export async function suggest(env: Env, rawQ: string, domain: SuggestDomain, lim
     const queries = PRODUCT_QUERIES.filter((pq) => pq.domains.includes(domain));
     const results = await Promise.all(queries.map(async (pq) => {
       try {
-        return ((await env.DB.prepare(pq.sql).bind(...pq.params(like)).all()).results || []).map(pq.map);
+        return ((await env.DB.prepare(pq.sql).bind(...pq.params(like)).all()).results || []).map((r) => pq.map(r, lang));
       } catch (e) {
         console.error("suggest product query failed", e);
         return [];

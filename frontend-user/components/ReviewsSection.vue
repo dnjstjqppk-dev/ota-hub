@@ -17,7 +17,7 @@ const auth = useAuthStore()
 const toast = useToastStore()
 const { t, locale } = useI18n()
 const apiErr = useApiError()
-const tag = computed(() => ({ ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' })[locale.value] || 'ko-KR')
+const tag = computed(() => ({ ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN', 'zh-hant': 'zh-Hant' })[locale.value] || 'ko-KR')
 
 const FULFILLED = ['VOUCHER_ISSUED', 'TICKETED', 'COMPLETED']
 const MAX_PHOTOS = 5
@@ -31,6 +31,7 @@ const SORTS = computed(() => [
 type Summary = { count: number; average: number | null; verifiedCount: number; photoCount: number; distribution: Record<string, number> }
 const reviews = ref<any[]>([])
 const summary = ref<Summary | null>(null)
+const digest = ref<{ summary?: string; pros?: string[]; cons?: string[]; review_count?: number } | null>(null)
 const loading = ref(true)
 const loadError = ref(false)
 const sort = ref<'recommended' | 'latest' | 'rating_high' | 'rating_low'>('recommended')
@@ -117,10 +118,17 @@ function onKey(e: KeyboardEvent) {
 }
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
+async function loadDigest() {
+  try {
+    const r = await apiFetch(`/reviews/digest?domain=${encodeURIComponent(props.domain)}&itemId=${encodeURIComponent(props.targetId)}`)
+    if (r.ok && r.data?.digest) digest.value = r.data.digest
+  } catch { digest.value = null }
+}
+
 onMounted(async () => {
   window.addEventListener('keydown', onKey)
   await auth.initAuth()
-  await Promise.all([loadReviews(), loadEligible()])
+  await Promise.all([loadReviews(), loadDigest(), loadEligible()])
 })
 </script>
 
@@ -149,6 +157,29 @@ onMounted(async () => {
           <span class="w-10 shrink-0 text-right tabular text-ink-subtle">{{ summary.distribution[n] || 0 }}</span>
         </li>
       </ul>
+    </div>
+
+    <!-- AI Review Digest (when available from weekly reviewDigestJob) -->
+    <div v-if="digest && (digest.summary || digest.pros?.length || digest.cons?.length)" class="rounded-2xl border border-primary/20 bg-primary-soft/50 p-4 sm:p-5" data-testid="review-digest">
+      <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary">
+        <AppIcon name="sparkle" :size="14" />
+        <span>{{ t('reviews.digestTitle') }}</span>
+      </div>
+      <p v-if="digest.summary" class="mt-2 text-sm leading-relaxed text-ink">{{ digest.summary }}</p>
+      <div v-if="digest.pros?.length || digest.cons?.length" class="mt-3 grid gap-3 sm:grid-cols-2">
+        <div v-if="digest.pros?.length" class="rounded-xl bg-surface/80 p-3">
+          <p class="text-xs font-bold text-success">{{ t('reviews.digestPros') }}</p>
+          <ul class="mt-1.5 space-y-1 text-xs text-ink-muted">
+            <li v-for="p in digest.pros" :key="p" class="flex items-start gap-1.5"><AppIcon name="check" :size="13" class="mt-0.5 text-success shrink-0" /><span>{{ p }}</span></li>
+          </ul>
+        </div>
+        <div v-if="digest.cons?.length" class="rounded-xl bg-surface/80 p-3">
+          <p class="text-xs font-bold text-warning">{{ t('reviews.digestCons') }}</p>
+          <ul class="mt-1.5 space-y-1 text-xs text-ink-muted">
+            <li v-for="c in digest.cons" :key="c" class="flex items-start gap-1.5"><AppIcon name="minus" :size="13" class="mt-0.5 text-warning shrink-0" /><span>{{ c }}</span></li>
+          </ul>
+        </div>
+      </div>
     </div>
 
     <!-- Controls -->

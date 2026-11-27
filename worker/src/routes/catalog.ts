@@ -73,7 +73,8 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
       const domain = parseDomain(url.searchParams.get("domain"));
       const limit = Math.max(1, Math.min(20, parseInt(url.searchParams.get("limit") || "10", 10) || 10));
       const q = url.searchParams.get("q") || "";
-      const { items, degraded } = await suggest(env, q, domain, limit);
+      const locale = url.searchParams.get("locale") || request.headers.get("accept-language") || "ko";
+      const { items, degraded } = await suggest(env, q, domain, limit, locale);
       return json(
         { success: true, count: items.length, data: items, meta: { q: q.trim().slice(0, 60), domain, degraded, took_ms: Date.now() - started } },
         200,
@@ -186,6 +187,108 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
       };
     };
 
+    // Helper to enrich hotels with date-aware partner_inventory overrides and availability
+    const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    const stayDates = (ciRaw: string | null, coRaw: string | null): string[] => {
+      const ci = ciRaw && ISO_DATE_RE.test(ciRaw) ? ciRaw : "";
+      if (!ci) return [];
+      const co = coRaw && ISO_DATE_RE.test(coRaw) && coRaw > ci ? coRaw : "";
+      const dates: string[] = [];
+      const start = new Date(`${ci}T00:00:00Z`);
+      const end = co ? new Date(`${co}T00:00:00Z`) : new Date(start.getTime() + 86400_000);
+      for (let t = start.getTime(); t < end.getTime() && dates.length < 30; t += 86400_000) {
+        dates.push(new Date(t).toISOString().slice(0, 10));
+      }
+      return dates;
+    };
+
+    const applyHotelInventory = async (hotels: any[], checkIn: string | null, checkOut: string | null, roomsWanted: number) => {
+      const dates = stayDates(checkIn, checkOut);
+      if (!dates.length || !hotels.length) return hotels;
+      const ids = hotels.map((h) => h.id).filter(Boolean);
+      if (!ids.length) return hotels;
+      try {
+        const invRows = await env.DB.prepare(
+          `SELECT item_id, unit_id, stay_date, allocated_units, booked_units, price_override_minor, is_closed
+           FROM partner_inventory
+           WHERE domain_type = 'HOTEL' AND item_id IN (${ids.map(() => "?").join(",")})
+             AND stay_date >= ? AND stay_date <= ?`
+        ).bind(...ids, dates[0], dates[dates.length - 1]).all<any>();
+        const byHotel = new Map<string, any[]>();
+        for (const r of invRows.results || []) {
+          const list = byHotel.get(r.item_id) || [];
+          list.push(r);
+          byHotel.set(r.item_id, list);
+        }
+        return hotels.map((h) => {
+          const rows = byHotel.get(h.id);
+          if (!rows || !rows.length) return { ...h, date_available: true, stay_nights: dates.length };
+          const defaultRows = rows.filter((r) => !r.unit_id || r.unit_id === "default");
+          const checkUnit = (unitRows: any[], fallbackPrice: number) => {
+            const byDate = new Map(unitRows.map((r) => [r.stay_date, r]));
+            let closed = false;
+            let minRemaining = Infinity;
+            let totalPrice = 0;
+            let hasOverride = false;
+            for (const d of dates) {
+              const rec = byDate.get(d);
+              if (rec) {
+                const rem = Number(rec.allocated_units || 0) - Number(rec.booked_units || 0);
+                if (Number(rec.is_closed) === 1 || rem < roomsWanted) closed = true;
+                minRemaining = Math.min(minRemaining, Math.max(0, rem));
+                if (rec.price_override_minor != null && Number(rec.price_override_minor) > 0) {
+                  totalPrice += Number(rec.price_override_minor);
+                  hasOverride = true;
+                } else {
+                  totalPrice += fallbackPrice;
+                }
+              } else {
+                totalPrice += fallbackPrice;
+              }
+            }
+            const avgNightly = Math.round(totalPrice / dates.length);
+            return {
+              available: !closed,
+              remaining_units: Number.isFinite(minRemaining) ? minRemaining : null,
+              effective_price: hasOverride ? avgNightly : fallbackPrice,
+              has_override: hasOverride,
+            };
+          };
+          const hotelCheck = checkUnit(defaultRows, Number(h.base_price_krw || 0));
+          const updatedRooms = Array.isArray(h.rooms) ? h.rooms.map((rm: any) => {
+            const unitRows = rows.filter((r) => r.unit_id === rm.id);
+            const rc = checkUnit(unitRows.length ? unitRows : defaultRows, Number(rm.price_krw || h.base_price_krw || 0));
+            return {
+              ...rm,
+              date_available: rc.available,
+              remaining_units: rc.remaining_units,
+              effective_price_krw: rc.effective_price,
+              rate_plans: Array.isArray(rm.rate_plans) ? rm.rate_plans.map((pl: any) => ({
+                ...pl,
+                price_krw: rc.has_override
+                  ? Math.round(rc.effective_price * (Number(pl.price_krw || rm.price_krw || 1) / Math.max(1, Number(rm.price_krw || 1))))
+                  : pl.price_krw,
+              })) : rm.rate_plans,
+            };
+          }) : h.rooms;
+          const anyRoomOpen = Array.isArray(updatedRooms) && updatedRooms.length
+            ? updatedRooms.some((rm: any) => rm.date_available !== false)
+            : hotelCheck.available;
+          return {
+            ...h,
+            base_price_krw: hotelCheck.effective_price,
+            list_price_krw: h.base_price_krw,
+            date_available: hotelCheck.available && anyRoomOpen,
+            remaining_units: hotelCheck.remaining_units,
+            stay_nights: dates.length,
+            rooms: updatedRooms,
+          };
+        });
+      } catch {
+        return hotels;
+      }
+    };
+
     if (path === "/api/v1/hotels") {
       const city = url.searchParams.get("city") || "";
       const star = parseInt(url.searchParams.get("star") || "0", 10);
@@ -197,6 +300,10 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
       const breakfast = url.searchParams.get("breakfast") === "true" || url.searchParams.get("free_breakfast") === "1";
       const sortBy = url.searchParams.get("sortBy") || "recommended";
       const limit = clampLimit(url.searchParams.get("limit"));
+      const checkIn = url.searchParams.get("checkIn") || url.searchParams.get("check_in");
+      const checkOut = url.searchParams.get("checkOut") || url.searchParams.get("check_out");
+      const roomsWanted = Math.max(1, Math.min(9, parseInt(url.searchParams.get("rooms") || "1", 10) || 1));
+      const availableOnly = url.searchParams.get("availableOnly") === "1" || url.searchParams.get("availableOnly") === "true";
 
       let q = "SELECT * FROM hotels WHERE is_active = 1";
       const p: any[] = [];
@@ -246,7 +353,11 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
 
       const res = await env.DB.prepare(q).bind(...p).all();
       const formatted = (res.results || []).map(formatHotel);
-      const annotated = annotate(formatted, bmap, "ptn_htl_01");
+      const withInv = await applyHotelInventory(formatted, checkIn, checkOut, roomsWanted);
+      const filtered = availableOnly ? withInv.filter((h) => h.date_available !== false) : withInv;
+      if (sortBy === "price_asc") filtered.sort((a, b) => Number(a.base_price_krw || 0) - Number(b.base_price_krw || 0));
+      else if (sortBy === "price_desc") filtered.sort((a, b) => Number(b.base_price_krw || 0) - Number(a.base_price_krw || 0));
+      const annotated = annotate(filtered, bmap, "ptn_htl_01");
       await trackEvent(db(env), { type: "search", domain: "HOTEL", ...attr, userId: viewer?.id, meta: { resultCount: annotated.length } });
       return json({ success: true, count: annotated.length, data: annotated });
     }
@@ -254,8 +365,12 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
       const id = path.replace("/api/v1/hotels/", "");
       const row = await env.DB.prepare("SELECT * FROM hotels WHERE id = ?").bind(id).first<any>();
       if (!row || row.is_active === 0) return json({ success: false, error: "Hotel not found", code: "NOT_FOUND" }, 404);
+      const checkIn = url.searchParams.get("checkIn") || url.searchParams.get("check_in");
+      const checkOut = url.searchParams.get("checkOut") || url.searchParams.get("check_out");
+      const roomsWanted = Math.max(1, Math.min(9, parseInt(url.searchParams.get("rooms") || "1", 10) || 1));
+      const [enriched] = await applyHotelInventory([formatHotel(row)], checkIn, checkOut, roomsWanted);
       await trackEvent(db(env), { type: "view", domain: "HOTEL", ...attr, entityId: id, userId: viewer?.id });
-      return json({ success: true, data: annotate([formatHotel(row)], bmap, "ptn_htl_01")[0] });
+      return json({ success: true, data: annotate([enriched], bmap, "ptn_htl_01")[0] });
     }
 
     if (path === "/api/v1/flights") {

@@ -103,7 +103,7 @@ useHead(() => {
           <AppIcon name="car" class="text-ink-subtle" />
           <span class="min-w-0 flex-1">
             <span class="block truncate font-bold text-ink">{{ q.city || $t('cars.list.allPlaces') }}</span>
-            <span class="block truncate text-xs text-ink-muted">{{ days ? $t('cars.list.period', { a: fmtDay(q.from), b: fmtDay(q.to), n: days }) : $t('cars.list.periodTbd') }}</span>
+            <span class="block truncate text-xs text-ink-muted">{{ days ? $t('cars.list.period', { a: fmtDay(q.from, false, locale), b: fmtDay(q.to, false, locale), n: days }) : $t('cars.list.periodTbd') }}</span>
           </span>
           <span class="text-sm font-semibold text-primary">{{ $t('hotels.list.change') }}</span>
         </button>
@@ -123,7 +123,7 @@ useHead(() => {
         <div>
           <nav class="mb-1 flex items-center gap-1 text-xs text-ink-subtle" :aria-label="$t('common.breadcrumb')"><NuxtLink :to="$localePath('/')" class="hover:text-ink">{{ $t('common.home') }}</NuxtLink><AppIcon name="chevron-right" :size="12" /><NuxtLink :to="$localePath('/cars')" class="hover:text-ink">{{ $t('nav.cars') }}</NuxtLink></nav>
           <h1 class="text-xl font-bold tracking-tight text-ink sm:text-2xl">{{ q.city ? $t('cars.list.h1city', { c: q.city }) : $t('cars.list.h1all') }} <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ $t('cars.list.count', { n: items.length }) }}</span></h1>
-          <p v-if="days" class="mt-0.5 text-sm text-ink-muted">{{ $t('cars.list.period', { a: fmtDay(q.from, true), b: fmtDay(q.to, true), n: days }) }}</p>
+          <p v-if="days" class="mt-0.5 text-sm text-ink-muted">{{ $t('cars.list.period', { a: fmtDay(q.from, true, locale), b: fmtDay(q.to, true, locale), n: days }) }}</p>
         </div>
         <label class="flex items-center gap-2 text-sm text-ink-muted">
           <span class="hidden sm:inline">{{ $t('hotels.list.sort') }}</span>

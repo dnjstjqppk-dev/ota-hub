@@ -54,6 +54,31 @@ onMounted(list.reload)
 const suggest = async (term: string, signal: AbortSignal) =>
   (await api(`/admin/bookings?q=${encodeURIComponent(term)}&limit=8`, { signal })).bookings || []
 
+const viewMode = computed<'orders' | 'changes' | 'fraud'>(() => {
+  const m = qv('mode')
+  return m === 'changes' || m === 'fraud' ? m : 'orders'
+})
+const pendingChanges = useResource(async () => (await api('/admin/change-requests?status=PENDING_APPROVAL')).requests || [], [] as any[])
+const fraudReviews = useResource(async () => (await api('/admin/fraud/reviews?status=PENDING')).reviews || [], [] as any[])
+const fraudBusy = ref('')
+async function decideFraud(reviewId: string, decision: 'APPROVED' | 'REJECTED') {
+  if (fraudBusy.value) return
+  fraudBusy.value = reviewId
+  try {
+    await api(`/admin/fraud/reviews/${encodeURIComponent(reviewId)}`, { method: 'PATCH', json: { status: decision } })
+    toast(decision === 'APPROVED' ? '이상거래 심사를 승인했어요.' : '이상거래 심사를 거절했어요.')
+    await fraudReviews.reload()
+  } catch (e: any) {
+    toast(e?.message || '처리에 실패했어요.', 'danger')
+  } finally {
+    fraudBusy.value = ''
+  }
+}
+watch(viewMode, (m) => {
+  if (m === 'changes') pendingChanges.reload()
+  else if (m === 'fraud') fraudReviews.reload()
+})
+
 const FILTERS = ['', 'MANUAL_REVIEW_REQUIRED', 'SUPPLIER_BOOKING_PENDING', 'REFUND_PENDING', 'AWAITING_PAYMENT', 'VOUCHER_ISSUED', 'TICKETED', 'CANCELLED', 'FAILED']
 
 // ------------------------------------------------------------------ detail
@@ -197,7 +222,58 @@ async function decideChange(reqId: string, decision: 'APPROVE' | 'REJECT') {
     </div>
     <p v-if="q" class="mb-3 text-sm text-ink-muted">‘{{ q }}’ 검색 결과 · <button type="button" class="font-semibold text-primary" @click="patch({ q: '' })">검색 해제</button></p>
 
-    <StatePanel :state="list.state.value" :error="list.error.value" :empty="!list.data.value.length" empty-text="조건에 맞는 예약이 없어요." @retry="list.reload()">
+    <div class="mb-4 flex flex-wrap gap-1.5" role="tablist" aria-label="예약 업무 뷰">
+      <button type="button" class="chip" :aria-pressed="viewMode === 'orders'" @click="patch({ mode: '' })">전체 예약</button>
+      <button type="button" class="chip" :aria-pressed="viewMode === 'changes'" @click="patch({ mode: 'changes' })">일정 변경 승인 대기</button>
+      <button type="button" class="chip" :aria-pressed="viewMode === 'fraud'" @click="patch({ mode: 'fraud' })">FDS 이상거래 검토</button>
+    </div>
+
+    <div v-if="viewMode === 'changes'" class="mb-6">
+      <StatePanel :state="pendingChanges.state.value" :error="pendingChanges.error.value" :empty="!pendingChanges.data.value.length" empty-text="승인 대기 중인 일정 변경 요청이 없어요." @retry="pendingChanges.reload()">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>요청 ID</th><th>예약</th><th>유형</th><th>희망 일정</th><th>사유</th><th class="text-right">관리</th></tr></thead>
+            <tbody>
+              <tr v-for="c in pendingChanges.data.value" :key="c.id">
+                <td class="font-mono text-xs">{{ c.id }}</td>
+                <td class="font-mono text-xs">{{ c.booking_id }}</td>
+                <td><StatusBadge tone="warning" :label="c.type || 'INVOLUNTARY'" /></td>
+                <td class="text-xs tabular">{{ c.new_start_date }}<span v-if="c.new_end_date"> → {{ c.new_end_date }}</span></td>
+                <td class="max-w-[240px] truncate text-xs text-ink-muted">{{ c.reason || '—' }}</td>
+                <td class="text-right"><button type="button" class="btn-primary btn-sm" @click="patch({ id: c.booking_id })">예약 열기</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </StatePanel>
+    </div>
+
+    <div v-else-if="viewMode === 'fraud'" class="mb-6">
+      <StatePanel :state="fraudReviews.state.value" :error="fraudReviews.error.value" :empty="!fraudReviews.data.value.length" empty-text="검토 대기 중인 FDS 이상거래 건이 없어요." @retry="fraudReviews.reload()">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>예약번호</th><th>리스크 점수</th><th>탐지 사유</th><th class="text-right">금액</th><th>생성</th><th class="text-right">결정</th></tr></thead>
+            <tbody>
+              <tr v-for="f in fraudReviews.data.value" :key="f.id">
+                <td class="font-mono text-xs">
+                  <button type="button" class="font-semibold text-primary hover:underline" @click="patch({ id: f.bookingId })">{{ f.bookingNumber || f.bookingId }}</button>
+                </td>
+                <td><StatusBadge :tone="f.score >= 80 ? 'danger' : 'warning'" :label="`${f.score}점`" /></td>
+                <td class="max-w-[260px] text-xs text-ink-muted">{{ Array.isArray(f.reasons) ? f.reasons.join(', ') : '—' }}</td>
+                <td class="text-right font-semibold tabular">{{ krw(f.totalMinor) }}</td>
+                <td class="whitespace-nowrap text-xs text-ink-subtle tabular">{{ dateTime(f.createdAt) }}</td>
+                <td class="whitespace-nowrap text-right">
+                  <button type="button" class="btn-primary btn-sm mr-1" :disabled="fraudBusy === f.id" @click="decideFraud(f.id, 'APPROVED')">승인</button>
+                  <button type="button" class="btn-danger btn-sm" :disabled="fraudBusy === f.id" @click="decideFraud(f.id, 'REJECTED')">거절</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </StatePanel>
+    </div>
+
+    <StatePanel v-else :state="list.state.value" :error="list.error.value" :empty="!list.data.value.length" empty-text="조건에 맞는 예약이 없어요." @retry="list.reload()">
       <div class="table-wrap">
         <table class="table">
           <thead><tr><th>예약번호</th><th>상품</th><th>고객</th><th>이용일</th><th class="text-right">금액</th><th>결제</th><th>상태</th><th>생성</th></tr></thead>

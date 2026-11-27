@@ -96,9 +96,10 @@ test("llms company lines render only when env carries them", async () => {
   assert.match(full, /- Business registration: 123-45-67890/);
 });
 
-test("llms brief names locale paths; full caches one hour", async () => {
-  assert.match(llmsText(SITE), /\/en \/ja \/zh/);
-  assert.match(llmsText(SITE), new RegExp(`${SITE}/en/hotels`));
+test("llms brief names regional subdomains; full caches one hour", async () => {
+  assert.match(llmsText(SITE), /kr\.getfortrip\.com/);
+  assert.match(llmsText(SITE), /jp\.getfortrip\.com/);
+  assert.match(llmsText(SITE), /www\.getfortrip\.com/);
   const db = fakeDb({ first: () => ({ n: 0 }), all: () => [] });
   const full = await llmsFull(env({ DB: db }));
   assert.ok(full.headers.get("Cache-Control")!.includes("max-age=3600"));

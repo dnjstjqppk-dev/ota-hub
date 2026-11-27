@@ -24,6 +24,7 @@ export interface CompanyInfo {
 
 export function useCompany(): CompanyInfo & { orPending: (v: string) => string } {
   const config = useRuntimeConfig()
+  const { t } = useI18n()
   const c = (config.public as any).company || {}
   const get = (k: string, fallback = ''): string => (typeof c[k] === 'string' && c[k] ? c[k] : fallback)
   return {
@@ -39,6 +40,6 @@ export function useCompany(): CompanyInfo & { orPending: (v: string) => string }
     cpoPhone: get('cpoPhone'),
     cpoEmail: get('cpoEmail'),
     hosting: get('hosting', 'Cloudflare'),
-    orPending: (v: string) => (v ? v : '준비 중')
+    orPending: (v: string) => (v ? v : t('common.pending'))
   }
 }

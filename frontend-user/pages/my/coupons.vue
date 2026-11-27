@@ -5,8 +5,10 @@
  * expired or duplicate codes — the page shows that answer verbatim instead of inventing a coupon.
  */
 import { computed, ref } from 'vue'
-import { apiFetch, formatKrw } from '~/composables/useApi'
+import { apiFetch } from '~/composables/useApi'
+import { useCurrencyStore } from '~/stores/currency'
 
+const currency = useCurrencyStore()
 const { t } = useI18n()
 useHead({ title: t('my.coupons') })
 const mine = ref<any[]>([])
@@ -38,9 +40,9 @@ async function claim(c: string) {
   code.value = ''
   await load()
 }
-const benefit = (c: any) => t('my.benefitOff', { v: c.discount_type === 'PERCENTAGE' ? `${c.discount_value}%` : formatKrw(Number(c.discount_value)) })
+const benefit = (c: any) => t('my.benefitOff', { v: c.discount_type === 'PERCENTAGE' ? `${c.discount_value}%` : currency.formatKRW(Number(c.discount_value)) })
 function conditions(c: any) {
-  return [c.max_discount_krw ? t('my.condMax', { v: formatKrw(Number(c.max_discount_krw)) }) : '', Number(c.min_order_amount_krw) ? t('my.condMin', { v: formatKrw(Number(c.min_order_amount_krw)) }) : '', c.valid_until ? t('my.condUntil', { d: String(c.valid_until).slice(0, 10) }) : t('my.condNoLimit')].filter(Boolean).join(' · ')
+  return [c.max_discount_krw ? t('my.condMax', { v: currency.formatKRW(Number(c.max_discount_krw)) }) : '', Number(c.min_order_amount_krw) ? t('my.condMin', { v: currency.formatKRW(Number(c.min_order_amount_krw)) }) : '', c.valid_until ? t('my.condUntil', { d: String(c.valid_until).slice(0, 10) }) : t('my.condNoLimit')].filter(Boolean).join(' · ')
 }
 </script>
 

@@ -41,7 +41,7 @@ const load = async () => {
 
 onMounted(load)
 
-const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN', 'zh-hant': 'zh-Hant' }
 const fmtTime = (iso: string) => {
   try {
     return new Date(iso).toLocaleString(LOCALE_TAG[locale.value] || 'ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -52,44 +52,50 @@ const fmtTime = (iso: string) => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl px-4 py-10">
-    <h1 class="text-2xl font-bold">{{ $t('status.title') }}</h1>
-    <p class="mt-1 text-sm text-gray-500">{{ $t('status.sub') }}</p>
+  <div class="mx-auto max-w-3xl px-4 pb-24 pt-10 lg:pb-16">
+    <h1 class="font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ $t('status.title') }}</h1>
+    <p class="mt-1 text-sm text-ink-muted">{{ $t('status.sub') }}</p>
 
-    <div v-if="state === 'loading'" class="mt-6 rounded-xl border p-6 text-sm text-gray-500">{{ $t('status.loading') }}</div>
-    <div v-else-if="state === 'error'" class="mt-6 rounded-xl border p-6 text-sm">
+    <div v-if="state === 'loading'" class="card mt-6 p-6 text-sm text-ink-muted">{{ $t('status.loading') }}</div>
+    <div v-else-if="state === 'error'" class="card mt-6 p-6 text-sm text-ink">
       {{ $t('status.loadFail') }}
-      <button type="button" class="ml-2 min-h-[44px] px-3 underline" @click="load">{{ $t('common.retry') }}</button>
+      <button type="button" class="ml-2 min-h-[44px] px-3 font-semibold text-primary underline" @click="load">{{ $t('common.retry') }}</button>
     </div>
     <div v-else-if="data" class="mt-6 space-y-4">
       <div
-        class="rounded-xl border p-5 text-lg font-bold"
-        :class="data.status === 'ok' ? 'border-green-200 bg-green-50 text-green-800' : data.status === 'degraded' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-red-200 bg-red-50 text-red-800'"
+        class="rounded-card border p-5 text-lg font-extrabold"
+        :class="data.status === 'ok' ? 'border-success/30 bg-success-soft text-success' : data.status === 'degraded' ? 'border-warning/30 bg-warning-soft text-warning' : 'border-danger/30 bg-danger-soft text-danger'"
       >
         {{ statusLabel(data.status) }}
       </div>
 
-      <section class="rounded-xl border p-5">
-        <h2 class="text-sm font-bold">{{ $t('status.components') }}</h2>
-        <ul class="mt-2 space-y-1 text-sm">
-          <li>{{ $t('status.apiLine', { s: data.components.api ? $t('status.up') : $t('status.checking') }) }}</li>
-          <li>{{ $t('status.dbLine', { s: data.components.database ? $t('status.up') : $t('status.checking') }) }}</li>
-        </ul>
-      </section>
-
-      <section v-if="data.activeIncidents.length" class="rounded-xl border p-5">
-        <h2 class="text-sm font-bold">{{ $t('status.activeTitle', { n: data.activeIncidents.length }) }}</h2>
-        <ul class="mt-3 space-y-3">
-          <li v-for="inc in data.activeIncidents" :key="inc.id" class="rounded-lg bg-gray-50 p-3 text-sm">
-            <p class="font-bold">[{{ sevLabel(inc.severity) }}] {{ inc.title }}</p>
-            <p v-if="inc.latestUpdate" class="mt-1 whitespace-pre-line text-gray-600">{{ inc.latestUpdate }}</p>
-            <p class="mt-1 text-xs text-gray-400">{{ $t('status.started', { d: fmtTime(inc.startedAt) }) }}</p>
+      <section class="card p-5">
+        <h2 class="text-sm font-bold text-ink">{{ $t('status.components') }}</h2>
+        <ul class="mt-3 space-y-2 text-sm text-ink-muted">
+          <li class="flex items-center justify-between rounded-xl bg-surface-sunken px-3.5 py-2.5">
+            <span>{{ $t('status.apiLine', { s: data.components.api ? $t('status.up') : $t('status.checking') }) }}</span>
+            <span :class="['h-2.5 w-2.5 rounded-full', data.components.api ? 'bg-success' : 'bg-warning']" />
+          </li>
+          <li class="flex items-center justify-between rounded-xl bg-surface-sunken px-3.5 py-2.5">
+            <span>{{ $t('status.dbLine', { s: data.components.database ? $t('status.up') : $t('status.checking') }) }}</span>
+            <span :class="['h-2.5 w-2.5 rounded-full', data.components.database ? 'bg-success' : 'bg-warning']" />
           </li>
         </ul>
       </section>
-      <p v-else class="text-sm text-gray-500">{{ $t('status.noIncidents') }}</p>
 
-      <p class="text-xs text-gray-400">{{ $t('status.lastCheck', { d: fmtTime(data.time) }) }}</p>
+      <section v-if="data.activeIncidents.length" class="card p-5">
+        <h2 class="text-sm font-bold text-ink">{{ $t('status.activeTitle', { n: data.activeIncidents.length }) }}</h2>
+        <ul class="mt-3 space-y-3">
+          <li v-for="inc in data.activeIncidents" :key="inc.id" class="rounded-xl bg-surface-sunken p-3.5 text-sm">
+            <p class="font-bold text-ink">[{{ sevLabel(inc.severity) }}] {{ inc.title }}</p>
+            <p v-if="inc.latestUpdate" class="mt-1 whitespace-pre-line text-ink-muted">{{ inc.latestUpdate }}</p>
+            <p class="mt-1 text-xs text-ink-subtle">{{ $t('status.started', { d: fmtTime(inc.startedAt) }) }}</p>
+          </li>
+        </ul>
+      </section>
+      <p v-else class="text-sm text-ink-muted">{{ $t('status.noIncidents') }}</p>
+
+      <p class="text-xs text-ink-subtle">{{ $t('status.lastCheck', { d: fmtTime(data.time) }) }}</p>
     </div>
   </div>
 </template>

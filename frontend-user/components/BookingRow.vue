@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /** One booking in the account area. Status label and amounts come from GET /bookings as-is. */
-import { formatKrw } from '~/composables/useApi'
+import { useCurrencyStore } from '~/stores/currency'
 import { fmtDay } from '~/composables/useUrlQuery'
 
 defineProps<{ b: any }>()
+const currency = useCurrencyStore()
 const { t, locale } = useI18n()
 const DOMAIN: Record<string, { key: string; icon: string }> = {
   HOTEL: { key: 'hotels', icon: 'hotel' }, FLIGHT: { key: 'flights', icon: 'flight' }, TRAIN: { key: 'trains', icon: 'train' }, CAR: { key: 'cars', icon: 'car' },
@@ -31,7 +32,7 @@ function tone(s: string) {
       <p class="text-sm text-ink-muted">{{ fmtDay(b.serviceStart, true, locale) }}<template v-if="b.serviceEnd && b.serviceEnd !== b.serviceStart"> – {{ fmtDay(b.serviceEnd, true, locale) }}</template></p>
     </div>
     <div class="hidden text-right sm:block">
-      <p class="font-bold text-ink tabular">{{ formatKrw(b.totalMinor) }}</p>
+      <p class="font-bold text-ink tabular">{{ currency.formatKRW(b.totalMinor) }}</p>
     </div>
     <AppIcon name="chevron-right" :size="18" class="text-ink-subtle" />
   </NuxtLink>

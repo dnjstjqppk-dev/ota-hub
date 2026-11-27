@@ -165,18 +165,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto px-4 py-8 space-y-6">
-    <div class="flex items-center justify-between gap-3">
+  <div class="mx-auto max-w-6xl space-y-6 px-4 pb-24 pt-8 lg:px-6 lg:pb-16">
+    <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 class="text-3xl font-black text-slate-900 tracking-tight">{{ $t('moments.title') }}</h1>
-        <p class="text-sm text-slate-500 mt-1">{{ $t('moments.sub') }}</p>
+        <h1 class="font-display text-3xl font-extrabold tracking-tight text-ink">{{ $t('moments.title') }}</h1>
+        <p class="mt-1 text-sm text-ink-muted">{{ $t('moments.sub') }}</p>
       </div>
 
-      <button
-        type="button"
-        @click="openWrite"
-        class="px-5 py-2.5 bg-trip-blue hover:bg-trip-hover text-white text-xs font-bold rounded-xl shadow-md flex shrink-0 items-center gap-2"
-      >
+      <button type="button" class="btn-primary !px-5 !py-2.5 !text-xs" @click="openWrite">
         <AppIcon name="plus" :size="14" /> {{ $t('moments.write') }}
       </button>
     </div>
@@ -191,17 +187,17 @@ onMounted(() => {
       @retry="fetchMoments"
     >
       <template #empty-actions>
-        <button type="button" class="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-ink hover:bg-primary-hover" @click="openWrite">{{ $t('moments.writeFirst') }}</button>
+        <button type="button" class="btn-primary" @click="openWrite">{{ $t('moments.writeFirst') }}</button>
       </template>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <article v-for="m in moments" :key="m.id" class="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm space-y-4">
-          <div class="flex items-center justify-between">
+      <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <article v-for="m in moments" :key="m.id" class="card space-y-4 p-6 transition hover:shadow-pop">
+          <div class="flex items-center justify-between gap-3">
             <div class="flex items-center gap-3">
-              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-trip-blue/10 text-sm font-black text-trip-blue" aria-hidden="true">{{ (m.user_name || $t('moments.traveler')).slice(0, 1) }}</span>
+              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-extrabold text-primary" aria-hidden="true">{{ (m.user_name || $t('moments.traveler')).slice(0, 1) }}</span>
               <div>
-                <div class="font-bold text-slate-900 text-sm">{{ m.user_name }}</div>
-                <div class="text-xs text-slate-400">{{ $t('moments.tripLog', { city: m.city, d: m.created_at ? fmtDate(m.created_at) : '' }) }}</div>
+                <div class="text-sm font-bold text-ink">{{ m.user_name }}</div>
+                <div class="text-xs text-ink-subtle">{{ $t('moments.tripLog', { city: m.city, d: m.created_at ? fmtDate(m.created_at) : '' }) }}</div>
               </div>
             </div>
             <button
@@ -209,7 +205,7 @@ onMounted(() => {
               :disabled="liking === m.id"
               :aria-pressed="likedIds.has(m.id)"
               :aria-label="likedIds.has(m.id) ? $t('moments.unlike') : $t('moments.like')"
-              :class="['flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold transition disabled:opacity-50', likedIds.has(m.id) ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-600 hover:bg-rose-100']"
+              :class="['flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition disabled:opacity-50', likedIds.has(m.id) ? 'bg-accent text-white' : 'bg-accent-soft text-accent hover:bg-accent/15']"
               @click="toggleLike(m)"
             >
               <AppIcon name="heart" :size="13" /> {{ m.likes_count }}
@@ -217,39 +213,39 @@ onMounted(() => {
           </div>
 
           <div>
-            <h3 class="font-black text-slate-900 text-base mb-1">{{ m.title }}</h3>
-            <p class="text-xs text-slate-600 leading-relaxed">{{ m.content }}</p>
+            <h2 class="mb-1 text-base font-extrabold text-ink">{{ m.title }}</h2>
+            <p class="text-sm leading-relaxed text-ink-muted">{{ m.content }}</p>
           </div>
 
           <div v-if="m.photos.length" class="chip-rail flex gap-2 pb-1 [&>*]:shrink-0">
-            <SmartImg v-for="p in m.photos" :key="p" :src="p" class="w-32 h-24 rounded-2xl object-cover" :alt="$t('moments.photoAlt')" />
+            <SmartImg v-for="p in m.photos" :key="p" :src="p" img-class="h-24 w-32 rounded-2xl object-cover" icon="camera" :alt="$t('moments.photoAlt')" />
           </div>
         </article>
       </div>
     </ResultsState>
 
-    <!-- 작성 모달 -->
-    <div v-if="showWriteModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" :aria-label="$t('moments.modalAria')">
-      <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-        <h3 class="text-lg font-black text-slate-900">{{ $t('moments.modalTitle') }}</h3>
+    <!-- Write Modal -->
+    <div v-if="showWriteModal" class="fixed inset-0 z-50 flex items-center justify-center bg-midnight-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" :aria-label="$t('moments.modalAria')" @click.self="showWriteModal = false">
+      <div class="w-full max-w-lg space-y-4 rounded-[28px] border border-line bg-surface p-6 shadow-pop animate-pop-in">
+        <h3 class="text-lg font-extrabold text-ink">{{ $t('moments.modalTitle') }}</h3>
 
         <div class="space-y-3">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-city">{{ $t('moments.cityLabel') }}</label>
-            <input id="moment-city" v-model="newCity" type="text" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold" :placeholder="$t('moments.cityDef')" />
+            <label class="field-label" for="moment-city">{{ $t('moments.cityLabel') }}</label>
+            <input id="moment-city" v-model="newCity" type="text" class="w-full rounded-field border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus" :placeholder="$t('moments.cityDef')" />
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-title">{{ $t('help.subject') }}</label>
-            <input id="moment-title" v-model="newTitle" type="text" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold" :placeholder="$t('moments.titlePh')" />
+            <label class="field-label" for="moment-title">{{ $t('help.subject') }}</label>
+            <input id="moment-title" v-model="newTitle" type="text" class="w-full rounded-field border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus" :placeholder="$t('moments.titlePh')" />
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-content">{{ $t('help.body') }}</label>
-            <textarea id="moment-content" v-model="newContent" rows="4" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs" :placeholder="$t('moments.contentPh')"></textarea>
+            <label class="field-label" for="moment-content">{{ $t('help.body') }}</label>
+            <textarea id="moment-content" v-model="newContent" rows="4" class="w-full rounded-field border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus" :placeholder="$t('moments.contentPh')"></textarea>
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1" for="moment-photos">{{ $t('moments.photosLabel') }}</label>
-            <input id="moment-photos" type="file" accept="image/jpeg,image/png,image/webp" multiple :disabled="uploading || draftPhotos.length >= 10" class="w-full text-xs text-slate-600" @change="attachFiles" />
-            <p v-if="uploading" class="mt-1 text-xs text-slate-500" role="status">{{ $t('moments.uploading') }}</p>
+            <label class="field-label" for="moment-photos">{{ $t('moments.photosLabel') }}</label>
+            <input id="moment-photos" type="file" accept="image/jpeg,image/png,image/webp" multiple :disabled="uploading || draftPhotos.length >= 10" class="w-full text-xs text-ink-muted" @change="attachFiles" />
+            <p v-if="uploading" class="mt-1 text-xs text-ink-muted" role="status">{{ $t('moments.uploading') }}</p>
             <p v-if="uploadError" class="mt-1 text-xs font-bold text-danger" role="alert">{{ uploadError }}</p>
             <div v-if="draftPhotos.length" class="mt-2 flex flex-wrap gap-2">
               <img v-for="(p, i) in draftPhotos" :key="p + i" :src="p" class="h-16 w-20 rounded-xl object-cover" :alt="$t('moments.previewAlt')" />
@@ -260,10 +256,10 @@ onMounted(() => {
         <p v-if="submitError" class="text-xs font-bold text-danger" role="alert">{{ submitError }}</p>
 
         <div class="flex gap-2 pt-2">
-          <button type="button" :disabled="submitting || !newTitle.trim() || !newContent.trim()" @click="submitMoment" class="flex-1 py-3 bg-trip-blue text-white font-bold rounded-xl text-xs shadow-md disabled:opacity-50">
+          <button type="button" :disabled="submitting || !newTitle.trim() || !newContent.trim()" class="btn-primary flex-1" @click="submitMoment">
             {{ submitting ? $t('moments.submitting') : $t('moments.submit') }}
           </button>
-          <button type="button" @click="showWriteModal = false" class="py-3 px-5 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs">
+          <button type="button" class="btn-secondary" @click="showWriteModal = false">
             {{ $t('common.cancel') }}
           </button>
         </div>

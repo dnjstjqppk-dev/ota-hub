@@ -160,7 +160,7 @@ const strip = computed(() => {
   const base = step.value === 'return' ? q.value.returnDate : q.value.date
   if (!base) return []
   return [-3, -2, -1, 0, 1, 2, 3].map((n) => addDaysIso(base, n)).map((d) => ({
-    d, label: fmtDay(d), on: d === base,
+    d, label: fmtDay(d, false, locale.value), on: d === base,
     disabled: (!!today.value && d < today.value) || (step.value === 'return' ? d < q.value.date : !!q.value.returnDate && d > q.value.returnDate)
   }))
 })
@@ -201,7 +201,7 @@ useHead(() => {
           <AppIcon name="flight" class="text-ink-subtle" />
           <span class="min-w-0 flex-1">
             <span class="block truncate font-bold text-ink">{{ q.origin && q.dest ? `${cityOf(q.origin)} → ${cityOf(q.dest)}` : $t('flights.search.whereTo') }}</span>
-            <span class="block truncate text-xs text-ink-muted">{{ $t('flights.search.phoneSummary', { date: q.date ? fmtDay(q.date) : $t('hotels.list.whenTbd'), ret: q.returnDate ? $t('flights.search.retPart', { d: fmtDay(q.returnDate) }) : $t('flights.search.onewayPart'), n: pax }) }}</span>
+            <span class="block truncate text-xs text-ink-muted">{{ $t('flights.search.phoneSummary', { date: q.date ? fmtDay(q.date, false, locale) : $t('hotels.list.whenTbd'), ret: q.returnDate ? $t('flights.search.retPart', { d: fmtDay(q.returnDate, false, locale) }) : $t('flights.search.onewayPart'), n: pax }) }}</span>
           </span>
           <span class="text-sm font-semibold text-primary">{{ $t('hotels.list.change') }}</span>
         </button>
@@ -248,7 +248,7 @@ useHead(() => {
         <div class="flex items-center gap-3 text-sm">
           <span class="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-ink"><AppIcon name="check" :size="16" /></span>
           <div>
-            <p class="font-semibold text-ink">{{ $t('flights.search.chosenOut', { d: fmtDay(q.date, true), al: chosenOut.airline_name, fn: chosenOut.flight_number }) }}</p>
+            <p class="font-semibold text-ink">{{ $t('flights.search.chosenOut', { d: fmtDay(q.date, true, locale), al: chosenOut.airline_name, fn: chosenOut.flight_number }) }}</p>
             <p class="text-ink-muted tabular">{{ chosenOut.departure_time }} {{ chosenOut.departure_airport }} → {{ chosenOut.arrival_time }} {{ chosenOut.arrival_airport }} · {{ currency.formatKRW(chosenOut.base_price_krw) }}</p>
           </div>
         </div>

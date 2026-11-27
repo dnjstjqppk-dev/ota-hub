@@ -5,8 +5,10 @@
  * tracked product reaches the target price.
  */
 import { ref } from 'vue'
-import { apiFetch, formatKrw } from '~/composables/useApi'
+import { apiFetch } from '~/composables/useApi'
+import { useCurrencyStore } from '~/stores/currency'
 
+const currency = useCurrencyStore()
 const { t } = useI18n()
 useHead({ title: t('my.wishlist') })
 const items = ref<any[]>([])
@@ -49,7 +51,7 @@ async function remove(kind: 'wishlist' | 'price-alerts', id: string) {
           <div class="min-w-0 flex-1">
             <NuxtLink v-if="linkOf(w.domain_type, w.item_id)" :to="$localePath(linkOf(w.domain_type, w.item_id))" class="line-clamp-2 text-sm font-semibold text-ink hover:text-primary">{{ w.item_title }}</NuxtLink>
             <p v-else class="line-clamp-2 text-sm font-semibold text-ink">{{ w.item_title }}</p>
-            <p v-if="Number(w.price_krw) > 0" class="mt-0.5 text-xs text-ink-subtle">{{ $t('my.wishRefPrice', { v: formatKrw(Number(w.price_krw)) }) }}</p>
+            <p v-if="Number(w.price_krw) > 0" class="mt-0.5 text-xs text-ink-subtle">{{ $t('my.wishRefPrice', { v: currency.formatKRW(Number(w.price_krw)) }) }}</p>
           </div>
           <button type="button" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-subtle hover:bg-surface-sunken hover:text-danger" :disabled="removing === w.id" :aria-label="$t('my.wishUnsave', { title: w.item_title })" @click="remove('wishlist', w.id)"><AppIcon name="close" :size="18" /></button>
         </li>
@@ -66,7 +68,7 @@ async function remove(kind: 'wishlist' | 'price-alerts', id: string) {
           <div class="min-w-0 flex-1">
             <NuxtLink v-if="linkOf(a.domain_type, a.item_id)" :to="$localePath(linkOf(a.domain_type, a.item_id))" class="line-clamp-1 text-sm font-semibold text-ink hover:text-primary">{{ a.route_or_hotel }}</NuxtLink>
             <p v-else class="line-clamp-1 text-sm font-semibold text-ink">{{ a.route_or_hotel }}</p>
-            <p class="text-xs text-ink-subtle">{{ $t('my.alertTarget', { v: formatKrw(Number(a.target_price)) }) }}<template v-if="Number(a.current_price_krw) > 0"> · {{ $t('my.alertAtReg', { v: formatKrw(Number(a.current_price_krw)) }) }}</template></p>
+            <p class="text-xs text-ink-subtle">{{ $t('my.alertTarget', { v: currency.formatKRW(Number(a.target_price)) }) }}<template v-if="Number(a.current_price_krw) > 0"> · {{ $t('my.alertAtReg', { v: currency.formatKRW(Number(a.current_price_krw)) }) }}</template></p>
           </div>
           <button type="button" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-subtle hover:bg-surface-sunken hover:text-danger" :disabled="removing === a.id" :aria-label="$t('my.alertDelete')" @click="remove('price-alerts', a.id)"><AppIcon name="close" :size="18" /></button>
         </li>

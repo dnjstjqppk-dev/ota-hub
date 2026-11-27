@@ -2,56 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
-/* getfortrip "Meridian Partner" tokens (RGB channels, consumed by tailwind.config.js). `.dark` on <html> flips them. */
+/* getfortrip "Solstice Partner" tokens (RGB channels, consumed by tailwind.config.js). `.dark` on <html> flips them. */
 @layer base {
   :root {
-    --gft-canvas: 247 245 240;
+    --gft-canvas: 245 247 252;
     --gft-surface: 255 255 255;
     --gft-surface-raised: 255 255 255;
-    --gft-surface-sunken: 240 236 228;
-    --gft-ink: 18 24 23;
-    --gft-ink-muted: 74 86 83;
-    --gft-ink-subtle: 120 132 128;
-    --gft-ink-inverse: 250 248 244;
-    --gft-line: 227 221 211;
-    --gft-line-strong: 201 193 180;
-    --gft-primary: 13 107 94;
-    --gft-primary-hover: 9 84 74;
-    --gft-primary-soft: 231 245 242;
+    --gft-surface-sunken: 235 240 250;
+    --gft-ink: 12 19 38;
+    --gft-ink-muted: 70 83 110;
+    --gft-ink-subtle: 118 133 163;
+    --gft-ink-inverse: 248 250 255;
+    --gft-line: 220 227 242;
+    --gft-line-strong: 193 204 227;
+    --gft-primary: 41 72 255;
+    --gft-primary-hover: 27 54 224;
+    --gft-primary-soft: 237 240 255;
     --gft-primary-ink: 255 255 255;
-    --gft-accent: 208 90 52;
-    --gft-accent-soft: 253 240 234;
-    --gft-success: 16 128 84;
-    --gft-success-soft: 230 247 239;
-    --gft-warning: 180 112 12;
-    --gft-warning-soft: 254 245 224;
-    --gft-danger: 198 46 58;
-    --gft-danger-soft: 253 236 238;
+    --gft-accent: 255 87 51;
+    --gft-accent-soft: 255 240 236;
+    --gft-success: 15 157 110;
+    --gft-success-soft: 230 248 241;
+    --gft-warning: 202 122 10;
+    --gft-warning-soft: 254 246 226;
+    --gft-danger: 220 38 72;
+    --gft-danger-soft: 254 236 240;
     color-scheme: light;
   }
   .dark {
-    --gft-canvas: 11 16 16;
-    --gft-surface: 18 25 25;
-    --gft-surface-raised: 24 34 33;
-    --gft-surface-sunken: 14 20 20;
-    --gft-ink: 242 240 235;
-    --gft-ink-muted: 168 179 175;
-    --gft-ink-subtle: 116 128 124;
-    --gft-ink-inverse: 11 16 16;
-    --gft-line: 37 49 48;
-    --gft-line-strong: 56 72 70;
-    --gft-primary: 45 191 168;
-    --gft-primary-hover: 72 212 189;
-    --gft-primary-soft: 16 46 42;
-    --gft-primary-ink: 11 16 16;
-    --gft-accent: 235 123 86;
-    --gft-accent-soft: 56 28 20;
-    --gft-success: 52 201 140;
-    --gft-success-soft: 12 44 33;
-    --gft-warning: 240 176 64;
-    --gft-warning-soft: 52 38 10;
-    --gft-danger: 255 110 122;
-    --gft-danger-soft: 58 18 24;
+    --gft-canvas: 6 10 23;
+    --gft-surface: 14 21 43;
+    --gft-surface-raised: 21 31 61;
+    --gft-surface-sunken: 10 15 32;
+    --gft-ink: 243 246 255;
+    --gft-ink-muted: 155 170 208;
+    --gft-ink-subtle: 109 127 168;
+    --gft-ink-inverse: 6 10 23;
+    --gft-line: 30 43 79;
+    --gft-line-strong: 48 67 118;
+    --gft-primary: 102 128 255;
+    --gft-primary-hover: 133 155 255;
+    --gft-primary-soft: 21 32 77;
+    --gft-primary-ink: 6 10 23;
+    --gft-accent: 255 119 89;
+    --gft-accent-soft: 61 25 20;
+    --gft-success: 45 212 156;
+    --gft-success-soft: 12 46 36;
+    --gft-warning: 245 184 65;
+    --gft-warning-soft: 54 39 11;
+    --gft-danger: 255 107 132;
+    --gft-danger-soft: 64 19 29;
     color-scheme: dark;
   }
   html, body, #app { height: 100%; }
@@ -87,6 +87,5 @@
   .table tbody tr:last-child td { @apply border-b-0; }
   .table tbody tr.row-link { @apply cursor-pointer transition-colors hover:bg-surface-sunken/60; }
 
-  /* Every horizontal scroller (tables, filter rails, photo rows): momentum + no page chaining. */
   .overflow-x-auto { overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 }

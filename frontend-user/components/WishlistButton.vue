@@ -46,7 +46,7 @@ async function toggle() {
     :aria-pressed="saved"
     :aria-label="saved ? $t('wishlist.unsave') : $t('wishlist.save')"
     class="inline-flex min-h-[40px] items-center gap-1.5 whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-semibold transition-colors"
-    :class="saved ? 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100' : 'border-line-strong bg-surface text-ink-muted hover:bg-surface-sunken'"
+    :class="saved ? 'border-accent/40 bg-accent-soft text-accent hover:bg-accent/15' : 'border-line-strong bg-surface text-ink-muted hover:bg-surface-sunken hover:text-ink'"
     data-testid="wishlist-toggle"
     @click="toggle"
   >

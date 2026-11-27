@@ -6,13 +6,20 @@
  */
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { apiFetch, formatKrw } from '~/composables/useApi'
+import { apiFetch, formatMinor } from '~/composables/useApi'
+import { useCurrencyStore } from '~/stores/currency'
 const localePath = useLocalePath()
 
 const props = defineProps<{ bookingId: string }>()
 const router = useRouter()
+const currency = useCurrencyStore()
 const { t, locale } = useI18n()
-const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN', 'zh-hant': 'zh-Hant' }
+const fmtMoney = (minor?: number | null) => {
+  if (typeof minor !== 'number' || !Number.isFinite(minor)) return '-'
+  const cur = booking.value?.currency || 'KRW'
+  return cur === 'KRW' ? currency.formatKRW(minor) : formatMinor(minor, cur)
+}
 
 const domainLabel = (d: string) => t(`checkout.domain_${d}`, d)
 const IN_FLIGHT = ['PAYMENT_PROCESSING', 'PAYMENT_AUTHORIZED', 'SUPPLIER_BOOKING_PENDING', 'TICKETING_PENDING', 'CANCELLATION_REQUESTED', 'REFUND_PENDING']
@@ -120,7 +127,7 @@ async function cancel() {
   const p = b.cancellationPreview
   const msg = b.status === 'AWAITING_PAYMENT'
     ? t('booking.detail.confirmCancelPre')
-    : p ? t('booking.detail.confirmCancelFee', { fee: formatKrw(p.feeMinor), refund: formatKrw(p.refundMinor) }) : t('booking.detail.confirmCancel')
+    : p ? t('booking.detail.confirmCancelFee', { fee: fmtMoney(p.feeMinor), refund: fmtMoney(p.refundMinor) }) : t('booking.detail.confirmCancel')
   if (!confirm(msg)) return
   cancelling.value = true
   cancelMsg.value = ''
@@ -155,18 +162,44 @@ async function loadChanges() {
   const r = await apiFetch(`/bookings/${encodeURIComponent(props.bookingId)}/change-requests`)
   if (r.ok) chgList.value = r.data.requests || []
 }
+function prefillChangeContact() {
+  const b = booking.value
+  chgContact.value = {
+    name: b?.contact?.name || '',
+    email: b?.contact?.email || '',
+    phone: b?.contact?.phone || '',
+  }
+}
 async function requestChange() {
   chgMsg.value = ''
   if (!chgForm.value.startDate) { chgMsg.value = t('booking.detail.chgNeedDate'); return }
   chgBusy.value = true
   try {
-    const r = await apiFetch(`/bookings/${encodeURIComponent(props.bookingId)}/change-request`, { method: 'POST', body: { ...chgForm.value } })
+    const r = await apiFetch(`/bookings/${encodeURIComponent(props.bookingId)}/change-request`, {
+      method: 'POST',
+      body: {
+        newStartDate: chgForm.value.startDate,
+        ...(chgForm.value.endDate ? { newEndDate: chgForm.value.endDate } : {}),
+        type: chgForm.value.type,
+        reason: chgForm.value.reason,
+      },
+    })
     if (!r.ok) { chgMsg.value = r.data.error || t('booking.detail.chgReqFail'); return }
     chgPreview.value = r.data
-    const b = booking.value
-    chgContact.value = { name: b.customerName || '', email: b.customerEmail || '', phone: b.customerPhone || '' }
+    prefillChangeContact()
     await loadChanges()
   } finally { chgBusy.value = false }
+}
+function selectApprovedChange(c: any) {
+  chgMsg.value = ''
+  chgPreview.value = {
+    requestId: c.id,
+    executable: true,
+    newTotalMinor: c.new_total_minor ?? c.quoted_total_minor ?? booking.value?.totalMinor ?? 0,
+    cancelFeeMinor: c.cancel_fee_minor ?? 0,
+    refundDueMinor: c.refund_due_minor ?? 0,
+  }
+  prefillChangeContact()
 }
 async function confirmChange() {
   const p = chgPreview.value
@@ -187,6 +220,39 @@ async function confirmChange() {
 }
 
 const printVoucher = () => window.print()
+function downloadIcs() {
+  const b = booking.value
+  if (!b?.serviceStart) return
+  const esc = (s: string) => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
+  const dt = (d: string) => d.replace(/-/g, '')
+  const start = dt(String(b.serviceStart).slice(0, 10))
+  const endRaw = String(b.serviceEnd || b.serviceStart).slice(0, 10)
+  const endDate = new Date(`${endRaw}T00:00:00Z`)
+  if (endRaw === String(b.serviceStart).slice(0, 10)) endDate.setUTCDate(endDate.getUTCDate() + 1)
+  const end = endDate.toISOString().slice(0, 10).replace(/-/g, '')
+  const voucher = (b.items || []).map((it: any) => it.voucher_code || it.pnr).filter(Boolean).join(', ')
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//getfortrip//OTA Itinerary//EN',
+    'BEGIN:VEVENT',
+    `UID:${b.bookingNumber || b.id}@getfortrip.com`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}`,
+    `DTSTART;VALUE=DATE:${start}`,
+    `DTEND;VALUE=DATE:${end}`,
+    `SUMMARY:${esc(`[getfortrip] ${b.title}`)}`,
+    `DESCRIPTION:${esc(`Booking No: ${b.bookingNumber}${voucher ? `\\nVoucher/PNR: ${voucher}` : ''}`)}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n')
+  const blob = new Blob([lines], { type: 'text/calendar;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `getfortrip-${b.bookingNumber || b.id}.ics`
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
 /** Supplier-provided links: https only (Vue does not sanitize :href — no javascript:). */
 function httpsOnly(urls: unknown): string[] {
   if (!Array.isArray(urls)) return []
@@ -223,9 +289,17 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
         <div v-if="booking.paymentMode === 'SANDBOX'" class="mt-3 text-[11px] font-semibold text-warning">{{ $t('booking.detail.sandboxNote') }}</div>
       </div>
 
-      <div v-if="booking.status === 'AWAITING_PAYMENT'" class="rounded-2xl border border-line bg-surface p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div class="hidden print:flex items-center justify-between border-b border-line pb-4 mb-2">
+        <div>
+          <p class="text-lg font-extrabold tracking-tight text-ink">getfortrip E-Voucher</p>
+          <p class="text-xs text-ink-muted">{{ booking.bookingNumber }}</p>
+        </div>
+        <p class="text-xs text-ink-subtle">{{ new Date().toLocaleDateString(tag()) }}</p>
+      </div>
+
+      <div v-if="booking.status === 'AWAITING_PAYMENT'" class="rounded-2xl border border-line bg-surface p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
         <p class="text-sm text-ink-muted">{{ $t('booking.detail.autoCancel', { d: deadlineText }) }}</p>
-        <button class="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-ink transition-colors hover:bg-primary-hover" data-testid="resume-payment" @click="resumePayment">{{ $t('checkout.payNow', { v: formatKrw(booking.totalMinor) }) }}</button>
+        <button class="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-ink transition-colors hover:bg-primary-hover" data-testid="resume-payment" @click="resumePayment">{{ $t('checkout.payNow', { v: fmtMoney(booking.totalMinor) }) }}</button>
       </div>
 
       <section class="rounded-2xl border border-line bg-surface p-5 md:p-6">
@@ -258,13 +332,13 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
         <div>
           <h3 class="font-semibold text-ink">{{ $t('booking.detail.payInfo') }}</h3>
           <dl class="mt-2 space-y-1">
-            <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.total') }}</dt><dd class="font-bold" data-testid="booking-total">{{ formatKrw(booking.totalMinor) }}</dd></div>
-            <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.paid') }}</dt><dd>{{ formatKrw(booking.paidMinor) }}</dd></div>
-            <div v-if="booking.cancellationFeeMinor" class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.cancelFee') }}</dt><dd>{{ formatKrw(booking.cancellationFeeMinor) }}</dd></div>
-            <div v-if="booking.refundedMinor" class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.refunded') }}</dt><dd class="text-success">{{ formatKrw(booking.refundedMinor) }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.total') }}</dt><dd class="font-bold tabular" data-testid="booking-total">{{ fmtMoney(booking.totalMinor) }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.paid') }}</dt><dd class="tabular">{{ fmtMoney(booking.paidMinor) }}</dd></div>
+            <div v-if="booking.cancellationFeeMinor" class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.cancelFee') }}</dt><dd class="tabular">{{ fmtMoney(booking.cancellationFeeMinor) }}</dd></div>
+            <div v-if="booking.refundedMinor" class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.refunded') }}</dt><dd class="text-success tabular">{{ fmtMoney(booking.refundedMinor) }}</dd></div>
           </dl>
           <ul v-if="booking.refunds?.length" class="mt-2 space-y-1 text-xs text-ink-muted">
-            <li v-for="rf in booking.refunds" :key="rf.id">{{ $t('booking.detail.refundLine', { v: formatKrw(rf.amount_minor), s: rf.status, d: fmt(rf.updated_at) }) }}</li>
+            <li v-for="rf in booking.refunds" :key="rf.id">{{ $t('booking.detail.refundLine', { v: fmtMoney(rf.amount_minor), s: rf.status, d: fmt(rf.updated_at) }) }}</li>
           </ul>
         </div>
         <div>
@@ -283,26 +357,29 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
           <span v-if="booking.cancellationPolicy?.type === 'FREE_UNTIL'">{{ $t('booking.detail.freeUntilFull', { d: fmt(booking.cancellationPolicy.freeUntil) }) }}</span>
           <span v-else>{{ $t('checkout.nonRefundable') }}</span>
         </p>
-        <p v-if="booking.cancellationPreview" class="mt-1 text-xs text-ink-subtle">{{ $t('booking.detail.cancelNow', { fee: formatKrw(booking.cancellationPreview.feeMinor), refund: formatKrw(booking.cancellationPreview.refundMinor) }) }}</p>
+        <p v-if="booking.cancellationPreview" class="mt-1 text-xs text-ink-subtle">{{ $t('booking.detail.cancelNow', { fee: fmtMoney(booking.cancellationPreview.feeMinor), refund: fmtMoney(booking.cancellationPreview.refundMinor) }) }}</p>
         <PolicyNotice :domain="booking.domain" :item-id="booking.itemId" v-slot="{ policy, hoursLabel, pct }">
           <ul v-if="policy && policy.tiers?.length" class="mt-2 space-y-1 text-xs text-ink-muted">
             <li v-for="(t, i) in policy.tiers" :key="i">{{ $t('booking.detail.tierLine', { h: hoursLabel(t.hours_before), p: pct(t.refund_bps), note: t.note ? ` (${t.note})` : '' }) }}</li>
             <li v-if="policy.no_show_fee_bps">{{ $t('booking.detail.noshowLine', { p: pct(policy.no_show_fee_bps) }) }}</li>
           </ul>
         </PolicyNotice>
-        <button v-if="booking.canCancel" :disabled="cancelling" class="mt-3 rounded-xl border border-danger/40 px-4 py-2 text-sm font-semibold text-danger disabled:opacity-50" data-testid="cancel-booking" @click="cancel">
+        <button v-if="booking.canCancel" :disabled="cancelling" class="mt-3 rounded-xl border border-danger/40 px-4 py-2 text-sm font-semibold text-danger disabled:opacity-50 print:hidden" data-testid="cancel-booking" @click="cancel">
           {{ cancelling ? $t('my.processing') : $t('booking.detail.cancelGo') }}
         </button>
         <p v-if="cancelMsg" class="mt-2 text-sm text-danger" role="alert">{{ cancelMsg }}</p>
       </section>
 
-      <section v-if="chgEligible" class="rounded-2xl border border-line bg-surface p-5 md:p-6" data-testid="change-section">
+      <section v-if="chgEligible" class="rounded-2xl border border-line bg-surface p-5 md:p-6 print:hidden" data-testid="change-section">
         <h2 class="font-bold text-ink">{{ $t('booking.detail.chgTitle') }}</h2>
         <p class="mt-1 text-sm text-ink-muted">{{ $t('booking.detail.chgSub') }}</p>
         <div v-if="chgList.length" class="mt-3 space-y-2">
-          <div v-for="c in chgList" :key="c.id" class="rounded-xl bg-surface-sunken p-3 text-sm">
-            <p class="font-semibold text-ink">{{ $t('booking.detail.chgRow', { a: c.new_start_date, b: c.new_end_date ? ` → ${c.new_end_date}` : '', s: c.status === 'PENDING_APPROVAL' ? $t('booking.detail.chgPending') : c.status === 'EXECUTED' ? $t('booking.detail.chgDone') : c.status }) }}</p>
-            <p v-if="c.status === 'PENDING_APPROVAL'" class="mt-1 text-xs text-ink-subtle">{{ $t('booking.detail.chgInvolNote') }}</p>
+          <div v-for="c in chgList" :key="c.id" class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface-sunken p-3 text-sm">
+            <div>
+              <p class="font-semibold text-ink">{{ $t('booking.detail.chgRow', { a: c.new_start_date, b: c.new_end_date ? ` → ${c.new_end_date}` : '', s: c.status === 'PENDING_APPROVAL' ? $t('booking.detail.chgPending') : c.status === 'EXECUTED' ? $t('booking.detail.chgDone') : c.status }) }}</p>
+              <p v-if="c.status === 'PENDING_APPROVAL'" class="mt-1 text-xs text-ink-subtle">{{ $t('booking.detail.chgInvolNote') }}</p>
+            </div>
+            <button v-if="c.status === 'APPROVED'" type="button" class="btn-primary btn-sm shrink-0" @click="selectApprovedChange(c)">{{ $t('booking.detail.chgConfirm') }}</button>
           </div>
         </div>
         <div v-if="!chgPreview" class="mt-3 grid gap-3 sm:grid-cols-2">
@@ -317,7 +394,7 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
           <label class="text-sm">{{ $t('booking.detail.chgMemo') }}<input v-model="chgForm.reason" type="text" maxlength="200" class="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5" /></label>
         </div>
         <div v-if="chgPreview" class="mt-3 rounded-xl bg-surface-sunken p-4 text-sm" data-testid="change-preview">
-          <p class="font-semibold text-ink">{{ $t('booking.detail.chgPreviewLine', { v: formatKrw(chgPreview.newTotalMinor), fee: formatKrw(chgPreview.cancelFeeMinor), refund: formatKrw(chgPreview.refundDueMinor) }) }}</p>
+          <p class="font-semibold text-ink">{{ $t('booking.detail.chgPreviewLine', { v: fmtMoney(chgPreview.newTotalMinor), fee: fmtMoney(chgPreview.cancelFeeMinor), refund: fmtMoney(chgPreview.refundDueMinor) }) }}</p>
           <p v-if="!chgPreview.executable" class="mt-1 text-xs text-ink-subtle">{{ $t('booking.detail.chgNeedApproval') }}</p>
           <div v-else class="mt-3 space-y-2">
             <input v-model="chgContact.name" :placeholder="$t('booking.detail.chgPhName')" class="w-full rounded-xl border border-line bg-surface px-3 py-2.5" />
@@ -346,27 +423,28 @@ onBeforeUnmount(() => clearTimeout(pollTimer))
             <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('checkout.bookingNo') }}</dt><dd class="font-mono">{{ receipt.bookingNumber }}</dd></div>
             <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.salesTypeShort') }}</dt><dd>{{ receipt.salesTypeLabel }}</dd></div>
             <div v-for="p in receipt.payments" :key="p.id" class="border-t border-line pt-2">
-              <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.payLine', { m: p.method || p.provider }) }}</dt><dd class="font-bold">{{ formatKrw(p.amountMinor) }}</dd></div>
+              <div class="flex justify-between"><dt class="text-ink-subtle">{{ $t('booking.detail.payLine', { m: p.method || p.provider }) }}</dt><dd class="font-bold tabular">{{ fmtMoney(p.amountMinor) }}</dd></div>
               <div v-if="p.card?.company" class="flex justify-between text-xs text-ink-muted"><span>{{ p.card.company }} {{ p.card.number }}</span><span>{{ p.card.installmentMonths ? $t('booking.detail.installment', { n: p.card.installmentMonths }) : $t('booking.detail.lumpSum') }}</span></div>
               <div class="flex justify-between text-xs text-ink-muted"><span>{{ $t('booking.detail.approved', { d: p.approvedAt ? fmt(p.approvedAt) : '—' }) }}</span><span>{{ p.status }}</span></div>
             </div>
-            <div v-for="rf in receipt.refunds" :key="rf.id" class="flex justify-between text-success"><dt>{{ $t('booking.detail.refundLineShort', { s: rf.status }) }}</dt><dd>{{ formatKrw(rf.amountMinor) }}</dd></div>
-            <div class="flex justify-between border-t border-line pt-2"><dt class="text-ink-subtle">{{ $t('booking.detail.netPaid') }}</dt><dd class="font-bold">{{ formatKrw(receipt.paidMinor - receipt.refundedMinor) }}</dd></div>
+            <div v-for="rf in receipt.refunds" :key="rf.id" class="flex justify-between text-success"><dt>{{ $t('booking.detail.refundLineShort', { s: rf.status }) }}</dt><dd class="tabular">{{ fmtMoney(rf.amountMinor) }}</dd></div>
+            <div class="flex justify-between border-t border-line pt-2"><dt class="text-ink-subtle">{{ $t('booking.detail.netPaid') }}</dt><dd class="font-bold tabular">{{ fmtMoney(receipt.paidMinor - receipt.refundedMinor) }}</dd></div>
           </dl>
           <button class="rounded-xl border border-line-strong px-4 py-2 text-xs font-semibold print:hidden" @click="printVoucher">{{ $t('booking.detail.printReceipt') }}</button>
         </div>
       </details>
 
-      <details class="rounded-2xl border border-line bg-surface p-5 text-sm">
+      <details class="rounded-2xl border border-line bg-surface p-5 text-sm print:hidden">
         <summary class="cursor-pointer font-semibold text-ink">{{ $t('booking.detail.history') }}</summary>
         <ol class="mt-3 space-y-1 text-xs text-ink-muted">
           <li v-for="(h, i) in booking.history" :key="i">{{ fmt(h.created_at) }} · {{ h.from_status || $t('booking.detail.created') }} → <strong>{{ h.to_status }}</strong><span v-if="h.reason"> ({{ h.reason }})</span></li>
         </ol>
       </details>
 
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2 print:hidden">
         <NuxtLink :to="$localePath('/my/bookings')" class="rounded-xl border border-line-strong px-4 py-2.5 text-sm font-semibold">{{ $t('booking.myList') }}</NuxtLink>
-        <button v-if="booking.isConfirmed" class="rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-ink-inverse print:hidden" @click="printVoucher">{{ $t('booking.detail.printVoucher') }}</button>
+        <button v-if="booking.isConfirmed" type="button" class="rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-ink-inverse" @click="printVoucher">{{ $t('booking.detail.printVoucher') }}</button>
+        <button v-if="booking.isConfirmed && booking.serviceStart" type="button" class="rounded-xl border border-primary/40 bg-primary-soft px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/15" @click="downloadIcs">{{ $t('booking.detail.addCalendar') }}</button>
       </div>
     </div>
   </div>

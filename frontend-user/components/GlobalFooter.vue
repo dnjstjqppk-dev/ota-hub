@@ -8,7 +8,7 @@ const co = useCompany()
 </script>
 
 <template>
-  <footer class="mt-24 border-t border-midnight-700 bg-midnight-900 pb-28 pt-16 text-white/80 md:pb-14">
+  <footer class="mt-24 border-t border-midnight-700 bg-midnight-900 pb-28 pt-16 text-white/80 md:pb-14 print:hidden">
     <div class="mx-auto max-w-7xl px-4 lg:px-6">
       <div class="grid gap-10 md:grid-cols-[1.5fr_repeat(3,1fr)]">
         <div class="max-w-sm space-y-4">

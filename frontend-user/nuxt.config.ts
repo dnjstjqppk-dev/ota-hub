@@ -150,7 +150,8 @@ export default defineNuxtConfig({
       { code: 'ko', iso: 'ko-KR', name: '한국어', file: 'ko.json' },
       { code: 'en', iso: 'en-US', name: 'English', file: 'en.json' },
       { code: 'ja', iso: 'ja-JP', name: '日本語', file: 'ja.json' },
-      { code: 'zh', iso: 'zh-CN', name: '中文', file: 'zh.json' }
+      { code: 'zh', iso: 'zh-CN', name: '简体中文', file: 'zh.json' },
+      { code: 'zh-hant', iso: 'zh-Hant', name: '繁體中文', file: 'zh-hant.json' }
     ],
     defaultLocale: 'ko',
     // v10: `lazy` was removed — locale `file`s are always lazy-loaded.
@@ -214,29 +215,30 @@ export default defineNuxtConfig({
   },
   app: {
     head: {
-      title: 'getfortrip - 전 세계 항공권, 호텔, 기차표, 렌터카 예약',
+      title: 'getfortrip — Global Travel & OTA Booking',
       htmlAttrs: {
         lang: 'ko'
       },
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
-        { name: 'description', content: 'getfortrip에서 전 세계 호텔, 항공권, 기차표, 렌터카, 투어 티켓 및 eSIM을 비교하고 간편하게 예약하세요.' },
+        { name: 'description', content: 'Compare and book hotels, flights, trains, rental cars, airport transfers, tours, and travel packages globally on getfortrip.' },
         { property: 'og:site_name', content: 'getfortrip' },
-        { property: 'og:title', content: 'getfortrip - 전 세계 스마트 여행 예약 플랫폼' },
-        { property: 'og:description', content: '전 세계 항공권, 특가 호텔, 고속열차, 렌터카를 한 번에 예약하세요.' },
+        { property: 'og:title', content: 'getfortrip — Global Smart Travel Platform' },
+        { property: 'og:description', content: 'Book global hotels, flights, high-speed trains, rental cars, and curated experiences in one place.' },
         { property: 'og:type', content: 'website' },
         { property: 'og:image', content: '/symbol.svg' },
         { name: 'twitter:card', content: 'summary' },
-        { name: 'twitter:title', content: 'getfortrip - 전 세계 스마트 여행 예약 플랫폼' },
-        { name: 'twitter:description', content: '전 세계 항공권, 호텔, 기차표, 렌터카 예약' },
-        { name: 'theme-color', content: '#0D6B5E' }
+        { name: 'twitter:title', content: 'getfortrip — Global Smart Travel Platform' },
+        { name: 'twitter:description', content: 'Hotels, flights, trains, rental cars, and curated travel bookings worldwide.' },
+        { name: 'theme-color', content: '#2948FF' }
       ],
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
         { rel: 'apple-touch-icon', href: '/symbol.svg' },
-        // Pretendard (brand typeface, BRANDING.md) — dynamic subset, loaded only for glyphs in use.
         { rel: 'preconnect', href: 'https://cdn.jsdelivr.net', crossorigin: '' },
+        { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@fontsource/plus-jakarta-sans@5.0.12/latin-700.css' },
+        { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@fontsource/plus-jakarta-sans@5.0.12/latin-800.css' },
         { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css' }
       ],
       script: [

@@ -204,7 +204,7 @@ test('s2 every listed page wires seofaq with localized items', () => {
   // Every `to` must resolve to a real page (bare path; locale prefix added at render).
   const routeFile = (to) => existsSync(new URL(`../pages/${to.replace(/^\//, '')}.vue`, import.meta.url))
     || existsSync(new URL(`../pages/${to.replace(/^\//, '')}/index.vue`, import.meta.url))
-  const locales = ['ko', 'en', 'ja', 'zh'].map((l) => JSON.parse(readFileSync(new URL(`../i18n/locales/${l}.json`, import.meta.url), 'utf8')))
+  const locales = ['ko', 'en', 'ja', 'zh', 'zh-hant'].map((l) => JSON.parse(readFileSync(new URL(`../i18n/locales/${l}.json`, import.meta.url), 'utf8')))
   for (const [li, m] of locales.entries()) {
     assert.ok(m.seoFaq.more, `seoFaq.more#${li}`)
     for (const topic of ['hotels', 'flights', 'trains', 'cars', 'transfers', 'todos', 'packages', 'esim', 'insurance']) {

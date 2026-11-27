@@ -2,47 +2,27 @@
 import { BRAND } from '~/config/brand'
 import { jsonLdScript } from '~/composables/useJsonLd'
 const VERSION = '1.1'
-const EFFECTIVE = '2026년 11월 7일'
+const EFFECTIVE = '2026-11-07'
 const REVISED = '2026-11-07'
 const { t } = useI18n()
-useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/cookies', title: t('seo.cookies.title'), description: t('seo.cookies.description'), koOnly: true })
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/cookies', title: t('seo.cookies.title'), description: t('seo.cookies.description') })
 // S6: document revision as WebPage dateModified.
 useHead({ script: [jsonLdScript({ '@context': 'https://schema.org', '@type': 'WebPage', url: `https://${useRuntimeConfig().public.brandDomain}/cookies`, dateModified: REVISED })] })
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto px-4 py-12 space-y-8">
-    <div class="space-y-2 border-b border-slate-200 dark:border-slate-700 pb-6">
-      <span class="text-xs font-bold text-trip-blue">Cookie Policy · v{{ VERSION }}</span>
-      <h1 class="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">{{ BRAND.name }} 쿠키 정책</h1>
-      <p class="text-xs text-slate-400">시행일: {{ EFFECTIVE }}</p>
-      <p class="text-xs text-slate-400">{{ $t('common.updatedAt', { d: REVISED }) }}</p>
+  <div class="mx-auto max-w-4xl space-y-8 px-4 pb-24 pt-10 lg:px-6 lg:pb-16">
+    <div class="space-y-2 border-b border-line pb-6">
+      <span class="text-xs font-bold text-primary">Cookie Policy · v{{ VERSION }}</span>
+      <h1 class="font-display text-3xl font-extrabold tracking-tight text-ink">{{ $t('legal.cookies.title', { brand: BRAND.name }) }}</h1>
+      <p class="text-xs text-ink-subtle">{{ $t('legal.effective', { d: EFFECTIVE }) }} · {{ $t('common.updatedAt', { d: REVISED }) }}</p>
     </div>
 
-    <div class="prose prose-slate dark:prose-invert max-w-none text-xs leading-relaxed text-slate-700 dark:text-slate-200 space-y-6">
-      <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">1. 쿠키의 사용 목적</h2>
-        <p>
-          {{ BRAND.name }}은 이용자에게 보다 빠르고 최적화된 웹사이트 경험을 제공하기 위해 쿠키(Cookie) 및 유사 기술을 사용합니다. 쿠키는 이용자가 웹사이트를 방문할 때 웹 브라우저에 저장되는 작은 텍스트 파일입니다.
-        </p>
-      </section>
-
-      <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">2. 사용하는 쿠키의 종류</h2>
-        <ul class="list-disc list-inside space-y-2">
-          <li><strong>필수 쿠키:</strong> 로그인 세션 유지, 보안 토큰 검증 및 장바구니/예약 프로세스 유지에 반드시 필요한 쿠키입니다.</li>
-          <li><strong>기능성 쿠키:</strong> 이용자가 선택한 통화(KRW, USD 등), 언어 설정 및 최근 검색 목적지 기록을 기억하여 편의를 제공합니다.</li>
-          <li><strong>성능 및 분석 쿠키:</strong> 웹사이트 방문자 수, 오류 발생 지점 및 페이지 로딩 성능을 측정하여 서비스 품질을 개선합니다.</li>
-        </ul>
-      </section>
-
-      <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">3. 쿠키 설정 및 관리 방법</h2>
-        <p>
-          이용자는 웹 브라우저의 옵션 설정을 통해 모든 쿠키를 허용하거나, 쿠키가 저장될 때마다 확인을 거치거나, 모든 쿠키의 저장을 거부할 수 있습니다. 단, 필수 쿠키를 비활성화할 경우 로그인이 필요한 예약 기능 이용에 제약이 있을 수 있습니다.
-        </p>
+    <div class="card space-y-6 p-6 text-sm leading-relaxed text-ink-muted sm:p-8">
+      <section v-for="n in 3" :key="n" class="space-y-2">
+        <h2 class="text-base font-extrabold text-ink">{{ $t(`legal.cookies.s${n}Title`) }}</h2>
+        <p class="whitespace-pre-line">{{ $t(`legal.cookies.s${n}Body`, { brand: BRAND.name }) }}</p>
       </section>
     </div>
   </div>
 </template>
-

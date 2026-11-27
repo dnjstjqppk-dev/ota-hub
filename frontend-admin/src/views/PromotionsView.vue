@@ -99,7 +99,7 @@ async function toggle(p: any) {
         </table>
       </div>
     </StatePanel>
-    <div v-if="showCreate" class="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" role="dialog" aria-modal="true" aria-label="새 프로모션 코드 발급">
+    <div v-if="showCreate" class="fixed inset-0 z-50 flex items-center justify-center bg-midnight-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="새 프로모션 코드 발급" @click.self="showCreate = false">
       <form class="card w-full max-w-md space-y-4 p-6" @submit.prevent="create">
         <h2 class="text-base font-bold text-ink">새 코드 발급</h2>
         <p v-if="createError" class="rounded-xl bg-danger-soft px-3 py-2 text-xs font-semibold text-danger" role="alert">{{ createError }}</p>

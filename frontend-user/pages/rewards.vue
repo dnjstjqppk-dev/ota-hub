@@ -8,70 +8,76 @@ const authStore = useAuthStore()
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto px-4 py-8 space-y-8">
-    <!-- 회원 등급 카드 (로그인 시, 실데이터) -->
-    <div v-if="authStore.isLoggedIn && authStore.user" class="bg-gradient-to-r from-slate-900 via-trip-navy to-slate-800 rounded-3xl p-8 text-white space-y-6 shadow-2xl relative overflow-hidden">
-      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+  <div class="mx-auto max-w-6xl space-y-8 px-4 pb-24 pt-6 lg:px-6 lg:pb-16">
+    <!-- Logged-in Member Card -->
+    <section v-if="authStore.isLoggedIn && authStore.user" class="relative overflow-hidden rounded-[28px] bg-midnight-900 p-7 text-white shadow-pop sm:p-10">
+      <div class="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-primary/35 blur-3xl" aria-hidden="true" />
+      <div class="pointer-events-none absolute -bottom-20 left-1/3 h-64 w-64 rounded-full bg-accent/25 blur-3xl" aria-hidden="true" />
+      <div class="relative flex flex-col items-start justify-between gap-5 md:flex-row md:items-center">
         <div class="flex items-center gap-4">
-          <img v-if="authStore.user.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-16 h-16 rounded-full border-2 border-amber-400 object-cover" />
-          <span v-else class="w-16 h-16 rounded-full bg-trip-blue text-white text-xl font-black flex items-center justify-center" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
+          <img v-if="authStore.user.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="h-16 w-16 rounded-full border-2 border-horizon-300 object-cover" />
+          <span v-else class="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-xl font-extrabold text-primary-ink" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
           <div>
-            <div class="flex items-center gap-2">
-              <h1 class="text-2xl font-black">{{ $t('rewards.greeting', { name: authStore.user.fullName }) }}</h1>
-              <span class="inline-flex items-center gap-1 px-3 py-0.5 bg-amber-400 text-slate-950 font-black text-xs rounded-full">
+            <div class="flex flex-wrap items-center gap-2">
+              <h1 class="font-display text-2xl font-extrabold">{{ $t('rewards.greeting', { name: authStore.user.fullName }) }}</h1>
+              <span class="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-0.5 text-xs font-bold text-white">
                 <AppIcon name="star" :size="12" /> {{ $t('rewards.tier', { tier: authStore.user.tier || 'SILVER' }) }}
               </span>
             </div>
-            <p class="text-xs text-slate-400 mt-1">{{ $t('rewards.member') }}</p>
+            <p class="mt-1 text-xs text-white/70">{{ $t('rewards.member') }}</p>
           </div>
         </div>
 
-        <div class="bg-white/10 backdrop-blur-md px-6 py-4 rounded-2xl border border-white/20 text-right">
-          <div class="text-xs text-amber-300 font-bold">{{ $t('rewards.coinsTitle') }}</div>
-          <div class="text-3xl font-black text-amber-400 font-mono">
-            {{ $n(authStore.user.tripCoins || 0) }} <span class="text-base">G</span>
+        <div class="w-full rounded-2xl border border-white/15 bg-white/10 px-6 py-4 backdrop-blur-md md:w-auto md:text-right">
+          <div class="text-xs font-bold text-horizon-300">{{ $t('rewards.coinsTitle') }}</div>
+          <div class="mt-1 font-mono text-3xl font-extrabold tabular text-white">
+            {{ $n(authStore.user.tripCoins || 0) }} <span class="text-base text-horizon-300">G</span>
           </div>
-          <div class="text-[11px] text-slate-300 mt-0.5">{{ $t('rewards.coinsHint') }}</div>
+          <div class="mt-0.5 text-2xs text-white/70">{{ $t('rewards.coinsHint') }}</div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 비로그인 게스트용 멤버십 안내 카드 -->
-    <div v-else class="bg-gradient-to-r from-slate-900 via-trip-navy to-slate-800 rounded-3xl p-8 sm:p-12 text-white space-y-6 shadow-2xl relative overflow-hidden text-center max-w-3xl mx-auto">
-      <div class="w-16 h-16 rounded-full bg-amber-400/20 text-amber-400 flex items-center justify-center mx-auto border border-amber-400/40">
-        <AppIcon name="star" :size="28" />
+    <!-- Guest Membership Hero -->
+    <section v-else class="relative mx-auto max-w-3xl overflow-hidden rounded-[28px] bg-midnight-900 p-8 text-center text-white shadow-pop sm:p-12">
+      <div class="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-primary/35 blur-3xl" aria-hidden="true" />
+      <div class="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-accent/25 blur-3xl" aria-hidden="true" />
+      <div class="relative space-y-5">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-horizon-300">
+          <AppIcon name="star" :size="28" />
+        </div>
+        <div class="space-y-2">
+          <h1 class="font-display text-2xl font-extrabold sm:text-3xl">{{ $t('rewards.guestTitle') }}</h1>
+          <p class="mx-auto max-w-md text-sm text-white/75">
+            {{ $t('rewards.guestSub') }}
+          </p>
+        </div>
+        <div class="pt-1">
+          <NuxtLink :to="$localePath('/login')" class="btn-primary px-7 py-3">
+            {{ $t('rewards.loginCta') }}
+          </NuxtLink>
+        </div>
       </div>
-      <div class="space-y-2">
-        <h1 class="text-2xl sm:text-3xl font-black">{{ $t('rewards.guestTitle') }}</h1>
-        <p class="text-xs sm:text-sm text-slate-300 max-w-md mx-auto">
-          {{ $t('rewards.guestSub') }}
-        </p>
-      </div>
-      <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-        <NuxtLink :to="$localePath('/login')" class="px-6 py-3 bg-trip-blue hover:bg-blue-600 text-white font-black rounded-xl text-xs shadow-md transition w-full sm:w-auto">
-          {{ $t('rewards.loginCta') }}
-        </NuxtLink>
-      </div>
-    </div>
+    </section>
 
-    <!-- 실제 회원 기능 안내 -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <NuxtLink :to="$localePath('/my/coupons')" class="block bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2 hover:shadow-md transition">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary"><AppIcon name="gift" :size="22" /></div>
-        <h3 class="font-bold text-slate-900 text-base">{{ $t('rewards.coupons') }}</h3>
-        <p class="text-xs text-slate-500 leading-relaxed">{{ $t('rewards.couponsSub') }}</p>
+    <!-- Member Features -->
+    <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
+      <NuxtLink :to="$localePath('/my/coupons')" class="card group block space-y-2.5 p-6 transition hover:border-primary/40 hover:shadow-pop">
+        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-soft text-primary"><AppIcon name="gift" :size="22" /></div>
+        <h2 class="text-base font-extrabold text-ink group-hover:text-primary">{{ $t('rewards.coupons') }}</h2>
+        <p class="text-xs leading-relaxed text-ink-muted">{{ $t('rewards.couponsSub') }}</p>
       </NuxtLink>
 
-      <NuxtLink :to="$localePath('/my/wishlist')" class="block bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2 hover:shadow-md transition">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-warning-soft text-warning"><AppIcon name="heart" :size="22" /></div>
-        <h3 class="font-bold text-slate-900 text-base">{{ $t('rewards.wishlist') }}</h3>
-        <p class="text-xs text-slate-500 leading-relaxed">{{ $t('rewards.wishlistSub') }}</p>
+      <NuxtLink :to="$localePath('/my/wishlist')" class="card group block space-y-2.5 p-6 transition hover:border-primary/40 hover:shadow-pop">
+        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-soft text-accent"><AppIcon name="heart" :size="22" /></div>
+        <h2 class="text-base font-extrabold text-ink group-hover:text-primary">{{ $t('rewards.wishlist') }}</h2>
+        <p class="text-xs leading-relaxed text-ink-muted">{{ $t('rewards.wishlistSub') }}</p>
       </NuxtLink>
 
-      <NuxtLink :to="$localePath('/my/bookings')" class="block bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-2 hover:shadow-md transition">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-success-soft text-success"><AppIcon name="bookings" :size="22" /></div>
-        <h3 class="font-bold text-slate-900 text-base">{{ $t('rewards.bookings') }}</h3>
-        <p class="text-xs text-slate-500 leading-relaxed">{{ $t('rewards.bookingsSub') }}</p>
+      <NuxtLink :to="$localePath('/my/bookings')" class="card group block space-y-2.5 p-6 transition hover:border-primary/40 hover:shadow-pop">
+        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-success-soft text-success"><AppIcon name="bookings" :size="22" /></div>
+        <h2 class="text-base font-extrabold text-ink group-hover:text-primary">{{ $t('rewards.bookings') }}</h2>
+        <p class="text-xs leading-relaxed text-ink-muted">{{ $t('rewards.bookingsSub') }}</p>
       </NuxtLink>
     </div>
   </div>

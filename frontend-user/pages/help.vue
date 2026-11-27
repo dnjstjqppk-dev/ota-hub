@@ -5,26 +5,26 @@ import { useAuthStore } from '~/stores/auth'
 
 const { t, locale } = useI18n()
 const localePath = useLocalePath()
-useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/help', title: t('seo.help.title'), description: t('seo.help.description'), koOnly: true })
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/help', title: t('seo.help.title'), description: t('seo.help.description') })
 
 const auth = useAuthStore()
 
-const faqs = [
-  { q: '호텔 예약 취소 시 환불은 언제 입금되나요?', a: '무료 취소 기한 내 취소하면 환불이 승인되며, 카드사 전산에 따라 영업일 기준 3~5일 정도 걸릴 수 있습니다. 환불 상태는 내 예약 상세에서 확인할 수 있습니다.', to: '/refund-policy' },
-  { q: '항공권 여권 정보(이름, 번호) 변경이 가능한가요?', a: '영문 철자 오탈자는 항공사 규정에 따라 수정 가능 여부가 다릅니다. 아래 1:1 문의로 예약 번호와 함께 남겨주시면 확인해 드립니다.' },
-  { q: 'getfortrip 코인은 어떻게 적립되나요?', a: '코인은 이벤트와 고객지원을 통해 적립됩니다. 보유 코인은 멤버십 페이지에서 확인할 수 있습니다.', to: '/rewards' },
-  { q: 'eSIM은 언제 구매할 수 있나요?', a: 'eSIM 판매를 준비하고 있어요. 지금은 요금제 조회만 가능하고, 판매가 시작되면 예약 확인 이메일로 QR 코드를 보내드립니다.', to: '/esim' }
-]
+const HELP_FAQ_META = [
+  { key: 'q1', to: '/refund-policy' },
+  { key: 'q2' },
+  { key: 'q3', to: '/rewards' },
+  { key: 'q4', to: '/esim' },
+] as const
 
 // S2: the same list drives the shared SeoFaq accordion, so the visible Q&A and
 // the FAQPage JSON-LD can never drift apart (all answers stay in the SSR DOM).
-const seoFaqItems = computed(() => faqs.map((f) => ({ q: f.q, a: f.a, to: (f as { to?: string }).to })))
+const seoFaqItems = computed(() => HELP_FAQ_META.map((f) => ({ q: t(`helpFaq.${f.key}.q`), a: t(`helpFaq.${f.key}.a`), to: (f as { to?: string }).to })))
 
 const CAT_VALUES = ['BOOKING', 'PAYMENT', 'REFUND', 'ACCOUNT', 'TECHNICAL', 'GENERAL'] as const
 const CATEGORIES = computed(() => CAT_VALUES.map((value) => ({ value, label: t(`help.cat.${value}`) })))
 const catLabel = (v: string) => (CAT_VALUES as readonly string[]).includes(v) ? t(`help.cat.${v}`) : v
 const STATUS_LABEL = computed<Record<string, string>>(() => ({ OPEN: t('help.status.OPEN'), IN_PROGRESS: t('help.status.IN_PROGRESS'), NEEDS_HUMAN: t('help.status.NEEDS_HUMAN'), RESOLVED: t('help.status.RESOLVED'), CLOSED: t('help.status.CLOSED') }))
-const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN', 'zh-hant': 'zh-Hant' }
 const fmtDate = (s: string) => new Date(s).toLocaleDateString(LOCALE_TAG[locale.value] || 'ko-KR')
 
 interface Inquiry {
@@ -106,60 +106,59 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto px-4 py-12 space-y-8">
-    <div class="text-center space-y-2">
-      <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-trip-blue rounded-full text-xs font-black uppercase tracking-wider">
+  <div class="mx-auto max-w-4xl space-y-8 px-4 pb-24 pt-8 lg:px-6 lg:pb-16">
+    <div class="space-y-2.5 text-center">
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-3.5 py-1 text-2xs font-bold uppercase tracking-wider text-primary">
         <AppIcon name="support" :size="14" /> {{ $t('help.badge') }}
       </span>
-      <h1 class="text-3xl font-black text-slate-900 tracking-tight">{{ $t('help.title') }}</h1>
-      <p class="text-sm text-slate-500">{{ $t('help.sub') }}</p>
+      <h1 class="font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">{{ $t('help.title') }}</h1>
+      <p class="text-sm text-ink-muted">{{ $t('help.sub') }}</p>
     </div>
 
-    <!-- 자주 묻는 질문 아코디언 (S2: SeoFaq emits the matching FAQPage JSON-LD) -->
     <SeoFaq :items="seoFaqItems" />
 
-    <!-- 1:1 문의 작성 -->
-    <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
-      <h2 class="text-lg font-black text-slate-900">{{ $t('help.formTitle') }}</h2>
-      <div v-if="!auth.isLoggedIn" class="rounded-2xl bg-slate-50 border border-slate-200 p-5 text-center space-y-3">
-        <p class="text-xs text-slate-600">{{ $t('help.needLogin') }}</p>
-        <button type="button" class="px-5 py-2.5 bg-trip-blue text-white text-xs font-bold rounded-xl" @click="goLogin">{{ $t('help.goLogin') }}</button>
+    <!-- 1:1 Inquiry Form -->
+    <div class="card space-y-4 p-6 sm:p-7">
+      <h2 class="text-lg font-extrabold text-ink">{{ $t('help.formTitle') }}</h2>
+      <div v-if="!auth.isLoggedIn" class="space-y-3 rounded-2xl border border-line bg-surface-sunken p-6 text-center">
+        <p class="text-sm text-ink-muted">{{ $t('help.needLogin') }}</p>
+        <button type="button" class="btn-primary !text-xs" @click="goLogin">{{ $t('help.goLogin') }}</button>
       </div>
-      <div v-else class="space-y-3">
-        <div class="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-3">
+      <div v-else class="space-y-3.5">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-[160px_1fr]">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-category">{{ $t('help.type') }}</label>
-            <select id="inq-category" v-model="category" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">
+            <label class="field-label" for="inq-category">{{ $t('help.type') }}</label>
+            <select id="inq-category" v-model="category" class="w-full rounded-field border border-line bg-surface px-3 py-2.5 text-sm font-semibold text-ink focus:border-primary focus:outline-none focus:shadow-focus">
               <option v-for="c in CATEGORIES" :key="c.value" :value="c.value">{{ c.label }}</option>
             </select>
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-subject">{{ $t('help.subject') }}</label>
-            <input id="inq-subject" v-model="subject" type="text" maxlength="120" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold" :placeholder="$t('help.subjectPh')" />
+            <label class="field-label" for="inq-subject">{{ $t('help.subject') }}</label>
+            <input id="inq-subject" v-model="subject" type="text" maxlength="120" class="w-full rounded-field border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus" :placeholder="$t('help.subjectPh')" />
           </div>
         </div>
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-booking">{{ $t('help.bookingOpt') }}</label>
-          <select id="inq-booking" v-model="bookingId" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-bold bg-white">
+          <label class="field-label" for="inq-booking">{{ $t('help.bookingOpt') }}</label>
+          <select id="inq-booking" v-model="bookingId" class="w-full rounded-field border border-line bg-surface px-3 py-2.5 text-sm text-ink focus:border-primary focus:outline-none focus:shadow-focus">
             <option value="">{{ $t('help.noBooking') }}</option>
             <option v-for="b in myBookings" :key="b.id" :value="b.id">{{ b.bookingNumber }} · {{ b.title }}</option>
           </select>
         </div>
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1" for="inq-body">{{ $t('help.body') }}</label>
-          <textarea id="inq-body" v-model="body" rows="5" maxlength="5000" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs" :placeholder="$t('help.bodyPh')"></textarea>
+          <label class="field-label" for="inq-body">{{ $t('help.body') }}</label>
+          <textarea id="inq-body" v-model="body" rows="5" maxlength="5000" class="w-full rounded-field border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus" :placeholder="$t('help.bodyPh')"></textarea>
         </div>
         <p v-if="submitError" class="text-xs font-bold text-danger" role="alert">{{ submitError }}</p>
         <p v-if="submitted" class="text-xs font-bold text-success" role="status">{{ $t('help.submitted') }}</p>
-        <button type="button" :disabled="submitting || !subject.trim() || !body.trim()" @click="submitInquiry" class="w-full sm:w-auto px-6 py-3 bg-trip-blue text-white font-bold rounded-xl text-xs shadow-md disabled:opacity-50">
+        <button type="button" :disabled="submitting || !subject.trim() || !body.trim()" class="btn-primary w-full sm:w-auto" @click="submitInquiry">
           {{ submitting ? $t('help.submitting') : $t('help.submit') }}
         </button>
       </div>
     </div>
 
-    <!-- 내 문의 내역 -->
+    <!-- My Inquiries -->
     <div v-if="auth.isLoggedIn" id="inquiries" class="scroll-mt-24 space-y-4">
-      <h2 class="text-lg font-black text-slate-900">{{ $t('help.myTitle') }}</h2>
+      <h2 class="text-lg font-extrabold text-ink">{{ $t('help.myTitle') }}</h2>
       <ResultsState
         :state="listState"
         :count="inquiries.length"
@@ -170,14 +169,14 @@ onMounted(() => {
         @retry="fetchMine"
       >
         <div class="space-y-3">
-          <div v-for="t in inquiries" :key="t.id" class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-2">
+          <div v-for="t in inquiries" :key="t.id" class="card space-y-2 p-5">
             <div class="flex items-center justify-between gap-2">
-              <span class="text-[11px] font-bold text-slate-500">{{ catLabel(t.category) }} · {{ t.created_at ? fmtDate(t.created_at) : '' }}</span>
-              <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold" :class="t.status === 'OPEN' ? 'bg-amber-50 text-amber-700' : (t.status === 'IN_PROGRESS' || t.status === 'NEEDS_HUMAN') ? 'bg-blue-50 text-trip-blue' : 'bg-emerald-50 text-emerald-700'">{{ STATUS_LABEL[t.status] || t.status }}</span>
+              <span class="text-xs font-semibold text-ink-subtle">{{ catLabel(t.category) }} · {{ t.created_at ? fmtDate(t.created_at) : '' }}</span>
+              <span class="rounded-full px-2.5 py-0.5 text-2xs font-bold" :class="t.status === 'OPEN' ? 'bg-warning-soft text-warning' : (t.status === 'IN_PROGRESS' || t.status === 'NEEDS_HUMAN') ? 'bg-primary-soft text-primary' : 'bg-success-soft text-success'">{{ STATUS_LABEL[t.status] || t.status }}</span>
             </div>
-            <h3 class="font-bold text-slate-900 text-sm">{{ t.subject }}</h3>
-            <p v-if="t.booking_id" class="text-[11px] font-bold text-trip-blue">{{ $t('help.relatedBooking', { id: t.booking_id }) }}</p>
-            <p class="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{{ t.body }}</p>
+            <h3 class="text-sm font-bold text-ink">{{ t.subject }}</h3>
+            <p v-if="t.booking_id" class="text-xs font-semibold text-primary">{{ $t('help.relatedBooking', { id: t.booking_id }) }}</p>
+            <p class="whitespace-pre-line text-sm leading-relaxed text-ink-muted">{{ t.body }}</p>
             <InquiryThread :ticket-id="t.id" :status="t.status" :has-reply="!!t.admin_note" @changed="fetchMine" />
           </div>
         </div>

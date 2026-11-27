@@ -90,7 +90,7 @@ const query = computed(() => text.value.trim())
 const rows = computed<SuggestItem[]>(() => (query.value ? items.value : [...recent.value, ...popular.value.filter(p => !recent.value.some(r => r.id === p.id))]))
 const activeId = computed(() => (active.value >= 0 && rows.value[active.value] ? `${uid}-opt-${active.value}` : undefined))
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const PH_KEY: Record<string, string> = {
   flights: 'phFlights', hotels: 'phHotels', trains: 'phTrains', cars: 'phCars',
   transfers: 'phTransfers', 'things-to-do': 'phThings', packages: 'phPackages',
@@ -113,7 +113,7 @@ async function fetchSuggest(q: string): Promise<SuggestItem[] | null> {
   controller?.abort()
   controller = new AbortController()
   const mySeq = ++seq
-  const res = await fetch(useApiUrl(`/search/suggest?q=${encodeURIComponent(q)}&domain=${encodeURIComponent(domain.value)}&limit=8`), { signal: controller.signal })
+  const res = await fetch(useApiUrl(`/search/suggest?q=${encodeURIComponent(q)}&domain=${encodeURIComponent(domain.value)}&limit=8&locale=${encodeURIComponent(locale.value)}`), { signal: controller.signal })
   if (!res.ok) throw new Error(`suggest ${res.status}`)
   const body = await res.json()
   const data: SuggestItem[] = Array.isArray(body?.data) ? body.data : []
@@ -153,7 +153,7 @@ async function run(q: string) {
 async function loadPopular() {
   if (popular.value.length) return
   try {
-    const res = await fetch(useApiUrl(`/search/suggest?q=&domain=${encodeURIComponent(domain.value)}&limit=6`))
+    const res = await fetch(useApiUrl(`/search/suggest?q=&domain=${encodeURIComponent(domain.value)}&limit=6&locale=${encodeURIComponent(locale.value)}`))
     if (res.ok) popular.value = ((await res.json())?.data || []) as SuggestItem[]
   } catch { /* the panel simply shows recent searches only */ }
 }

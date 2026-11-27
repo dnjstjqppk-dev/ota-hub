@@ -38,7 +38,7 @@ export function daysBetween(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000)
 }
 const WEEK = ['일', '월', '화', '수', '목', '금', '토']
-const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' }
+const LOCALE_TAG: Record<string, string> = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN', 'zh-hant': 'zh-Hant' }
 export function fmtDay(s: string, long = false, locale = 'ko'): string {
   if (!s) return ''
   const [y = NaN, m = NaN, d = NaN] = s.split('-').map(Number)

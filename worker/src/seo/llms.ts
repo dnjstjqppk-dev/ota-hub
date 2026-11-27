@@ -27,8 +27,8 @@ const PRICE_COLS: [string, string][] = [
   ["packages", "total_package_krw"],
 ];
 
-/** Shipped frontend locales (frontend-user i18n config: ko default + 3 prefixes). */
-const SHIPPED_LOCALES = ["ko", "en", "ja", "zh"] as const;
+/** Shipped frontend locales (country subdomains + 5 i18n bundles). */
+const SHIPPED_LOCALES = ["ko", "en", "ja", "zh", "zh-hant"] as const;
 
 const fmtInt = (n: number): string => n.toLocaleString("ko-KR");
 const cleanEnv = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -96,10 +96,13 @@ export function llmsText(site: string): string {
 - Cars: ${site}/cars — Transfers: ${site}/transfers — Tours: ${site}/things-to-do
 - Packages: ${site}/packages — Deals: ${site}/deals — Best: ${site}/trip-best
 
-## Locales
-- Default locale ko has no path prefix; other locales live under /en /ja /zh
-  (e.g. ${site}/en/hotels, ${site}/ja/hotels, ${site}/zh/hotels). Every page
-  declares its alternates (ko, en, ja, zh, x-default) in <head> link tags.
+## Locales & Regional Subdomains
+- Regional subdomains serve localized experiences with ?locale=xx-yy:
+  https://kr.getfortrip.com (ko-KR), https://jp.getfortrip.com (ja-JP),
+  https://uk.getfortrip.com (en-GB), https://hk.getfortrip.com (zh-HK),
+  https://tw.getfortrip.com (zh-TW), and https://www.getfortrip.com (en-US, x-default).
+  Legacy /en, /ja, /zh paths 301-redirect to their corresponding subdomains. Every
+  crawlable page declares all 7 hreflang alternates in <head> link tags.
 
 ## Off limits
 - Do not crawl or submit forms under /my /checkout /booking /login /register

@@ -14,9 +14,10 @@ function dismissOnboarding() {
 }
 
 const runtimeCfg = useRuntimeConfig()
+const { t } = useI18n()
 
 useHead({
-  titleTemplate: (titleChunk) => titleChunk ? `${titleChunk} - getfortrip` : 'getfortrip - 스마트한 전 세계 여행의 시작',
+  titleTemplate: (titleChunk) => titleChunk ? `${titleChunk} - getfortrip` : t('brand.defaultTitle'),
   meta: [
     // S9: search-console ownership (renders only when the operator configures the env).
     ...siteVerificationMetas({

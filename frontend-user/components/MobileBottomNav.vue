@@ -17,7 +17,7 @@ const active = (i: typeof items[number]) => (i.exact ? bare(route.path) === i.to
 
 <template>
   <nav
-    class="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 grid grid-cols-5 rounded-2xl border border-line bg-surface/95 p-1 shadow-pop backdrop-blur-md md:hidden"
+    class="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 grid grid-cols-5 rounded-2xl border border-line bg-surface/95 p-1 shadow-pop backdrop-blur-md md:hidden print:hidden"
     :aria-label="$t('mobile.menu')"
   >
     <NuxtLink

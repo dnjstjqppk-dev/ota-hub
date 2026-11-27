@@ -83,7 +83,7 @@ useHead(() => {
       <div class="pb-3 pt-6">
         <nav class="mb-1 flex items-center gap-1 text-xs text-ink-subtle" :aria-label="$t('common.breadcrumb')"><NuxtLink :to="$localePath('/')" class="hover:text-ink">{{ $t('common.home') }}</NuxtLink><AppIcon name="chevron-right" :size="12" /><NuxtLink :to="$localePath('/packages')" class="hover:text-ink">{{ $t('nav.packages') }}</NuxtLink></nav>
         <h1 class="text-xl font-bold tracking-tight text-ink sm:text-2xl">{{ q.city ? $t('packages.list.docTitle', { c: q.city }) : $t('packages.list.h1all') }} <span v-if="state === 'ready'" class="ml-1 text-base font-semibold text-ink-subtle tabular">{{ $t('hotels.list.count', { n: items.length }) }}</span></h1>
-        <p v-if="q.date" class="mt-0.5 text-sm text-ink-muted">{{ $t('packages.list.depOn', { d: fmtDay(q.date, true) }) }}</p>
+        <p v-if="q.date" class="mt-0.5 text-sm text-ink-muted">{{ $t('packages.list.depOn', { d: fmtDay(q.date, true, locale) }) }}</p>
       </div>
       <p class="mb-3 flex items-start gap-1.5 text-xs text-ink-subtle"><AppIcon name="check" :size="14" class="mt-px" />{{ $t('packages.list.priceNote') }}</p>
 

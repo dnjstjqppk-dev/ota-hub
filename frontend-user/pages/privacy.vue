@@ -3,144 +3,64 @@ import { BRAND } from '~/config/brand'
 import { useCompany } from '~/composables/useCompany'
 import { jsonLdScript } from '~/composables/useJsonLd'
 const VERSION = '2.1'
-const EFFECTIVE = '2026년 11월 10일'
+const EFFECTIVE = '2026-11-10'
 const REVISED = '2026-11-10'
 const co = useCompany()
 const { t } = useI18n()
-useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/privacy', title: t('seo.privacy.title'), description: t('seo.privacy.description'), koOnly: true })
+useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/privacy', title: t('seo.privacy.title'), description: t('seo.privacy.description') })
 // S6: document revision as WebPage dateModified.
 useHead({ script: [jsonLdScript({ '@context': 'https://schema.org', '@type': 'WebPage', url: `https://${useRuntimeConfig().public.brandDomain}/privacy`, dateModified: REVISED })] })
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto px-4 py-12 space-y-8">
-    <div class="space-y-2 border-b border-slate-200 dark:border-slate-700 pb-6">
-      <span class="text-xs font-bold text-trip-blue">Privacy Policy · v{{ VERSION }}</span>
-      <h1 class="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">{{ BRAND.name }} 개인정보 처리방침</h1>
-      <p class="text-xs text-slate-400">시행일: {{ EFFECTIVE }}</p>
-      <p class="text-xs text-slate-400">{{ $t('common.updatedAt', { d: REVISED }) }}</p>
+  <div class="mx-auto max-w-4xl space-y-8 px-4 pb-24 pt-10 lg:px-6 lg:pb-16">
+    <div class="space-y-2 border-b border-line pb-6">
+      <span class="text-xs font-bold text-primary">Privacy Policy · v{{ VERSION }}</span>
+      <h1 class="font-display text-3xl font-extrabold tracking-tight text-ink">{{ $t('legal.privacy.title', { brand: BRAND.name }) }}</h1>
+      <p class="text-xs text-ink-subtle">{{ $t('legal.effective', { d: EFFECTIVE }) }} · {{ $t('common.updatedAt', { d: REVISED }) }}</p>
     </div>
 
-    <div class="prose prose-slate dark:prose-invert max-w-none text-xs leading-relaxed text-slate-700 dark:text-slate-200 space-y-6">
-      <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">1. 개인정보의 수집 및 이용 목적</h2>
-        <p>
-          {{ BRAND.name }} Inc.(이하 "회사")는 호텔, 항공권, 기차, 렌터카, 투어 상품 예약 및 발권, 본인 확인, 결제 및 정산, 고객 상담을 위해 최소한의 개인정보를 수집합니다.
-        </p>
+    <div class="card space-y-6 p-6 text-sm leading-relaxed text-ink-muted sm:p-8">
+      <section v-for="n in 3" :key="n" class="space-y-2">
+        <h2 class="text-base font-extrabold text-ink">{{ $t(`legal.privacy.s${n}Title`) }}</h2>
+        <p class="whitespace-pre-line">{{ $t(`legal.privacy.s${n}Body`, { brand: BRAND.name }) }}</p>
       </section>
 
-      <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">2. 수집하는 개인정보 항목</h2>
-        <ul class="list-disc list-inside space-y-1">
-          <li><strong>회원 가입 시:</strong> 성명, 이메일 주소, 휴대전화번호, 비밀번호(암호화 저장)</li>
-          <li><strong>여행 예약 및 발권 시:</strong> 탑승객/투숙객 영문 성명, 생년월일, 성별, 국적, 여권번호 및 만료일(국제선 항공권 등 필수 발권 시에 한함)</li>
-          <li><strong>결제 시:</strong> 카드사명, 결제 승인 기록(신용카드 번호는 PCI-DSS 준수 PG사 토큰화 처리되어 회사 서버에 직접 저장되지 않음)</li>
-          <li><strong>자동 수집:</strong> 접속 IP, 브라우저·기기 정보, 쿠키, 서비스 이용 기록(부정거래 탐지 및 품질 개선 목적)</li>
-        </ul>
-      </section>
-
-      <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">3. 개인정보의 제3자 제공</h2>
-        <p>
-          회사는 예약 이행을 위해 아래와 같이 개인정보를 제공합니다. 제공 항목: 예약자·탑승객 성명(영문 포함), 연락처, 예약번호, 여권 정보(항공 발권 시).
-          제공받는 자: 예약된 상품의 항공사·호텔·철도·렌터카·현지 투어 공급사 및 결제대행사(토스페이먼츠).
-          이용 목적: 예약 확정·발권·결제 승인. 보유·이용 기간: 각 수탁사의 이용약관 및 관계 법령에 따름.
-        </p>
-      </section>
-
-      <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">4. 개인정보 처리위탁 및 국외이전</h2>
-        <p>
-          회사는 서비스 운영을 위해 아래와 같이 개인정보 처리를 위탁하며, 일부 수탁자는 국외 사업자입니다.
-          이전은 서비스 이용 시점에 암호화 통신으로 수시로 이루어지며, 아래 보유 기간이 지나면 파기됩니다.
-        </p>
-        <div class="overflow-x-auto overscroll-x-contain [touch-action:pan-x_pan-y]">
-          <table class="w-full border-collapse border border-slate-300 text-left">
+      <section class="space-y-3">
+        <h2 class="text-base font-extrabold text-ink">{{ $t('legal.privacy.s4Title') }}</h2>
+        <p>{{ $t('legal.privacy.s4Intro') }}</p>
+        <div class="overflow-x-auto rounded-2xl border border-line">
+          <table class="w-full min-w-[540px] border-collapse text-left text-xs">
             <thead>
-              <tr class="bg-slate-100 dark:bg-slate-800">
-                <th class="border border-slate-300 px-2 py-1">수탁자 (국가)</th>
-                <th class="border border-slate-300 px-2 py-1">위탁 업무</th>
-                <th class="border border-slate-300 px-2 py-1">이전 항목</th>
-                <th class="border border-slate-300 px-2 py-1">보유·이용 기간</th>
+              <tr class="border-b border-line bg-surface-sunken text-ink">
+                <th class="px-3 py-2.5 font-bold">{{ $t('legal.privacy.colProcessor') }}</th>
+                <th class="px-3 py-2.5 font-bold">{{ $t('legal.privacy.colPurpose') }}</th>
+                <th class="px-3 py-2.5 font-bold">{{ $t('legal.privacy.colData') }}</th>
+                <th class="px-3 py-2.5 font-bold">{{ $t('legal.privacy.colRetention') }}</th>
               </tr>
             </thead>
-            <tbody>
-              <tr>
-                <td class="border border-slate-300 px-2 py-1">Cloudflare, Inc. (미국 등)</td>
-                <td class="border border-slate-300 px-2 py-1">호스팅·CDN·보안</td>
-                <td class="border border-slate-300 px-2 py-1">서비스 이용 기록, 접속 IP, 캐시된 페이지 데이터</td>
-                <td class="border border-slate-300 px-2 py-1">회원 탈퇴 또는 위탁 계약 종료 시까지</td>
-              </tr>
-              <tr>
-                <td class="border border-slate-300 px-2 py-1">토스페이먼츠 주식회사 (대한민국)</td>
-                <td class="border border-slate-300 px-2 py-1">결제 승인·취소·정산</td>
-                <td class="border border-slate-300 px-2 py-1">주문번호, 결제 금액, 카드사·승인 정보, 예약자 연락처</td>
-                <td class="border border-slate-300 px-2 py-1">전자상거래법상 5년</td>
-              </tr>
-              <tr>
-                <td class="border border-slate-300 px-2 py-1">Resend (미국)</td>
-                <td class="border border-slate-300 px-2 py-1">예약·결제 알림 메일 발송</td>
-                <td class="border border-slate-300 px-2 py-1">수신 이메일 주소, 예약번호, 알림 내용</td>
-                <td class="border border-slate-300 px-2 py-1">발송 후 최대 30일</td>
-              </tr>
-              <tr>
-                <td class="border border-slate-300 px-2 py-1">Sentry (미국)</td>
-                <td class="border border-slate-300 px-2 py-1">오류 추적·서비스 품질 개선</td>
-                <td class="border border-slate-300 px-2 py-1">오류 로그, 기기·브라우저 정보 (여권번호·카드번호는 수집하지 않음)</td>
-                <td class="border border-slate-300 px-2 py-1">수집 후 최대 90일</td>
+            <tbody class="divide-y divide-line">
+              <tr v-for="k in ['cf', 'toss', 'resend', 'sentry']" :key="k">
+                <td class="px-3 py-2.5 font-semibold text-ink">{{ $t(`legal.privacy.proc_${k}_name`) }}</td>
+                <td class="px-3 py-2.5">{{ $t(`legal.privacy.proc_${k}_task`) }}</td>
+                <td class="px-3 py-2.5">{{ $t(`legal.privacy.proc_${k}_data`) }}</td>
+                <td class="px-3 py-2.5">{{ $t(`legal.privacy.proc_${k}_ret`) }}</td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p>
-          회사는 수탁자가 개인정보를 안전하게 처리하도록 관리·감독하며, 위탁 업무가 변경되면 본 방침을 개정하여 고지합니다.
-          국외이전을 원하지 않는 이용자는 회원 탈퇴를 통해 이전을 중단할 수 있습니다.
-        </p>
+        <p>{{ $t('legal.privacy.s4Outro') }}</p>
       </section>
 
-      <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">5. 개인정보의 보유 및 파기</h2>
-        <ul class="list-disc list-inside space-y-1">
-          <li><strong>예약·결제 기록:</strong> 전자상거래법상 5년 (계약·청약철회·대금결제·공급 기록)</li>
-          <li><strong>소비자 불만·분쟁 처리 기록:</strong> 3년</li>
-          <li><strong>접속 로그:</strong> 통신비밀보호법상 3개월</li>
-          <li><strong>회원 정보:</strong> 회원 탈퇴 시 즉시 파기 (단, 위 법정 보존 항목 제외)</li>
-        </ul>
-        <p>
-          보유 기간이 끝난 개인정보는 복구 불가능한 방법으로 지체 없이 파기합니다.
-        </p>
+      <section v-for="n in [5, 6, 7, 8]" :key="n" class="space-y-2">
+        <h2 class="text-base font-extrabold text-ink">{{ $t(`legal.privacy.s${n}Title`) }}</h2>
+        <p class="whitespace-pre-line">{{ $t(`legal.privacy.s${n}Body`, { email: BRAND.supportEmail }) }}</p>
       </section>
 
-      <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">6. 쿠키 및 트래킹 로그 운영</h2>
+      <section class="space-y-2 border-t border-line pt-5">
+        <h2 class="text-base font-extrabold text-ink">{{ $t('legal.privacy.s9Title') }}</h2>
         <p>
-          회사는 로그인 유지·보안·예약 흐름 유지를 위한 필수 쿠키와, 이용자 편의를 위한 기능성 쿠키(통화·언어·최근 검색)를 사용합니다.
-          제휴 링크 클릭 추적에는 개인 식별이 아닌 클릭 ID와 서브 ID만을 기록합니다. 상세 내용은 쿠키 정책을 따릅니다.
-        </p>
-      </section>
-
-      <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">7. 이용자의 권리와 행사 방법</h2>
-        <p>
-          이용자는 언제든지 자신의 개인정보에 대한 열람·정정·삭제·처리정지를 요청할 수 있습니다.
-          마이페이지 또는 고객센터 이메일({{ BRAND.supportEmail }})로 요청하시면 본인 확인 후 지체 없이 조치합니다.
-        </p>
-      </section>
-
-      <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">8. 기술적·관리적 보호 조치</h2>
-        <p>
-          회사는 운영 환경에서 전송 구간 암호화(HTTPS/TLS)를 적용하고, 비밀번호 단방향 해시(PBKDF2), 여권번호 AES-256-GCM 암호화로 개인정보를 보호하며,
-          데이터베이스 접근 권한 통제와 접근 기록 관리를 시행하고 있습니다.
-        </p>
-      </section>
-
-      <section class="space-y-2">
-        <h2 class="text-sm font-black text-slate-900 dark:text-slate-100">9. 개인정보 보호책임자</h2>
-        <p>
-          개인정보 보호책임자: {{ co.orPending(co.cpoName) }} ({{ co.orPending(co.cpoDept) }}) ·
-          연락처: {{ co.orPending(co.cpoPhone) }} · {{ co.orPending(co.cpoEmail) }}.
-          그 밖에 개인정보 침해 신고는 개인정보보호위원회(privacy.go.kr)·한국인터넷진흥원(118)으로 하실 수 있습니다.
+          {{ $t('legal.privacy.s9Body', { name: co.orPending(co.cpoName), dept: co.orPending(co.cpoDept), phone: co.orPending(co.cpoPhone), email: co.orPending(co.cpoEmail) }) }}
         </p>
       </section>
     </div>

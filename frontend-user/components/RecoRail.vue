@@ -15,7 +15,7 @@ interface Card { itemId: string; domain: string; title: string; priceKrw: number
 type Slot = 'together' | 'popular' | 'recent'
 
 const { t, locale } = useI18n()
-const tag = computed(() => ({ ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN' })[locale.value] || 'ko-KR')
+const tag = computed(() => ({ ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', zh: 'zh-CN', 'zh-hant': 'zh-Hant' } as Record<string, string>)[locale.value] || 'ko-KR')
 
 function slotTitle(slot: Slot): string {
   return slot === 'together' ? t('reco.together') : slot === 'popular' ? t('reco.popular') : t('reco.recent')
