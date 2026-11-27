@@ -46,6 +46,10 @@ const EXTENSIONS = new Set([
   '.vue',
   '.ts',
   '.js',
+  '.mjs',
+  '.sh',
+  '.yml',
+  '.yaml',
   '.html',
   '.json',
   '.jsonc',
@@ -54,8 +58,7 @@ const EXTENSIONS = new Set([
   '.go',
   '.css',
   '.md',
-  '.csv',
-  '.env.example'
+  '.csv'
 ])
 
 let violations = []
@@ -72,7 +75,7 @@ function walk(dir) {
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name).toLowerCase()
       if (IGNORED_FILES.has(entry.name)) continue
-      if (!EXTENSIONS.has(ext)) continue
+      if (!EXTENSIONS.has(ext) && !entry.name.endsWith('.env.example')) continue
 
       scannedCount++
       checkFile(fullPath)

@@ -24,10 +24,20 @@ interface MarketplaceSettlement {
   gross_amount_minor: number
   commission_amount_minor: number
   seller_payout_minor: number
+  recovery_deducted_minor?: number
   fulfillment_status: string
   settlement_status: string
   created_at: string
 }
+
+const SETTLEMENT_STATUS: Record<string, { label: string; cls: string }> = {
+  SETTLED: { label: '지급 완료', cls: 'bg-success-soft text-success' },
+  PENDING: { label: '정산 대기', cls: 'bg-warning-soft text-warning' },
+  HELD: { label: '지급 보류', cls: 'bg-surface-sunken text-ink-muted' },
+  REFUNDED: { label: '환불됨', cls: 'bg-danger-soft text-danger' },
+}
+const netPayoutOf = (s: MarketplaceSettlement) =>
+  Math.max(0, Number(s.seller_payout_minor || 0) - Number(s.recovery_deducted_minor || 0))
 
 const activeTab = ref<'realtime' | 'batches'>('realtime')
 const batches = ref<SettlementBatch[]>([])
@@ -52,10 +62,12 @@ const fetchSettlements = async () => {
 
     // 1. Fetch live marketplace order settlements
     const mktRes = await fetch(apiUrl('/partner/marketplace/settlements'), { credentials: 'include', headers })
-    if (mktRes.ok) {
-      const data = await mktRes.json()
-      orderSettlements.value = data.settlements || []
+    if (!mktRes.ok) {
+      const mktErr = await mktRes.json().catch(() => ({}))
+      throw new Error(mktErr.error || '실시간 정산 원장을 불러오지 못했습니다.')
     }
+    const data = await mktRes.json()
+    orderSettlements.value = data.settlements || []
 
     // 2. Fetch periodic settlement batches
     const batchRes = await fetch(apiUrl('/partner/settlements'), { credentials: 'include', headers })
@@ -90,8 +102,8 @@ function csvCell(v: unknown): string {
 const handleDownload = () => {
   const rows: unknown[][] = activeTab.value === 'realtime'
     ? [
-        ['정산ID', '일시', '예약번호', '도메인', '고객결제액', '수수료', '입금액', '이행상태', '정산상태'],
-        ...orderSettlements.value.map(s => [s.id, s.created_at, s.booking_id, s.domain_type, s.gross_amount_minor, s.commission_amount_minor, s.seller_payout_minor, s.fulfillment_status, s.settlement_status])
+        ['정산ID', '일시', '예약번호', '도메인', '고객결제액', '수수료', '환수차감', '실입금액', '이행상태', '정산상태'],
+        ...orderSettlements.value.map(s => [s.id, s.created_at, s.booking_id, s.domain_type, s.gross_amount_minor, s.commission_amount_minor, Number(s.recovery_deducted_minor || 0), netPayoutOf(s), s.fulfillment_status, s.settlement_status])
       ]
     : [
         ['정산주기', '총공급액', '수수료', '실지급액', '상태', '지급일시'],
@@ -261,7 +273,12 @@ onMounted(() => {
               </td>
               <td class="font-bold tabular">{{ Number(s.gross_amount_minor || 0).toLocaleString() }}원</td>
               <td class="font-bold tabular text-danger">-{{ Number(s.commission_amount_minor || 0).toLocaleString() }}원</td>
-              <td class="font-black tabular text-primary">{{ Number(s.seller_payout_minor || 0).toLocaleString() }}원</td>
+              <td class="font-black tabular text-primary">
+                {{ netPayoutOf(s).toLocaleString() }}원
+                <div v-if="Number(s.recovery_deducted_minor) > 0" class="text-[10px] font-semibold text-danger">
+                  (환수 차감 -{{ Number(s.recovery_deducted_minor).toLocaleString() }}원)
+                </div>
+              </td>
               <td>
                 <span :class="[
                   'rounded-full px-2 py-0.5 text-[10px] font-bold',
@@ -271,12 +288,8 @@ onMounted(() => {
                 </span>
               </td>
               <td class="!text-right">
-                <span :class="[
-                  'rounded-full px-2 py-0.5 text-[10px] font-bold',
-                  s.settlement_status === 'SETTLED' ? 'bg-success-soft text-success' :
-                  s.settlement_status === 'PENDING' ? 'bg-warning-soft text-warning' : 'bg-surface-sunken text-ink-muted'
-                ]">
-                  {{ s.settlement_status === 'SETTLED' ? '지급 완료' : '정산 대기' }}
+                <span :class="['rounded-full px-2 py-0.5 text-[10px] font-bold', (SETTLEMENT_STATUS[s.settlement_status] || { cls: 'bg-surface-sunken text-ink-muted' }).cls]">
+                  {{ (SETTLEMENT_STATUS[s.settlement_status] || { label: s.settlement_status }).label }}
                 </span>
               </td>
             </tr>

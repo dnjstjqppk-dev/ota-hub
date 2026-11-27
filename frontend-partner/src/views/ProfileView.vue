@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { apiUrl, partnerToken } from '../config/api'
+import { apiUrl, partnerInfo, partnerToken, savePartnerInfo } from '../config/api'
 
 const route = useRoute()
 const partner = ref<any>(null)
+const isOwner = computed(() => String(partnerInfo()?.staffRole || 'OWNER').toUpperCase() === 'OWNER')
 // C1: PENDING owners land here from login (?onboarding=1) and complete the
 // company profile + verification docs before the admin can approve them.
 const onboardingPending = computed(() => {
   const st = String(partner.value?.profile?.status || '').toUpperCase()
-  return route.query.onboarding === '1' || st === 'PENDING_APPROVAL' || st === 'PENDING'
+  if (st) return st === 'PENDING_APPROVAL' || st === 'PENDING'
+  return route.query.onboarding === '1'
 })
 const contactPhone = ref('')
 const bankName = ref('')
@@ -47,7 +49,13 @@ const uploadFile = async (purpose: 'BUSINESS_CERT' | 'BANK_CERT', ev: Event) => 
     const json = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(json.error || '업로드에 실패했습니다.')
     uploadState.value = { ...uploadState.value, [purpose]: '등록 완료' }
-    await fetchProfile()
+    // Patch only the uploaded cert URL so unsaved form inputs are preserved.
+    if (partner.value) {
+      const prof = { ...(partner.value.profile || {}) }
+      if (purpose === 'BUSINESS_CERT') prof.business_cert_url = json.url || json.id || 'uploaded'
+      if (purpose === 'BANK_CERT') prof.bank_cert_url = json.url || json.id || 'uploaded'
+      partner.value = { ...partner.value, profile: prof }
+    }
   } catch (e: any) {
     uploadState.value = { ...uploadState.value, [purpose]: '' }
     saveError.value = e.message || '업로드에 실패했습니다.'
@@ -68,6 +76,15 @@ const fetchProfile = async () => {
     if (!res.ok) throw new Error('회사 정보를 불러오지 못했습니다.')
     const json = await res.json()
     partner.value = json.partner
+    // Sync updated profile status back into cached partner info so newly approved
+    // partners immediately leave the onboarding router guard without hard reload.
+    const cached = partnerInfo()
+    if (cached && json.partner?.profile?.status && cached.profileStatus !== json.partner.profile.status) {
+      const persistent = (() => {
+        try { return !!localStorage.getItem('getfortrip_partner_info') || !sessionStorage.getItem('getfortrip_partner_info') } catch { return true }
+      })()
+      savePartnerInfo({ ...cached, profileStatus: json.partner.profile.status }, persistent)
+    }
     contactPhone.value = json.partner.contact_phone || ''
     if (json.partner.profile) {
       bankName.value = json.partner.profile.bank_name || ''
@@ -224,9 +241,10 @@ onMounted(() => {
             <input
               v-model="bankName"
               type="text"
-              required
+              :required="isOwner"
+              :disabled="!isOwner"
               placeholder="예: 신한은행"
-              class="input font-bold"
+              class="input font-bold disabled:opacity-60"
             />
           </div>
           <div class="space-y-1 sm:col-span-2">
@@ -234,10 +252,11 @@ onMounted(() => {
             <input
               v-model="bankAccountNumber"
               type="text"
-              required
+              :required="isOwner"
+              :disabled="!isOwner"
               inputmode="numeric"
               placeholder="숫자만 입력"
-              class="input font-mono font-medium"
+              class="input font-mono font-medium disabled:opacity-60"
             />
           </div>
           <div class="space-y-1">
@@ -245,9 +264,10 @@ onMounted(() => {
             <input
               v-model="bankAccountHolder"
               type="text"
-              required
+              :required="isOwner"
+              :disabled="!isOwner"
               placeholder="상호명 또는 대표자"
-              class="input font-medium"
+              class="input font-medium disabled:opacity-60"
             />
           </div>
           <div class="space-y-1 sm:col-span-2">

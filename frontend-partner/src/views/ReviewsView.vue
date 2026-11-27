@@ -42,7 +42,10 @@ async function load() {
   stats.value = r.data.stats
   totalPages.value = r.data.totalPages || 1
 }
-watch(filter, () => { page.value = 1; load() })
+watch(filter, () => {
+  if (page.value !== 1) page.value = 1
+  else load()
+})
 watch(page, load)
 
 function edit(r: any) {
@@ -51,10 +54,11 @@ function edit(r: any) {
   rowError.value = ''
 }
 async function save(r: any) {
+  if (saving.value) return
   const text = draft.value.trim()
   if (!text) { rowError.value = '답글 내용을 입력해주세요.'; return }
   saving.value = true
-  const res = await pfetch(`/partner/reviews/${r.id}/reply`, { method: 'PUT', body: { reply: text } })
+  const res = await pfetch(`/partner/reviews/${encodeURIComponent(r.id)}/reply`, { method: 'PUT', body: { reply: text } })
   saving.value = false
   if (!res.ok) { rowError.value = res.data.error || '답글을 저장하지 못했습니다.'; return }
   editing.value = null
@@ -62,9 +66,12 @@ async function save(r: any) {
   await load()
 }
 async function remove(r: any) {
-  if (!confirm('답글을 삭제할까요?')) return
-  const res = await pfetch(`/partner/reviews/${r.id}/reply`, { method: 'DELETE' })
-  if (!res.ok) { notice.value = res.data.error || '삭제하지 못했습니다.'; return }
+  if (saving.value || !confirm('답글을 삭제할까요?')) return
+  saving.value = true
+  error.value = ''
+  const res = await pfetch(`/partner/reviews/${encodeURIComponent(r.id)}/reply`, { method: 'DELETE' })
+  saving.value = false
+  if (!res.ok) { error.value = res.data.error || '삭제하지 못했습니다.'; return }
   notice.value = '답글을 삭제했어요.'
   await load()
 }

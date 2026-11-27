@@ -40,7 +40,15 @@ export async function adminFetch(path: string, options: RequestInit = {}): Promi
     headers
   })
   if (res.status === 401 || res.status === 403) {
-    if (typeof window !== 'undefined' && !window.location.pathname.endsWith('/login')) {
+    let shouldLogout = res.status === 401
+    if (res.status === 403) {
+      // Domain / step-up 403s (e.g. mistyped MFA TOTP code) must return to the caller
+      // instead of nuking the admin session mid-enrollment.
+      const body = await res.clone().json().catch(() => null)
+      const code = String(body?.code || '')
+      shouldLogout = code === 'FORBIDDEN' || code === 'UNAUTHORIZED' || code === ''
+    }
+    if (shouldLogout && typeof window !== 'undefined' && !window.location.pathname.endsWith('/login')) {
       clearAdminMemoryToken()
       localStorage.removeItem('getfortrip_admin_token')
       localStorage.removeItem('getfortrip_admin_user')

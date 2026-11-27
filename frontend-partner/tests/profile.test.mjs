@@ -27,6 +27,7 @@ function setup() {
     computed, ref, onMounted: () => {},
     useRoute: () => ({ query: {} }),
     apiUrl: (p) => `https://test.local${p}`, partnerToken: () => 't',
+    partnerInfo: () => ({ staffRole: 'OWNER' }), savePartnerInfo: () => {},
     fetch: async (url, opts = {}) => {
       calls.push({ url: String(url), method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : null })
       return { ok: true, json: async () => profile }

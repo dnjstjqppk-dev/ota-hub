@@ -101,27 +101,45 @@ async function main() {
     await get(`${HUB}/api/v1/suppliers/registry`, { allow: [404] });
   });
 
-  // M2: real-domain checks (read-only GET, no redirect following).
+  // M2 + Subdomain routing (2026-11-27): real-domain checks (read-only GET, no redirect following).
   if (!SITE) {
-    skip('site domain checks (apex, www 301, admin, partner, health, sitemap) (SITE_URL empty)');
+    skip('site domain checks (apex 302, country subdomains, legacy 301, admin, partner, health, sitemap) (SITE_URL empty)');
   } else {
     const siteHost = SITE.replace(/^https?:\/\//, '');
     console.log(`Smoke-probing site ${SITE}`);
-    await check('apex root serves HTTP 200 HTML', async () => {
-      const res = await get(SITE, { redirect: 'manual' });
-      const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('text/html')) throw new Error(`apex root content-type is ${ct}, want text/html`);
-    });
-    await check('www keeps path+query and 301s to apex', async () => {
-      const res = await get(`https://www.${siteHost}/hotels?probe=1`, { allow: [301], redirect: 'manual' });
+    await check('apex root 302s to a country subdomain with locale+curr', async () => {
+      const res = await get(SITE, { allow: [302], redirect: 'manual' });
       const loc = res.headers.get('location') || '';
-      if (loc !== `${SITE}/hotels?probe=1`) throw new Error(`Location is ${loc}, want ${SITE}/hotels?probe=1`);
+      if (!/^https:\/\/(kr|jp|uk|hk|tw|www)\./.test(loc) || !loc.includes('locale=') || !loc.includes('curr=')) {
+        throw new Error(`Location is ${loc}, want country subdomain with locale & curr`);
+      }
+    });
+    for (const [label, url] of [
+      ['www global root (?locale=en-us&curr=USD)', `https://www.${siteHost}/?locale=en-us&curr=USD`],
+      ['kr subdomain root', `https://kr.${siteHost}/`],
+      ['jp subdomain root', `https://jp.${siteHost}/`],
+    ]) {
+      await check(`${label} serves HTTP 200 HTML`, async () => {
+        const res = await get(url, { redirect: 'manual' });
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('text/html')) throw new Error(`${url} content-type is ${ct}, want text/html`);
+      });
+    }
+    await check('legacy /en/hotels 301s to www subdomain with locale+curr', async () => {
+      const res = await get(`https://kr.${siteHost}/en/hotels?probe=1`, { allow: [301], redirect: 'manual' });
+      const loc = res.headers.get('location') || '';
+      if (loc !== `https://www.${siteHost}/hotels?probe=1&locale=en-us&curr=USD`) {
+        throw new Error(`Location is ${loc}, want https://www.${siteHost}/hotels?probe=1&locale=en-us&curr=USD`);
+      }
     });
     for (const [label, url] of [['admin', `https://admin.${siteHost}`], ['partner', `https://partner.${siteHost}`]]) {
       await check(`${label} domain root serves HTTP 200`, async () => { await get(url, { redirect: 'manual' }); });
     }
     await check('apex /api/v1/health serves HTTP 200 (hub zone route)', async () => {
       await get(`${SITE}/api/v1/health`, { redirect: 'manual' });
+    });
+    await check('kr /api/v1/health serves HTTP 200 (hub subdomain route)', async () => {
+      await get(`https://kr.${siteHost}/api/v1/health`, { redirect: 'manual' });
     });
     await check('apex /sitemap.xml renders the catalog index (hub zone route)', async () => {
       const xml = await (await get(`${SITE}/sitemap.xml`, { redirect: 'manual' })).text();

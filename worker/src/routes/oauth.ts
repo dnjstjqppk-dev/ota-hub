@@ -176,9 +176,9 @@ async function exchangeCode(env: Env, url: URL, p: ProviderId, code: string, sta
   return prof;
 }
 
-async function sessionFor(env: Env, user: any) {
+async function sessionFor(env: Env, user: any, request?: Request) {
   const token = await signJwt({ id: user.id, email: user.email, fullName: user.full_name, role: user.role || "USER", tier: user.tier }, jwtSecret(env));
-  return { token, cookie: authCookie(token, env) };
+  return { token, cookie: authCookie(token, env, "getfortrip_jwt", 604800, request) };
 }
 
 /** Verify a handoff/sign-up ticket and burn it (single use). */
@@ -271,7 +271,7 @@ export async function handleOAuth(request: Request, env: Env, url: URL): Promise
     const t = await consumeTicket(env, (await readJson(request)).handoff, "login");
     const u = await db.prepare("SELECT * FROM users WHERE id = ?").bind(String(t.uid)).first<any>();
     if (!u || (u.status || "ACTIVE") !== "ACTIVE" || u.role !== "USER") throw new HttpError(403, "ACCOUNT_SUSPENDED", "이용할 수 없는 계정입니다.");
-    const s = await sessionFor(env, u);
+    const s = await sessionFor(env, u, request);
     return json({ success: true, token: s.token, user: publicUser(u) }, 200, { "Set-Cookie": s.cookie });
   }
 
@@ -309,7 +309,7 @@ export async function handleOAuth(request: Request, env: Env, url: URL): Promise
       ], clientIp(request), request.headers.get("User-Agent")),
     ]);
     const u = { id, email, full_name: fullName, role: "USER", tier: "SILVER", trip_coins: 0 };
-    const s = await sessionFor(env, u);
+    const s = await sessionFor(env, u, request);
     return json({ success: true, token: s.token, user: publicUser(u) }, 201, { "Set-Cookie": s.cookie });
   }
 

@@ -40,7 +40,11 @@ export function splitSql(text) {
   let quote = null; // ', ", `, or [..]
   let lineComment = false;
   let blockComment = false;
-  let depth = 0; // BEGIN..END nesting (triggers)
+  let depth = 0; // trigger BEGIN..END + nested CASE..END depth
+  const beginRe = /BEGIN\b/iy;
+  const caseRe = /CASE\b/iy;
+  const endRe = /END\b/iy;
+  const triggerRe = /\bCREATE\s+(?:TEMP(?:ORARY)?\s+)?TRIGGER\b/i;
   while (i < text.length) {
     const c = text[i];
     const next2 = text.slice(i, i + 2);
@@ -101,12 +105,22 @@ export function splitSql(text) {
       i += 1;
       continue;
     }
-    // BEGIN/END depth (word boundaries, case-insensitive).
-    const rest = text.slice(i);
-    const beginMatch = rest.match(/^(BEGIN)\b/i);
-    const endMatch = rest.match(/^(END)\b/i);
-    if (beginMatch) depth += 1;
-    if (endMatch) depth = Math.max(0, depth - 1);
+    // O(1) sticky keyword matching with leading word-boundary check.
+    // Only track BEGIN..END inside CREATE TRIGGER (not standalone BEGIN TRANSACTION)
+    // plus CASE..END inside triggers so trigger bodies never split prematurely.
+    const prev = i > 0 ? text[i - 1] : "";
+    if (!/[\w$]/.test(prev)) {
+      beginRe.lastIndex = i;
+      caseRe.lastIndex = i;
+      endRe.lastIndex = i;
+      if (beginRe.test(text) && triggerRe.test(buf)) {
+        depth += 1;
+      } else if (depth > 0 && caseRe.test(text)) {
+        depth += 1;
+      } else if (depth > 0 && endRe.test(text)) {
+        depth = Math.max(0, depth - 1);
+      }
+    }
     if (c === ";" && depth === 0) {
       const stmt = buf.trim();
       if (stmt.replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, "").trim()) out.push(stmt);

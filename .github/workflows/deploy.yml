@@ -211,6 +211,10 @@ jobs:
           # Code-only: triggers (routes/crons/custom domains) are synced by a
           # local full deploy when a wrangler config changes them.
           DEPLOY_CODE_ONLY: '1'
+          # Custom-domain probes from GitHub runner datacenter IPs hit Cloudflare
+          # zone Bot Fight Mode (403); CI still verifies all workers.dev endpoints,
+          # while local full deploys verify every custom domain with HTTP 200/301/302.
+          SITE_URL: ''
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           # Baked into the 3 portal builds at build time. Empty = reporters stay disabled.

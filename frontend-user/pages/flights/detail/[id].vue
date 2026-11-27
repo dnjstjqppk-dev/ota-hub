@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
-import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 // Resolved once in setup: head getters run at render time, outside the Nuxt context.
 const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
@@ -31,6 +31,7 @@ const facts = computed(() => {
 })
 
 // S4: markdown fact sheet alternate for LLMs (hub serves it; same-origin on apex).
+const localeCtx = useActiveLocaleContext()
 useHead(() => ({ link: [{ rel: 'alternate', type: 'text/markdown', href: `/api/v1/seo/md/FLIGHT/${String(route.params.id || '')}` }] }))
 useHead(() => {
   const x = f.value
@@ -38,8 +39,8 @@ useHead(() => {
   const offer = liveOk.value ? offerLd(seoSite, `/flights/detail/${id}`, x.base_price_krw, x.bookable, x.outlink_path) : null
   const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
-    meta: [...ogMeta(seoSite, `/flights/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
-    link: [{ rel: 'canonical', href: `${seoSite}/flights/detail/${id}` }, ...hreflangLinks(seoSite, `/flights/detail/${id}`)],
+    meta: [...ogMeta(seoSite, `/flights/detail/${id}`, x.thumbnail_url || x.image_url || null, localeCtx.value.locale, localeCtx.value.sub)],
+    link: [{ rel: 'canonical', href: canonicalHref(`/flights/detail/${id}`, { sub: localeCtx.value.sub, locale: localeCtx.value.locale }) }, ...hreflangLinks(seoSite, `/flights/detail/${id}`)],
     title: `${x.airline_name} ${x.flight_number} ${x.departure_airport}→${x.arrival_airport}`,
     script: [jsonLdScript(breadcrumbLd(seoSite, [{ name: t('common.home'), path: '/' }, { name: t('nav.flights'), path: '/flights' }, { name: x.flight_number, path: `/flights/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',

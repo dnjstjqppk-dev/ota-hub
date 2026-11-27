@@ -29,15 +29,22 @@ const STATUS: Record<string, { label: string; tone: any }> = {
 }
 const s = computed(() => summary.data.value)
 
-const paying = ref('')
+const payingIds = ref<Set<string>>(new Set())
+const isPaying = (id: string) => payingIds.value.has(id)
 async function payout(r: any) {
-  if (!confirm(`${r.seller_name}에게 ${krw(r.seller_payout_minor)} 지급 완료로 처리할까요? 실제 송금은 별도로 해야 해요.`)) return
-  paying.value = r.id
+  if (isPaying(r.id) || Number(r.seller_payout_minor) <= 0) return
+  if (!confirm(`${r.seller_name}에게 ${krw(r.seller_payout_minor)} 지급 완료로 처리할까요? 미환수금이 있으면 자동 차감되며, 실제 송금은 순 지급액 기준으로 별도 진행해야 해요.`)) return
+  payingIds.value = new Set([...payingIds.value, r.id])
   try {
-    await api(`/admin/marketplace/settlements/${r.id}/settle`, { method: 'PATCH' })
-    toast('지급 완료로 처리했어요.')
+    const res = await api(`/admin/marketplace/settlements/${encodeURIComponent(r.id)}/settle`, { method: 'PATCH' })
+    const msg = res?.message || (res?.payout?.netMinor !== undefined ? `지급 완료 처리됨 (순 지급액 ${krw(res.payout.netMinor)})` : '지급 완료로 처리했어요.')
+    toast(msg, res?.payout?.recoveryDeductedMinor ? 'info' : 'success', 6000)
     rows.reload(); summary.reload()
-  } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { paying.value = '' }
+  } catch (e) { toast((e as Error).message, 'danger', 6000) } finally {
+    const next = new Set(payingIds.value)
+    next.delete(r.id)
+    payingIds.value = next
+  }
 }
 
 const logQuery = ref('')
@@ -81,7 +88,7 @@ function details(d: string | null) {
       <StatePanel :state="rows.state.value" :error="rows.error.value" :empty="!rows.data.value.length" empty-text="정산 내역이 없어요." @retry="rows.reload()">
         <div class="table-wrap">
           <table class="table">
-            <thead><tr><th>판매자</th><th>모델</th><th>상품군</th><th class="text-right">거래액</th><th class="text-right">수수료</th><th class="text-right">지급액</th><th>상태</th><th>생성</th><th class="w-px"></th></tr></thead>
+            <thead><tr><th>판매자</th><th>모델</th><th>상품군</th><th class="text-right">거래액</th><th class="text-right">수수료</th><th class="text-right">환수 차감</th><th class="text-right">순 지급액</th><th>상태</th><th>생성</th><th class="w-px"></th></tr></thead>
             <tbody>
               <tr v-for="r in rows.data.value" :key="r.id">
                 <td><p class="font-medium">{{ r.seller_name }}</p><p class="font-mono text-2xs text-ink-subtle">{{ r.booking_id }}</p></td>
@@ -89,10 +96,11 @@ function details(d: string | null) {
                 <td class="text-xs">{{ domainLabel(r.domain_type) }}</td>
                 <td class="text-right tabular">{{ krw(r.gross_amount_minor) }}</td>
                 <td class="text-right tabular">{{ krw(r.commission_amount_minor) }}</td>
-                <td class="text-right font-semibold tabular">{{ krw(r.seller_payout_minor) }}</td>
+                <td class="text-right tabular text-danger">{{ Number(r.recovery_deducted_minor) > 0 ? `-${krw(r.recovery_deducted_minor)}` : '—' }}</td>
+                <td class="text-right font-semibold tabular">{{ krw(Math.max(0, Number(r.seller_payout_minor || 0) - Number(r.recovery_deducted_minor || 0))) }}</td>
                 <td><StatusBadge v-bind="STATUS[r.settlement_status] || { label: r.settlement_status }" /></td>
                 <td class="whitespace-nowrap text-xs text-ink-muted tabular">{{ dateTime(r.created_at) }}</td>
-                <td><button v-if="r.settlement_status === 'PENDING' || r.settlement_status === 'HELD'" type="button" class="btn-secondary btn-sm" :disabled="paying === r.id" @click="payout(r)">지급 완료 처리</button></td>
+                <td><button v-if="(r.settlement_status === 'PENDING' || r.settlement_status === 'HELD') && Number(r.seller_payout_minor) > 0" type="button" class="btn-secondary btn-sm" :disabled="isPaying(r.id)" @click="payout(r)">지급 완료 처리</button></td>
               </tr>
             </tbody>
           </table>

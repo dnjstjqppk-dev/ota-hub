@@ -87,11 +87,11 @@ function roleBadge(role: string) {
 
 const rowBusy = ref('')
 
-async function patchStaff(s: StaffRow, patch: { role?: string; isActive?: boolean }) {
+async function patchStaff(s: StaffRow, patch: { role?: string; isActive?: boolean }, selectEl?: HTMLSelectElement) {
   rowBusy.value = s.id
   error.value = ''
   try {
-    const res = await fetch(apiUrl(`/partner/staff/${s.id}`), {
+    const res = await fetch(apiUrl(`/partner/staff/${encodeURIComponent(s.id)}`), {
       credentials: 'include',
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken()}` },
@@ -101,6 +101,7 @@ async function patchStaff(s: StaffRow, patch: { role?: string; isActive?: boolea
     if (!res.ok) throw new Error((j as any).error || '수정에 실패했습니다.')
     await fetchStaff()
   } catch (e: any) {
+    if (selectEl) selectEl.value = s.role
     error.value = e.message || '수정에 실패했습니다.'
   } finally {
     rowBusy.value = ''
@@ -184,7 +185,7 @@ onMounted(() => {
                   :disabled="rowBusy === s.id"
                   :aria-label="`${s.full_name} 역할`"
                   class="input !min-h-[32px] !w-auto !py-1 !text-[11px] font-bold"
-                  @change="patchStaff(s, { role: ($event.target as HTMLSelectElement).value })"
+                  @change="patchStaff(s, { role: ($event.target as HTMLSelectElement).value }, $event.target as HTMLSelectElement)"
                 >
                   <option value="MANAGER">MANAGER</option>
                   <option value="STAFF">STAFF</option>
@@ -270,14 +271,15 @@ onMounted(() => {
             </select>
           </div>
           <div class="space-y-1">
-            <label class="label">초기 임시 비밀번호 (8자 이상)</label>
+            <label class="label">초기 임시 비밀번호 (영문·숫자 포함 10자 이상)</label>
             <input
               v-model="newPassword"
               type="text"
               required
-              minlength="8"
+              minlength="10"
+              maxlength="128"
               autocomplete="new-password"
-              placeholder="직원에게 전달할 임시 비밀번호"
+              placeholder="영문·숫자 포함 10자 이상"
               class="input font-mono"
             />
           </div>

@@ -5,7 +5,7 @@
 </script>
 
 <template>
-  <div class="flex min-h-full flex-col px-6 py-12">
+  <div class="flex min-h-full flex-col bg-midnight-900 px-6 py-12">
     <div class="text-center">
       <h1 class="text-2xl font-black tracking-tight text-white">파트너 공급 규정 및 정산 정책</h1>
       <p class="mt-2 text-sm font-medium text-sapphire-300">v1.0 · 시행 2026-11-11 · 법무 검토 전 초안</p>

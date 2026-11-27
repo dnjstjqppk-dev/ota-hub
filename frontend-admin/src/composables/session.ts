@@ -16,16 +16,21 @@ export function saveSession(token: string, user: AdminUser) {
   session.user = user
   settled = true
 }
-export function clearSession() {
+function clearLocalSession() {
   clearAdminMemoryToken()
   try {
     localStorage.removeItem('getfortrip_admin_token')
     localStorage.removeItem(USER_KEY)
   } catch {}
   session.user = null
-  // Best-effort server logout: revokes the JWT and clears the admin jar.
+}
+export function clearSession() {
+  const token = adminMemoryToken()
+  clearLocalSession()
+  // Best-effort server logout: pass Bearer token so cross-site staging also revokes the JTI.
   try {
-    fetch(apiUrl('/admin/logout'), { method: 'POST', credentials: 'include' }).catch(() => {})
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+    fetch(apiUrl('/admin/logout'), { method: 'POST', credentials: 'include', headers }).catch(() => {})
   } catch {}
 }
 
@@ -47,7 +52,9 @@ export async function restoreSession(): Promise<boolean> {
       return true
     }
   } catch {}
-  clearSession()
+  // Clear local client state only — never call /admin/logout here or unauthenticated
+  // visits to /login would wipe coexisting user/partner cookies in this browser.
+  clearLocalSession()
   return false
 }
 

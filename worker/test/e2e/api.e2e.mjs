@@ -2132,10 +2132,17 @@ test("p0 money: platform-failure refunds restore coins; fee-cancel voids settlem
   await api("POST", "/api/v1/admin/maintenance/run", { token: ADMIN });
   assert.equal((await api("GET", `/api/v1/bookings/${b3.id}`, { token: F.token })).data.booking.status, "FAILED");
   assert.equal(await coins(), 50000, "coins restored on reconciled FAILED");
-  // 4. Operator REJECT on an uncaptured booking under review restores coins + releases holds (P0 #2).
+  // 4. Operator REJECT on an unresolved (UNKNOWN) payment is refused with 409 PAYMENT_UNRESOLVED
+  // (90b76ac: prevents stranding captured money in FAILED); after payment fails/resolves,
+  // operator REJECT on an uncaptured booking restores coins + releases holds (P0 #2).
   const q4 = (await quote(F.token, { coinAmount: 2000 })).data.quote;
   const b4 = (await book(F.token, q4)).data.booking;
   assert.equal((await pay(F.token, b4, "lost")).data.booking.status, "MANUAL_REVIEW_REQUIRED");
+  const rjBlocked = await api("POST", `/api/v1/admin/bookings/${b4.id}/supplier-decision`, { token: ADMIN, body: { decision: "REJECT", note: "e2e" } });
+  assert.equal(rjBlocked.status, 409, JSON.stringify(rjBlocked.data));
+  assert.equal(rjBlocked.data.code, "PAYMENT_UNRESOLVED");
+  // Once the payment row is resolved as FAILED (not UNKNOWN/PROCESSING), operator REJECT succeeds and restores coins.
+  sql(`UPDATE payments SET status = 'FAILED' WHERE booking_id = '${b4.id}'`);
   const rj = await api("POST", `/api/v1/admin/bookings/${b4.id}/supplier-decision`, { token: ADMIN, body: { decision: "REJECT", note: "e2e" } });
   assert.equal(rj.status, 200, JSON.stringify(rj.data));
   assert.equal(rj.data.booking.status, "FAILED");
@@ -2308,7 +2315,9 @@ test("B1: PG-confirmed external cancel syncs booking, refund, holds, coins, payo
   assert.equal(sql(`SELECT trip_coins AS v FROM users WHERE id = '${W.id}'`)[0].v, 5000, "coins restored");
   assert.equal(sql(`SELECT COUNT(*) AS v FROM inventory_holds WHERE booking_id = '${b.id}' AND status != 'RELEASED'`)[0].v, 0);
   const w2 = await api("POST", "/api/v1/webhooks/toss", { body: hook });
-  assert.equal(w2.data.duplicate, true);
+  // 90b76ac: cancel hints always re-query the PG instead of short-circuiting on duplicate;
+  // cumulative cancel reconciliation is idempotent so no second refund is recorded.
+  assert.equal(w2.status, 200, JSON.stringify(w2.data));
   assert.equal(sql(`SELECT COUNT(*) AS v FROM refunds WHERE booking_id = '${b.id}'`)[0].v, 1, "no double record");
 });
 
@@ -3293,7 +3302,9 @@ test("#100: admin TOTP gates login; admin tokens live 12h", async () => {
   const en = await api("POST", "/api/v1/admin/mfa/enroll", { token: ADMIN });
   assert.equal(en.status, 200, JSON.stringify(en.data));
   assert.ok(en.data.otpauthUrl.includes("otpauth://totp/"));
-  assert.equal((await api("GET", "/api/v1/admin/mfa/status", { token: ADMIN })).data.confirmed, false);
+  const stPending = (await api("GET", "/api/v1/admin/mfa/status", { token: ADMIN })).data;
+  assert.equal(stPending.enrolled, false);
+  assert.equal(stPending.pending, true);
   // Unconfirmed: login still works.
   assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD } })).status, 200);
   assert.equal((await api("POST", "/api/v1/admin/mfa/confirm", { token: ADMIN, body: { code: "000000" } })).status, 403);
@@ -3308,8 +3319,10 @@ test("#100: admin TOTP gates login; admin tokens live 12h", async () => {
     const U = await register("mfa100");
     const up = JSON.parse(Buffer.from(U.token.split(".")[1], "base64url").toString());
     assert.equal(up.exp - up.iat, 7 * 86400, "non-admin TTL unchanged");
+    // 90b76ac: disabling a confirmed factor requires a current TOTP code.
+    assert.equal((await api("DELETE", "/api/v1/admin/mfa", { token: ADMIN })).status, 403);
   } finally {
-    assert.equal((await api("DELETE", "/api/v1/admin/mfa", { token: ADMIN })).status, 200);
+    assert.equal((await api("DELETE", "/api/v1/admin/mfa", { token: ADMIN, body: { code: totpForTest(en.data.secret) } })).status, 200);
   }
   assert.equal((await api("POST", "/api/v1/auth/login", { body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD } })).status, 200);
 });

@@ -16,13 +16,13 @@
 const BASE = (process.argv[2] || process.env.SITE_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
 const PAGES = [
-  { path: '/', alternates: 5 },
-  { path: '/hotels', alternates: 5 },
-  { path: '/hotels/detail/htl_seoul_01', alternates: 5 },
+  { path: '/', alternates: 7 },
+  { path: '/hotels', alternates: 7 },
+  { path: '/hotels/detail/htl_seoul_01', alternates: 7 },
   { path: '/faq', alternates: 2 },
   { path: '/terms', alternates: 2 },
   { path: '/help', alternates: 2 },
-  { path: '/esim', alternates: 5 },
+  { path: '/esim', alternates: 7 },
 ];
 
 const unesc = (s) => s.replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&apos;', "'");
@@ -48,7 +48,13 @@ async function auditPage({ path, alternates }) {
   const ct = res.headers.get('content-type') || '';
   check(ct.includes('text/html'), 'content-type html', ct);
   const html = await res.text();
-  const text = unesc(html);
+  // Strip <script>, <style>, and HTML tags before FAQ parity so JSON-LD never self-matches.
+  const visibleText = unesc(
+    html
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+  );
 
   const title = (html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1];
   check(!!(title && title.trim()), 'title non-empty');
@@ -89,7 +95,7 @@ async function auditPage({ path, alternates }) {
   if (faqs.length) {
     const missing = faqs.filter((q) => {
       const a = q.acceptedAnswer && (typeof q.acceptedAnswer === 'string' ? q.acceptedAnswer : q.acceptedAnswer.text);
-      return !(q.name && text.includes(q.name)) || !(a && text.includes(a));
+      return !(q.name && visibleText.includes(q.name)) || !(a && visibleText.includes(a));
     });
     check(missing.length === 0, `FAQ visible parity (${faqs.length - missing.length}/${faqs.length})`, `${missing.length} pair(s) not in HTML`);
   } else {

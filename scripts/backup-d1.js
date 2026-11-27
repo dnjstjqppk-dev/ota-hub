@@ -34,7 +34,7 @@ const DB = dbIdx >= 0 && args[dbIdx + 1] ? args[dbIdx + 1] : 'ota_production';
 // FTS5 shadow suffixes: recreated by CREATE VIRTUAL TABLE, never dumped.
 const SHADOW_SUFFIXES = ['_data', '_idx', '_content', '_docsize', '_config'];
 const SKIP_PREFIXES = ['sqlite_', '_cf_'];
-const ROWS_PER_PAGE = 500;
+const ROWS_PER_PAGE = 200;
 const ROWS_PER_INSERT = 50;
 
 function run(argv, opts = {}) {
@@ -43,8 +43,13 @@ function run(argv, opts = {}) {
     return '';
   }
   // Invoke the wrangler CLI through node directly: no shell, no .cmd quoting
-  // pitfalls on Windows, identical argv on every platform.
-  return execFileSync(process.execPath, [path.join(__dirname, '..', 'node_modules', 'wrangler', 'bin', 'wrangler.js'), ...argv], { encoding: 'utf8', ...opts });
+  // pitfalls on Windows, identical argv on every platform. Raise maxBuffer so
+  // wide JSON pages (rooms_json, audit logs) never fail with ENOBUFS.
+  return execFileSync(process.execPath, [path.join(__dirname, '..', 'node_modules', 'wrangler', 'bin', 'wrangler.js'), ...argv], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+    ...opts,
+  });
 }
 
 function wrangler(d1args) {
@@ -83,17 +88,17 @@ function isSkipped(name) {
 
 async function main() {
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-  const out = path.join(OUT_DIR, `${DB}-${stamp}.sql`);
   const liveDb = LOCAL ? 'ota_local' : DB;
+  const out = path.join(OUT_DIR, `${liveDb}-${stamp}.sql`);
   if (DRY_RUN) {
-    console.log(`[backup] exporting ${DB} (${LOCAL ? 'local' : 'remote'}) -> ${out}`);
+    console.log(`[backup] exporting ${liveDb} (${LOCAL ? 'local' : 'remote'}) -> ${out}`);
     console.log('   [dry-run] enumerate sqlite_master (tables, views, triggers, indexes)');
     console.log('   [dry-run] dump schema + rows per user table (FTS5 shadow tables skipped)');
     console.log('   [dry-run] verify dumped/live table counts + money-table row spot checks');
     return;
   }
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  console.log(`[backup] exporting ${DB} (${LOCAL ? 'local' : 'remote'}) -> ${out}`);
+  console.log(`[backup] exporting ${liveDb} (${LOCAL ? 'local' : 'remote'}) -> ${out}`);
 
   const master = q(liveDb, "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL");
   const virtuals = new Set(
@@ -118,23 +123,48 @@ async function main() {
 
   // Rows: base tables only (views/virtual/shadow tables hold no dumped rows —
   // FTS triggers above rebuild the index from base inserts on restore).
+  // Use rowid keyset pagination (falling back to OFFSET for WITHOUT ROWID tables)
+  // so live writes during backup cannot duplicate rows across pages.
   let totalRows = 0;
   for (const t of tables) {
     const name = String(t.name);
-    const [{ c }] = q(liveDb, `SELECT COUNT(*) AS c FROM ${quoteIdent(name)}`);
-    if (!c) continue;
-    const cols = q(liveDb, `SELECT name FROM pragma_table_info(${quoteIdent(name)})`).map((r) => String(r.name));
+    const cols = q(liveDb, `SELECT name FROM pragma_table_info(${sqlLiteral(name)})`).map((r) => String(r.name));
     if (!cols.length) continue;
     const head = `INSERT INTO ${quoteIdent(name)} (${cols.map(quoteIdent).join(', ')}) VALUES `;
-    for (let off = 0; off < c; off += ROWS_PER_PAGE) {
-      const rows = q(liveDb, `SELECT * FROM ${quoteIdent(name)} LIMIT ${ROWS_PER_PAGE} OFFSET ${off}`);
-      for (let i = 0; i < rows.length; i += ROWS_PER_INSERT) {
-        const slice = rows.slice(i, i + ROWS_PER_INSERT);
-        chunks.push(head + slice.map((r) => `(${cols.map((col) => sqlLiteral(r[col])).join(', ')})`).join(', ') + ';');
+    let tableRows = 0;
+    const isWithoutRowid = /\bWITHOUT\s+ROWID\b/i.test(String(t.sql || ''));
+    if (!isWithoutRowid) {
+      let lastRowid = -1;
+      for (;;) {
+        const rows = q(
+          liveDb,
+          `SELECT _rowid_ AS __gft_rowid, ${cols.map(quoteIdent).join(', ')} FROM ${quoteIdent(name)} WHERE _rowid_ > ${lastRowid} ORDER BY _rowid_ ASC LIMIT ${ROWS_PER_PAGE}`
+        );
+        if (!rows.length) break;
+        for (let i = 0; i < rows.length; i += ROWS_PER_INSERT) {
+          const slice = rows.slice(i, i + ROWS_PER_INSERT);
+          chunks.push(head + slice.map((r) => `(${cols.map((col) => sqlLiteral(r[col])).join(', ')})`).join(', ') + ';');
+        }
+        tableRows += rows.length;
+        totalRows += rows.length;
+        const nextId = Number(rows[rows.length - 1].__gft_rowid);
+        if (!Number.isFinite(nextId) || nextId <= lastRowid) break;
+        lastRowid = nextId;
+        if (rows.length < ROWS_PER_PAGE) break;
       }
-      totalRows += rows.length;
+    } else {
+      const [{ c }] = q(liveDb, `SELECT COUNT(*) AS c FROM ${quoteIdent(name)}`);
+      for (let off = 0; off < c; off += ROWS_PER_PAGE) {
+        const rows = q(liveDb, `SELECT ${cols.map(quoteIdent).join(', ')} FROM ${quoteIdent(name)} LIMIT ${ROWS_PER_PAGE} OFFSET ${off}`);
+        for (let i = 0; i < rows.length; i += ROWS_PER_INSERT) {
+          const slice = rows.slice(i, i + ROWS_PER_INSERT);
+          chunks.push(head + slice.map((r) => `(${cols.map((col) => sqlLiteral(r[col])).join(', ')})`).join(', ') + ';');
+        }
+        tableRows += rows.length;
+        totalRows += rows.length;
+      }
     }
-    console.log(`[backup] dumped ${name}: ${c} rows`);
+    if (tableRows > 0) console.log(`[backup] dumped ${name}: ${tableRows} rows`);
   }
   chunks.push('PRAGMA foreign_keys=ON;');
   fs.writeFileSync(out, `${chunks.join('\n')}\n`);

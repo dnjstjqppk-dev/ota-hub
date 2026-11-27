@@ -96,11 +96,16 @@ async function revoke(id: string) {
   }
 }
 
-function copyFresh() {
+async function copyFresh() {
   if (!freshKey.value) return
-  navigator.clipboard.writeText(freshKey.value.apiKey)
-  copied.value = true
-  setTimeout(() => (copied.value = false), 2000)
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('클립보드 복사가 지원되지 않는 환경입니다. 직접 선택해 복사해 주세요.')
+    await navigator.clipboard.writeText(freshKey.value.apiKey)
+    copied.value = true
+    setTimeout(() => (copied.value = false), 2000)
+  } catch (e) {
+    error.value = (e as Error).message || '복사에 실패했습니다. 키를 직접 선택해 복사해 주세요.'
+  }
 }
 
 async function saveWebhook() {
@@ -166,11 +171,16 @@ async function rotateSecret() {
   }
 }
 
-function copySecret() {
+async function copySecret() {
   if (!webhookSecret.value) return
-  navigator.clipboard.writeText(webhookSecret.value)
-  copiedSecret.value = true
-  setTimeout(() => (copiedSecret.value = false), 2000)
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('클립보드 복사가 지원되지 않는 환경입니다. 직접 선택해 복사해 주세요.')
+    await navigator.clipboard.writeText(webhookSecret.value)
+    copiedSecret.value = true
+    setTimeout(() => (copiedSecret.value = false), 2000)
+  } catch (e) {
+    webhookMsg.value = (e as Error).message || '복사에 실패했습니다.'
+  }
 }
 
 const openapiUrl = `${API_BASE}/partner/openapi.json`

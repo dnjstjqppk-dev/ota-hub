@@ -13,8 +13,8 @@ const errorMessage = ref('')
 
 async function handleReset() {
   errorMessage.value = ''
-  if (password.value.length < 8) {
-    errorMessage.value = '비밀번호는 8자 이상이어야 합니다.'
+  if (password.value.length < 10 || !/[A-Za-z]/.test(password.value) || !/[0-9]/.test(password.value)) {
+    errorMessage.value = '비밀번호는 영문과 숫자를 포함한 10자 이상이어야 합니다.'
     return
   }
   if (password.value !== confirm.value) {
@@ -41,10 +41,10 @@ async function handleReset() {
 </script>
 
 <template>
-  <div class="flex min-h-full flex-col justify-center px-6 py-12">
+  <div class="flex min-h-full flex-col justify-center bg-midnight-900 px-6 py-12">
     <div class="text-center">
       <h1 class="text-2xl font-black tracking-tight text-white">새 비밀번호 설정</h1>
-      <p class="mt-2 text-sm font-medium text-sapphire-300">8자 이상의 새 비밀번호를 입력해 주세요.</p>
+      <p class="mt-2 text-sm font-medium text-sapphire-300">영문과 숫자를 포함한 10자 이상의 새 비밀번호를 입력해 주세요.</p>
     </div>
 
     <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
@@ -62,10 +62,11 @@ async function handleReset() {
               v-model="password"
               type="password"
               required
-              minlength="8"
+              minlength="10"
+              maxlength="128"
               autocomplete="new-password"
               class="input !text-xs"
-              placeholder="8자 이상"
+              placeholder="영문·숫자 포함 10자 이상"
             />
           </div>
           <div class="space-y-1">

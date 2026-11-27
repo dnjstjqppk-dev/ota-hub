@@ -88,24 +88,28 @@ function body(extra: Record<string, unknown> = {}) {
   }
 }
 async function save(status?: 'REVIEWED' | 'REJECTED') {
-  if (priceError.value) return
+  if (busy.value || !draft.value || priceError.value) return
+  const targetId = draft.value.id
   busy.value = true
   try {
-    await api(`/admin/ingest/${draft.value.id}`, { method: 'PATCH', json: body(status ? { status } : {}) })
+    await api(`/admin/ingest/${encodeURIComponent(targetId)}`, { method: 'PATCH', json: body(status ? { status } : {}) })
     toast(status === 'REJECTED' ? '수집 상품을 반려했어요.' : '초안을 저장했어요.')
     await history.reload()
-    if (status === 'REJECTED') draft.value = null
-    else draft.value = history.data.value.find((x: any) => x.id === draft.value.id) || draft.value
+    if (draft.value?.id === targetId) {
+      if (status === 'REJECTED') draft.value = null
+      else draft.value = history.data.value.find((x: any) => x.id === targetId) || draft.value
+    }
   } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
 }
 async function publish() {
-  if (!canPublish.value) return
+  if (busy.value || !draft.value || !canPublish.value) return
+  const targetId = draft.value.id
   busy.value = true
   try {
-    await api(`/admin/ingest/${draft.value.id}`, { method: 'PATCH', json: body({ status: 'REVIEWED' }) })
-    const r = await api(`/admin/ingest/${draft.value.id}/publish`, { method: 'POST' })
+    await api(`/admin/ingest/${encodeURIComponent(targetId)}`, { method: 'PATCH', json: body({ status: 'REVIEWED' }) })
+    const r = await api(`/admin/ingest/${encodeURIComponent(targetId)}/publish`, { method: 'POST' })
     toast(`카탈로그에 등록했어요 (${r.published_item_id}). 예약 가능 여부는 공급사 연동 상태(공급사 연동 메뉴)를 따라요.`, 'success', 6000)
-    draft.value = null
+    if (draft.value?.id === targetId) draft.value = null
     history.reload()
   } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
 }

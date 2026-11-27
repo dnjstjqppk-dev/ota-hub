@@ -9,6 +9,8 @@ export interface Env {
   /** 32-byte base64 key for AES-GCM encryption of passport numbers. */
   PII_ENC_KEY?: string;
   ALLOWED_ORIGINS?: string;
+  /** Optional shared cookie domain for subdomains (e.g. ".getfortrip.com"). Unset on staging/local. */
+  AUTH_COOKIE_DOMAIN?: string;
   PUBLIC_SITE_URL?: string;
   PARTNER_SITE_URL?: string;
   /** GAP-06: comma allowlist, e.g. "toss,stripe" (first = default). Unset = payments disabled. "sandbox" is refused outside development/test. */

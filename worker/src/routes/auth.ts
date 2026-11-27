@@ -23,9 +23,9 @@ export const SOCIAL_ONLY_HASH = "oauth:no-password";
 export const isSocialOnlyHash = (h: string | null | undefined) => typeof h === "string" && h.startsWith("oauth:");
 export const WITHDRAW_PHRASE = "탈퇴합니다";
 
-export async function issueSession(env: Env, u: any) {
+export async function issueSession(env: Env, u: any, request?: Request) {
   const token = await signJwt({ id: u.id, email: u.email, fullName: u.full_name, role: u.role || "USER", tier: u.tier }, jwtSecret(env));
-  return { token, cookie: authCookie(token, env) };
+  return { token, cookie: authCookie(token, env, "getfortrip_jwt", 604800, request) };
 }
 
 export async function handleAuth(request: Request, env: Env, url: URL): Promise<Response | null> {
@@ -61,7 +61,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
       ], clientIp(request), request.headers.get("User-Agent")),
     ]);
     const u = { id, email, full_name: fullName, phone_number: phone, role: "USER", tier: "SILVER", trip_coins: 0 };
-    const s = await issueSession(env, u);
+    const s = await issueSession(env, u, request);
     return json({ success: true, token: s.token, user: publicUser(u) }, 201, { "Set-Cookie": s.cookie });
   }
 
@@ -106,17 +106,17 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     const jar = path === "/api/v1/admin/login" ? "getfortrip_admin_jwt" : "getfortrip_jwt";
     // #100: admin tokens live 12h (one workday), not 7d — a stolen money-console token expires the same day.
     const adminToken = await signJwt({ id: u.id, email: u.email, fullName: u.full_name, role: u.role || "USER", tier: u.tier }, jwtSecret(env), u.role === "ADMIN" ? 12 * 3600 : JWT_TTL_SECONDS);
-    return json({ success: true, token: adminToken, user: publicUser(u) }, 200, { "Set-Cookie": authCookie(adminToken, env, jar as "getfortrip_jwt" | "getfortrip_admin_jwt") });
+    return json({ success: true, token: adminToken, user: publicUser(u) }, 200, { "Set-Cookie": authCookie(adminToken, env, jar as "getfortrip_jwt" | "getfortrip_admin_jwt", 604800, request) });
   }
 
   if (path === "/api/v1/auth/logout" && method === "POST") {
     await revokeCurrentToken(request, env);
-    return jsonCookies({ success: true }, 200, clearAllAuthCookies(env));
+    return jsonCookies({ success: true }, 200, clearAllAuthCookies(env, request));
   }
 
   if (path === "/api/v1/admin/logout" && method === "POST") {
     await revokeCurrentToken(request, env);
-    return jsonCookies({ success: true }, 200, clearAllAuthCookies(env));
+    return jsonCookies({ success: true }, 200, clearAllAuthCookies(env, request));
   }
 
   // #37: authenticated password change. Verifies the current password (a live
@@ -144,7 +144,10 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     await revokeCurrentToken(request, env);
     await resetSubjectSessions(env, a.id);
     await audit(env, a.id, "PASSWORD_CHANGED", "AUTH", a.email, { ip: request.headers.get("CF-Connecting-IP") });
-    return json({ success: true, requireRelogin: true }, 200, { "Set-Cookie": clearAuthCookie(env, "getfortrip_jwt") });
+    return jsonCookies({ success: true, requireRelogin: true }, 200, [
+      clearAuthCookie(env, "getfortrip_jwt", request),
+      clearAuthCookie(env, "getfortrip_jwt"),
+    ]);
   }
 
   if (path === "/api/v1/auth/me" && method === "GET") {

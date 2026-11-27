@@ -6,7 +6,7 @@ import { defineStore } from 'pinia'
  * conversions fail safe to KRW truth instead of fictional dollars.
  */
 export function convertKrw(krwAmount: number, activeCurrency: string, rates: Record<string, number>, loaded: boolean): { amount: number; currency: string; symbol: string } {
-  const symbols: Record<string, string> = { KRW: '₩', USD: '$', JPY: '¥', EUR: '€', CNY: '¥', GBP: '£' }
+  const symbols: Record<string, string> = { KRW: '₩', USD: '$', JPY: '¥', EUR: '€', CNY: '¥', GBP: '£', HKD: 'HK$', TWD: 'NT$' }
   if (!loaded) return { amount: krwAmount, currency: 'KRW', symbol: '₩' }
   const rate = rates[activeCurrency] || 1.0
   return { amount: krwAmount / rate, currency: activeCurrency, symbol: symbols[activeCurrency] || '$' }
@@ -23,7 +23,9 @@ export const useCurrencyStore = defineStore('currency', {
       JPY: 9.10,
       EUR: 1470.0,
       CNY: 188.0,
-      GBP: 1720.0
+      GBP: 1720.0,
+      HKD: 175.0,
+      TWD: 42.0
     } as Record<string, number>
   }),
   getters: {
@@ -55,12 +57,14 @@ export const useCurrencyStore = defineStore('currency', {
         case 'EUR': this.symbol = '€'; break
         case 'CNY': this.symbol = '¥'; break
         case 'GBP': this.symbol = '£'; break
+        case 'HKD': this.symbol = 'HK$'; break
+        case 'TWD': this.symbol = 'NT$'; break
         default: this.symbol = '$'; break
       }
     },
     formatKRW(krwAmount: number): string {
       const { amount, currency, symbol } = convertKrw(krwAmount, this.activeCurrency, this.rates, this.ratesLoaded)
-      if (currency === 'KRW' || currency === 'JPY') {
+      if (currency === 'KRW' || currency === 'JPY' || currency === 'TWD') {
         return `${symbol}${Math.round(amount).toLocaleString()}`
       }
       return `${symbol}${(Math.round(amount * 100) / 100).toFixed(2)}`

@@ -31,6 +31,7 @@ export function parseRedisUrl(url, dbIndex) {
     host: u.hostname,
     port: Number(u.port || 6379),
     database: Number.isSafeInteger(dbIndex) ? dbIndex : (Number.isSafeInteger(pathDb) ? pathDb : 0),
+    ...(u.protocol === 'rediss:' ? { tls: true } : {}),
     ...(u.username ? { username: decodeURIComponent(u.username) } : {}),
     ...(u.password ? { password: decodeURIComponent(u.password) } : {}),
   };
@@ -45,6 +46,7 @@ export async function connectRedis(url, dbIndex) {
     socket: {
       host: opts.host,
       port: opts.port,
+      ...(opts.tls ? { tls: true } : {}),
       reconnectStrategy: (retries) => (retries > 3 ? false : 100),
     },
   });

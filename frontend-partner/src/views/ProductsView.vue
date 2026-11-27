@@ -22,7 +22,9 @@ const editError = ref('')
 const imgBusy = ref(false)
 const imgMsg = ref('')
 
+let editLoadSeq = 0
 async function openEdit(p: ProductRow) {
+  const seq = ++editLoadSeq
   editing.value = p
   editTitle.value = p.title
   editCity.value = p.city
@@ -34,14 +36,15 @@ async function openEdit(p: ProductRow) {
   editRoomsLoaded.value = false
   if (p.domain_type === 'HOTEL') {
     try {
-      const res = await fetch(apiUrl(`/partner/products/${p.id}`), { credentials: 'include', headers: { Authorization: `Bearer ${partnerToken()}` } })
+      const res = await fetch(apiUrl(`/partner/products/${encodeURIComponent(p.id)}`), { credentials: 'include', headers: { Authorization: `Bearer ${partnerToken()}` } })
       const j = await res.json().catch(() => ({}))
+      if (seq !== editLoadSeq || editing.value?.id !== p.id) return
       if (res.ok && Array.isArray(j.product?.rooms)) {
         editRooms.value = j.product.rooms.map((r: any) => ({ id: r.id, name: r.name_ko || r.name || '', price: Number(r.base_price_krw) || 0, inventory: Number(r.available_inventory) || 0, occupancy: Number(r.max_occupancy) || 2 }))
       }
       editRoomsLoaded.value = true
     } catch {
-      editError.value = '객실 정보를 불러오지 못했습니다.'
+      if (seq === editLoadSeq && editing.value?.id === p.id) editError.value = '객실 정보를 불러오지 못했습니다.'
     }
   }
 }
@@ -50,6 +53,7 @@ async function uploadImages(ev: Event) {
   const input = ev.target as HTMLInputElement
   const files = Array.from(input.files || [])
   if (!files.length || !editing.value) return
+  const productId = editing.value.id
   imgBusy.value = true
   imgMsg.value = ''
   editError.value = ''
@@ -69,7 +73,7 @@ async function uploadImages(ev: Event) {
       if (!up.ok) throw new Error(uj.error || `"${file.name}" 업로드에 실패했습니다.`)
       ids.push(uj.id)
     }
-    const res = await fetch(apiUrl(`/partner/products/${editing.value.id}`), {
+    const res = await fetch(apiUrl(`/partner/products/${encodeURIComponent(productId)}`), {
       credentials: 'include',
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${partnerToken()}` },
@@ -77,10 +81,10 @@ async function uploadImages(ev: Event) {
     })
     const j = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(j.error || '이미지 연결에 실패했습니다.')
-    imgMsg.value = `${ids.length}장을 등록했어요.`
+    if (editing.value?.id === productId) imgMsg.value = `${ids.length}장을 등록했어요.`
     await fetchProducts()
   } catch (e) {
-    editError.value = (e as Error).message
+    if (editing.value?.id === productId) editError.value = (e as Error).message
   } finally {
     imgBusy.value = false
     input.value = ''
@@ -206,8 +210,9 @@ const handleImportUrl = async () => {
     if (!res.ok) throw new Error(data.error || 'URL 수집에 실패했습니다.')
 
     const draft = data.draft
+    const rawDomain = String(draft.domain_type || '').toUpperCase()
     newTitle.value = draft.title || ''
-    newDomain.value = draft.domain_type || 'ACTIVITY'
+    newDomain.value = ['HOTEL', 'CAR', 'ACTIVITY'].includes(rawDomain) ? rawDomain : 'ACTIVITY'
     newPrice.value = draft.price_minor || 50000
     newCity.value = draft.city || '서울'
     importOk.value = true
@@ -533,7 +538,7 @@ onMounted(() => {
           <div v-if="editing && editing.domain_type === 'HOTEL'" class="space-y-2 rounded-xl border border-line bg-surface-sunken p-3">
             <div class="flex items-center justify-between">
               <span class="label">객실 (1개 이상 필수 · 없으면 견적 불가)</span>
-              <button type="button" class="rounded-lg bg-surface px-2 py-1 text-[11px] font-bold text-ink-muted hover:text-ink" @click="editRooms.push(blankRoom())">+ 객실 추가</button>
+              <button type="button" :disabled="!editRoomsLoaded" class="rounded-lg bg-surface px-2 py-1 text-[11px] font-bold text-ink-muted hover:text-ink disabled:opacity-50" @click="editRooms.push(blankRoom())">+ 객실 추가</button>
             </div>
             <p v-if="!editRoomsLoaded" class="text-[11px] text-ink-subtle">객실 정보를 불러오는 중…</p>
             <div v-for="(r, i) in editRooms" :key="r.id || i" class="grid grid-cols-12 items-end gap-2 rounded-lg bg-surface p-2">

@@ -16,21 +16,22 @@ test('seo titles prefix city/country ahead of the base phrase', () => {
   assert.equal(seoTitle('호텔·숙소'), '호텔·숙소')
 })
 
-test('seo head canonical follows the rendering locale prefix', () => {
-  const h = seoHead({ site: SITE, path: '/hotels/list', title: 't', description: 'd', localePrefix: '/en' })
-  assert.equal(h.link.find((l) => l.rel === 'canonical').href, `${SITE}/en/hotels/list`)
-  assert.equal(h.link.find((l) => l.hreflang === 'x-default').href, `${SITE}/hotels/list`)
+test('seo head canonical uses country subdomain without curr and emits hreflang per subdomain', () => {
+  const h = seoHead({ site: SITE, path: '/hotels/list', title: 't', description: 'd', subdomain: 'uk', locale: 'en-gb' })
+  assert.equal(h.link.find((l) => l.rel === 'canonical').href, 'https://uk.getfortrip.com/hotels/list?locale=en-gb')
+  assert.ok(!h.link.find((l) => l.rel === 'canonical').href.includes('curr='))
+  assert.equal(h.link.find((l) => l.hreflang === 'x-default').href, 'https://www.getfortrip.com/hotels/list?locale=en-us')
 })
 
 test('seo head carries canonical, hreflang set, and OG/Twitter', () => {
   const h = seoHead({ site: SITE, path: '/hotels/list', title: '호텔·숙소', description: '비교하고 예약하세요.', city: '도쿄' })
   assert.equal(h.title, '도쿄 호텔·숙소')
-  assert.ok(h.link.some((l) => l.rel === 'canonical' && l.href === `${SITE}/hotels/list`))
-  // GAP-01 full: every locale alternates, x-default points at the ko URL.
-  for (const lang of ['ko', 'en', 'ja', 'zh', 'x-default']) assert.ok(h.link.some((l) => l.rel === 'alternate' && l.hreflang === lang), lang)
-  assert.equal(h.link.find((l) => l.hreflang === 'en').href, `${SITE}/en/hotels/list`)
-  assert.equal(h.link.find((l) => l.hreflang === 'x-default').href, `${SITE}/hotels/list`)
-  assert.ok(h.meta.some((m) => m.property === 'og:url' && m.content === `${SITE}/hotels/list`))
+  assert.ok(h.link.some((l) => l.rel === 'canonical' && l.href === 'https://kr.getfortrip.com/hotels/list?locale=ko-kr'))
+  for (const lang of ['ko-KR', 'ja-JP', 'en-GB', 'zh-HK', 'zh-TW', 'en-US', 'x-default']) assert.ok(h.link.some((l) => l.rel === 'alternate' && l.hreflang === lang), lang)
+  assert.equal(h.link.find((l) => l.hreflang === 'en-US').href, 'https://www.getfortrip.com/hotels/list?locale=en-us')
+  assert.equal(h.link.find((l) => l.hreflang === 'ja-JP').href, 'https://jp.getfortrip.com/hotels/list?locale=ja-jp')
+  assert.equal(h.link.find((l) => l.hreflang === 'x-default').href, 'https://www.getfortrip.com/hotels/list?locale=en-us')
+  assert.ok(h.meta.some((m) => m.property === 'og:url' && m.content === 'https://kr.getfortrip.com/hotels/list?locale=ko-kr'))
   assert.ok(h.meta.some((m) => m.name === 'twitter:card'))
 })
 
@@ -415,7 +416,7 @@ test('s9 verification metas and og locale tags', () => {
   const byProp = (p) => tags.find((t) => t.property === p || t.name === p)
   assert.equal(byProp('og:image').content, `${SITE}/symbol.svg`)
   assert.equal(byProp('og:locale').content, 'en_US')
-  assert.equal(tags.filter((t) => t.property === 'og:locale:alternate').length, 3)
+  assert.equal(tags.filter((t) => t.property === 'og:locale:alternate').length, 5)
   assert.equal(byProp('twitter:card').content, 'summary_large_image')
   const ko = seoHead({ site: SITE, path: '/hotels', title: 'T', description: 'D' })
   assert.ok(ko.meta.some((m) => m.property === 'og:locale' && m.content === 'ko_KR'))

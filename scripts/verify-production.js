@@ -26,7 +26,7 @@ const PROD_DOMAIN = 'getfortrip.com';
 // #114: the suite used to default to PRODUCTION with no confirmation. There
 // is no staging worker, so the safe default is the local dev server; reaching
 // production requires naming it AND acknowledging it (env or TTY prompt).
-const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:8799';
+const BASE_URL = (process.env.BASE_URL || 'http://127.0.0.1:8799').replace(/\/+$/, '');
 
 // #48/#53 (6f): this suite used to count skipped tests as passes (fake 41/41)
 // and mutated production (flag toggles, draft publishes, product rows).
@@ -607,9 +607,9 @@ async function runVerificationSuite() {
   await test("3-Portal Architecture: User, Admin, Partner independent URLs & Hub paths return HTTP 200", async () => {
     // Portal roots derive from env (BASE_URL for hub, *_URL for the consoles) so the
     // suite can target staging as well as production (2026-11-09 audit [m]).
-    const hub = (process.env.BASE_URL || 'https://ota-hub.dnjstjq0824.workers.dev').replace(/\/+$/, '');
-    const adminRoot = (process.env.ADMIN_URL || 'https://ota-admin.dnjstjq0824.workers.dev').replace(/\/+$/, '');
-    const partnerRoot = (process.env.PARTNER_URL || 'https://ota-partner.dnjstjq0824.workers.dev').replace(/\/+$/, '');
+    const hub = BASE_URL;
+    const adminRoot = (process.env.ADMIN_URL || (isProdTarget ? 'https://ota-admin.dnjstjq0824.workers.dev' : `${hub}/admin`)).replace(/\/+$/, '');
+    const partnerRoot = (process.env.PARTNER_URL || (isProdTarget ? 'https://ota-partner.dnjstjq0824.workers.dev' : `${hub}/partner`)).replace(/\/+$/, '');
     for (const [label, url] of [['User portal', hub], ['Admin portal', adminRoot], ['Partner portal', partnerRoot], ['Hub /admin/ fallback', `${hub}/admin/`], ['Hub /partner/ fallback', `${hub}/partner/`]]) {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`${label} failed: HTTP ${res.status} (${url})`);
@@ -1468,7 +1468,7 @@ async function runVerificationSuite() {
   // 48. PORTAL SECURITY HEADERS + CSP (GAP-10)
   // ---------------------------------------------------------------------------
   await test('GAP-10: hub API + 3 portals send security headers incl CSP', async () => {
-    const hub = (process.env.BASE_URL || 'https://ota-hub.dnjstjq0824.workers.dev').replace(/\/+$/, '');
+    const hub = BASE_URL;
     const userRoot = (process.env.USER_URL || 'https://ota-user.dnjstjq0824.workers.dev').replace(/\/+$/, '');
     const adminRoot = (process.env.ADMIN_URL || 'https://ota-admin.dnjstjq0824.workers.dev').replace(/\/+$/, '');
     const partnerRoot = (process.env.PARTNER_URL || 'https://ota-partner.dnjstjq0824.workers.dev').replace(/\/+$/, '');

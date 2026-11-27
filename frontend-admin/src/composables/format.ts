@@ -3,10 +3,12 @@
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
 
 export const krw = (n: unknown) => {
+  if (n === null || n === undefined || n === '') return '—'
   const v = Number(n)
   return Number.isFinite(v) ? `₩${Math.round(v).toLocaleString('ko-KR')}` : '—'
 }
 export const num = (n: unknown) => {
+  if (n === null || n === undefined || n === '') return '—'
   const v = Number(n)
   return Number.isFinite(v) ? v.toLocaleString('ko-KR') : '—'
 }

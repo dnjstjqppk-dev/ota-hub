@@ -19,14 +19,19 @@ const currentMonth = ref(new Date().toISOString().slice(0, 7))
 const inventory = ref<InventoryItem[]>([])
 const loading = ref(false)
 const error = ref('')
-const products = ref<{ id: string; title: string; domain_type: string }[]>([])
+const products = ref<{ id: string; title: string; domain_type: string; base_price_krw?: number | null; is_active?: number }[]>([])
 const selectedProduct = ref('')
 
-const selectedDomain = computed(() => products.value.find((p) => p.id === selectedProduct.value)?.domain_type || 'HOTEL')
+const activeProductObj = computed(() => products.value.find((p) => p.id === selectedProduct.value) || null)
+const selectedDomain = computed(() => activeProductObj.value?.domain_type || 'HOTEL')
+const basePriceKrw = computed(() => {
+  const n = Number(activeProductObj.value?.base_price_krw)
+  return Number.isFinite(n) && n > 0 ? n : null
+})
 
 const selectedDate = ref('')
-const selectedAlloc = ref(10)
-const selectedPrice = ref(150000)
+const selectedAlloc = ref<number | string>(10)
+const selectedPrice = ref<number | string>('')
 const selectedClosed = ref(false)
 const isModalOpen = ref(false)
 const saveLoading = ref(false)
@@ -41,12 +46,13 @@ const fetchProducts = async () => {
     })
     if (!res.ok) throw new Error('상품 목록을 불러오지 못했습니다.')
     const json = await res.json()
-    products.value = (json.products || []).filter((p: any) => p.is_active === 1)
+    products.value = json.products || []
     const fromQuery = String(route.query.item || '')
     if (fromQuery && products.value.some((p) => p.id === fromQuery)) {
       selectedProduct.value = fromQuery
     } else if (!selectedProduct.value && products.value.length) {
-      selectedProduct.value = products.value[0].id
+      const firstActive = products.value.find((p) => p.is_active === 1)
+      selectedProduct.value = (firstActive || products.value[0]).id
     }
   } catch (e: any) {
     error.value = e.message || '상품 목록을 불러오지 못했습니다.'
@@ -74,19 +80,47 @@ const fetchInventory = async () => {
 }
 
 const openEditDateModal = (dateStr: string, existing?: InventoryItem) => {
+  if (!selectedProduct.value) return
   selectedDate.value = dateStr
   selectedAlloc.value = existing?.allocated_units ?? 10
-  selectedPrice.value = existing?.price_override_minor ?? 150000
+  // Blank priceOverrideMinor means "keep product base price" — never overwrite with a hardcoded figure.
+  selectedPrice.value = existing?.price_override_minor ?? ''
   selectedClosed.value = existing?.is_closed === 1
   saveError.value = ''
   isModalOpen.value = true
 }
 
 const handleSaveDate = async () => {
-  saveLoading.value = true
+  if (!selectedProduct.value || saveLoading.value) return
   saveError.value = ''
+  const rawAlloc = String(selectedAlloc.value ?? '').trim()
+  const allocNum = rawAlloc === '' ? NaN : Number(rawAlloc)
+  if (!Number.isInteger(allocNum) || allocNum < 0) {
+    saveError.value = '배정 수량은 0 이상의 정수로 입력해 주세요.'
+    return
+  }
+  const rawPrice = String(selectedPrice.value ?? '').trim()
+  let priceOverride: number | null = null
+  if (rawPrice !== '') {
+    const pNum = Number(rawPrice)
+    if (!Number.isInteger(pNum) || pNum < 0) {
+      saveError.value = '요금은 0 이상의 정수로 입력하거나 비워두어 기본가를 유지해 주세요.'
+      return
+    }
+    priceOverride = pNum
+  }
+  saveLoading.value = true
   try {
     const token = partnerToken()
+    const payload: Record<string, unknown> = {
+      domain: selectedDomain.value,
+      itemId: selectedProduct.value,
+      unitId: 'default',
+      serviceDate: selectedDate.value,
+      allocatedUnits: allocNum,
+      isClosed: selectedClosed.value
+    }
+    if (priceOverride !== null) payload.priceOverrideMinor = priceOverride
     const res = await fetch(apiUrl('/partner/inventory'), {
       credentials: 'include',
       method: 'PUT',
@@ -94,15 +128,7 @@ const handleSaveDate = async () => {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({
-        domain: selectedDomain.value,
-        itemId: selectedProduct.value,
-        unitId: 'default',
-        serviceDate: selectedDate.value,
-        allocatedUnits: selectedAlloc.value,
-        priceOverrideMinor: selectedPrice.value,
-        isClosed: selectedClosed.value
-      })
+      body: JSON.stringify(payload)
     })
 
     if (res.ok) {
@@ -129,7 +155,8 @@ const daysInMonth = computed(() => {
 })
 
 const getDayData = (dateStr: string) => {
-  return inventory.value.find(item => item.service_date === dateStr)
+  return inventory.value.find(item => item.service_date === dateStr && item.unit_id === 'default')
+    || inventory.value.find(item => item.service_date === dateStr)
 }
 
 onMounted(async () => {
@@ -184,6 +211,7 @@ onMounted(async () => {
     <!-- Calendar Grid -->
     <div class="card space-y-4 p-4">
       <p v-if="loading" class="py-8 text-center text-sm font-bold text-ink-subtle">재고 정보를 불러오는 중입니다...</p>
+      <p v-else-if="!selectedProduct" class="py-8 text-center text-sm font-bold text-ink-subtle">등록된 상품이 없습니다. 먼저 공급 상품을 등록해 주세요.</p>
       <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-7">
         <button
           v-for="date in daysInMonth"
@@ -214,7 +242,9 @@ onMounted(async () => {
 
           <div class="space-y-0.5">
             <div class="text-[11px] font-black tabular text-primary">
-              {{ (getDayData(date)?.price_override_minor ?? 150000).toLocaleString() }}원
+              <template v-if="getDayData(date)?.price_override_minor != null">{{ Number(getDayData(date)!.price_override_minor).toLocaleString() }}원</template>
+              <template v-else-if="basePriceKrw != null">{{ basePriceKrw.toLocaleString() }}원 <span class="font-medium text-ink-subtle">(기본가)</span></template>
+              <template v-else>기본가</template>
             </div>
             <div class="text-[10px] font-medium text-ink-subtle">
               배정 {{ getDayData(date)?.allocated_units ?? 10 }} / 예약 {{ getDayData(date)?.booked_units ?? 0 }}
@@ -257,12 +287,13 @@ onMounted(async () => {
           </div>
 
           <div class="space-y-1">
-            <label class="label">해당 일자 요금 (KRW)</label>
+            <label class="label">해당 일자 특별 요금 (KRW · 비워두면 기본가 유지)</label>
             <input
-              v-model.number="selectedPrice"
+              v-model="selectedPrice"
               type="number"
-              step="5000"
+              step="1000"
               min="0"
+              :placeholder="basePriceKrw != null ? `기본가 ${basePriceKrw.toLocaleString()}원` : '기본가 유지'"
               class="input font-black tabular text-primary"
             />
           </div>

@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
-import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 // Resolved once in setup: head getters run at render time, outside the Nuxt context.
 const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
@@ -28,6 +28,7 @@ const facts = computed(() => {
 })
 
 // S4: markdown fact sheet alternate for LLMs (hub serves it; same-origin on apex).
+const localeCtx = useActiveLocaleContext()
 useHead(() => ({ link: [{ rel: 'alternate', type: 'text/markdown', href: `/api/v1/seo/md/TRANSFER/${String(route.params.id || '')}` }] }))
 useHead(() => {
   const x = t.value
@@ -35,8 +36,8 @@ useHead(() => {
   const offer = liveOk.value ? offerLd(seoSite, `/transfers/detail/${id}`, x.price_krw, x.bookable, x.outlink_path) : null
   const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
-    meta: [...ogMeta(seoSite, `/transfers/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
-    link: [{ rel: 'canonical', href: `${seoSite}/transfers/detail/${id}` }, ...hreflangLinks(seoSite, `/transfers/detail/${id}`)],
+    meta: [...ogMeta(seoSite, `/transfers/detail/${id}`, x.thumbnail_url || x.image_url || null, localeCtx.value.locale, localeCtx.value.sub)],
+    link: [{ rel: 'canonical', href: canonicalHref(`/transfers/detail/${id}`, { sub: localeCtx.value.sub, locale: localeCtx.value.locale }) }, ...hreflangLinks(seoSite, `/transfers/detail/${id}`)],
     title: `${x.airport_code} → ${x.destination_area} · ${x.service_title}`,
     script: [jsonLdScript(breadcrumbLd(seoSite, [{ name: tr('common.home'), path: '/' }, { name: tr('nav.transfers'), path: '/transfers' }, { name: x.service_title, path: `/transfers/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',

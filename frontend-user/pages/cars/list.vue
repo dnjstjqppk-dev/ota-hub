@@ -7,7 +7,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
-import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { daysBetween, fmtDay, qDate, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 // Resolved once in setup: head getters run at render time, outside the Nuxt context.
 const carSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
@@ -83,7 +83,8 @@ await useSsrLoad('tg15-cars-list', load, { items, state })
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
-useHead(() => ({ title: q.value.city ? t('cars.list.docTitle', { c: q.value.city }) : t('cars.list.title'), meta: [...ogMeta(carSeoSite, '/cars/list', null, locale.value)], link: [{ rel: 'canonical', href: `${carSeoSite}/cars/list` }, ...hreflangLinks(carSeoSite, '/cars/list')] }))
+const carLocaleCtx = useActiveLocaleContext()
+useHead(() => ({ title: q.value.city ? t('cars.list.docTitle', { c: q.value.city }) : t('cars.list.title'), meta: [...ogMeta(carSeoSite, '/cars/list', null, carLocaleCtx.value.locale, carLocaleCtx.value.sub)], link: [{ rel: 'canonical', href: canonicalHref('/cars/list', { sub: carLocaleCtx.value.sub, locale: carLocaleCtx.value.locale }) }, ...hreflangLinks(carSeoSite, '/cars/list')] }))
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {
   const elements = items.value

@@ -731,44 +731,6 @@ INSERT INTO support_ticket_messages (id, ticket_id, author_type, author_id, body
   FROM support_tickets WHERE admin_note IS NOT NULL AND admin_note <> '';
 
 -- 0049_search_fts.sql
-INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
-  VALUES ('HOTEL', NEW.id, NEW.name_ko || ' ' || NEW.name_en, NEW.city,
-    COALESCE(NEW.neighborhood, '') || ' ' || COALESCE(NEW.address, '') || ' ' || COALESCE(NEW.property_type, ''),
-    NEW.is_active, NEW.base_price_krw, NEW.review_score, NEW.partner_id);
-
--- 0049_search_fts.sql
-INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
-  VALUES ('FLIGHT', NEW.id, NEW.airline_name || ' ' || NEW.flight_number, NEW.departure_city || ' ' || NEW.arrival_city,
-    NEW.airline_code || ' ' || NEW.departure_airport || ' ' || NEW.arrival_airport || ' ' || COALESCE(NEW.cabin_class, ''),
-    NEW.is_active, NEW.base_price_krw, NULL, NEW.partner_id);
-
--- 0049_search_fts.sql
-INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
-  VALUES ('TRAIN', NEW.id, NEW.train_type || ' ' || NEW.train_number, NEW.departure_station || ' ' || NEW.arrival_station,
-    COALESCE(NEW.seat_class, ''), NEW.is_active, NEW.price_krw, NULL, NULL);
-
--- 0049_search_fts.sql
-INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
-  VALUES ('CAR', NEW.id, NEW.company_name || ' ' || NEW.vehicle_model, NEW.pickup_location,
-    COALESCE(NEW.vehicle_type, '') || ' ' || COALESCE(NEW.transmission, ''), NEW.is_active, NEW.daily_price_krw, NULL, NEW.partner_id);
-
--- 0049_search_fts.sql
-INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
-  VALUES ('TRANSFER', NEW.id, NEW.service_title, NEW.destination_area,
-    NEW.airport_code || ' ' || COALESCE(NEW.vehicle_class, ''), NEW.is_active, NEW.price_krw, NULL, NEW.partner_id);
-
--- 0049_search_fts.sql
-INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
-  VALUES ('ACTIVITY', NEW.id, NEW.title, NEW.city,
-    COALESCE(NEW.category, '') || ' ' || COALESCE(NEW.country, '') || ' ' || COALESCE(NEW.description, ''),
-    NEW.is_active, NEW.price_krw, NEW.review_score, NEW.partner_id);
-
--- 0049_search_fts.sql
-INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
-  VALUES ('PACKAGE', NEW.id, NEW.title, NEW.destination_city, '',
-    NEW.is_active, NEW.total_package_krw, NULL, NULL);
-
--- 0049_search_fts.sql
 -- Backfill current rows (triggers cover future writes).
 INSERT INTO catalog_fts (domain, item_id, title, city, body, active, price_krw, rating, supplier_id)
   SELECT 'HOTEL', id, name_ko || ' ' || name_en, city,
@@ -856,5 +818,19 @@ WHERE NOT EXISTS (SELECT 1 FROM feature_flags WHERE key = 'DYNAMIC_MARKUP');
 INSERT INTO feature_flags (key, category, display_name, description, is_enabled, default_enabled, requires_flags, is_external_dependent, external_contract_status, updated_by)
 SELECT 'CS_BOT', 'SYSTEM', 'CS 봇 v1', '1:1 문의 1차 자동 응답 + 1클릭 사람 이관. OFF면 전량 사람 응대.', 0, 0, '[]', 0, 'NOT_REQUIRED', 'migration_0053'
 WHERE NOT EXISTS (SELECT 1 FROM feature_flags WHERE key = 'CS_BOT');
+
+-- 0056_affiliate_p3.sql
+-- 0056: Phase 3 affiliate deeplinks — Travelpayouts registry + dashboard indexes.
+-- The row ships INACTIVE: /out/travelpayouts 404s until the operator stores
+-- the contracted marker/secret and flips is_active. Sub-ids ({sub_id}) are
+-- HMAC-minted per click (see worker/src/affiliate/partner-links.ts), never seeded.
+INSERT INTO affiliate_partners_config (partner_id, name, deep_link_template, affiliate_id, secret_key, is_active) VALUES
+('travelpayouts', 'Travelpayouts', 'https://search.hotellook.com/?marker={affiliate_id}&sub_id={sub_id}&destination={item_id}', 'SET_VIA_WRANGLER_D1_MARKER', 'SET_VIA_WRANGLER_D1_SECRET_TRAVELPAYOUTS', 0);
+
+-- 0059_fx_hkd_twd.sql
+-- Display-only FX reference rates for HK and TW country subdomains.
+INSERT INTO fx_rates (currency, symbol, rate_to_krw) VALUES
+('HKD', 'HK$', 175.0),
+('TWD', 'NT$', 42.0);
 
 COMMIT;

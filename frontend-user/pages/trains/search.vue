@@ -7,7 +7,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
-import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { fmtDay, qDate, qInt, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 // Resolved once in setup: head getters run at render time, outside the Nuxt context.
 const trainSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
@@ -90,7 +90,8 @@ await useSsrLoad('tg15-trains-list', load, { items, state })
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
-useHead(() => ({ title: q.value.dep && q.value.arr ? t('trains.search.docTitle', { o: q.value.dep, d: q.value.arr }) : t('trains.search.title'), meta: [...ogMeta(trainSeoSite, '/trains/search', null, locale.value)], link: [{ rel: 'canonical', href: `${trainSeoSite}/trains/search` }, ...hreflangLinks(trainSeoSite, '/trains/search')] }))
+const trainLocaleCtx = useActiveLocaleContext()
+useHead(() => ({ title: q.value.dep && q.value.arr ? t('trains.search.docTitle', { o: q.value.dep, d: q.value.arr }) : t('trains.search.title'), meta: [...ogMeta(trainSeoSite, '/trains/search', null, trainLocaleCtx.value.locale, trainLocaleCtx.value.sub)], link: [{ rel: 'canonical', href: canonicalHref('/trains/search', { sub: trainLocaleCtx.value.sub, locale: trainLocaleCtx.value.locale }) }, ...hreflangLinks(trainSeoSite, '/trains/search')] }))
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {
   const elements = filtered.value

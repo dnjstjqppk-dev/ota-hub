@@ -10,7 +10,8 @@ import { randomBytes } from "node:crypto";
 
 const BASE = process.env.BASE || "http://127.0.0.1:8799";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "LocalAdmin2026!x";
-if (!/127\.0\.0\.1|localhost/.test(BASE)) throw new Error("trace-order runs against localhost only");
+const baseHost = (() => { try { return new URL(BASE).hostname.toLowerCase(); } catch { return ""; } })();
+if (!["127.0.0.1", "localhost", "::1"].includes(baseHost)) throw new Error("trace-order runs against localhost only");
 
 const rnd = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 const hex = (n) => randomBytes(n).toString("hex");

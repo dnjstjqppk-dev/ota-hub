@@ -68,13 +68,17 @@ const rateError = computed(() => {
 const rateChanged = computed(() => !!selected.value && !rateError.value && rateBps.value !== Number(selected.value.settlement_rate_bps))
 
 async function apply(body: Record<string, unknown>, done: string) {
+  if (busy.value || !selected.value) return
+  const targetId = selected.value.id
   busy.value = true
   try {
-    await api(`/admin/partners/${encodeURIComponent(selected.value.id)}`, { method: 'PATCH', json: body })
+    await api(`/admin/partners/${encodeURIComponent(targetId)}`, { method: 'PATCH', json: body })
     toast(done)
     await list.reload()
-    selected.value = list.data.value.find((p: any) => p.id === selected.value.id) || null
-    if (selected.value) open(selected.value)
+    if (selected.value?.id === targetId) {
+      selected.value = list.data.value.find((p: any) => p.id === targetId) || null
+      if (selected.value) open(selected.value)
+    }
   } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
 }
 function submitStatus() {
@@ -97,15 +101,19 @@ async function openDoc(url: string) {
   } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
 }
 async function verifyBusiness(method: 'NTS_API' | 'MANUAL') {
+  if (busy.value || !selected.value) return
+  const targetId = selected.value.id
   if (method === 'MANUAL' && !vform.note.trim()) { toast('수동 확인 근거를 입력해 주세요.', 'danger'); return }
   busy.value = true
   try {
-    await api(`/admin/partners/${encodeURIComponent(selected.value.id)}/verify-business`, { method: 'POST', json: { method, note: vform.note.trim() || undefined } })
+    await api(`/admin/partners/${encodeURIComponent(targetId)}/verify-business`, { method: 'POST', json: { method, note: vform.note.trim() || undefined } })
     toast(method === 'NTS_API' ? '국세청 조회로 사업자 확인을 마쳤어요.' : '수동 확인을 기록했어요.')
     vform.note = ''
     await list.reload()
-    selected.value = list.data.value.find((p: any) => p.id === selected.value.id) || null
-    if (selected.value) open(selected.value)
+    if (selected.value?.id === targetId) {
+      selected.value = list.data.value.find((p: any) => p.id === targetId) || null
+      if (selected.value) open(selected.value)
+    }
   } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
 }
 </script>

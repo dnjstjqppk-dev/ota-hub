@@ -12,7 +12,7 @@ import { useApiUrl } from '~/composables/useApi'
 import { getHotelById } from '~/data/hotelCatalog'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
-import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { useCartStore } from '~/stores/cart'
 
 const route = useRoute()
@@ -132,6 +132,7 @@ watch(nights, (n) => { if (n) needDates.value = false })
 
 // ------------------------------------------------------------------ SEO (catalogue facts only; ratings must come from verified reviews)
 const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
+const localeCtx = useActiveLocaleContext()
 // S4: markdown fact sheet alternate for LLMs (hub serves it; same-origin on apex).
 useHead(() => ({ link: [{ rel: 'alternate', type: 'text/markdown', href: `/api/v1/seo/md/HOTEL/${String(route.params.id || '')}` }] }))
 useHead(() => {
@@ -159,9 +160,9 @@ useHead(() => {
     title: h.name_ko || h.name,
     meta: [
       { name: 'description', content: [h.name_ko, h.city, h.neighborhood, t('hotels.detail.seoSuffix')].filter(Boolean).join(' · ') },
-      ...ogMeta(seoSite, detailPath, (h as any).thumbnail_url || (h as any).image_url || null, locale.value),
+      ...ogMeta(seoSite, detailPath, (h as any).thumbnail_url || (h as any).image_url || null, localeCtx.value.locale, localeCtx.value.sub),
     ],
-    link: [{ rel: 'canonical', href: `${seoSite}${detailPath}` }, ...hreflangLinks(seoSite, detailPath)],
+    link: [{ rel: 'canonical', href: canonicalHref(detailPath, { sub: localeCtx.value.sub, locale: localeCtx.value.locale }) }, ...hreflangLinks(seoSite, detailPath)],
     script: [
       { type: 'application/ld+json', innerHTML: JSON.stringify(ld).replace(/</g, '\\u003c') },
       jsonLdScript(breadcrumbLd(seoSite, [{ name: t('common.home'), path: '/' }, { name: t('nav.hotels'), path: '/hotels' }, { name: h.name_ko || h.name, path: detailPath }])),

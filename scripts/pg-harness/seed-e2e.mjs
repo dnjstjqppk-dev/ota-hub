@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // scripts/pg-harness/seed-e2e.mjs
-// TG-09: E2E bootstrap seed for Postgres ??mirrors scripts/seed-isolated.mjs
+// TG-09: E2E bootstrap seed for Postgres — mirrors scripts/seed-isolated.mjs
 // part 2/3 (catalog SQL already applied): simulator suppliers, partner dev
 // passwords, local admin (known password), test promotions.
 // Usage: E2E_PG_URL=... node scripts/pg-harness/seed-e2e.mjs [adminPassword]
@@ -33,8 +33,8 @@ await pool.query(
 );
 await pool.query(
   `INSERT INTO promotions (id, code, title, discount_type, discount_value, min_order_amount_krw, max_discount_krw, valid_from, valid_until, is_active) VALUES
-  ('promo_test10', 'TEST10', '[?�스?? 10% ?�인 (최�? 30,000??', 'PERCENTAGE', 10, 50000, 30000, '2026-01-01T00:00:00Z', '2027-12-31T23:59:59Z', 1),
-  ('promo_expired', 'EXPIRED', '[?�스?? 만료 쿠폰', 'FIXED_AMOUNT', 10000, 0, 10000, '2025-01-01T00:00:00Z', '2025-12-31T23:59:59Z', 1)
+  ('promo_test10', 'TEST10', '[테스트] 10% 할인 (최대 30,000원)', 'PERCENTAGE', 10, 50000, 30000, '2026-01-01T00:00:00Z', '2027-12-31T23:59:59Z', 1),
+  ('promo_expired', 'EXPIRED', '[테스트] 만료 쿠폰', 'FIXED_AMOUNT', 10000, 0, 10000, '2025-01-01T00:00:00Z', '2025-12-31T23:59:59Z', 1)
   ON CONFLICT(id) DO NOTHING`,
 );
 console.log(`seeded pg E2E bootstrap (admin: admin@local.test / ${adminPassword})`);

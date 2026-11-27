@@ -5,21 +5,24 @@
 // Usage: node scripts/seed-isolated.mjs <persistDir> <adminPassword>
 import { execFileSync } from "node:child_process";
 import { webcrypto as crypto } from "node:crypto";
-import { writeFileSync, mkdtempSync } from "node:fs";
+import { rmSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const CFG = "wrangler.local.jsonc";
 const DB = "ota_local";
-const isWin = process.platform === "win32";
+const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const wranglerBin = join(rootDir, "node_modules", "wrangler", "bin", "wrangler.js");
 const persist = process.argv[2];
 if (!persist) throw new Error("usage: seed-isolated.mjs <persistDir> <adminPassword>");
 
 function d1(args) {
-  const full = ["wrangler", "d1", "execute", DB, "--local", "-c", CFG, "--persist-to", persist, ...args];
-  const cmd = isWin ? "cmd.exe" : "npx";
-  const par = isWin ? ["/c", "npx", ...full] : full;
-  return execFileSync(cmd, par, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return execFileSync(
+    process.execPath,
+    [wranglerBin, "d1", "execute", DB, "--local", "-c", CFG, "--persist-to", persist, ...args],
+    { cwd: rootDir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+  );
 }
 
 async function pbkdf2Hash(password) {
@@ -52,7 +55,11 @@ INSERT OR REPLACE INTO promotions (id, code, title, discount_type, discount_valu
 const dir = mkdtempSync(join(tmpdir(), "gft-seed-"));
 const f = join(dir, "seed.sql");
 writeFileSync(f, sql);
-console.log("2/3 simulator suppliers, admin, promotions ...");
-d1(["--file", f]);
+try {
+  console.log("2/3 simulator suppliers, admin, promotions ...");
+  d1(["--file", f]);
+} finally {
+  try { rmSync(dir, { recursive: true, force: true }); } catch {}
+}
 console.log("3/3 done.");
 console.log(`\nIsolated admin: admin@local.test / ${adminPassword}\n`);

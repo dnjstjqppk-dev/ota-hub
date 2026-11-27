@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiUrl, partnerToken } from '../config/api'
 import OrderMessages from '../components/OrderMessages.vue'
 
 const route = useRoute()
 const router = useRouter()
-const id = String(route.params.id || '')
+const id = computed(() => String(route.params.id || ''))
 
 const booking = ref<any>(null)
 const payments = ref<any[]>([])
@@ -18,27 +18,29 @@ const error = ref('')
 const krw = (v: number | null | undefined) => (typeof v === 'number' ? `${v.toLocaleString()}원` : '-')
 
 async function fetchDetail() {
+  const targetId = id.value
   loading.value = true
   error.value = ''
   try {
-    const res = await fetch(apiUrl(`/partner/orders/${encodeURIComponent(id)}`), {
+    const res = await fetch(apiUrl(`/partner/orders/${encodeURIComponent(targetId)}`), {
       credentials: 'include',
       headers: { Authorization: `Bearer ${partnerToken()}` }
     })
     const j = await res.json().catch(() => ({}))
+    if (targetId !== id.value) return
     if (!res.ok) throw new Error((j as any).error || '주문을 불러오지 못했습니다.')
     booking.value = j.booking
     payments.value = j.payments || []
     refunds.value = j.refunds || []
     history.value = j.history || []
   } catch (e: any) {
-    error.value = e.message || '주문을 불러오지 못했습니다.'
+    if (targetId === id.value) error.value = e.message || '주문을 불러오지 못했습니다.'
   } finally {
-    loading.value = false
+    if (targetId === id.value) loading.value = false
   }
 }
 
-onMounted(fetchDetail)
+watch(id, () => { booking.value = null; payments.value = []; refunds.value = []; history.value = []; fetchDetail() }, { immediate: true })
 </script>
 
 <template>

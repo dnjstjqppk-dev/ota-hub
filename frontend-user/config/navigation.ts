@@ -32,11 +32,13 @@ export const SUPPORT_LINKS = [
   { key: 'refundPolicy', label: '취소·환불 규정', to: '/refund-policy', icon: 'refund' }
 ]
 
-export const CURRENCIES = ['KRW', 'USD', 'JPY', 'EUR', 'CNY', 'GBP'] as const
+export const CURRENCIES = ['KRW', 'USD', 'JPY', 'GBP', 'HKD', 'TWD', 'EUR', 'CNY'] as const
 
 export const LOCALES = [
-  { id: 'ko', label: '한국어' },
-  { id: 'en', label: 'English' },
-  { id: 'ja', label: '日本語' },
-  { id: 'zh', label: '中文' }
+  { id: 'ko', sub: 'kr', locale: 'ko-kr', curr: 'KRW', label: '한국어 (KR)' },
+  { id: 'ja', sub: 'jp', locale: 'ja-jp', curr: 'JPY', label: '日本語 (JP)' },
+  { id: 'en', sub: 'uk', locale: 'en-gb', curr: 'GBP', label: 'English (UK)' },
+  { id: 'zh', sub: 'hk', locale: 'zh-hk', curr: 'HKD', label: '繁體中文 (HK)' },
+  { id: 'zh', sub: 'tw', locale: 'zh-tw', curr: 'TWD', label: '繁體中文 (TW)' },
+  { id: 'en', sub: 'www', locale: 'en-us', curr: 'USD', label: 'English (Global)' }
 ] as const

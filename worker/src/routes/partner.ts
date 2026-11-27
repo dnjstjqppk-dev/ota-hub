@@ -201,7 +201,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
           staffRole: s.role,
           staffName: s.full_name,
         },
-      }, 200, { "Set-Cookie": authCookie(staffToken, env, "getfortrip_partner_jwt", staffJarAge) });
+      }, 200, { "Set-Cookie": authCookie(staffToken, env, "getfortrip_partner_jwt", staffJarAge, request) });
     }
 
     const v = await verifyPasswordDetailed(pass, p.password_hash, resolvePbkdf2Iterations(env));
@@ -243,12 +243,12 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
         settlementRateBps: p.rate_bps,
         profileStatus: p.profile_status,
       },
-    }, 200, { "Set-Cookie": authCookie(token, env, "getfortrip_partner_jwt", jarAge) });
+    }, 200, { "Set-Cookie": authCookie(token, env, "getfortrip_partner_jwt", jarAge, request) });
   }
 
   if (path === "/api/v1/partner/logout" && method === "POST") {
     await revokeCurrentToken(request, env);
-    return jsonCookies({ success: true }, 200, clearAllAuthCookies(env));
+    return jsonCookies({ success: true }, 200, clearAllAuthCookies(env, request));
   }
 
   if (path === "/api/v1/partner/forgot-password" && method === "POST") {
@@ -299,6 +299,11 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     if (!done[0].meta.changes) throw new HttpError(400, "INVALID_RESET_TOKEN", "만료되었거나 이미 사용된 링크입니다.");
     await resetSubjectSessions(env, rec.partner_id);
     return json({ success: true, message: "비밀번호를 변경했어요. 새 비밀번호로 로그인해주세요." });
+  }
+
+  // 12. Partner OpenAPI document (public spec — must stay reachable from the extranet docs link without Bearer auth).
+  if (path === "/api/v1/partner/openapi.json" && method === "GET") {
+    return json(PARTNER_OPENAPI, 200, { "Cache-Control": "public, max-age=3600" });
   }
 
   // -------------------------------------------------------------------------
@@ -403,7 +408,11 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       const acct = String(pr.bank_account_number);
       pr.bank_account_number = acct.length > 4 ? `${"*".repeat(Math.max(0, acct.length - 4))}${acct.slice(-4)}` : "****";
     }
-    return json({ success: true, partner: { ...p, profile: pr } });
+    return json({
+      success: true,
+      partner: { ...p, profile: pr },
+      caller: { email: partner.email, staffId: partner.staffId || null, staffRole },
+    });
   }
 
   if (path === "/api/v1/partner/profile" && method === "PATCH") {
@@ -592,7 +601,10 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
     const unitId = str(b.unitId || "default", 100);
     const serviceDate = str(b.serviceDate, 10);
     const allocatedUnits = Number(b.allocatedUnits ?? 10);
-    const priceOverride = b.priceOverrideMinor !== undefined ? Number(b.priceOverrideMinor) : null;
+    const rawPriceOverride = b.priceOverrideMinor;
+    const priceOverride = (rawPriceOverride === undefined || rawPriceOverride === null || rawPriceOverride === "")
+      ? null
+      : Number(rawPriceOverride);
     const isClosed = b.isClosed ? 1 : 0;
 
     if (!itemId || !serviceDate) throw new HttpError(400, "INVALID_PARAMS", "상품 ID와 날짜는 필수입니다.");
@@ -778,13 +790,15 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       "SELECT p.business_number, pr.tax_invoice_email, pr.bank_name, pr.bank_account_number, pr.settlement_rate_bps FROM partners p LEFT JOIN partner_profiles pr ON pr.partner_id = p.id WHERE p.id = ?",
     ).bind(pId).first<any>();
     let acct = "";
+    let bizNo: string | null = null;
     try { acct = String((await decryptPiiField(prof?.bank_account_number, env)) || ""); } catch { acct = ""; }
+    try { bizNo = prof?.business_number ? String(await decryptPiiField(prof.business_number, env)) : null; } catch { bizNo = "***"; }
     const maskedAcct = acct.length > 4 ? `${"*".repeat(acct.length - 4)}${acct.slice(-4)}` : (acct ? "****" : "");
     return json({
       success: true,
       statement: {
         batch, lines: rows, totals,
-        partner: { id: pId, companyName: partner.companyName, businessNumber: prof?.business_number || null, taxInvoiceEmail: prof?.tax_invoice_email || null, settlementRateBps: prof?.settlement_rate_bps ?? null },
+        partner: { id: pId, companyName: partner.companyName, businessNumber: bizNo, taxInvoiceEmail: prof?.tax_invoice_email || null, settlementRateBps: prof?.settlement_rate_bps ?? null },
         payoutAccount: prof?.bank_name || maskedAcct ? `${prof?.bank_name || ""} ${maskedAcct}`.trim() : null,
         taxInvoice: "MANUAL",
         issuedAt: new Date().toISOString(),
@@ -977,11 +991,6 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       "INSERT INTO partner_webhook_deliveries (id, partner_id, webhook_url, event_type, booking_id, payload_json) VALUES (?, ?, ?, 'test', NULL, ?)"
     ).bind(id, pId, pr.webhook_url, JSON.stringify({ message: "연결 테스트 이벤트입니다.", occurred_at: new Date().toISOString() })).run();
     return json({ success: true, id }, 201);
-  }
-
-  // 12. Partner OpenAPI document (what the extranet's "API docs" link points to)
-  if (path === "/api/v1/partner/openapi.json" && method === "GET") {
-    return json(PARTNER_OPENAPI, 200, { "Cache-Control": "public, max-age=3600" });
   }
 
   throw new HttpError(404, "NOT_FOUND", "요청하신 파트너 API를 찾을 수 없습니다.");

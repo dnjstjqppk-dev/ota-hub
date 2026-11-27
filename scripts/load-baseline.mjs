@@ -15,7 +15,7 @@ const lat = [];
 const statusCount = {};
 let ok = 0;
 let err = 0;
-const startedAt = Date.now();
+let startedAt = Date.now();
 
 async function call(method, path, { token, body } = {}) {
   const t0 = performance.now();
@@ -85,6 +85,7 @@ const quoteBody = {
 lat.length = 0;
 for (const k of Object.keys(statusCount)) delete statusCount[k];
 ok = 0; err = 0;
+startedAt = Date.now();
 
 async function vu(id) {
   let i = 0;

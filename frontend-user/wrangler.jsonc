@@ -13,12 +13,17 @@
   "observability": {
     "enabled": true
   },
-  // Domain hookup (2026-11-25): apex + www (www 301s to the apex in
-  // server/middleware/canonical-host.ts). workers.dev stays on for checks.
+  // Country-subdomain routing (2026-11-27): apex + www + regional subdomains.
+  // Edge redirects (legacy /en|/ja|/zh 301 & Geo-IP 302) live in edge/edge-guard.mjs.
   "workers_dev": true,
   "routes": [
     { "pattern": "getfortrip.com", "custom_domain": true },
-    { "pattern": "www.getfortrip.com", "custom_domain": true }
+    { "pattern": "www.getfortrip.com", "custom_domain": true },
+    { "pattern": "kr.getfortrip.com", "custom_domain": true },
+    { "pattern": "jp.getfortrip.com", "custom_domain": true },
+    { "pattern": "uk.getfortrip.com", "custom_domain": true },
+    { "pattern": "hk.getfortrip.com", "custom_domain": true },
+    { "pattern": "tw.getfortrip.com", "custom_domain": true }
   ],
   "assets": {
     "directory": ".output/public",

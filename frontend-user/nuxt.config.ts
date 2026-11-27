@@ -54,14 +54,6 @@ const PAGE_RULES: Record<string, Record<string, unknown>> = {
   '/faq': { isr: 3600 },
   '/help': { isr: 3600 }
 }
-const LOCALE_PREFIXES = ['en', 'ja', 'zh']
-function localizeRules(rules: Record<string, Record<string, unknown>>) {
-  const out: Record<string, Record<string, unknown>> = { ...rules }
-  for (const loc of LOCALE_PREFIXES) {
-    for (const [path, rule] of Object.entries(rules)) out[`/${loc}${path}`] = rule
-  }
-  return out
-}
 
 export default defineNuxtConfig({
   ssr: true,
@@ -76,14 +68,14 @@ export default defineNuxtConfig({
         'X-Frame-Options': 'SAMEORIGIN',
         'Referrer-Policy': 'strict-origin-when-cross-origin',
         // GAP-02 (2026-11-24 audit): page CSP. Inline scripts stay allowed
-        // (Nuxt SSR payload + theme boot); remote code is Toss SDK only.
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.tosspayments.com https://js.stripe.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data: blob:; font-src 'self' https://cdn.jsdelivr.net data:; connect-src 'self' https://ota-hub.dnjstjq0824.workers.dev https://getfortrip.com https://api.tosspayments.com https://log.tosspayments.com https://api.stripe.com https://*.sentry.io https://*.ingest.sentry.io; frame-src https://pay.tosspayments.com https://js.stripe.com; form-action 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
+        // (Nuxt SSR payload + theme boot); remote code is Toss/Stripe SDKs.
+        // Subdomain routing (2026-11-27): allow https://*.getfortrip.com for API calls.
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.tosspayments.com https://js.stripe.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data: blob:; font-src 'self' https://cdn.jsdelivr.net data:; connect-src 'self' https://ota-hub.dnjstjq0824.workers.dev https://getfortrip.com https://*.getfortrip.com https://api.tosspayments.com https://log.tosspayments.com https://api.stripe.com https://*.sentry.io https://*.ingest.sentry.io; frame-src https://pay.tosspayments.com https://js.stripe.com; form-action 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
       }
     },
-    // 2026-11-27 CPU incident: these used to cover the ko (unprefixed) paths
-    // only, so /en/login, /zh/register, /ja/my … ran a full SSR on every hit
-    // (56% of ota-user CPU). localizeRules() repeats each rule per prefix.
-    ...localizeRules(PAGE_RULES)
+    // Subdomain + ?locale= routing (strategy: no_prefix): no duplicate /en|/ja|/zh
+    // Vue routes exist; legacy prefixes 301 at the edge before Nitro runs.
+    ...PAGE_RULES
   },
   nitro: {
     // cloudflare-module (ES modules + nodejs_compat). The plain 'cloudflare'
@@ -123,6 +115,11 @@ export default defineNuxtConfig({
             const buildTag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
             this.emitFile({
               type: 'asset',
+              fileName: 'locale-map.mjs',
+              source: readFileSync(new URL('./edge/locale-map.mjs', import.meta.url), 'utf8')
+            })
+            this.emitFile({
+              type: 'asset',
               fileName: 'edge-guard.mjs',
               source: readFileSync(new URL('./edge/edge-guard.mjs', import.meta.url), 'utf8')
             })
@@ -158,12 +155,11 @@ export default defineNuxtConfig({
     defaultLocale: 'ko',
     // v10: `lazy` was removed — locale `file`s are always lazy-loaded.
     langDir: 'locales',
-    strategy: 'prefix_except_default',
-    detectBrowserLanguage: {
-      useCookie: true,
-      cookieKey: 'getfortrip_locale',
-      redirectOn: 'root'
-    }
+    strategy: 'no_prefix',
+    // Country subdomains + ?locale=xx-yy&curr=XXX + pref_* cookies are resolved
+    // by edge/edge-guard.mjs and plugins/02.locale-routing.ts (single mapping:
+    // config/locale.config.ts).
+    detectBrowserLanguage: false
   },
 
   compatibilityDate: '2025-07-15',

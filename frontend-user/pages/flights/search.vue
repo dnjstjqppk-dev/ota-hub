@@ -10,7 +10,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
-import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { addDaysIso, daysBetween, fmtDay, qDate, qInt, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 // Resolved once in setup: head getters run at render time, outside the Nuxt context.
 const flightSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
@@ -180,7 +180,8 @@ const heading = computed(() => {
   if (!x.origin || !x.dest) return t('flights.search.title')
   return step.value === 'return' ? `${cityOf(x.dest)} → ${cityOf(x.origin)}` : `${cityOf(x.origin)} → ${cityOf(x.dest)}`
 })
-useHead(() => ({ title: q.value.origin && q.value.dest ? t('flights.search.docTitle', { o: cityOf(q.value.origin), d: cityOf(q.value.dest) }) : t('flights.search.title'), meta: [...ogMeta(flightSeoSite, '/flights/search', null, locale.value)], link: [{ rel: 'canonical', href: `${flightSeoSite}/flights/search` }, ...hreflangLinks(flightSeoSite, '/flights/search')] }))
+const flightLocaleCtx = useActiveLocaleContext()
+useHead(() => ({ title: q.value.origin && q.value.dest ? t('flights.search.docTitle', { o: cityOf(q.value.origin), d: cityOf(q.value.dest) }) : t('flights.search.title'), meta: [...ogMeta(flightSeoSite, '/flights/search', null, flightLocaleCtx.value.locale, flightLocaleCtx.value.sub)], link: [{ rel: 'canonical', href: canonicalHref('/flights/search', { sub: flightLocaleCtx.value.sub, locale: flightLocaleCtx.value.locale }) }, ...hreflangLinks(flightSeoSite, '/flights/search')] }))
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {
   const elements = filtered.value

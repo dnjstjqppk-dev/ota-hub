@@ -23,6 +23,7 @@
 
 import { execFileSync, spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -35,7 +36,7 @@ const opt = (name, fallback = null) => {
   return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : fallback;
 };
 const SOURCE = opt("--source");
-const WORK = opt("--work", "C:\\tmp\\dr_drill");
+const WORK = opt("--work", join(tmpdir(), "dr_drill"));
 const PORT = Number(opt("--port", "8898"));
 const MARKERS = Number(opt("--markers", "25"));
 
@@ -60,7 +61,7 @@ function killChild() {
   if (!child || child.exitCode !== null) return;
   try {
     if (process.platform === "win32") execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-    else child.kill("SIGKILL");
+    else process.kill(-child.pid, "SIGKILL");
   } catch { /* already gone */ }
 }
 process.on("exit", killChild);
@@ -175,6 +176,7 @@ async function main() {
 
 드릴은 원천 디렉터리를 읽기만 한다 (쓰기는 drill/live·restored 복사본에만).
 `;
+  mkdirSync(join(root, "reports"), { recursive: true });
   const outPath = join(root, "reports", `DR_REHEARSAL_${stamp}.md`);
   writeFileSync(outPath, md);
   console.log(JSON.stringify(report));

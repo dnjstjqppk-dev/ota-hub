@@ -40,7 +40,8 @@ const debouncedQuery = ref('')
 const page = ref(1)
 const total = ref(0)
 const totalPages = ref(1)
-const actionLoading = ref('')
+const actionLoadingIds = ref<Set<string>>(new Set())
+const isActionLoading = (id: string) => actionLoadingIds.value.has(id)
 const actionError = ref('')
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -104,6 +105,7 @@ const fetchOrders = async () => {
 }
 
 const handleOrderAction = async (order: OrderRow, action: 'confirm' | 'reject') => {
+  if (isActionLoading(order.id)) return
   actionError.value = ''
   let supplierReference = ''
   if (action === 'confirm') {
@@ -118,10 +120,10 @@ const handleOrderAction = async (order: OrderRow, action: 'confirm' | 'reject') 
     return
   }
 
-  actionLoading.value = order.id
+  actionLoadingIds.value = new Set([...actionLoadingIds.value, order.id])
   try {
     const token = partnerToken()
-    const res = await fetch(apiUrl(`/partner/orders/${order.id}/${action}`), {
+    const res = await fetch(apiUrl(`/partner/orders/${encodeURIComponent(order.id)}/${action}`), {
       credentials: 'include',
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -133,7 +135,9 @@ const handleOrderAction = async (order: OrderRow, action: 'confirm' | 'reject') 
   } catch (e: any) {
     actionError.value = e.message || '오류가 발생했습니다.'
   } finally {
-    actionLoading.value = ''
+    const next = new Set(actionLoadingIds.value)
+    next.delete(order.id)
+    actionLoadingIds.value = next
   }
 }
 
@@ -259,16 +263,16 @@ onMounted(() => {
                   <button
                     v-if="confirmable(o)"
                     type="button"
-                    :disabled="actionLoading === o.id"
+                    :disabled="isActionLoading(o.id)"
                     class="rounded-lg bg-success px-2.5 py-1 text-[11px] font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
                     @click="handleOrderAction(o, 'confirm')"
                   >
-                    {{ actionLoading === o.id ? '처리 중...' : '예약 확정' }}
+                    {{ isActionLoading(o.id) ? '처리 중...' : '예약 확정' }}
                   </button>
                   <button
                     v-if="rejectable(o)"
                     type="button"
-                    :disabled="actionLoading === o.id"
+                    :disabled="isActionLoading(o.id)"
                     class="rounded-lg border border-danger/30 bg-danger-soft px-2.5 py-1 text-[11px] font-bold text-danger transition hover:opacity-80 disabled:opacity-50"
                     @click="handleOrderAction(o, 'reject')"
                   >

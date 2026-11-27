@@ -59,7 +59,6 @@ const FILTERS = ['', 'MANUAL_REVIEW_REQUIRED', 'SUPPLIER_BOOKING_PENDING', 'REFU
 // ------------------------------------------------------------------ detail
 const id = computed(() => qv('id'))
 const detail = useResource(async () => (id.value ? api(`/admin/bookings/${encodeURIComponent(id.value)}`) : null), null as any)
-watch(id, (v) => { if (v) detail.reload() }, { immediate: true })
 const b = computed(() => detail.data.value?.booking)
 const canDecide = computed(() => ['SUPPLIER_BOOKING_PENDING', 'MANUAL_REVIEW_REQUIRED'].includes(b.value?.status))
 const hasPendingRefund = computed(() => (b.value?.refunds || []).some((r: any) => r.status === 'PENDING'))
@@ -70,19 +69,31 @@ const TERMINAL = ['COMPLETED', 'REFUNDED', 'CANCELLED', 'EXPIRED', 'FAILED']
 const canForce = computed(() => !!b.value && !TERMINAL.includes(b.value.status))
 const refundable = computed(() => Math.max(0, (b.value?.paidMinor || 0) - (b.value?.refundedMinor || 0)))
 const rform = reactive({ mode: '' as '' | 'FORCE' | 'REFUND' | 'OFFLINE', amount: '', bank: '', account: '', reason: '' })
+const chNotes = reactive<Record<string, string>>({})
+function resetDetailForms() {
+  Object.assign(form, { mode: '', supplierReference: '', pnr: '', note: '' })
+  Object.assign(rform, { mode: '', amount: '', bank: '', account: '', reason: '' })
+  for (const k of Object.keys(chNotes)) delete chNotes[k]
+}
+watch(id, (v) => { resetDetailForms(); if (v) detail.reload() }, { immediate: true })
 function openR(mode: 'FORCE' | 'REFUND' | 'OFFLINE') { Object.assign(rform, { mode, amount: String(refundable.value), bank: '', account: '', reason: '' }) }
 async function submitR() {
-  const id = b.value.id
+  if (busy.value || !b.value) return
+  const bookingId = b.value.id
   if (!rform.reason.trim()) { toast('사유를 입력해 주세요.', 'danger'); return }
-  const amount = Math.floor(Number(rform.amount))
-  if (rform.mode !== 'FORCE' && (!Number.isInteger(amount) || amount <= 0)) { toast('환불 금액을 입력해 주세요.', 'danger'); return }
+  const rawAmount = String(rform.amount ?? '').replace(/,/g, '').trim()
+  const amount = rawAmount === '' ? 0 : Math.floor(Number(rawAmount))
+  if (rform.mode !== 'FORCE') {
+    if (!Number.isInteger(amount) || amount <= 0) { toast('환불 금액을 입력해 주세요.', 'danger'); return }
+    if (amount > refundable.value) { toast(`환불 가능액(${krw(refundable.value)})을 초과할 수 없어요.`, 'danger'); return }
+  }
   if (rform.mode === 'OFFLINE' && (!rform.bank.trim() || !rform.account.trim())) { toast('환불 은행과 계좌번호를 입력해 주세요.', 'danger'); return }
   const verb = rform.mode === 'FORCE' ? '직권 취소' : rform.mode === 'REFUND' ? `${amount.toLocaleString('ko-KR')}원 PG 환불` : `${amount.toLocaleString('ko-KR')}원 수기 환불`
   if (!confirm(`${b.value.bookingNumber} 예약을 ${verb}할까요? 되돌릴 수 없어요.`)) return
   busy.value = true
   try {
     const endpoint = rform.mode === 'FORCE' ? 'force-cancel' : rform.mode === 'REFUND' ? 'refund' : 'offline-refund'
-    await api(`/admin/bookings/${id}/${endpoint}`, { method: 'POST', json: { amountMinor: amount, bank: rform.bank.trim() || undefined, account: rform.account.trim() || undefined, reason: rform.reason.trim() } })
+    await api(`/admin/bookings/${encodeURIComponent(bookingId)}/${endpoint}`, { method: 'POST', json: { amountMinor: amount, bank: rform.bank.trim() || undefined, account: rform.account.trim() || undefined, reason: rform.reason.trim() } })
     toast(`${verb}했어요.`)
     rform.mode = ''
     await Promise.all([detail.reload(), list.reload()])
@@ -123,18 +134,29 @@ const ACTOR: Record<string, string> = { SYSTEM: '시스템', USER: '고객', ADM
 
 // GAP-08: itinerary-change approvals (involuntary requests wait here).
 const changes = ref<any[]>([])
+let changesSeq = 0
 async function loadChanges() {
-  changes.value = id.value ? (await api(`/admin/change-requests?bookingId=${encodeURIComponent(id.value)}`)).requests || [] : []
+  const seq = ++changesSeq
+  const targetId = id.value
+  changes.value = []
+  if (!targetId) return
+  try {
+    const res = await api(`/admin/change-requests?bookingId=${encodeURIComponent(targetId)}`)
+    if (seq === changesSeq && id.value === targetId) changes.value = res.requests || []
+  } catch (e) {
+    if (seq === changesSeq) toast((e as Error).message, 'danger')
+  }
 }
 watch(id, loadChanges, { immediate: true })
-const chNote = ref('')
 async function decideChange(reqId: string, decision: 'APPROVE' | 'REJECT') {
-  if (decision === 'REJECT' && !chNote.value.trim()) { toast('거절 사유를 입력해 주세요.', 'danger'); return }
+  if (busy.value) return
+  const note = (chNotes[reqId] || '').trim()
+  if (decision === 'REJECT' && !note) { toast('거절 사유를 입력해 주세요.', 'danger'); return }
   busy.value = true
   try {
-    await api(`/admin/change-requests/${encodeURIComponent(reqId)}`, { method: 'PATCH', json: { decision, note: chNote.value.trim() || undefined } })
+    await api(`/admin/change-requests/${encodeURIComponent(reqId)}`, { method: 'PATCH', json: { decision, note: note || undefined } })
     toast(decision === 'APPROVE' ? '일정 변경을 승인했어요. 수수료가 면제됩니다.' : '일정 변경을 거절했어요.')
-    chNote.value = ''
+    delete chNotes[reqId]
     await Promise.all([loadChanges(), detail.reload(), list.reload()])
   } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }
 }
@@ -196,7 +218,7 @@ async function decideChange(reqId: string, decision: 'APPROVE' | 'REJECT') {
       <PageNav :page="page" :total-pages="totalPages" :total="total" @go="(p) => patch({ page: p === 1 ? '' : String(p) })" />
     </StatePanel>
 
-    <SidePanel :open="!!id" wide :title="b ? b.title : '예약 상세'" :subtitle="b ? b.bookingNumber : ''" @close="patch({ id: '' }); form.mode = ''">
+    <SidePanel :open="!!id" wide :title="b ? b.title : '예약 상세'" :subtitle="b ? b.bookingNumber : ''" @close="patch({ id: '' }); resetDetailForms()">
       <StatePanel :state="detail.state.value" :error="detail.error.value" @retry="detail.reload()">
         <div v-if="b" class="space-y-6 text-sm">
           <div class="flex flex-wrap items-center gap-2">
@@ -255,7 +277,7 @@ async function decideChange(reqId: string, decision: 'APPROVE' | 'REJECT') {
                 <p class="font-medium">{{ c.type === 'INVOLUNTARY' ? '항공사 사유' : '자발적' }} · {{ c.new_start_date }}<span v-if="c.new_end_date"> → {{ c.new_end_date }}</span> · <span class="font-mono">{{ c.status }}</span></p>
                 <p class="mt-1 text-xs text-ink-muted">새 금액 {{ krw(c.new_total_minor) }} · 취소 수수료 {{ krw(c.cancel_fee_minor) }} · 환불 예정 {{ krw(c.refund_due_minor) }}<span v-if="c.reason"> · 사유: {{ c.reason }}</span><span v-if="c.new_booking_id"> · 새 예약 <span class="font-mono">{{ c.new_booking_id }}</span></span></p>
                 <div v-if="c.status === 'PENDING_APPROVAL'" class="mt-2 flex flex-wrap items-center gap-2">
-                  <input v-model="chNote" class="input flex-1" placeholder="메모 (거절 시 필수)" maxlength="300" />
+                  <input v-model="chNotes[c.id]" class="input flex-1" placeholder="메모 (거절 시 필수)" maxlength="300" />
                   <button type="button" class="btn-primary btn-sm" :disabled="busy" @click="decideChange(c.id, 'APPROVE')">승인 (수수료 면제)</button>
                   <button type="button" class="btn-danger btn-sm" :disabled="busy" @click="decideChange(c.id, 'REJECT')">거절</button>
                 </div>

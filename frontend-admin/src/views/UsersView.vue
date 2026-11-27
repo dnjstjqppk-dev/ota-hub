@@ -55,7 +55,15 @@ const STATUS: Record<string, { label: string; tone: any }> = { ACTIVE: { label: 
 const selected = ref<any | null>(null)
 const form = reactive({ role: 'USER', coin: '', note: '', suspended: false, reason: '' })
 const busy = ref(false)
-function open(u: any) { selected.value = u; Object.assign(form, { role: u.role, coin: '', note: '', suspended: u.status === 'SUSPENDED', reason: '' }) }
+// #23: one stable Idempotency-Key per coin-adjustment attempt; reset only on
+// success, user switch, or when coin/note values change.
+let coinIdemKey = ''
+watch(() => [form.coin, form.note], () => { coinIdemKey = '' })
+function open(u: any) {
+  selected.value = u
+  coinIdemKey = ''
+  Object.assign(form, { role: u.role, coin: '', note: '', suspended: u.status === 'SUSPENDED', reason: '' })
+}
 const isSelf = computed(() => selected.value?.id === session.user?.id)
 const isDeleted = computed(() => selected.value?.status === 'DELETED')
 const suspensionChanged = computed(() => !!selected.value && !isDeleted.value && form.suspended !== (selected.value.status === 'SUSPENDED'))
@@ -70,28 +78,34 @@ const coinError = computed(() => {
 const dirty = computed(() => !!selected.value && (form.role !== selected.value.role || coinValue.value !== null || suspensionChanged.value))
 
 async function save() {
-  if (coinError.value) return
-  if (form.role !== selected.value.role && !confirm(`${selected.value.email}의 권한을 ${ROLE[form.role].label}(으)로 바꿀까요?`)) return
+  if (busy.value || !selected.value || coinError.value) return
+  const target = selected.value
+  const targetId = target.id
+  if (form.role !== target.role && !confirm(`${target.email}의 권한을 ${ROLE[form.role].label}(으)로 바꿀까요?`)) return
   if (suspensionChanged.value) {
     if (form.suspended && !form.reason.trim()) { toast('정지 사유를 입력해 주세요.', 'danger', 6000); return }
     const verb = form.suspended ? '정지' : '정지 해제'
-    if (!confirm(`${selected.value.email} 회원을 ${verb}할까요?${form.suspended ? ' 즉시 모든 세션이 끊깁니다.' : ''}`)) return
+    if (!confirm(`${target.email} 회원을 ${verb}할까요?${form.suspended ? ' 즉시 모든 세션이 끊깁니다.' : ''}`)) return
   }
   busy.value = true
   try {
     const body: Record<string, unknown> = {}
-    if (form.role !== selected.value.role) body.role = form.role
+    if (form.role !== target.role) body.role = form.role
     if (coinValue.value !== null) { body.coinAdjustment = coinValue.value; body.note = form.note.trim() || undefined }
     if (suspensionChanged.value) { body.isActive = !form.suspended; if (form.suspended) body.reason = form.reason.trim() }
-    // #23: coin adjustments are money-moving — the server requires an
-    // Idempotency-Key so a retried submit replays instead of double-applying.
     const headers: Record<string, string> = {}
-    if (body.coinAdjustment !== undefined) headers['Idempotency-Key'] = `adm_coin_${crypto.randomUUID().replace(/-/g, '')}`
-    const r = await api(`/admin/users/${encodeURIComponent(selected.value.id)}`, { method: 'PATCH', json: body, headers })
-    selected.value = { ...selected.value, role: form.role, coin_balance: r.coinBalance ?? selected.value.coin_balance, status: suspensionChanged.value ? (form.suspended ? 'SUSPENDED' : 'ACTIVE') : selected.value.status }
-    form.coin = ''
-    form.note = ''
-    form.reason = ''
+    if (body.coinAdjustment !== undefined) {
+      if (!coinIdemKey) coinIdemKey = `adm_coin_${crypto.randomUUID().replace(/-/g, '')}`
+      headers['Idempotency-Key'] = coinIdemKey
+    }
+    const r = await api(`/admin/users/${encodeURIComponent(targetId)}`, { method: 'PATCH', json: body, headers })
+    coinIdemKey = ''
+    if (selected.value?.id === targetId) {
+      selected.value = { ...selected.value, role: form.role, coin_balance: r.coinBalance ?? selected.value.coin_balance, status: suspensionChanged.value ? (form.suspended ? 'SUSPENDED' : 'ACTIVE') : selected.value.status }
+      form.coin = ''
+      form.note = ''
+      form.reason = ''
+    }
     toast('회원 정보를 저장했어요.')
     list.reload()
   } catch (e) { toast((e as Error).message, 'danger', 6000) } finally { busy.value = false }

@@ -50,7 +50,7 @@ const list = useResource(async () => {
   return (tab.value === 'clicks' ? j.clicks : j.conversions) || []
 }, [] as any[])
 watch([tab, q, partner, status, page], () => { if (tab.value === 'partners') partners.reload(); else list.reload() })
-onMounted(() => { summary.reload(); list.reload(); partners.reload() })
+onMounted(() => { summary.reload(); partners.reload(); if (tab.value !== 'partners') list.reload() })
 
 // #24: partner registry.
 const partners = useResource(async () => (await api('/admin/affiliate/partners')).partners || [], [] as any[])
@@ -92,7 +92,19 @@ async function rotateSecret(p: any) {
 }
 
 const CLICK_STATUS = ['', 'CLICKED', 'REDIRECTED', 'CONVERTED', 'EXPIRED']
-const CONV_STATUS = ['', 'CONFIRMED', 'PENDING', 'REJECTED', 'REVERSED']
+const CONV_STATUS = ['', 'REPORTED', 'CONFIRMED', 'PENDING', 'REJECTED', 'REVERSED']
+function fmtCurrency(amount: unknown, curr: unknown) {
+  if (amount === null || amount === undefined || amount === '') return '—'
+  const v = Number(amount)
+  if (!Number.isFinite(v)) return '—'
+  const c = String(curr || 'KRW').toUpperCase()
+  const decimals = c === 'KRW' || c === 'JPY' ? 0 : 2
+  try {
+    return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: c, minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(v)
+  } catch {
+    return `${v.toLocaleString('ko-KR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${c}`
+  }
+}
 function statusTone(s: string) {
   if (s === 'CONVERTED' || s === 'CONFIRMED') return 'success'
   if (s === 'REJECTED' || s === 'REVERSED' || s === 'EXPIRED') return 'danger'
@@ -194,8 +206,8 @@ const convRate = computed(() => {
             <tr v-for="c in list.data.value" :key="c.id">
               <td><p class="font-mono text-xs">{{ c.order_id }}</p><p class="font-mono text-2xs text-ink-subtle">{{ c.click_id }}</p></td>
               <td class="font-mono text-xs">{{ c.partner_name }}</td>
-              <td class="text-right font-semibold tabular">{{ krw(c.amount) }} <span class="text-2xs text-ink-subtle">{{ c.currency }}</span></td>
-              <td class="text-right font-semibold tabular">{{ krw(c.commission) }}</td>
+              <td class="text-right font-semibold tabular">{{ fmtCurrency(c.amount, c.currency) }} <span class="text-2xs text-ink-subtle">{{ c.currency }}</span></td>
+              <td class="text-right font-semibold tabular">{{ fmtCurrency(c.commission, c.currency) }}</td>
               <td><StatusBadge :tone="statusTone(c.status)" :label="c.status" /></td>
               <td class="whitespace-nowrap text-xs text-ink-muted">{{ dateTime(c.created_at) }}</td>
             </tr>

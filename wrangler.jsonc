@@ -25,7 +25,37 @@
     { "pattern": "getfortrip.com/out/*", "zone_name": "getfortrip.com" },
     { "pattern": "getfortrip.com/sitemap*", "zone_name": "getfortrip.com" },
     { "pattern": "getfortrip.com/llms*", "zone_name": "getfortrip.com" },
-    { "pattern": "getfortrip.com/rss.xml", "zone_name": "getfortrip.com" }
+    { "pattern": "getfortrip.com/rss.xml", "zone_name": "getfortrip.com" },
+    { "pattern": "www.getfortrip.com/api/*", "zone_name": "getfortrip.com" },
+    { "pattern": "www.getfortrip.com/out/*", "zone_name": "getfortrip.com" },
+    { "pattern": "www.getfortrip.com/sitemap*", "zone_name": "getfortrip.com" },
+    { "pattern": "www.getfortrip.com/llms*", "zone_name": "getfortrip.com" },
+    { "pattern": "www.getfortrip.com/rss.xml", "zone_name": "getfortrip.com" },
+    { "pattern": "kr.getfortrip.com/api/*", "zone_name": "getfortrip.com" },
+    { "pattern": "kr.getfortrip.com/out/*", "zone_name": "getfortrip.com" },
+    { "pattern": "kr.getfortrip.com/sitemap*", "zone_name": "getfortrip.com" },
+    { "pattern": "kr.getfortrip.com/llms*", "zone_name": "getfortrip.com" },
+    { "pattern": "kr.getfortrip.com/rss.xml", "zone_name": "getfortrip.com" },
+    { "pattern": "jp.getfortrip.com/api/*", "zone_name": "getfortrip.com" },
+    { "pattern": "jp.getfortrip.com/out/*", "zone_name": "getfortrip.com" },
+    { "pattern": "jp.getfortrip.com/sitemap*", "zone_name": "getfortrip.com" },
+    { "pattern": "jp.getfortrip.com/llms*", "zone_name": "getfortrip.com" },
+    { "pattern": "jp.getfortrip.com/rss.xml", "zone_name": "getfortrip.com" },
+    { "pattern": "uk.getfortrip.com/api/*", "zone_name": "getfortrip.com" },
+    { "pattern": "uk.getfortrip.com/out/*", "zone_name": "getfortrip.com" },
+    { "pattern": "uk.getfortrip.com/sitemap*", "zone_name": "getfortrip.com" },
+    { "pattern": "uk.getfortrip.com/llms*", "zone_name": "getfortrip.com" },
+    { "pattern": "uk.getfortrip.com/rss.xml", "zone_name": "getfortrip.com" },
+    { "pattern": "hk.getfortrip.com/api/*", "zone_name": "getfortrip.com" },
+    { "pattern": "hk.getfortrip.com/out/*", "zone_name": "getfortrip.com" },
+    { "pattern": "hk.getfortrip.com/sitemap*", "zone_name": "getfortrip.com" },
+    { "pattern": "hk.getfortrip.com/llms*", "zone_name": "getfortrip.com" },
+    { "pattern": "hk.getfortrip.com/rss.xml", "zone_name": "getfortrip.com" },
+    { "pattern": "tw.getfortrip.com/api/*", "zone_name": "getfortrip.com" },
+    { "pattern": "tw.getfortrip.com/out/*", "zone_name": "getfortrip.com" },
+    { "pattern": "tw.getfortrip.com/sitemap*", "zone_name": "getfortrip.com" },
+    { "pattern": "tw.getfortrip.com/llms*", "zone_name": "getfortrip.com" },
+    { "pattern": "tw.getfortrip.com/rss.xml", "zone_name": "getfortrip.com" }
   ],
   "d1_databases": [
     {
@@ -45,7 +75,8 @@
     "run_worker_first": true
   },
   "vars": {
-    "ALLOWED_ORIGINS": "https://getfortrip.com,https://www.getfortrip.com,https://admin.getfortrip.com,https://partner.getfortrip.com,https://ota-hub.dnjstjq0824.workers.dev,https://ota-user.dnjstjq0824.workers.dev,https://ota-admin.dnjstjq0824.workers.dev,https://ota-partner.dnjstjq0824.workers.dev",
+    "ALLOWED_ORIGINS": "https://getfortrip.com,https://www.getfortrip.com,https://kr.getfortrip.com,https://jp.getfortrip.com,https://uk.getfortrip.com,https://hk.getfortrip.com,https://tw.getfortrip.com,https://admin.getfortrip.com,https://partner.getfortrip.com,https://ota-hub.dnjstjq0824.workers.dev,https://ota-user.dnjstjq0824.workers.dev,https://ota-admin.dnjstjq0824.workers.dev,https://ota-partner.dnjstjq0824.workers.dev",
+    "AUTH_COOKIE_DOMAIN": ".getfortrip.com",
     "PUBLIC_SITE_URL": "https://getfortrip.com",
     "PARTNER_SITE_URL": "https://partner.getfortrip.com",
     // Declared provider with no key yet: /health stays DISABLED until TOSS_SECRET_KEY

@@ -116,7 +116,11 @@ const list = useResource(async () => {
   totalPages.value = j.totalPages || 1
   return j.items || []
 }, [] as any[])
-watch([domain, q, status, page], () => list.reload())
+watch([domain, q, status], () => {
+  if (page.value !== 1) patch({ page: '' })
+  else list.reload()
+})
+watch(page, () => list.reload())
 onMounted(() => { list.reload(); suppliers.reload() })
 const suppliers = useResource(async () => (await api('/admin/suppliers')).suppliers || [], [] as any[])
 const supplierById = computed(() => new Map(suppliers.data.value.map((s: any) => [s.id, s])))
@@ -169,15 +173,19 @@ function resetForm() {
 function openCreate() {
   resetForm()
   createId.value = ''
-  panel.value = { mode: 'create', domain: domain.value || 'HOTEL', id: '', title: '상품 등록' }
+  createDomain.value = domain.value || 'HOTEL'
+  panel.value = { mode: 'create', domain: createDomain.value, id: '', title: '상품 등록' }
   snapshot = JSON.stringify({ form: {}, policy: { ...policy } })
 }
+let editReqSeq = 0
 async function openEdit(it: any) {
+  const reqId = ++editReqSeq
   resetForm()
   panel.value = { mode: 'edit', domain: it.domain_type, id: it.id, title: it.title }
   formLoading.value = true
   try {
     const d = await api(`/admin/catalog/${it.domain_type}/${encodeURIComponent(it.id)}`)
+    if (reqId !== editReqSeq || panel.value?.id !== it.id) return
     for (const f of fieldsFor(it.domain_type)) {
       const v = d.product[f.key]
       if (v === null || v === undefined) continue
@@ -186,6 +194,7 @@ async function openEdit(it: any) {
       else form[f.key] = v
     }
     const p = (await api(`/admin/catalog/${it.domain_type}/${encodeURIComponent(it.id)}/policy`)).policy
+    if (reqId !== editReqSeq || panel.value?.id !== it.id) return
     if (p) {
       policy.free_cancel_hours = p.free_cancel_hours ?? ''
       policy.change_allowed = Number(p.change_allowed) === 1
@@ -195,9 +204,10 @@ async function openEdit(it: any) {
     }
     snapshot = JSON.stringify({ form: { ...form }, json: { ...formJson }, policy: { ...policy } })
   } catch (e: any) {
+    if (reqId !== editReqSeq) return
     formError.value = e?.message || '상품을 불러오지 못했어요.'
   } finally {
-    formLoading.value = false
+    if (reqId === editReqSeq) formLoading.value = false
   }
 }
 function closePanel() { panel.value = null }

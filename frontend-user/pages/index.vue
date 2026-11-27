@@ -9,24 +9,23 @@ import { computed, onMounted, ref } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { CATEGORIES } from '~/config/navigation'
-import { SEO_LOCALES } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, useActiveLocaleContext } from '~/composables/useSeoPage'
 
 const currency = useCurrencyStore()
-const { t, locale } = useI18n()
-const prefix = computed(() => (locale.value === 'ko' ? '' : `/${locale.value}`))
+const { t } = useI18n()
+const localeCtx = useActiveLocaleContext()
 
 useHead({
   title: () => t('seo.home.title'),
-  htmlAttrs: { lang: () => locale.value === 'ko' ? 'ko-KR' : locale.value === 'ja' ? 'ja-JP' : locale.value === 'zh' ? 'zh-CN' : 'en-US' },
+  htmlAttrs: { lang: () => localeCtx.value.hreflang },
   meta: [
     { name: 'description', content: () => t('seo.home.description') },
     { property: 'og:site_name', content: 'getfortrip' },
-    { property: 'og:url', content: () => `https://getfortrip.com${prefix.value}/` }
+    { property: 'og:url', content: () => canonicalHref('/', { sub: localeCtx.value.sub, locale: localeCtx.value.locale }) }
   ],
   link: [
-    { rel: 'canonical', href: () => `https://getfortrip.com${prefix.value}/` },
-    ...SEO_LOCALES.map((l) => ({ rel: 'alternate' as const, hreflang: l.code, href: `https://getfortrip.com${l.prefix}/` })),
-    { rel: 'alternate', hreflang: 'x-default', href: 'https://getfortrip.com/' }
+    { rel: 'canonical', href: () => canonicalHref('/', { sub: localeCtx.value.sub, locale: localeCtx.value.locale }) },
+    ...hreflangLinks('https://getfortrip.com', '/')
   ]
 })
 

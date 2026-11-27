@@ -1,3 +1,5 @@
+import { ref } from 'vue'
+
 const host = typeof window !== 'undefined' ? window.location.hostname : ''
 
 // partner.<domain> calls the apex /api/* route: same-site, so the HttpOnly
@@ -33,8 +35,7 @@ export function partnerToken(): string {
   return memoryToken || ''
 }
 
-/** Stored login payload (`data.partner`). Display cache only — never a credential. */
-export function partnerInfo(): Record<string, any> | null {
+function readStoredPartnerInfo(): Record<string, any> | null {
   try {
     const raw = localStorage.getItem('getfortrip_partner_info') || sessionStorage.getItem('getfortrip_partner_info')
     return raw ? JSON.parse(raw) : null
@@ -43,7 +44,16 @@ export function partnerInfo(): Record<string, any> | null {
   }
 }
 
+/** Reactive partner display cache (updated by savePartnerInfo / clearPartnerSession). */
+export const partnerState = ref<Record<string, any> | null>(readStoredPartnerInfo())
+
+/** Stored login payload (`data.partner`). Display cache only — never a credential. */
+export function partnerInfo(): Record<string, any> | null {
+  return partnerState.value ?? readStoredPartnerInfo()
+}
+
 export function savePartnerInfo(info: Record<string, any>, persistent: boolean): void {
+  partnerState.value = info
   try {
     const raw = JSON.stringify(info)
     const store = persistent ? localStorage : sessionStorage
@@ -61,17 +71,24 @@ export function partnerOnboardingPending(): boolean {
   return st === 'PENDING_APPROVAL' || st === 'PENDING'
 }
 
-export function clearPartnerSession(): void {
+function clearLocalPartnerSession(): void {
   memoryToken = null
+  partnerState.value = null
   try {
     localStorage.removeItem('getfortrip_partner_token')
     localStorage.removeItem('getfortrip_partner_info')
     sessionStorage.removeItem('getfortrip_partner_token')
     sessionStorage.removeItem('getfortrip_partner_info')
   } catch {}
-  // Best-effort server logout: revokes the JWT and clears the partner jar.
+}
+
+export function clearPartnerSession(): void {
+  const token = memoryToken
+  clearLocalPartnerSession()
+  // Best-effort server logout: pass Bearer token so cross-site sessions also revoke the JTI.
   try {
-    fetch(apiUrl('/partner/logout'), { method: 'POST', credentials: 'include' }).catch(() => {})
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+    fetch(apiUrl('/partner/logout'), { method: 'POST', credentials: 'include', headers }).catch(() => {})
   } catch {}
 }
 
@@ -87,16 +104,24 @@ export async function restorePartnerSession(): Promise<boolean> {
     const data = await res.json().catch(() => null)
     const p = data && data.partner ? data.partner : null
     if (res.ok && p && p.id) {
+      const prev = readStoredPartnerInfo() || {}
+      const persistent = (() => {
+        try { return !!localStorage.getItem('getfortrip_partner_info') || !sessionStorage.getItem('getfortrip_partner_info') } catch { return true }
+      })()
+      const caller = data.caller || {}
       savePartnerInfo({
+        ...prev,
         id: p.id,
-        email: p.email,
+        email: caller.email || prev.email || p.email,
         companyName: p.company_name,
         partnerType: p.partner_type,
-        profileStatus: p.profile?.status || null
-      }, true)
+        profileStatus: p.profile?.status || null,
+        ...(caller.staffId !== undefined ? { staffId: caller.staffId } : {}),
+        ...(caller.staffRole !== undefined ? { staffRole: caller.staffRole } : {}),
+      }, persistent)
       return true
     }
   } catch {}
-  clearPartnerSession()
+  clearLocalPartnerSession()
   return false
 }

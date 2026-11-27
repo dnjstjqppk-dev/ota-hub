@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { clearPartnerSession } from './config/api'
+import { clearPartnerSession, partnerState } from './config/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,16 +19,10 @@ const navItems = [
   { path: '/api-keys', label: 'API & 웹훅', icon: 'link' },
 ]
 
-const partner = computed(() => {
-  try {
-    const raw = localStorage.getItem('getfortrip_partner_info') || sessionStorage.getItem('getfortrip_partner_info')
-    if (raw) return JSON.parse(raw)
-  } catch (e) {}
-  return { companyName: '공급사 파트너', email: 'partner@getfortrip.com' }
-})
+const partner = computed(() => partnerState.value || { companyName: '공급사 파트너', email: 'partner@getfortrip.com' })
 
-const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password']
-const isPublicPage = computed(() => PUBLIC_PATHS.includes(route.path))
+const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password', '/terms']
+const isPublicPage = computed(() => route.meta?.public === true || PUBLIC_PATHS.includes(route.path))
 const currentLabel = computed(() => navItems.find((i) => route.path === i.path)?.label ?? '')
 
 // Drawer on phones/tablets (< lg), fixed sidebar on desktop — mirrors the admin shell.

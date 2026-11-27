@@ -7,7 +7,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
-import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { fmtDay, qDate, qInt, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 // Resolved once in setup: head getters run at render time, outside the Nuxt context.
 const packageSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
@@ -57,7 +57,8 @@ await useSsrLoad('tg15-packages-list', load, { items, state })
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
-useHead(() => ({ title: q.value.city ? t('packages.list.docTitle', { c: q.value.city }) : t('packages.list.title'), meta: [...ogMeta(packageSeoSite, '/packages/list', null, locale.value)], link: [{ rel: 'canonical', href: `${packageSeoSite}/packages/list` }, ...hreflangLinks(packageSeoSite, '/packages/list')] }))
+const packageLocaleCtx = useActiveLocaleContext()
+useHead(() => ({ title: q.value.city ? t('packages.list.docTitle', { c: q.value.city }) : t('packages.list.title'), meta: [...ogMeta(packageSeoSite, '/packages/list', null, packageLocaleCtx.value.locale, packageLocaleCtx.value.sub)], link: [{ rel: 'canonical', href: canonicalHref('/packages/list', { sub: packageLocaleCtx.value.sub, locale: packageLocaleCtx.value.locale }) }, ...hreflangLinks(packageSeoSite, '/packages/list')] }))
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {
   const elements = items.value

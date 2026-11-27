@@ -29,7 +29,9 @@ const issues = computed(() => {
     { label: '대차 불일치 분개', n: r.unbalancedJournals?.length || 0 },
     { label: '결제액 불일치 예약', n: r.paidMismatch?.length || 0 },
     { label: '환불액 불일치 예약', n: r.refundMismatch?.length || 0 },
-    { label: '종료 예약에 남은 예치금', n: r.strandedDeposits?.length || 0 }
+    { label: '종료 예약에 남은 예치금', n: r.strandedDeposits?.length || 0 },
+    { label: '미해소 공급사 미지급금', n: r.payableStranded?.length || 0 },
+    { label: '고아 원장/정산 불일치', n: r.orphanViolations?.length || 0 }
   ]
 })
 const ACCOUNT: Record<string, string> = {

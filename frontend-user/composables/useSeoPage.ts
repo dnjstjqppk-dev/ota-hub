@@ -1,4 +1,15 @@
-/** One SEO head per public page: dynamic title/meta + canonical + hreflang + OG/Twitter. SSR-safe (pure builder). */
+/** One SEO head per public page: dynamic title/meta + subdomain canonical (no curr) + hreflang + OG/Twitter. SSR-safe (pure builder). */
+import {
+  SUBDOMAINS,
+  buildCanonical,
+  buildHreflang,
+  getLocaleConfig,
+  getSubdomainConfig,
+  resolveLocale,
+  type HreflangLink,
+  type SubdomainConfig,
+  type SubdomainKey,
+} from '../config/locale.config.ts'
 
 export interface SeoPageInput {
   site: string
@@ -9,59 +20,79 @@ export interface SeoPageInput {
   country?: string
   image?: string
   type?: 'website' | 'article'
-  /** Locale URL prefix of the rendering page ('' for ko, '/en', ...). */
+  /** Legacy prefix ('', '/en', '/ja', '/zh') or BCP-47 locale ('ko-kr', 'en-us', ...). */
   localePrefix?: string
+  /** Target country subdomain ('kr' | 'jp' | 'uk' | 'hk' | 'tw' | 'www'). */
+  subdomain?: SubdomainKey | string
+  /** Target BCP-47 locale ('ko-kr' | 'ja-jp' | 'en-gb' | 'zh-hk' | 'zh-tw' | 'en-us'). */
+  locale?: string
   /**
    * Korean-only content (legal text, help/FAQ prose). Canonical + OG URL point
-   * to the ko page and only ko/x-default alternates are emitted, so crawlers
-   * never mistake the translated chrome for translated content.
+   * to the kr.getfortrip.com page and only ko-KR/x-default alternates are emitted,
+   * so crawlers never mistake the translated chrome for translated content.
    */
   koOnly?: boolean
 }
 
-export const SEO_LOCALES = [
-  { code: 'ko', prefix: '' },
-  { code: 'en', prefix: '/en' },
-  { code: 'ja', prefix: '/ja' },
-  { code: 'zh', prefix: '/zh' },
-] as const
+export const SEO_LOCALES = SUBDOMAINS
 
-const OG_LOCALE_TAG: Record<string, string> = { ko: 'ko_KR', en: 'en_US', ja: 'ja_JP', zh: 'zh_CN' }
+const OG_LOCALE_TAG: Record<string, string> = {
+  ko: 'ko_KR',
+  'ko-kr': 'ko_KR',
+  en: 'en_US',
+  'en-us': 'en_US',
+  'en-gb': 'en_GB',
+  ja: 'ja_JP',
+  'ja-jp': 'ja_JP',
+  zh: 'zh_HK',
+  'zh-cn': 'zh_HK',
+  'zh-hk': 'zh_HK',
+  'zh-tw': 'zh_TW',
+}
+
+const ALL_OG_LOCALES = ['ko_KR', 'ja_JP', 'en_GB', 'zh_HK', 'zh_TW', 'en_US'] as const
 
 /** S9: Open Graph locale for a locale code (unknown codes fall back to ko_KR). */
 export function ogLocaleTag(locale: string) {
-  return OG_LOCALE_TAG[locale] || 'ko_KR'
+  const key = String(locale || '').trim().toLowerCase().replace('_', '-')
+  return OG_LOCALE_TAG[key] || 'ko_KR'
 }
 
 /**
  * S9: minimal social-card meta for pages with bespoke heads (details, lists).
  * Title/description stay in the page's own tags; this fills image/locale/card.
  */
-export function ogMeta(site: string, path: string, image: string | null | undefined, locale: string) {
-  const url = `${site}${path}`
+export function ogMeta(site: string, path: string, image: string | null | undefined, locale: string, subdomain?: string) {
+  const canonical = subdomain || locale
+    ? buildCanonical(path, subdomain ? { sub: subdomain, locale: locale || undefined } : { locale })
+    : `${site}${path}`
   const img = image || `${site}/symbol.svg`
   const current = ogLocaleTag(locale)
   return [
-    { property: 'og:url', content: url },
+    { property: 'og:url', content: canonical },
     { property: 'og:image', content: img },
     { property: 'og:locale', content: current },
-    ...Object.values(OG_LOCALE_TAG).filter((t) => t !== current).map((t) => ({ property: 'og:locale:alternate', content: t })),
+    ...ALL_OG_LOCALES.filter((t) => t !== current).map((t) => ({ property: 'og:locale:alternate', content: t })),
     { name: 'twitter:card', content: 'summary_large_image' },
     { name: 'twitter:image', content: img },
   ]
 }
 
 /**
- * S10: hreflang alternates for pages with bespoke heads (details). Mirrors the
- * seoHead set: ko has no prefix, x-default points at the ko URL.
+ * Canonical URL for a page (without `curr`, with subdomain + `?locale=`).
+ * Used by both seoHead() and bespoke detail/list heads.
  */
-export function hreflangLinks(site: string, path: string) {
-  // type="text/html" satisfies unhead's alternate-link type; crawlers ignore it.
-  const link = (hreflang: string, href: string) => ({ rel: 'alternate' as const, hreflang, href, type: 'text/html' as const });
-  return [
-    ...SEO_LOCALES.map((l) => link(l.code, `${site}${l.prefix}${path}`)),
-    link('x-default', `${site}${path}`),
-  ]
+export function canonicalHref(path: string, opts?: { sub?: string; locale?: string; koOnly?: boolean }): string {
+  if (opts?.koOnly) return buildCanonical(path, { sub: 'kr' })
+  return buildCanonical(path, { sub: opts?.sub, locale: opts?.locale })
+}
+
+/**
+ * S10: hreflang alternates for pages with bespoke heads (details, lists).
+ * Emits one canonical (curr-free) URL per country subdomain plus x-default on www.
+ */
+export function hreflangLinks(_site: string, path: string, opts?: { koOnly?: boolean }): HreflangLink[] {
+  return buildHreflang(path, opts)
 }
 
 /** S9: search-console ownership metas — only the configured engines render. */
@@ -84,22 +115,25 @@ export function seoH1(base: string, city?: string, country?: string) {
   return seoTitle(base, city, country)
 }
 
+function resolveTargetConfig(i: SeoPageInput): SubdomainConfig {
+  if (i.koOnly) return getSubdomainConfig('kr')
+  if (i.subdomain) return getSubdomainConfig(i.subdomain)
+  if (i.locale) return getLocaleConfig(i.locale)
+  const legacyCode = (i.localePrefix || '').replace(/^\//, '').trim().toLowerCase()
+  if (legacyCode) return getLocaleConfig(legacyCode)
+  return getSubdomainConfig('kr')
+}
+
 export function seoHead(i: SeoPageInput) {
   const title = seoTitle(i.title, i.city, i.country)
   const desc = seoTitle(i.description, i.city, i.country)
-  const prefix = i.koOnly ? '' : (i.localePrefix || '')
-  const canonical = `${i.site}${prefix}${i.path}`
+  const cfg = resolveTargetConfig(i)
+  const locale = i.koOnly ? 'ko-kr' : (i.locale || cfg.locale)
+  // Canonical URL always uses the country subdomain + ?locale= and strips `curr`.
+  const canonical = buildCanonical(i.path, { sub: cfg.sub, locale })
   const image = i.image || `${i.site}/symbol.svg`
-  const ogLocale = i.koOnly ? 'ko_KR' : ogLocaleTag((i.localePrefix || '').replace(/^\//, '') || 'ko')
-  const alternates = i.koOnly
-    ? [
-        { rel: 'alternate', hreflang: 'ko', href: `${i.site}${i.path}` },
-        { rel: 'alternate', hreflang: 'x-default', href: `${i.site}${i.path}` },
-      ]
-    : [
-        ...SEO_LOCALES.map((l) => ({ rel: 'alternate', hreflang: l.code, href: `${i.site}${l.prefix}${i.path}` })),
-        { rel: 'alternate', hreflang: 'x-default', href: `${i.site}${i.path}` },
-      ]
+  const ogLocale = i.koOnly ? 'ko_KR' : ogLocaleTag(locale)
+  const alternates = buildHreflang(i.path, { koOnly: i.koOnly })
   return {
     title,
     meta: [
@@ -111,7 +145,7 @@ export function seoHead(i: SeoPageInput) {
       { property: 'og:url', content: canonical },
       { property: 'og:image', content: image },
       { property: 'og:locale', content: ogLocale },
-      ...Object.values(OG_LOCALE_TAG).filter((t) => t !== ogLocale).map((t) => ({ property: 'og:locale:alternate', content: t })),
+      ...ALL_OG_LOCALES.filter((t) => t !== ogLocale).map((t) => ({ property: 'og:locale:alternate', content: t })),
       { name: 'twitter:card', content: 'summary_large_image' },
       { name: 'twitter:title', content: title },
       { name: 'twitter:description', content: desc },
@@ -124,9 +158,27 @@ export function seoHead(i: SeoPageInput) {
   }
 }
 
+/** Resolve active { sub, locale, curr, hreflang } inside a Vue setup context. */
+export function useActiveLocaleContext() {
+  const route = useRoute()
+  const { locale } = useI18n()
+  let hostname = ''
+  if (import.meta.server) {
+    try { hostname = useRequestURL().hostname } catch {}
+  } else if (typeof window !== 'undefined') {
+    hostname = window.location.hostname
+  }
+  return computed(() =>
+    resolveLocale({
+      hostname,
+      searchParams: route.query as Record<string, unknown>,
+      cookies: { pref_locale: locale.value },
+    })
+  )
+}
+
 /** Thin Nuxt wrapper — pages call this in <script setup> (SSR head). */
 export function useSeoPage(i: SeoPageInput) {
-  const { locale } = useI18n()
-  const prefix = locale.value === 'ko' ? '' : `/${locale.value}`
-  useHead(seoHead({ ...i, localePrefix: prefix }) as any)
+  const ctx = useActiveLocaleContext()
+  useHead(() => seoHead({ ...i, subdomain: ctx.value.sub, locale: ctx.value.locale }) as any)
 }

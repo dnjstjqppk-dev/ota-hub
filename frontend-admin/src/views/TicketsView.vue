@@ -17,12 +17,13 @@ import type { Tone } from '../composables/format'
 const FILTERS = [
   { value: '', label: '전체' },
   { value: 'OPEN', label: '접수' },
+  { value: 'NEEDS_HUMAN', label: '담당자 확인 필요' },
   { value: 'IN_PROGRESS', label: '처리 중' },
   { value: 'RESOLVED', label: '답변 완료' },
   { value: 'CLOSED', label: '종료' }
 ]
-const STATUS_TONE: Record<string, Tone> = { OPEN: 'warning', IN_PROGRESS: 'info', RESOLVED: 'success', CLOSED: 'neutral' }
-const STATUS_LABEL: Record<string, string> = { OPEN: '접수', IN_PROGRESS: '처리 중', RESOLVED: '답변 완료', CLOSED: '종료' }
+const STATUS_TONE: Record<string, Tone> = { OPEN: 'warning', NEEDS_HUMAN: 'danger', IN_PROGRESS: 'info', RESOLVED: 'success', CLOSED: 'neutral' }
+const STATUS_LABEL: Record<string, string> = { OPEN: '접수', NEEDS_HUMAN: '담당자 확인 필요', IN_PROGRESS: '처리 중', RESOLVED: '답변 완료', CLOSED: '종료' }
 const CATEGORY_LABEL: Record<string, string> = { BOOKING: '예약', PAYMENT: '결제', REFUND: '취소/환불', ACCOUNT: '계정', TECHNICAL: '이용 오류', GENERAL: '기타' }
 
 const filter = ref('')
@@ -60,11 +61,17 @@ const counts = computed(() => {
 
 const thread = ref<any>(null)
 const threadError = ref('')
+let threadSeq = 0
 async function loadThread(id: string) {
+  const seq = ++threadSeq
   thread.value = null
   threadError.value = ''
-  try { thread.value = await api(`/admin/tickets/${encodeURIComponent(id)}`) }
-  catch (e) { threadError.value = (e as Error).message }
+  try {
+    const res = await api(`/admin/tickets/${encodeURIComponent(id)}`)
+    if (seq === threadSeq && openId.value === id) thread.value = res
+  } catch (e) {
+    if (seq === threadSeq && openId.value === id) threadError.value = (e as Error).message
+  }
 }
 function toggle(t: any) {
   openId.value = openId.value === t.id ? null : t.id

@@ -37,19 +37,23 @@ function openCreate() {
 }
 
 async function create() {
+  if (createBusy.value) return
   createBusy.value = true
   createError.value = ''
   try {
-    const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
+    const parseNum = (v: unknown) => {
+      const s = String(v ?? '').trim()
+      return s === '' ? undefined : Number(s)
+    }
     await api('/admin/promotions', {
       method: 'POST',
       json: {
         code: form.value.code,
         title: form.value.title,
         discountType: form.value.discountType,
-        discountValue: num(form.value.discountValue),
-        minOrderAmountKrw: num(form.value.minOrderAmountKrw),
-        maxDiscountKrw: num(form.value.maxDiscountKrw),
+        discountValue: parseNum(form.value.discountValue),
+        minOrderAmountKrw: parseNum(form.value.minOrderAmountKrw),
+        maxDiscountKrw: parseNum(form.value.maxDiscountKrw),
         validFrom: form.value.validFrom || undefined,
         validUntil: form.value.validUntil || undefined
       }

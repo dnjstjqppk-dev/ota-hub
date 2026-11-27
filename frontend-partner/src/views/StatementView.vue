@@ -3,22 +3,24 @@
  * CR-07 printable payout statement for one settlement batch. Figures come from
  * settled rows only; the e-tax invoice is issued manually by operations.
  */
-import { onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dt, krw, pfetch } from '../config/http'
 
 const route = useRoute()
 const router = useRouter()
-const id = String(route.params.id || '')
+const id = computed(() => String(route.params.id || ''))
 const st = ref<any>(null)
 const loading = ref(true)
 const error = ref('')
 const DOMAIN: Record<string, string> = { HOTEL: '숙소', FLIGHT: '항공', TRAIN: '기차', CAR: '렌터카', TRANSFER: '공항 이동', ACTIVITY: '투어·티켓', PACKAGE: '패키지' }
 
 async function load() {
+  const targetId = id.value
   loading.value = true
   error.value = ''
-  const r = await pfetch(`/partner/settlements/${encodeURIComponent(id)}/statement`)
+  const r = await pfetch(`/partner/settlements/${encodeURIComponent(targetId)}/statement`)
+  if (targetId !== id.value) return
   loading.value = false
   if (!r.ok) { error.value = r.data.error || '명세서를 불러오지 못했습니다.'; return }
   st.value = r.data.statement
@@ -29,14 +31,16 @@ function csv() {
   const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
   const rows = [['예약번호', '상품유형', '결제액', '수수료', '지급액', '회수차감', '실지급액', '정산상태', '정산일시'],
     ...st.value.lines.map((l: any) => [l.booking_number || l.booking_id, DOMAIN[l.domain_type] || l.domain_type, l.gross_amount_minor, l.commission_amount_minor, l.seller_payout_minor, l.recovery_deducted_minor, l.net_payout_minor, l.settlement_status, l.settled_at])]
-  const blob = new Blob(['﻿' + rows.map((r) => r.map(q).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' })
+  const blob = new Blob(['\uFEFF' + rows.map((r) => r.map(q).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `statement_${id}.csv`
+  a.download = `statement_${id.value}.csv`
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(a.href)
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
-onMounted(load)
+watch(id, () => { st.value = null; load() }, { immediate: true })
 </script>
 
 <template>

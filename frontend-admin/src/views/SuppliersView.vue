@@ -15,7 +15,7 @@ import SidePanel from '../components/SidePanel.vue'
 
 const list = useResource(async () => (await api('/admin/suppliers')).suppliers || [], [] as any[])
 const entities = useResource(async () => api('/admin/entities'), { entities: [], contracts: [] } as any)
-onMounted(() => { list.reload(); entities.reload() })
+onMounted(() => { list.reload(); entities.reload(); partners.reload() })
 
 const STATUS: Record<string, { label: string; tone: any; help: string }> = {
   LIVE: { label: '실연동', tone: 'success', help: '실제 결제·예약이 공급사로 전달돼요.' },
@@ -26,7 +26,7 @@ const STATUS: Record<string, { label: string; tone: any; help: string }> = {
   NOT_INTEGRATED: { label: '미연동', tone: 'neutral', help: '판매할 수 없어요.' },
   BLOCKED: { label: '차단', tone: 'danger', help: '판매가 막혀 있어요.' }
 }
-const ADAPTER: Record<string, string> = { none: '없음', direct_contract: '직계약 (수동 확정)', simulator: '시뮬레이터', api: 'API 연동' }
+const ADAPTER: Record<string, string> = { none: '없음', direct_contract: '직계약 (수동 확정)', simulator: '시뮬레이터', api: 'API 연동', ndc: 'NDC 직연동', gds: 'GDS 연동' }
 const MODEL: Record<string, string> = { MERCHANT_OF_RECORD: '직판매', AGENCY: '중개', AFFILIATE: '제휴 링크' }
 
 const supplierContracts = computed(() => (entities.data.value.contracts || []).filter((c: any) => c.contract_type === 'SUPPLIER'))
@@ -46,7 +46,7 @@ const liveBlocked = computed(() => {
   const c: any = form.contractId ? contractById.value.get(form.contractId) : null
   if (!c) return 'LIVE 전환에는 공급사 계약이 필요해요.'
   if (c.status !== 'ACTIVE') return `선택한 계약이 유효(ACTIVE) 상태가 아니에요 (현재 ${c.status}).`
-  if (form.adapter !== 'direct_contract' && form.adapter !== 'api') return 'LIVE는 직계약 또는 API 어댑터에서만 가능해요.'
+  if (!['direct_contract', 'api', 'ndc', 'gds'].includes(form.adapter)) return 'LIVE는 직계약, API, NDC 또는 GDS 어댑터에서만 가능해요.'
   return ''
 })
 async function save() {

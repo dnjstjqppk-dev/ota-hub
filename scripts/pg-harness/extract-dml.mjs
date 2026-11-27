@@ -14,19 +14,33 @@ import { splitRegions, translateSQL } from './d1-shim.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const migDir = join(here, '..', '..', 'worker', 'migrations');
 
-// Quote-aware statement split (semicolons inside literals don't count).
+// Quote- and trigger-aware statement split (semicolons inside literals or
+// CREATE TRIGGER ... BEGIN ... END blocks do not terminate the outer statement).
 function splitStatements(sql) {
   const regions = splitRegions(sql);
   const stmts = [];
   let cur = '';
+  let depth = 0;
+  const triggerRe = /\bCREATE\s+(?:TEMP(?:ORARY)?\s+)?TRIGGER\b/i;
   for (const r of regions) {
     if (!r.code) { cur += r.text; continue; }
-    const parts = r.text.split(';');
-    for (let i = 0; i < parts.length; i++) {
-      cur += parts[i];
-      if (i < parts.length - 1) {
+    const tokens = r.text.split(/(\bBEGIN\b|\bCASE\b|\bEND\b|;)/gi);
+    for (const tok of tokens) {
+      if (!tok) continue;
+      if (/^BEGIN$/i.test(tok) && triggerRe.test(cur)) {
+        depth += 1;
+        cur += tok;
+      } else if (depth > 0 && /^CASE$/i.test(tok)) {
+        depth += 1;
+        cur += tok;
+      } else if (depth > 0 && /^END$/i.test(tok)) {
+        depth = Math.max(0, depth - 1);
+        cur += tok;
+      } else if (tok === ';' && depth === 0) {
         if (cur.trim()) stmts.push(cur.trim());
         cur = '';
+      } else {
+        cur += tok;
       }
     }
   }

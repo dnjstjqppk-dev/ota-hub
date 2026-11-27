@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { formatKrw } from '~/composables/useApi'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
-import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 // Resolved once in setup: head getters run at render time, outside the Nuxt context.
 const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
@@ -30,6 +30,7 @@ const facts = computed(() => {
 })
 
 // S4: markdown fact sheet alternate for LLMs (hub serves it; same-origin on apex).
+const localeCtx = useActiveLocaleContext()
 useHead(() => ({ link: [{ rel: 'alternate', type: 'text/markdown', href: `/api/v1/seo/md/CAR/${String(route.params.id || '')}` }] }))
 useHead(() => {
   const x = c.value
@@ -37,8 +38,8 @@ useHead(() => {
   const offer = liveOk.value ? offerLd(seoSite, `/cars/detail/${id}`, x.daily_price_krw, x.bookable, x.outlink_path) : null
   const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
-    meta: [...ogMeta(seoSite, `/cars/detail/${id}`, x.thumbnail_url || x.image_url || null, locale.value)],
-    link: [{ rel: 'canonical', href: `${seoSite}/cars/detail/${id}` }, ...hreflangLinks(seoSite, `/cars/detail/${id}`)],
+    meta: [...ogMeta(seoSite, `/cars/detail/${id}`, x.thumbnail_url || x.image_url || null, localeCtx.value.locale, localeCtx.value.sub)],
+    link: [{ rel: 'canonical', href: canonicalHref(`/cars/detail/${id}`, { sub: localeCtx.value.sub, locale: localeCtx.value.locale }) }, ...hreflangLinks(seoSite, `/cars/detail/${id}`)],
     title: `${x.vehicle_model} · ${x.company_name}`,
     script: [jsonLdScript(breadcrumbLd(seoSite, [{ name: t('common.home'), path: '/' }, { name: t('nav.cars'), path: '/cars' }, { name: x.vehicle_model, path: `/cars/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',

@@ -6,6 +6,7 @@ import { useAuthStore } from '~/stores/auth'
 import { useCartStore } from '~/stores/cart'
 import { BRAND } from '~/config/brand'
 import { CATEGORIES, CURRENCIES, DISCOVER_LINKS, LOCALES, SUPPORT_LINKS } from '~/config/navigation'
+import { COOKIE_DOMAIN, PREF_COOKIES, buildLocalizedUrl, isSiteHost, resolveLocale } from '~/config/locale.config'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,16 +34,58 @@ function toggleTheme() {
 
 const primary = CATEGORIES.filter(c => c.primary)
 const secondary = CATEGORIES.filter(c => !c.primary)
-const localeLabel = computed(() => LOCALES.find(l => l.id === locale.value)?.label || LOCALES[0].label)
+const activeLocaleCtx = computed(() => {
+  const hostname = import.meta.client && typeof window !== 'undefined' ? window.location.hostname : ''
+  return resolveLocale({
+    hostname,
+    searchParams: route.query as Record<string, unknown>,
+    cookies: { [PREF_COOKIES.locale]: locale.value, [PREF_COOKIES.curr]: currency.activeCurrency },
+  })
+})
+const localeLabel = computed(() => LOCALES.find(l => l.locale === activeLocaleCtx.value.locale)?.label || LOCALES.find(l => l.id === locale.value)?.label || LOCALES[0].label)
 const initial = computed(() => (auth.user?.fullName || auth.user?.email || '?').trim().charAt(0).toUpperCase())
 const barePath = (p: string) => p.replace(/^\/(en|ja|zh)(?=\/|$)/, '') || '/'
 const isActive = (to: string) => barePath(route.path) === to || barePath(route.path).startsWith(`${to}/`)
 
+function writePrefCookies(sub: string, loc: string, curr: string) {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return
+  const host = window.location.hostname
+  const domainAttr = isSiteHost(host) ? `; Domain=${COOKIE_DOMAIN}` : ''
+  const secureAttr = window.location.protocol === 'https:' ? '; Secure' : ''
+  const tail = `; Path=/${domainAttr}; Max-Age=31536000; SameSite=Lax${secureAttr}`
+  document.cookie = `${PREF_COOKIES.sub}=${sub}${tail}`
+  document.cookie = `${PREF_COOKIES.locale}=${loc}${tail}`
+  document.cookie = `${PREF_COOKIES.curr}=${curr}${tail}`
+}
+
 function toggle(p: Exclude<Pop, null>) { pop.value = pop.value === p ? null : p }
 function closeAll() { pop.value = null; drawer.value = false }
-async function setLocale(id: string) {
-  await setI18nLocale(id as 'ko' | 'en' | 'ja' | 'zh')
-  await router.push(localePath({ path: barePath(route.path), query: route.query }))
+async function selectRegion(entry: typeof LOCALES[number]) {
+  writePrefCookies(entry.sub, entry.locale, entry.curr)
+  const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
+  const path = barePath(route.path)
+  if (isSiteHost(host)) {
+    const targetUrl = buildLocalizedUrl(path, {
+      sub: entry.sub,
+      locale: entry.locale,
+      curr: entry.curr,
+      query: route.query as Record<string, unknown>,
+    })
+    const targetHost = new URL(targetUrl).hostname.toLowerCase()
+    if (targetHost !== host) {
+      window.location.assign(targetUrl)
+      return
+    }
+  }
+  await setI18nLocale(entry.id as 'ko' | 'en' | 'ja' | 'zh')
+  currency.setCurrency(entry.curr)
+  await router.replace({ path, query: { ...route.query, locale: entry.locale, curr: entry.curr } })
+}
+async function selectCurrency(curr: string) {
+  currency.setCurrency(curr)
+  const ctx = activeLocaleCtx.value
+  writePrefCookies(ctx.sub, ctx.locale, curr)
+  await router.replace({ path: barePath(route.path), query: { ...route.query, locale: ctx.locale, curr } })
 }
 function logout() { auth.logout(); closeAll(); router.push(localePath('/')) }
 
@@ -139,7 +182,7 @@ onBeforeUnmount(() => {
                 :key="c"
                 type="button"
                 :class="['flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-sm font-semibold', currency.activeCurrency === c ? 'bg-primary-soft text-primary' : 'text-ink hover:bg-surface-sunken']"
-                @click="currency.setCurrency(c); pop = null"
+                @click="selectCurrency(c); pop = null"
               >
                 <span class="tabular">{{ c }}</span>
                 <AppIcon v-if="currency.activeCurrency === c" name="check" :size="16" />
@@ -149,13 +192,13 @@ onBeforeUnmount(() => {
               <p class="mb-2 text-2xs font-bold uppercase tracking-wider text-ink-subtle">{{ t('header.language') }}</p>
               <button
                 v-for="l in LOCALES"
-                :key="l.id"
+                :key="l.sub"
                 type="button"
-                :class="['flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-sm font-semibold', locale === l.id ? 'bg-primary-soft text-primary' : 'text-ink hover:bg-surface-sunken']"
-                @click="setLocale(l.id); pop = null"
+                :class="['flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-sm font-semibold', activeLocaleCtx.locale === l.locale ? 'bg-primary-soft text-primary' : 'text-ink hover:bg-surface-sunken']"
+                @click="selectRegion(l); pop = null"
               >
                 {{ l.label }}
-                <AppIcon v-if="locale === l.id" name="check" :size="16" />
+                <AppIcon v-if="activeLocaleCtx.locale === l.locale" name="check" :size="16" />
               </button>
             </div>
             <p class="col-span-2 border-t border-line pt-3 text-2xs leading-relaxed text-ink-subtle">{{ t('header.fxNote') }}</p>
@@ -260,11 +303,11 @@ onBeforeUnmount(() => {
 
             <p class="mb-2 mt-6 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">{{ t('header.currency') }}</p>
             <div class="flex flex-wrap gap-1.5">
-              <button v-for="c in CURRENCIES" :key="c" type="button" :class="['tabular rounded-lg border px-3 py-1.5 text-xs font-semibold', currency.activeCurrency === c ? 'border-primary bg-primary text-primary-ink' : 'border-line text-ink-muted']" @click="currency.setCurrency(c)">{{ c }}</button>
+              <button v-for="c in CURRENCIES" :key="c" type="button" :class="['tabular rounded-lg border px-3 py-1.5 text-xs font-semibold', currency.activeCurrency === c ? 'border-primary bg-primary text-primary-ink' : 'border-line text-ink-muted']" @click="selectCurrency(c)">{{ c }}</button>
             </div>
             <p class="mb-2 mt-4 text-2xs font-semibold uppercase tracking-wide text-ink-subtle">{{ t('header.language') }}</p>
             <div class="flex flex-wrap gap-1.5">
-              <button v-for="l in LOCALES" :key="l.id" type="button" :class="['rounded-lg border px-3 py-1.5 text-xs font-semibold', locale === l.id ? 'border-primary bg-primary text-primary-ink' : 'border-line text-ink-muted']" @click="setLocale(l.id)">{{ l.label }}</button>
+              <button v-for="l in LOCALES" :key="l.sub" type="button" :class="['rounded-lg border px-3 py-1.5 text-xs font-semibold', activeLocaleCtx.locale === l.locale ? 'border-primary bg-primary text-primary-ink' : 'border-line text-ink-muted']" @click="selectRegion(l)">{{ l.label }}</button>
             </div>
 
             <button type="button" class="mt-8 flex w-full items-center justify-between rounded-xl border border-line px-4 py-3 text-sm font-semibold text-ink hover:bg-surface-sunken" @click="toggleTheme">

@@ -1,32 +1,53 @@
 /**
- * Edge guard for the ota-user worker (2026-11-27 CPU incident).
+ * Edge guard for the ota-user worker (CPU incident + country-subdomain routing).
  *
  * nuxt.config.ts emits a wrapper index.mjs that imports this module and the
  * real Nitro entry (entry.orig.mjs). Everything here runs BEFORE Nuxt, so it
  * must stay dependency-free and cheap.
  *
- *  1. www.* → apex 301 (M5, moved here from the inline wrapper).
- *  2. Scanner paths (/.env, /wp-*, *.php …) → plain 404 without a render.
- *  3. Edge cache for public, request-independent pages via the Workers Cache
- *     API. Zone Cache Rules do not apply here: a Worker's own response never
- *     passes through the zone cache, and `isr` on the cloudflare-module preset
- *     caches nothing — every hit used to be a full SSR (18–20 ms CPU on a 10 ms
- *     plan → exceededResources/503).
- *
- * Why caching these pages is safe: SSR never reads auth (the session restores
- * client-side in app.vue onMounted via /auth/me) and no page reads request
- * cookies/headers. The one exception is the i18n root redirect on "/"
- * (redirectOn: 'root' — cookie / Accept-Language), handled by rootLocale().
- * The only cookie SSR sets is the getfortrip_locale preference; it is stored
- * aside and replayed on hits so behaviour is unchanged.
+ *  1. Scanner paths (/.env, /wp-*, *.php …) → plain 404 without a render.
+ *  2. Legacy /en, /ja, /zh path-prefix URLs → 301 to the subdomain + ?locale=&curr= scheme.
+ *  3. Geo-IP 302 on apex (getfortrip.com) and unpinned www.getfortrip.com →
+ *     country subdomain (kr, jp, uk, hk, tw, www) with pref_sub / pref_locale / pref_curr
+ *     cookies on Domain=.getfortrip.com.
+ *  4. Edge cache for public, request-independent pages via the Workers Cache API
+ *     with subdomain host + locale + curr in the cache key (preserving the
+ *     2026-11-27 CPU fix).
+ *  5. Rewrite initial `<html lang="ko">` on HTML responses (including ssr:false
+ *     login/register shells) to the resolved BCP-47 lang tag on first paint.
  */
+import {
+  COOKIE_DOMAIN,
+  DEFAULT_SUBDOMAIN,
+  I18N_BUNDLES,
+  LEGACY_PREFIX_MAP,
+  PREF_COOKIES,
+  SITE_DOMAIN,
+  SUBDOMAIN_BY_KEY,
+  buildLocalizedUrl,
+  buildPrefCookieHeaders,
+  configForCountry,
+  configForLocale,
+  configForSubdomain,
+  isSiteHost,
+  normalizeCurrency,
+  normalizeLocale,
+  resolveLocaleContext,
+  subdomainFromHost,
+} from './locale-map.mjs'
 
-export const LOCALES = ['ko', 'en', 'ja', 'zh']
-const PREFIXED = LOCALES.filter((l) => l !== 'ko')
+export const LOCALES = I18N_BUNDLES
 export const LOCALE_COOKIE = 'getfortrip_locale'
 /** Edge TTL. Short on purpose: catalog prices/availability live in these pages. */
 export const EDGE_TTL_SECONDS = 300
 const STASHED_COOKIE = 'x-edge-set-cookie'
+
+const ALLOWED_STORED_COOKIES = [
+  `${LOCALE_COOKIE}=`,
+  `${PREF_COOKIES.sub}=`,
+  `${PREF_COOKIES.locale}=`,
+  `${PREF_COOKIES.curr}=`,
+]
 
 const SCANNER_PATH = /^\/(?:\.(?:env|git|svn|hg|aws|ssh|DS_Store|htaccess|htpasswd|vscode|idea)|wp-|wordpress\/|xmlrpc|phpmyadmin|pma\/|cgi-bin\/|vendor\/|telescope\/|_ignition\/|actuator\/|server-status|boaform\/)|\.(?:php\d?|asp|aspx|jsp|cgi|env|ini|bak|old|sql|sqlite|yml|yaml|log|swp)$/i
 
@@ -35,77 +56,193 @@ export function isScannerPath(pathname) {
   return SCANNER_PATH.test(pathname)
 }
 
-// Public pages whose HTML depends only on path + query (mirrors the `isr`
-// entries of PAGE_RULES in nuxt.config.ts).
+/** Static/system/API paths that must never trigger Geo-IP or locale redirects. */
+const BYPASS_REDIRECT_RE = /^\/(?:_nuxt\/|_i18n\/|api\/|out\/|\.well-known\/|robots\.txt$|sitemap[^/]*$|llms[^/]*$|rss\.xml$|favicon[^/]*$|logo[^/]*\.svg$|symbol\.svg$)/i
+
+export function isBypassRedirectPath(pathname) {
+  return BYPASS_REDIRECT_RE.test(pathname)
+}
+
+/** Known search / AI crawlers: never Geo-IP redirect off www, and send apex bots to www (x-default). */
+const BOT_UA_RE = /googlebot|bingbot|yeti|daumoa|applebot|duckassistbot|gptbot|oai-searchbot|chatgpt-user|claudebot|claude-user|claude-searchbot|perplexitybot|perplexity-user|amazonbot|meta-externalagent|google-extended|facebookexternalhit|twitterbot|slackbot|linkedinbot|kakaotalk-scrap|yandexbot|baiduspider/i
+
+export function isBotUserAgent(ua) {
+  return BOT_UA_RE.test(String(ua || ''))
+}
+
+// Public pages whose HTML depends only on host + path + query/locale/curr
+// (mirrors the `isr` entries of PAGE_RULES in nuxt.config.ts).
 export const CACHE_SECTIONS = ['hotels', 'flights', 'trains', 'cars', 'transfers', 'things-to-do', 'packages']
 export const CACHE_PAGES = ['deals', 'trip-best', 'esim', 'insurance', 'faq', 'help']
-// ssr:false shells: the HTML ignores the query (?redirect=… is read client-side),
-// so every /xx/login?redirect=<page> variant shares one cache entry.
+// ssr:false shells: the HTML ignores arbitrary queries (?redirect=… is read client-side),
+// so every /login?redirect=<page> variant for a given (host, locale) shares one cache entry.
 export const SHELL_PAGES = ['login', 'register']
 const alt = (list) => list.join('|')
 const SECTION_RE = new RegExp('^/(?:' + alt(CACHE_SECTIONS) + ')(?:/.*)?$')
 const PAGE_RE = new RegExp('^/(?:' + alt(CACHE_PAGES) + ')/?$')
 const SHELL_RE = new RegExp('^/(?:' + alt(SHELL_PAGES) + ')/?$')
-const PREFIX_RE = new RegExp('^/(' + alt(PREFIXED) + ')(?=/|$)')
+const LEGACY_PREFIX_RE = /^\/(en|ja|zh)(?=\/|$)/
 const PAYLOAD_SUFFIX = '/_payload.json'
 
 /**
- * Classify a pathname: null = never cache, 'root' = the ko root "/" (cache
- * only for visitors i18n would not redirect), 'page' = always cacheable,
- * 'shell' = cacheable with the query dropped from the key.
+ * Classify a pathname: null = never cache, 'root' = "/", 'page' = always cacheable,
+ * 'shell' = cacheable with non-locale query params dropped from the key.
  */
 export function edgeCacheClass(pathname) {
   let p = pathname
   const payload = p.endsWith(PAYLOAD_SUFFIX)
   if (payload) p = p.slice(0, -PAYLOAD_SUFFIX.length) || '/'
-  const m = PREFIX_RE.exec(p)
-  const rest = m ? p.slice(m[0].length) || '/' : p
-  if (rest === '/') return m ? 'page' : 'root'
-  if (SHELL_RE.test(rest)) return payload ? null : 'shell'
-  if (SECTION_RE.test(rest) || PAGE_RE.test(rest)) return 'page'
+  if (p === '/') return 'root'
+  if (SHELL_RE.test(p)) return payload ? null : 'shell'
+  if (SECTION_RE.test(p) || PAGE_RE.test(p)) return 'page'
   return null
 }
 
-function readCookie(header, name) {
+export function parseCookies(header) {
+  const out = {}
   for (const part of String(header || '').split(';')) {
     const i = part.indexOf('=')
-    if (i > 0 && part.slice(0, i).trim() === name) return part.slice(i + 1).trim()
+    if (i > 0) out[part.slice(0, i).trim()] = part.slice(i + 1).trim()
   }
-  return ''
+  return out
 }
 
 /**
- * Which locale @nuxtjs/i18n would pick on "/": the cookie first, then the
- * Accept-Language header exactly as i18n 10 reads it (@intlify/utils
- * parseAcceptLanguage + findBrowserLocale): q-values are IGNORED, tags are
- * taken in header order and NOT trimmed, and the first tag whose base
- * language is a locale wins; no match → ko. Only 'ko' may get the cached
- * root; anyone else goes to Nuxt, which answers with the 302.
+ * Pick a subdomain from Accept-Language when cf.country is unavailable.
  */
-export function rootLocale(headers) {
-  const fromCookie = readCookie(headers.get('cookie'), LOCALE_COOKIE)
-  if (LOCALES.includes(fromCookie)) return fromCookie
-  const tags = String(headers.get('accept-language') || '')
+export function subdomainFromAcceptLanguage(header) {
+  const tags = String(header || '')
     .split(',')
-    .map((tag) => tag.split(';')[0])
-    .filter((tag) => !(tag === '*' || tag === ''))
+    .map((tag) => tag.split(';')[0].trim().toLowerCase())
+    .filter((tag) => tag && tag !== '*')
   for (const tag of tags) {
-    const lang = tag.split('-')[0].toLowerCase()
-    if (LOCALES.includes(lang)) return lang
+    if (tag === 'ko' || tag.startsWith('ko-')) return 'kr'
+    if (tag === 'ja' || tag.startsWith('ja-')) return 'jp'
+    if (tag === 'en-gb') return 'uk'
+    if (tag === 'zh-hk' || tag === 'zh-mo') return 'hk'
+    if (tag === 'zh-tw' || tag === 'zh-hant') return 'tw'
+    if (tag === 'zh' || tag.startsWith('zh-')) return 'hk'
+    if (tag === 'en' || tag.startsWith('en-')) return 'www'
   }
-  return 'ko'
+  return DEFAULT_SUBDOMAIN
+}
+
+/**
+ * Legacy /en, /ja, /zh path-prefix → 301 redirect target URL, or null.
+ */
+export function legacyPrefixRedirectUrl(url) {
+  const m = LEGACY_PREFIX_RE.exec(url.pathname)
+  if (!m) return null
+  const cfg = LEGACY_PREFIX_MAP[m[1]]
+  if (!cfg) return null
+  const rest = url.pathname.slice(m[0].length) || '/'
+  const host = url.hostname.toLowerCase()
+  const locale = normalizeLocale(url.searchParams.get('locale')) || cfg.locale
+  const curr = normalizeCurrency(url.searchParams.get('curr')) || cfg.curr
+  return buildLocalizedUrl(rest, {
+    sub: cfg.sub,
+    locale,
+    curr,
+    query: url.searchParams,
+    origin: isSiteHost(host) ? undefined : url.origin,
+  })
+}
+
+/**
+ * Decide whether an apex (getfortrip.com) or unpinned www.getfortrip.com request
+ * should receive a Geo-IP 302 redirect. Returns { location, cookies } or null.
+ */
+export function geoRedirectDecision(request, url, cookies) {
+  const host = url.hostname.toLowerCase()
+  if (!isSiteHost(host)) return null
+  if (isBypassRedirectPath(url.pathname)) return null
+  if (url.pathname.endsWith(PAYLOAD_SUFFIX)) return null
+  if (request.method !== 'GET' && request.method !== 'HEAD') return null
+
+  const isApex = host === SITE_DOMAIN
+  const isWww = host === `www.${SITE_DOMAIN}`
+  if (!isApex && !isWww) return null
+
+  const bot = isBotUserAgent(request.headers.get('user-agent'))
+  const queryLocale = normalizeLocale(url.searchParams.get('locale'))
+  const queryCurr = normalizeCurrency(url.searchParams.get('curr'))
+  const cookieSub = cookies[PREF_COOKIES.sub] && SUBDOMAIN_BY_KEY[cookies[PREF_COOKIES.sub]] ? cookies[PREF_COOKIES.sub] : null
+  const cookieLocale = normalizeLocale(cookies[PREF_COOKIES.locale])
+  const cookieCurr = normalizeCurrency(cookies[PREF_COOKIES.curr])
+  const cfCountry = (request.cf && request.cf.country) || request.headers.get('cf-ipcountry') || ''
+
+  // On www.getfortrip.com: never redirect bots, users who already have pref_sub,
+  // or links that explicitly specify ?locale=.
+  if (isWww) {
+    if (bot || cookieSub || queryLocale) return null
+    const geoCfg = cfCountry ? configForCountry(cfCountry) : configForSubdomain(DEFAULT_SUBDOMAIN)
+    if (geoCfg.sub === DEFAULT_SUBDOMAIN) return null
+    const targetCurr = queryCurr || cookieCurr || geoCfg.curr
+    const location = buildLocalizedUrl(url.pathname, {
+      sub: geoCfg.sub,
+      locale: geoCfg.locale,
+      curr: targetCurr,
+      query: url.searchParams,
+    })
+    return {
+      location,
+      cookies: buildPrefCookieHeaders({ sub: geoCfg.sub, locale: geoCfg.locale, curr: targetCurr }, { hostname: host, secure: url.protocol === 'https:' }),
+    }
+  }
+
+  // On apex getfortrip.com: always 302 to the resolved country subdomain.
+  // Bots get sent deterministically to www (x-default) with no cookies.
+  if (bot) {
+    const locCfg = queryLocale ? configForLocale(queryLocale) : configForSubdomain(DEFAULT_SUBDOMAIN)
+    const location = buildLocalizedUrl(url.pathname, {
+      sub: locCfg.sub,
+      locale: queryLocale || locCfg.locale,
+      curr: queryCurr || locCfg.curr,
+      query: url.searchParams,
+    })
+    return { location, cookies: [] }
+  }
+
+  let targetCfg
+  if (queryLocale) {
+    targetCfg = configForLocale(queryLocale)
+  } else if (cookieSub) {
+    targetCfg = configForSubdomain(cookieSub)
+  } else if (cfCountry) {
+    targetCfg = configForCountry(cfCountry)
+  } else {
+    targetCfg = configForSubdomain(subdomainFromAcceptLanguage(request.headers.get('accept-language')))
+  }
+
+  const targetLocale = queryLocale || (cookieSub ? (cookieLocale || targetCfg.locale) : targetCfg.locale)
+  const targetCurr = queryCurr || cookieCurr || targetCfg.curr
+  const location = buildLocalizedUrl(url.pathname, {
+    sub: targetCfg.sub,
+    locale: targetLocale,
+    curr: targetCurr,
+    query: url.searchParams,
+  })
+  return {
+    location,
+    cookies: buildPrefCookieHeaders({ sub: targetCfg.sub, locale: targetLocale, curr: targetCurr }, { hostname: host, secure: url.protocol === 'https:' }),
+  }
 }
 
 /**
  * Cache key: the request URL under a build-version PATH prefix (old HTML
- * points at deleted /_nuxt assets). A client cannot forge the prefix onto a
- * cacheable page — /__edge/<v>/… is never itself a cacheable path — and the
- * query is kept verbatim, so no two client URLs share a key.
+ * points at deleted /_nuxt assets), including resolved `locale` and `curr`
+ * so currency/locale variants never collide even when inherited from cookies.
  */
-export function cacheKeyFor(url, version, dropQuery = false) {
+export function cacheKeyFor(url, version, dropQuery = false, ctx = null) {
   const u = new URL(url)
   u.hash = ''
-  if (dropQuery) u.search = ''
+  if (dropQuery) {
+    u.search = ''
+  }
+  if (ctx) {
+    u.searchParams.set('__ec_loc', ctx.locale)
+    if (!dropQuery) u.searchParams.set('__ec_curr', ctx.curr)
+  }
   u.pathname = `/__edge/${version}${u.pathname}`
   return u.toString()
 }
@@ -123,8 +260,11 @@ export function isStorable(response) {
   if (!/^(text\/html|application\/json)/i.test(type)) return false
   const cc = (response.headers.get('cache-control') || '').toLowerCase()
   if (/no-store|no-cache|private/.test(cc)) return false
-  // Anything but the locale preference cookie means the response is per-user.
-  return !setCookiesOf(response.headers).some((c) => !c.trim().startsWith(`${LOCALE_COOKIE}=`))
+  // Anything other than locale/currency preference cookies means per-user state.
+  return !setCookiesOf(response.headers).some((c) => {
+    const trimmed = c.trim()
+    return !ALLOWED_STORED_COOKIES.some((prefix) => trimmed.startsWith(prefix))
+  })
 }
 
 /** The copy to put in the cache (headers rewritten), or null when not storable. */
@@ -138,55 +278,135 @@ export function storableCopy(response) {
   return new Response(response.body, { status: 200, headers })
 }
 
-/** Rebuild a client response from a cache hit. */
-export function fromCacheHit(hit) {
+/** Rebuild a client response from a cache hit, optionally appending pref cookies. */
+export function fromCacheHit(hit, extraCookies = []) {
   const headers = new Headers(hit.headers)
   const cookie = headers.get(STASHED_COOKIE)
   headers.delete(STASHED_COOKIE)
   headers.delete('cache-control')
   headers.delete('age')
-  if (cookie) headers.set('set-cookie', cookie)
+  if (cookie) headers.append('set-cookie', cookie)
+  for (const c of extraCookies) headers.append('set-cookie', c)
   headers.set('x-edge-cache', 'HIT')
   return new Response(hit.body, { status: hit.status, headers })
+}
+
+/**
+ * Fix item 7 (open-items-2026-11-27): ssr:false shells (login/register/my/checkout)
+ * ship with static `<html lang="ko">` from nuxt.config.ts. Rewrite the opening
+ * `<html ... lang="...">` attribute to the resolved BCP-47 tag on first paint.
+ */
+export async function rewriteHtmlLang(response, hreflang) {
+  if (!hreflang || response.status !== 200) return response
+  const ct = response.headers.get('content-type') || ''
+  if (!/^text\/html/i.test(ct)) return response
+  const html = await response.text()
+  const updated = html.replace(/<html\b([^>]*?)\blang="[^"]*"/i, `<html$1lang="${hreflang}"`)
+  return new Response(updated, { status: response.status, statusText: response.statusText, headers: response.headers })
+}
+
+/** Build Set-Cookie headers when a visitor explicitly passes ?locale= or ?curr= on a regional subdomain. */
+function explicitPrefCookies(url, ctx) {
+  if (!ctx.hasExplicitQuery) return []
+  const host = url.hostname.toLowerCase()
+  const sub = subdomainFromHost(host) || ctx.sub
+  return buildPrefCookieHeaders(
+    { sub, locale: ctx.locale, curr: ctx.curr },
+    { hostname: host, secure: url.protocol === 'https:' }
+  )
 }
 
 /** Wrap a Nitro worker `fetch` with the guard. */
 export function createEdgeFetch(target, version, cacheProvider = () => globalThis.caches && globalThis.caches.default) {
   return async function fetch(request, env, ctx) {
     const url = new URL(request.url)
-    const host = url.hostname.toLowerCase()
-    if (host.startsWith('www.')) {
-      return Response.redirect(`https://${host.slice(4)}${url.pathname}${url.search}`, 301)
-    }
+
+    // 1. Scanner paths → immediate 404 without invoking Nuxt.
     if (isScannerPath(url.pathname)) {
       return new Response('Not Found', {
         status: 404,
-        headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400' }
+        headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400' },
       })
     }
 
-    const cls = request.method === 'GET' && !request.headers.has('authorization') ? edgeCacheClass(url.pathname) : null
-    const cacheable = cls === 'page' || cls === 'shell' || (cls === 'root' && rootLocale(request.headers) === 'ko')
-    const cache = cacheable ? cacheProvider() : null
-    if (!cache) return target.fetch(request, env, ctx)
+    // 2. Legacy /en, /ja, /zh path-prefix URLs → 301 permanent redirect to new scheme.
+    if (request.method === 'GET' || request.method === 'HEAD') {
+      const legacyTarget = legacyPrefixRedirectUrl(url)
+      if (legacyTarget) {
+        return new Response(null, {
+          status: 301,
+          headers: {
+            location: legacyTarget,
+            'cache-control': 'public, max-age=86400',
+          },
+        })
+      }
+    }
 
-    const key = cacheKeyFor(request.url, version, cls === 'shell')
+    const cookies = parseCookies(request.headers.get('cookie'))
+
+    // 3. Geo-IP 302 on apex (getfortrip.com) and unpinned www.getfortrip.com.
+    const geo = geoRedirectDecision(request, url, cookies)
+    if (geo) {
+      const headers = new Headers({
+        location: geo.location,
+        'cache-control': 'no-store',
+        vary: 'CF-IPCountry, Cookie',
+      })
+      for (const c of geo.cookies) headers.append('set-cookie', c)
+      return new Response(null, { status: 302, headers })
+    }
+
+    const localeCtx = resolveLocaleContext({
+      hostname: url.hostname,
+      searchParams: url.searchParams,
+      cookies,
+    })
+    const prefCookies = explicitPrefCookies(url, localeCtx)
+
+    // 4. Edge cache via Workers Cache API (host + locale + curr keyed).
+    const cls = request.method === 'GET' && !request.headers.has('authorization') ? edgeCacheClass(url.pathname) : null
+    const cacheable = cls === 'page' || cls === 'shell' || cls === 'root'
+    const cache = cacheable ? cacheProvider() : null
+    if (!cache) {
+      let res = await target.fetch(request, env, ctx)
+      if (request.method === 'GET') res = await rewriteHtmlLang(res, localeCtx.hreflang)
+      if (prefCookies.length) {
+        const h = new Headers(res.headers)
+        for (const c of prefCookies) h.append('set-cookie', c)
+        res = new Response(res.body, { status: res.status, statusText: res.statusText, headers: h })
+      }
+      return res
+    }
+
+    const key = cacheKeyFor(request.url, version, cls === 'shell', localeCtx)
     try {
       const hit = await cache.match(key)
-      if (hit) return fromCacheHit(hit)
+      if (hit) return fromCacheHit(hit, prefCookies)
     } catch {
       // Cache API trouble must never take the page down.
     }
 
-    const response = await target.fetch(request, env, ctx)
-    // Decide on headers first: cloning a response nobody stores would tee and
-    // buffer its body for a branch that is never read.
-    if (!isStorable(response)) return response
+    let response = await target.fetch(request, env, ctx)
+    // Rewrite `<html lang="...">` before caching so cached ssr:false shells carry the right lang.
+    response = await rewriteHtmlLang(response, localeCtx.hreflang)
+
+    if (!isStorable(response)) {
+      if (prefCookies.length) {
+        const h = new Headers(response.headers)
+        for (const c of prefCookies) h.append('set-cookie', c)
+        return new Response(response.body, { status: response.status, statusText: response.statusText, headers: h })
+      }
+      return response
+    }
     const copy = storableCopy(response.clone())
     const put = cache.put(key, copy).catch(() => {})
     if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(put)
     const headers = new Headers(response.headers)
+    for (const c of prefCookies) headers.append('set-cookie', c)
     headers.set('x-edge-cache', 'MISS')
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
   }
 }
+
+export { COOKIE_DOMAIN, PREF_COOKIES, SITE_DOMAIN, SUBDOMAIN_BY_KEY }

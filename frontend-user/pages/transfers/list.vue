@@ -8,7 +8,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
-import { hreflangLinks, ogMeta } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { fmtDay, qDate, qInt, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 // Resolved once in setup: head getters run at render time, outside the Nuxt context.
 const transferSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
@@ -81,7 +81,8 @@ await useSsrLoad('tg15-transfers-list', load, { items, state })
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => { today.value = todayIso() })
 onBeforeUnmount(() => ctrl?.abort())
-useHead(() => ({ title: q.value.airport ? t('transfers.list.docTitle', { a: q.value.airport }) : t('transfers.list.title'), meta: [...ogMeta(transferSeoSite, '/transfers/list', null, locale.value)], link: [{ rel: 'canonical', href: `${transferSeoSite}/transfers/list` }, ...hreflangLinks(transferSeoSite, '/transfers/list')] }))
+const transferLocaleCtx = useActiveLocaleContext()
+useHead(() => ({ title: q.value.airport ? t('transfers.list.docTitle', { a: q.value.airport }) : t('transfers.list.title'), meta: [...ogMeta(transferSeoSite, '/transfers/list', null, transferLocaleCtx.value.locale, transferLocaleCtx.value.sub)], link: [{ rel: 'canonical', href: canonicalHref('/transfers/list', { sub: transferLocaleCtx.value.sub, locale: transferLocaleCtx.value.locale }) }, ...hreflangLinks(transferSeoSite, '/transfers/list')] }))
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {
   const elements = sorted.value

@@ -13,25 +13,40 @@ const sending = ref(false)
 const LABEL: Record<string, string> = { USER: '고객', PARTNER: '파트너', ADMIN: '운영(CS)' }
 const TONE: Record<string, string> = { USER: 'bg-surface-sunken', PARTNER: 'bg-primary-soft', ADMIN: 'bg-warning-soft' }
 
+let loadSeq = 0
 async function load() {
+  const seq = ++loadSeq
+  const targetId = props.bookingId
   loading.value = true
   error.value = ''
-  try { thread.value = (await api(`/admin/bookings/${encodeURIComponent(props.bookingId)}/messages`)).thread }
-  catch (e) { error.value = (e as Error).message }
-  finally { loading.value = false }
+  try {
+    const res = await api(`/admin/bookings/${encodeURIComponent(targetId)}/messages`)
+    if (seq === loadSeq && props.bookingId === targetId) thread.value = res.thread
+  } catch (e) {
+    if (seq === loadSeq) error.value = (e as Error).message
+  } finally {
+    if (seq === loadSeq) loading.value = false
+  }
 }
 async function send() {
+  if (sending.value) return
   const body = draft.value.trim()
-  if (!body) return
+  const targetId = props.bookingId
+  if (!body || !targetId) return
   sending.value = true
   try {
-    await api(`/admin/bookings/${encodeURIComponent(props.bookingId)}/messages`, { method: 'POST', json: { body } })
-    draft.value = ''
+    await api(`/admin/bookings/${encodeURIComponent(targetId)}/messages`, { method: 'POST', json: { body } })
+    if (props.bookingId === targetId) draft.value = ''
     toast('고객센터 이름으로 메시지를 보냈어요.')
     await load()
   } catch (e) { toast((e as Error).message, 'danger') } finally { sending.value = false }
 }
-watch(() => props.bookingId, (v) => { if (v) load() }, { immediate: true })
+watch(() => props.bookingId, (v) => {
+  draft.value = ''
+  thread.value = null
+  error.value = ''
+  if (v) load()
+}, { immediate: true })
 </script>
 
 <template>

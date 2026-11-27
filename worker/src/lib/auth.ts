@@ -252,28 +252,53 @@ export async function clearLoginFailures(env: Env, scope: string, email: string)
 
 export type AuthJar = "getfortrip_jwt" | "getfortrip_admin_jwt" | "getfortrip_partner_jwt";
 
+function cookieDomainAttr(env: Env, request?: Request): string {
+  const dom = (env.AUTH_COOKIE_DOMAIN || "").trim().toLowerCase();
+  if (!dom || env.APP_ENV === "development" || env.APP_ENV === "test") return "";
+  const bare = dom.replace(/^\./, "");
+  if (request) {
+    try {
+      const host = new URL(request.url).hostname.toLowerCase();
+      if (host !== bare && !host.endsWith(`.${bare}`)) return "";
+    } catch {
+      return "";
+    }
+  }
+  return ` Domain=${dom};`;
+}
+
 /**
  * #35: HttpOnly session cookie. One jar per portal so a user, an admin, and a
- * partner session coexist in one browser. Host-only (no Domain): the browser
- * returns it to the API host on same-site requests, which covers the launch
- * topology (getfortrip.com + subdomains); cross-site staging falls back to
- * the in-memory Bearer token (re-login after reload).
+ * partner session coexist in one browser. When AUTH_COOKIE_DOMAIN (e.g.
+ * ".getfortrip.com") is configured and the request arrived on that domain, the
+ * cookie is scoped across country subdomains (kr/jp/uk/hk/tw/www) and apex;
+ * workers.dev / staging / local stay host-only.
  */
-export function authCookie(token: string, env: Env, name: AuthJar = "getfortrip_jwt", maxAgeSec = 604800): string {
+export function authCookie(token: string, env: Env, name: AuthJar = "getfortrip_jwt", maxAgeSec = 604800, request?: Request): string {
   const secure = env.APP_ENV === "development" || env.APP_ENV === "test" ? "" : " Secure;";
+  const domain = cookieDomainAttr(env, request);
   const age = maxAgeSec > 0 ? ` Max-Age=${maxAgeSec};` : "";
-  return `${name}=${token}; Path=/; HttpOnly;${secure} SameSite=Lax;${age}`;
+  return `${name}=${token}; Path=/;${domain} HttpOnly;${secure} SameSite=Lax;${age}`;
 }
 
 /** Clearing must mirror the set attributes or the browser keeps the cookie. */
-export function clearAuthCookie(env: Env, name: AuthJar): string {
+export function clearAuthCookie(env: Env, name: AuthJar, request?: Request): string {
   const secure = env.APP_ENV === "development" || env.APP_ENV === "test" ? "" : " Secure;";
-  return `${name}=; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=0`;
+  const domain = cookieDomainAttr(env, request);
+  return `${name}=; Path=/;${domain} HttpOnly;${secure} SameSite=Lax; Max-Age=0`;
 }
 
-/** #127: one browser can hold all three portal sessions — logout clears every jar. */
-export function clearAllAuthCookies(env: Env): string[] {
-  return (["getfortrip_jwt", "getfortrip_admin_jwt", "getfortrip_partner_jwt"] as const).map((jar) => clearAuthCookie(env, jar));
+/** #127: one browser can hold all three portal sessions — logout clears every jar (both domain-scoped and host-only). */
+export function clearAllAuthCookies(env: Env, request?: Request): string[] {
+  const jars = ["getfortrip_jwt", "getfortrip_admin_jwt", "getfortrip_partner_jwt"] as const;
+  const domain = cookieDomainAttr(env, request);
+  const secure = env.APP_ENV === "development" || env.APP_ENV === "test" ? "" : " Secure;";
+  const out: string[] = [];
+  for (const jar of jars) {
+    if (domain) out.push(`${jar}=; Path=/;${domain} HttpOnly;${secure} SameSite=Lax; Max-Age=0`);
+    out.push(`${jar}=; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=0`);
+  }
+  return out;
 }
 
 export async function audit(env: Env, adminId: string, action: string, targetType: string, targetId: string, details: unknown): Promise<void> {

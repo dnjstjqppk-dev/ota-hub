@@ -30,7 +30,7 @@ async function handleForgot() {
 </script>
 
 <template>
-  <div class="flex min-h-full flex-col justify-center px-6 py-12">
+  <div class="flex min-h-full flex-col justify-center bg-midnight-900 px-6 py-12">
     <div class="text-center">
       <h1 class="text-2xl font-black tracking-tight text-white">비밀번호 찾기</h1>
       <p class="mt-2 text-sm font-medium text-sapphire-300">가입한 이메일로 재설정 링크를 보내드려요.</p>

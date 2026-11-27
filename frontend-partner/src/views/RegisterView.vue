@@ -166,14 +166,15 @@ const handleRegister = async () => {
                 />
               </div>
               <div class="space-y-1">
-                <label class="label">비밀번호 (8자 이상) *</label>
+                <label class="label">비밀번호 (영문·숫자 포함 10자 이상) *</label>
                 <input
                   v-model="password"
                   type="password"
                   required
-                  minlength="8"
+                  minlength="10"
+                  maxlength="128"
                   autocomplete="new-password"
-                  placeholder="••••••••"
+                  placeholder="영문·숫자 포함 10자 이상"
                   class="input font-medium"
                 />
               </div>
