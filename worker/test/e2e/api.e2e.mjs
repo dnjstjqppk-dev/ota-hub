@@ -1253,9 +1253,16 @@ test("partner inventory: writes are scoped to own products", async () => {
   const created = await api("POST", "/api/v1/partner/products", { token: P.token, body: { domain: "CAR", title: `E2E 차량 ${rnd()}`, city: "제주", price: 79000 } });
   const id = created.data.id;
   const day = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+  const epochBefore = (await api("GET", "/api/v1/edge/epoch")).data.epoch;
   assert.equal((await api("PUT", "/api/v1/partner/inventory", { token: P.token, body: { domain: "CAR", itemId: "ptn_prod_nope", serviceDate: day, allocatedUnits: 3 } })).status, 404);
+  // A refused write leaves the storefront edge cache alone.
+  assert.equal((await api("GET", "/api/v1/edge/epoch")).data.epoch, epochBefore);
   const put = await api("PUT", "/api/v1/partner/inventory", { token: P.token, body: { domain: "CAR", itemId: id, serviceDate: day, allocatedUnits: 3, priceOverrideMinor: 69000 } });
   assert.equal(put.status, 200, JSON.stringify(put.data));
+  // A successful calendar write turns the storefront edge cache over (waitUntil — poll briefly).
+  let epochAfter = epochBefore;
+  for (let i = 0; i < 20 && epochAfter === epochBefore; i++) { await new Promise((r) => setTimeout(r, 100)); epochAfter = (await api("GET", "/api/v1/edge/epoch")).data.epoch; }
+  assert.ok(epochAfter > epochBefore, `epoch ${epochBefore} -> ${epochAfter}`);
   const month = day.slice(0, 7);
   const got = await api("GET", `/api/v1/partner/inventory?month=${month}&itemId=${id}`, { token: P.token });
   assert.ok(got.data.inventory.some((r) => r.service_date === day && r.allocated_units === 3 && r.price_override_minor === 69000));

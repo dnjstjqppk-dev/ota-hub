@@ -9,6 +9,7 @@ import {
   SHELL_PAGES,
   cacheKeyFor,
   createEdgeFetch,
+  resetEdgeEpochMemo,
   edgeCacheClass,
   isScannerPath,
   legacyPrefixRedirectUrl,
@@ -232,4 +233,39 @@ test('edge guard lists stay in sync with nuxt.config (locales, isr pages, ssr:fa
   const isr = [...rules.matchAll(/'\/([a-z-]+)(?:\/\*\*)?': \{ isr:/g)].map((m) => m[1])
   assert.deepEqual([...new Set(isr)].sort(), [...CACHE_SECTIONS, ...CACHE_PAGES].sort())
   for (const sp of SHELL_PAGES) assert.match(rules, new RegExp(`'/${sp}': \\{ ssr: false`))
+})
+
+test('cache keys carry the hub catalog epoch; a bump turns the page over, a dead hub skips the cache', async () => {
+  resetEdgeEpochMemo()
+  let epoch = 7
+  let hubUp = true
+  let hubCalls = 0
+  const env = { API: { async fetch() { hubCalls++; if (!hubUp) throw new Error('down'); return new Response(JSON.stringify({ epoch }), { headers: { 'content-type': 'application/json' } }) } } }
+  const calls = []
+  const target = { async fetch(req) { calls.push(new URL(req.url).pathname); return html() } }
+  const cache = memoryCache()
+  const fetch = createEdgeFetch(target, 'v1', () => cache)
+  const run = async (url) => { const waits = []; const r = await fetch(new Request(url), env, { waitUntil: (p) => waits.push(p) }); await Promise.all(waits); return r }
+
+  assert.equal((await run('https://kr.getfortrip.com/hotels')).headers.get('x-edge-cache'), 'MISS')
+  assert.ok([...cache.store.keys()].some((k) => k.includes('/__edge/v1.e7/hotels')))
+  assert.equal((await run('https://kr.getfortrip.com/hotels')).headers.get('x-edge-cache'), 'HIT')
+  assert.equal(hubCalls, 1, 'epoch memoized within the isolate')
+
+  // A catalog write bumps the epoch: once the memo lapses the page re-renders.
+  epoch = 8
+  resetEdgeEpochMemo()
+  cache.store.delete('https://kr.getfortrip.com/__edge-epoch')
+  assert.equal((await run('https://kr.getfortrip.com/hotels')).headers.get('x-edge-cache'), 'MISS')
+
+  // Hub unreachable with no epoch known: SSR without touching the cache.
+  hubUp = false
+  resetEdgeEpochMemo()
+  cache.store.delete('https://kr.getfortrip.com/__edge-epoch')
+  const before = cache.store.size
+  const r = await run('https://kr.getfortrip.com/hotels')
+  assert.equal(r.headers.get('x-edge-cache'), null)
+  assert.equal(cache.store.size, before)
+  assert.deepEqual(calls, ['/hotels', '/hotels', '/hotels'])
+  resetEdgeEpochMemo()
 })

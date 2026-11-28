@@ -38,8 +38,59 @@ import {
 
 export const LOCALES = I18N_BUNDLES
 export const LOCALE_COOKIE = 'getfortrip_locale'
-/** Edge TTL. Short on purpose: catalog prices/availability live in these pages. */
-export const EDGE_TTL_SECONDS = 300
+/**
+ * Edge TTL. Catalog prices/availability live in these pages, so freshness
+ * does not ride the TTL: every key carries the hub's catalog epoch, which any
+ * admin/partner write bumps (worker/src/lib/edge-epoch.ts) — a change reaches
+ * every colo within EPOCH_MEMO_MS. The TTL only bounds what no write signals
+ * (cron imports, new reviews, allotment consumed by bookings). It was 300s,
+ * and with traffic spread over ~27 colos (Cache API is per colo) the hit rate
+ * sat at ~19% — almost every view was a full SSR (2026-11-28 analytics).
+ */
+export const EDGE_TTL_SECONDS = 3600
+/** How long one isolate / one colo trusts an epoch read. */
+export const EPOCH_MEMO_MS = 30_000
+const EPOCH_URL = 'https://hub.internal/api/v1/edge/epoch'
+
+let epochMemo = { value: null, at: 0 }
+/** Test hook: forget the in-isolate epoch. */
+export function resetEdgeEpochMemo() { epochMemo = { value: null, at: 0 } }
+
+/**
+ * Current catalog epoch as a key segment, or null when it cannot be read
+ * (the caller then skips the cache for this request — never serve a page
+ * that could miss an invalidation). Order: isolate memo → colo Cache API
+ * entry → hub over the service binding. No binding (tests, local) → '0'.
+ */
+export async function edgeEpoch(env, ctx, cache, origin) {
+  const now = Date.now()
+  if (epochMemo.value !== null && now - epochMemo.at < EPOCH_MEMO_MS) return epochMemo.value
+  const api = env && env.API
+  if (!api || typeof api.fetch !== 'function') return '0'
+  const coloKey = `${origin}/__edge-epoch`
+  try {
+    const hit = cache && (await cache.match(coloKey))
+    if (hit) {
+      const v = (await hit.text()).trim()
+      if (/^\d{1,15}$/.test(v)) { epochMemo = { value: v, at: now }; return v }
+    }
+  } catch {}
+  try {
+    const res = await api.fetch(EPOCH_URL, { signal: AbortSignal.timeout(1500) })
+    const body = res.ok ? await res.json() : null
+    const v = body && Number.isSafeInteger(body.epoch) ? String(body.epoch) : null
+    if (v === null) throw new Error('bad epoch')
+    epochMemo = { value: v, at: now }
+    if (cache) {
+      const put = cache.put(coloKey, new Response(v, { headers: { 'content-type': 'text/plain', 'cache-control': `public, max-age=${EPOCH_MEMO_MS / 1000}` } })).catch(() => {})
+      if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(put)
+    }
+    return v
+  } catch {
+    // A briefly stale epoch beats an SSR storm while the hub hiccups.
+    return epochMemo.value
+  }
+}
 const STASHED_COOKIE = 'x-edge-set-cookie'
 
 const ALLOWED_STORED_COOKIES = [
@@ -381,7 +432,9 @@ export function createEdgeFetch(target, version, cacheProvider = () => globalThi
     // 4. Edge cache via Workers Cache API (host + locale + curr keyed).
     const cls = request.method === 'GET' && !request.headers.has('authorization') ? edgeCacheClass(url.pathname) : null
     const cacheable = cls === 'page' || cls === 'shell' || cls === 'root'
-    const cache = cacheable ? cacheProvider() : null
+    let cache = cacheable ? cacheProvider() : null
+    const epoch = cache ? await edgeEpoch(env, ctx, cache, url.origin) : null
+    if (epoch === null) cache = null
     if (!cache) {
       let res = await target.fetch(request, env, ctx)
       if (request.method === 'GET') res = await rewriteHtmlLang(res, localeCtx.hreflang)
@@ -393,7 +446,7 @@ export function createEdgeFetch(target, version, cacheProvider = () => globalThi
       return res
     }
 
-    const key = cacheKeyFor(request.url, version, cls === 'shell', localeCtx)
+    const key = cacheKeyFor(request.url, `${version}.e${epoch}`, cls === 'shell', localeCtx)
     try {
       const hit = await cache.match(key)
       if (hit) return fromCacheHit(hit, prefCookies)

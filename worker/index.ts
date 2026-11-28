@@ -36,6 +36,7 @@ import { handleCatalog } from "./src/routes/catalog.ts";
 import { handleUser } from "./src/routes/user.ts";
 import { handleAdmin } from "./src/routes/admin.ts";
 import { handlePartner } from "./src/routes/partner.ts";
+import { bumpEdgeEpoch, isCatalogMutation, readEdgeEpoch } from "./src/lib/edge-epoch.ts";
 import { handleAffiliate } from "./src/routes/affiliate.ts";
 import { handleFeatureFlags } from "./src/routes/feature-flags.ts";
 import { handleUrlIngest } from "./src/routes/url-ingest.ts";
@@ -373,7 +374,13 @@ export default {
       return serveAssets(request, env, url);
     }
     if (request.method === "OPTIONS") return preflight(request, env);
-    return observeApi(request, env, ctx, () => route(request, env, url));
+    // ota-user edge-cache generation: read on its cache path (memoized there for 30s).
+    if (url.pathname === "/api/v1/edge/epoch" && request.method === "GET") {
+      return json({ epoch: await readEdgeEpoch(env) }, 200, { "Cache-Control": "no-store" });
+    }
+    const res = await observeApi(request, env, ctx, () => route(request, env, url));
+    if (isCatalogMutation(request.method, url.pathname, res.status)) ctx.waitUntil(bumpEdgeEpoch(env));
+    return res;
   },
 
   /** Cron: expire abandoned bookings, reconcile unknown payments, retry refunds. */
