@@ -810,8 +810,10 @@ test("sitemap: dynamic, includes catalog detail pages", async () => {
   const res = await fetch(BASE + "/sitemap.xml");
   assert.equal(res.status, 200);
   const xml = await res.text();
-  assert.ok(xml.includes("/hotels/detail/htl_seoul_01</loc>"));
-  assert.ok(xml.includes("/flights/detail/flt_ke703</loc>"));
+  // <loc> is the ko-KR subdomain canonical (the bare apex always redirects).
+  assert.ok(xml.includes("/hotels/detail/htl_seoul_01?locale=ko-kr</loc>"));
+  assert.ok(xml.includes("/flights/detail/flt_ke703?locale=ko-kr</loc>"));
+  assert.ok(!xml.includes("<loc>https://getfortrip.com"));
 });
 
 async function approvedPartner(tag) {

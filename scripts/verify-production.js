@@ -503,7 +503,7 @@ async function runVerificationSuite() {
     const res = await fetch(`${BASE_URL}/sitemap.xml`);
     if (!res.ok) throw new Error(`Sitemap request failed: HTTP ${res.status}`);
     const xml = await res.text();
-    if (!xml.includes('<urlset') || !xml.includes('https://getfortrip.com/hotels/detail/')) {
+    if (!xml.includes('<urlset') || !xml.includes('https://kr.getfortrip.com/hotels/detail/')) {
       throw new Error(`Sitemap missing essential catalog entries`);
     }
   });
