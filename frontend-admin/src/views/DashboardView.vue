@@ -47,7 +47,7 @@ const ACCOUNT: Record<string, string> = {
     </PageHeader>
 
     <StatePanel :state="dash.state.value" :error="dash.error.value" :rows="3" @retry="dash.reload()">
-      <section class="grid grid-cols-2 gap-3 lg:grid-cols-4 [&>*]:min-w-0" aria-label="주요 지표">
+      <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-w-0" aria-label="주요 지표">
         <StatCard label="확인 필요 · 수동 검토" :value="num(m.manualReview)" icon="alert" :tone="m.manualReview ? 'danger' : 'neutral'" to="/bookings?status=MANUAL_REVIEW_REQUIRED" />
         <StatCard label="공급사 확정 대기" :value="num(m.supplierPending)" icon="server" :tone="m.supplierPending ? 'warning' : 'neutral'" to="/bookings?status=SUPPLIER_BOOKING_PENDING" />
         <StatCard label="환불 처리 대기" :value="num(m.pendingRefunds)" icon="refund" :tone="m.pendingRefunds ? 'warning' : 'neutral'" to="/bookings?status=REFUND_PENDING" />

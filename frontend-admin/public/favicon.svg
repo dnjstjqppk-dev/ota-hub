@@ -1,18 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <defs>
-    <linearGradient id="sol-bg" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#3B5BFF"/>
-      <stop offset="55%" stop-color="#2948FF"/>
-      <stop offset="100%" stop-color="#0E1B6B"/>
-    </linearGradient>
-    <linearGradient id="sol-arc" x1="14" y1="46" x2="50" y2="14" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#A5B8FF"/>
-      <stop offset="100%" stop-color="#FFFFFF"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="18" fill="url(#sol-bg)"/>
-  <circle cx="32" cy="32" r="20" stroke="#A5B8FF" stroke-opacity="0.35" stroke-width="1.5"/>
-  <path d="M16 40C22 25 35 18 49 20" stroke="url(#sol-arc)" stroke-width="3" stroke-linecap="round"/>
-  <path d="M32 14L35.2 26.8L48 30L35.2 33.2L32 46L28.8 33.2L16 30L28.8 26.8Z" fill="#FFFFFF"/>
-  <circle cx="48" cy="20" r="4.2" fill="#FF5733"/>
+  <rect width="64" height="64" rx="16" fill="#0F6A53"/>
+  <path d="M18 44V29C18 21.268 24.268 15 32 15C39.732 15 46 21.268 46 29V44" stroke="#F8F6F1" stroke-width="4" stroke-linecap="round"/>
+  <path d="M24 44L32 25L40 44" stroke="#8AD4BF" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="32" cy="24" r="4" fill="#D95D30"/>
 </svg>

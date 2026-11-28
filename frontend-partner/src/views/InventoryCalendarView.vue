@@ -315,7 +315,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 <template>
   <div class="space-y-6">
-    <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+    <div class="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
       <div>
         <h1 class="font-display text-2xl font-extrabold tracking-tight text-ink">
           일자별 가격 / 재고 캘린더
@@ -324,18 +324,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           객실별 차등 요금, 기간 일괄 반영, 판매 마감 및 투어 회차(Time Slot)를 관리합니다.
         </p>
       </div>
-      <div class="flex flex-wrap items-center gap-2">
-        <select v-model="selectedProduct" aria-label="재고 관리 상품" class="input !w-auto !text-xs font-bold shadow-sm" @change="onProductChange">
+      <div class="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+        <select v-model="selectedProduct" aria-label="재고 관리 상품" class="input max-w-full !text-xs font-bold shadow-sm sm:!w-auto sm:max-w-xs" @change="onProductChange">
           <option v-if="!products.length" value="">등록된 상품 없음</option>
           <option v-for="p in products" :key="p.id" :value="p.id">{{ p.title }} ({{ p.domain_type }})</option>
         </select>
-        <select v-if="selectedDomain === 'HOTEL' && rooms.length" v-model="selectedUnitId" aria-label="객실 타입" class="input !w-auto !text-xs font-bold shadow-sm">
+        <select v-if="selectedDomain === 'HOTEL' && rooms.length" v-model="selectedUnitId" aria-label="객실 타입" class="input max-w-full !text-xs font-bold shadow-sm sm:!w-auto sm:max-w-[200px]">
           <option value="default">전체 기본 (default)</option>
           <option v-for="rm in rooms" :key="rm.id" :value="rm.id">{{ rm.name_ko || rm.name || rm.id }}</option>
         </select>
-        <input v-model="currentMonth" type="month" aria-label="조회 월" class="input !w-auto !text-xs font-bold shadow-sm" @change="fetchInventory" />
-        <button v-if="selectedProduct" type="button" class="btn-primary btn-sm !text-xs" @click="openBulkModal">기간 일괄 설정</button>
-        <button type="button" class="btn-secondary btn-sm !text-xs" @click="fetchInventory"><AppIcon name="refresh" :size="14" />새로고침</button>
+        <div class="flex flex-wrap items-center gap-2">
+          <input v-model="currentMonth" type="month" aria-label="조회 월" class="input !w-auto flex-1 !text-xs font-bold shadow-sm sm:flex-initial" @change="fetchInventory" />
+          <button v-if="selectedProduct" type="button" class="btn-primary btn-sm !text-xs" @click="openBulkModal">기간 일괄 설정</button>
+          <button type="button" class="btn-secondary btn-sm !text-xs" @click="fetchInventory"><AppIcon name="refresh" :size="14" />새로고침</button>
+        </div>
       </div>
     </div>
 
@@ -348,7 +350,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     <div class="card space-y-4 p-4">
       <p v-if="loading" class="py-8 text-center text-sm font-bold text-ink-subtle">재고 정보를 불러오는 중입니다...</p>
       <p v-else-if="!selectedProduct" class="py-8 text-center text-sm font-bold text-ink-subtle">등록된 상품이 없습니다. 먼저 공급 상품을 등록해 주세요.</p>
-      <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-7">
+      <div v-else class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7">
         <button
           v-for="date in daysInMonth"
           :key="date"
@@ -412,7 +414,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
     <!-- Single-Day Edit Modal -->
     <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-midnight-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" :aria-label="`${selectedDate} 요금/재고 설정`" @click.self="isModalOpen = false">
-      <div class="w-full max-w-sm space-y-5 rounded-2xl border border-line bg-surface-raised p-6 shadow-pop animate-pop-in">
+      <div class="max-h-[90dvh] w-full max-w-sm space-y-5 overflow-y-auto rounded-card border border-line bg-surface-raised p-6 shadow-pop animate-pop-in">
         <div class="flex items-center justify-between border-b border-line pb-3">
           <h3 class="text-base font-extrabold text-ink">{{ selectedDate }} 요금/재고 설정</h3>
           <button type="button" aria-label="닫기" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" @click="isModalOpen = false"><AppIcon name="close" :size="18" /></button>
@@ -441,7 +443,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
     <!-- Bulk Date-Range Modal -->
     <div v-if="bulkOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-midnight-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="기간 일괄 요금/재고 설정" @click.self="bulkOpen = false">
-      <div class="w-full max-w-md space-y-4 rounded-2xl border border-line bg-surface-raised p-6 shadow-pop animate-pop-in">
+      <div class="max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-card border border-line bg-surface-raised p-6 shadow-pop animate-pop-in">
         <div class="flex items-center justify-between border-b border-line pb-3">
           <h3 class="text-base font-extrabold text-ink">기간 일괄 요금·재고 설정</h3>
           <button type="button" aria-label="닫기" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" @click="bulkOpen = false"><AppIcon name="close" :size="18" /></button>

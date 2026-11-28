@@ -228,16 +228,16 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
           <span class="text-sm font-semibold text-primary">{{ $t('hotels.list.change') }}</span>
         </button>
 
-        <form :class="['grid gap-2 lg:grid lg:grid-cols-[1.5fr_1.4fr_1fr_auto]', formOpen ? 'grid' : 'hidden']" novalidate @submit.prevent="submitSearch">
-          <div class="relative flex min-h-[52px] flex-col justify-center rounded-2xl border border-line bg-surface px-4 py-1.5 transition-colors focus-within:border-primary focus-within:shadow-focus hover:border-line-strong">
-            <label for="hl-city" class="mb-0.5 block text-2xs font-semibold uppercase tracking-wide text-ink-subtle">{{ $t('hotels.list.dest') }}</label>
+        <form :class="['grid gap-2 sm:grid-cols-2 lg:grid lg:grid-cols-[1.5fr_1.4fr_1fr_auto]', formOpen ? 'grid' : 'hidden']" novalidate @submit.prevent="submitSearch">
+          <div class="relative flex min-h-[52px] flex-col justify-center rounded-field border border-line bg-surface px-4 py-1.5 transition-colors focus-within:border-primary focus-within:shadow-focus hover:border-line-strong sm:col-span-2 lg:col-span-1">
+            <label for="hl-city" class="mb-0.5 block text-2xs font-bold uppercase tracking-wider text-ink-subtle">{{ $t('hotels.list.dest') }}</label>
             <SearchAutocomplete v-model="draft.city" input-id="hl-city" domain="hotels" variant="bare" :placeholder="$t('hotels.list.destPh')" @enter="submitSearch" />
           </div>
           <DateRangePicker v-model:start="draft.checkIn" v-model:end="draft.checkOut" :start-label="$t('checkout.startHotel')" :end-label="$t('checkout.endHotel')" :min="today" :max-range="30" compact />
           <GuestPicker v-model:adults="draft.adults" v-model:children="draft.children" v-model:rooms="draft.rooms" compact />
-          <div class="flex gap-2">
-            <button v-if="formOpen" type="button" class="rounded-2xl border border-line px-4 text-sm font-semibold text-ink-muted lg:hidden" @click="formOpen = false; syncDraft()">{{ $t('common.cancel') }}</button>
-            <button type="submit" class="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-7 font-bold text-primary-ink transition-colors hover:bg-primary-hover"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
+          <div class="flex gap-2 sm:col-span-2 lg:col-span-1">
+            <button v-if="formOpen" type="button" class="btn-secondary lg:hidden" @click="formOpen = false; syncDraft()">{{ $t('common.cancel') }}</button>
+            <button type="submit" class="btn-primary min-h-[52px] flex-1 px-7"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
           </div>
         </form>
       </div>
@@ -277,7 +277,7 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
       <div class="grid gap-6 lg:grid-cols-[272px_1fr]">
         <!-- Filters (desktop sidebar; same panel is reused in the phone sheet) -->
         <aside class="hidden lg:block" :aria-label="$t('hotels.list.filter')">
-          <div class="sticky top-24 rounded-card border border-line bg-surface p-5">
+          <div class="sticky top-28 rounded-card border border-line bg-surface p-5 shadow-card">
             <div class="mb-4 flex items-center justify-between">
               <h2 class="font-bold text-ink">{{ $t('hotels.list.filter') }}</h2>
               <button v-if="activeFilters.length" type="button" class="text-sm font-semibold text-primary hover:underline" @click="setQuery(FILTER_DEFAULTS)">{{ $t('hotels.list.reset') }}</button>
@@ -328,8 +328,8 @@ const chip = (on: boolean) => [CHIP, on ? 'border-primary bg-primary-soft text-p
           <!-- List -->
           <ul v-else class="space-y-3">
             <li v-for="h in hotels" :key="h.id">
-              <article class="defer-paint group relative flex flex-col overflow-hidden rounded-card border border-line bg-surface transition-shadow hover:shadow-pop sm:flex-row">
-                <div class="relative aspect-[16/10] shrink-0 overflow-hidden bg-surface-sunken sm:aspect-auto sm:w-64 md:w-72">
+              <article class="defer-paint group relative flex flex-col overflow-hidden rounded-card border border-line bg-surface shadow-card transition-[border-color,box-shadow] hover:border-primary/45 hover:shadow-pop sm:grid sm:grid-cols-[216px_1fr] md:grid-cols-[260px_1fr]">
+                <div class="relative aspect-[16/10] shrink-0 overflow-hidden bg-surface-sunken sm:aspect-auto sm:min-h-[200px]">
                   <SmartImg :src="h.thumbnail_url" :alt="h.name_ko" icon="hotel" img-class="h-full w-full object-cover sm:absolute sm:inset-0 sm:transition-transform sm:duration-500 sm:group-hover:scale-105" />
                 </div>
                 <div class="flex min-w-0 flex-1 flex-col p-4 sm:p-5">

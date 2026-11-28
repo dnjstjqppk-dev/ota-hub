@@ -40,7 +40,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
           <button type="button" class="btn-ghost btn-sm -mr-2 px-2" aria-label="닫기" @click="emit('close')"><AppIcon name="close" :size="18" /></button>
         </header>
         <div class="flex-1 overflow-y-auto px-5 py-5"><slot /></div>
-        <footer v-if="$slots.footer" class="flex flex-wrap justify-end gap-2 border-t border-line px-5 py-3"><slot name="footer" /></footer>
+        <footer v-if="$slots.footer" class="flex flex-wrap justify-end gap-2 border-t border-line px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3"><slot name="footer" /></footer>
       </section>
     </div>
   </Teleport>

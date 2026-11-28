@@ -232,7 +232,7 @@ onMounted(() => {
       aria-modal="true"
       aria-label="직원 계정 생성"
     >
-      <div class="w-full max-w-sm space-y-5 rounded-2xl border border-line bg-surface-raised p-6 shadow-pop">
+      <div class="max-h-[90dvh] w-full max-w-sm space-y-5 overflow-y-auto rounded-card border border-line bg-surface-raised p-6 shadow-pop">
         <div class="flex items-center justify-between border-b border-line pb-3">
           <h3 class="text-base font-black text-ink">직원 계정 생성</h3>
           <button type="button" aria-label="닫기" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" @click="isModalOpen = false"><AppIcon name="close" :size="18" /></button>

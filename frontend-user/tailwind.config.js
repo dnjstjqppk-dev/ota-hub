@@ -1,7 +1,7 @@
 /**
- * getfortrip design system — "Solstice Atelier".
- * Contemporary luxury-editorial OTA palette: Alabaster Pearl canvas,
- * Electric Cobalt Indigo primary, Solar Coral Sunset accent, Deep Celestial Navy dark chrome.
+ * getfortrip design system — "Terra Nord".
+ * Architectural Nordic-Editorial travel system: Warm Sandstone Alabaster canvas,
+ * Botanical Alpine Spruce primary, Sienna Terracotta accent, Obsidian Forest dark chrome.
  * Semantic colours resolve to CSS variables (assets/css/tailwind.css) so light and dark
  * themes share one class vocabulary: bg-surface, text-ink, border-line, bg-primary ...
  *
@@ -22,7 +22,6 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Semantic tokens (theme-aware)
         canvas: v('canvas'),
         surface: { DEFAULT: v('surface'), raised: v('surface-raised'), sunken: v('surface-sunken') },
         ink: { DEFAULT: v('ink'), muted: v('ink-muted'), subtle: v('ink-subtle'), inverse: v('ink-inverse') },
@@ -33,29 +32,29 @@ module.exports = {
         warning: { DEFAULT: v('warning'), soft: v('warning-soft') },
         danger: { DEFAULT: v('danger'), soft: v('danger-soft') },
 
-        // Brand scales — Solstice Cobalt / Periwinkle / Solar Coral / Celestial Cosmos
+        // Brand scales — Terra Nord (Spruce / Sage / Terracotta / Obsidian)
         sapphire: {
-          50: '#EEF1FF', 100: '#DCE3FF', 200: '#BAC7FF', 300: '#8FA5FF', 400: '#5C78FF',
-          500: '#2948FF', 600: '#1B36E0', 700: '#162BB8', 800: '#132494', 900: '#101D75', 950: '#09114A'
+          50: '#ECF6F3', 100: '#D3ECE4', 200: '#A9DACB', 300: '#74C1AC', 400: '#3FA289',
+          500: '#0F6A53', 600: '#0B5441', 700: '#094335', 800: '#08362B', 900: '#062B22', 950: '#041A15'
         },
-        horizon: { 300: '#A5B8FF', 400: '#7892FF', 500: '#4E6EFF', 600: '#2948FF' },
-        coral: { 50: '#FFF0EC', 100: '#FFDCD3', 400: '#FF7D5C', 500: '#FF5733', 600: '#E04220', 700: '#B83216' },
-        midnight: { 700: '#1D2952', 800: '#131C3B', 900: '#0B1126', 950: '#060917' },
+        horizon: { 300: '#8AD4BF', 400: '#55B99E', 500: '#238C70', 600: '#0F6A53' },
+        coral: { 50: '#FDF1EC', 100: '#FBE0D5', 400: '#E87E56', 500: '#D95D30', 600: '#BA4920', 700: '#963817' },
+        midnight: { 700: '#24312C', 800: '#19231F', 900: '#111815', 950: '#0A0F0D' },
 
-        // Legacy aliases: cleanly remapped to Solstice tokens
+        // Legacy aliases mapped to Terra Nord tokens
         trip: {
-          blue: '#2948FF',
-          hover: '#1B36E0',
-          navy: '#0B1126',
-          dark: '#060917',
-          orange: '#FF5733',
-          yellow: '#E59B14',
-          bg: '#F5F7FC',
-          border: '#DCE3F2'
+          blue: '#0F6A53',
+          hover: '#0B5441',
+          navy: '#111815',
+          dark: '#0A0F0D',
+          orange: '#D95D30',
+          yellow: '#C98212',
+          bg: '#F8F6F1',
+          border: '#E2DDD3'
         }
       },
       fontFamily: {
-        display: ['"Plus Jakarta Sans"', '"Pretendard Variable"', 'Pretendard', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        display: ['"Outfit"', '"Pretendard Variable"', 'Pretendard', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         sans: ['"Pretendard Variable"', 'Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', '"Segoe UI"', 'Roboto', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace']
       },
@@ -63,20 +62,20 @@ module.exports = {
         '2xs': ['0.6875rem', { lineHeight: '1rem' }]
       },
       borderRadius: {
-        card: '1.375rem',
+        card: '1.25rem',
         field: '0.875rem'
       },
       boxShadow: {
-        card: '0 1px 2px rgb(12 19 38 / 0.04), 0 8px 24px -8px rgb(12 19 38 / 0.08)',
-        pop: '0 20px 48px -12px rgb(12 19 38 / 0.22), 0 2px 8px rgb(12 19 38 / 0.06)',
-        focus: '0 0 0 4px rgb(var(--gft-primary) / 0.18)'
+        card: '0 1px 2px rgb(20 26 24 / 0.04), 0 8px 24px -10px rgb(20 26 24 / 0.07)',
+        pop: '0 22px 48px -12px rgb(20 26 24 / 0.18), 0 2px 8px rgb(20 26 24 / 0.06)',
+        focus: '0 0 0 3px rgb(var(--gft-primary) / 0.2)'
       },
       keyframes: {
-        'pop-in': { from: { opacity: '0', transform: 'translateY(-4px) scale(0.98)' }, to: { opacity: '1', transform: 'none' } },
+        'pop-in': { from: { opacity: '0', transform: 'translateY(-4px) scale(0.985)' }, to: { opacity: '1', transform: 'none' } },
         shimmer: { '100%': { transform: 'translateX(100%)' } }
       },
       animation: {
-        'pop-in': 'pop-in 140ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+        'pop-in': 'pop-in 150ms cubic-bezier(0.2, 0.8, 0.2, 1)',
         shimmer: 'shimmer 1.4s infinite'
       }
     },

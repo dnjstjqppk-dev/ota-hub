@@ -64,19 +64,20 @@ const handleRegister = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-midnight-900 px-4 py-12 font-sans sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-gradient-to-b from-primary-soft/65 via-canvas to-canvas px-4 py-10 font-sans sm:px-6 sm:py-12 lg:px-8">
     <div class="mx-auto max-w-2xl space-y-6">
       <div class="space-y-2 text-center">
-        <h1 class="flex items-center justify-center gap-2 text-3xl font-black tracking-tight text-white">
-          <span>getfor<span class="text-sapphire-400">trip</span></span>
-          <span class="rounded bg-primary px-2 py-0.5 text-xs font-black uppercase text-primary-ink">Partner Onboarding</span>
+        <h1 class="flex flex-wrap items-center justify-center gap-2 font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
+          <img src="/logo.svg" alt="getfortrip" class="h-8 w-auto dark:hidden" />
+          <img src="/logo-white.svg" alt="getfortrip" class="hidden h-8 w-auto dark:block" />
+          <span class="rounded-md bg-primary-soft px-2.5 py-0.5 font-mono text-xs font-bold uppercase text-primary">Partner Onboarding</span>
         </h1>
-        <p class="text-sm font-medium text-sapphire-300">
+        <p class="text-sm font-medium text-ink-muted">
           getfortrip 글로벌 판매 네트워크에 상품을 직접 공급하고 매출을 확대하세요.
         </p>
       </div>
 
-      <div class="space-y-6 rounded-3xl border border-line bg-surface p-8 shadow-pop">
+      <div class="space-y-6 rounded-card border border-line bg-surface p-6 shadow-pop sm:p-8">
         <div v-if="successMessage" class="space-y-3 rounded-2xl border border-success/30 bg-success-soft p-6 text-success">
           <div class="flex items-center gap-2 text-base font-black">
             <AppIcon name="check" :size="20" />

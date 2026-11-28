@@ -10,45 +10,43 @@ const authStore = useAuthStore()
 <template>
   <div class="mx-auto max-w-6xl space-y-8 px-4 pb-24 pt-6 lg:px-6 lg:pb-16">
     <!-- Logged-in Member Card -->
-    <section v-if="authStore.isLoggedIn && authStore.user" class="relative overflow-hidden rounded-[28px] bg-midnight-900 p-7 text-white shadow-pop sm:p-10">
-      <div class="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-primary/35 blur-3xl" aria-hidden="true" />
-      <div class="pointer-events-none absolute -bottom-20 left-1/3 h-64 w-64 rounded-full bg-accent/25 blur-3xl" aria-hidden="true" />
+    <section v-if="authStore.isLoggedIn && authStore.user" class="relative overflow-hidden rounded-card border border-line bg-gradient-to-br from-primary-soft/80 via-surface to-accent-soft/45 p-6 shadow-card sm:p-10">
+      <div class="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-primary/15 blur-3xl" aria-hidden="true" />
       <div class="relative flex flex-col items-start justify-between gap-5 md:flex-row md:items-center">
         <div class="flex items-center gap-4">
-          <img v-if="authStore.user.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="h-16 w-16 rounded-full border-2 border-horizon-300 object-cover" />
-          <span v-else class="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-xl font-extrabold text-primary-ink" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
+          <img v-if="authStore.user.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="h-16 w-16 rounded-2xl border-2 border-primary object-cover" />
+          <span v-else class="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary font-display text-xl font-extrabold text-primary-ink" aria-hidden="true">{{ (authStore.user.fullName || authStore.user.email || '?').trim().charAt(0).toUpperCase() }}</span>
           <div>
             <div class="flex flex-wrap items-center gap-2">
-              <h1 class="font-display text-2xl font-extrabold">{{ $t('rewards.greeting', { name: authStore.user.fullName }) }}</h1>
+              <h1 class="font-display text-2xl font-extrabold text-ink">{{ $t('rewards.greeting', { name: authStore.user.fullName }) }}</h1>
               <span class="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-0.5 text-xs font-bold text-white">
                 <AppIcon name="star" :size="12" /> {{ $t('rewards.tier', { tier: authStore.user.tier || 'SILVER' }) }}
               </span>
             </div>
-            <p class="mt-1 text-xs text-white/70">{{ $t('rewards.member') }}</p>
+            <p class="mt-1 text-xs text-ink-muted">{{ $t('rewards.member') }}</p>
           </div>
         </div>
 
-        <div class="w-full rounded-2xl border border-white/15 bg-white/10 px-6 py-4 backdrop-blur-md md:w-auto md:text-right">
-          <div class="text-xs font-bold text-horizon-300">{{ $t('rewards.coinsTitle') }}</div>
-          <div class="mt-1 font-mono text-3xl font-extrabold tabular text-white">
-            {{ $n(authStore.user.tripCoins || 0) }} <span class="text-base text-horizon-300">G</span>
+        <div class="w-full rounded-field border border-line bg-surface px-6 py-4 shadow-sm md:w-auto md:text-right">
+          <div class="text-xs font-bold text-primary">{{ $t('rewards.coinsTitle') }}</div>
+          <div class="mt-1 font-mono text-3xl font-extrabold tabular text-ink">
+            {{ $n(authStore.user.tripCoins || 0) }} <span class="text-base text-primary">G</span>
           </div>
-          <div class="mt-0.5 text-2xs text-white/70">{{ $t('rewards.coinsHint') }}</div>
+          <div class="mt-0.5 text-2xs text-ink-subtle">{{ $t('rewards.coinsHint') }}</div>
         </div>
       </div>
     </section>
 
     <!-- Guest Membership Hero -->
-    <section v-else class="relative mx-auto max-w-3xl overflow-hidden rounded-[28px] bg-midnight-900 p-8 text-center text-white shadow-pop sm:p-12">
-      <div class="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-primary/35 blur-3xl" aria-hidden="true" />
-      <div class="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-accent/25 blur-3xl" aria-hidden="true" />
+    <section v-else class="relative mx-auto max-w-3xl overflow-hidden rounded-card border border-line bg-gradient-to-br from-primary-soft/80 via-surface to-accent-soft/45 p-8 text-center shadow-card sm:p-12">
+      <div class="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-primary/15 blur-3xl" aria-hidden="true" />
       <div class="relative space-y-5">
-        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-horizon-300">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/20 bg-surface text-primary shadow-sm">
           <AppIcon name="star" :size="28" />
         </div>
         <div class="space-y-2">
-          <h1 class="font-display text-2xl font-extrabold sm:text-3xl">{{ $t('rewards.guestTitle') }}</h1>
-          <p class="mx-auto max-w-md text-sm text-white/75">
+          <h1 class="font-display text-2xl font-extrabold text-ink sm:text-3xl">{{ $t('rewards.guestTitle') }}</h1>
+          <p class="mx-auto max-w-md text-sm text-ink-muted">
             {{ $t('rewards.guestSub') }}
           </p>
         </div>

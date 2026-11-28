@@ -374,29 +374,31 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
                     <p v-if="plan.free_cancellation" class="flex items-center gap-1.5 font-medium text-success"><AppIcon name="check" :size="14" />{{ freeCancelLabel }}</p>
                     <p v-else class="flex items-center gap-1.5 font-medium text-danger"><AppIcon name="close" :size="14" />{{ $t('hotels.detail.nonRefundable') }}</p>
                   </div>
-                  <div class="flex items-center justify-between gap-4 sm:justify-end">
-                    <div class="text-right">
+                  <div class="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                    <div class="text-left sm:text-right">
                       <p class="text-xl font-extrabold text-ink tabular">{{ currency.formatKRW(plan.price_krw) }}</p>
                       <p class="text-2xs text-ink-subtle tabular">
                         <template v-if="nights">{{ $t('hotels.detail.stayPrice', { n: nights, rooms: stay.rooms, v: currency.formatKRW(plan.price_krw * nights * stay.rooms) }) }}</template>
                         <template v-else>{{ $t('hotels.detail.perNightTax') }}</template>
                       </p>
                     </div>
-                    <NuxtLink
-                      v-if="nights && roomFits(room)"
-                      :to="$localePath(checkoutLink(room, plan))"
-                      class="shrink-0 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-ink transition-colors hover:bg-primary-hover"
-                    >{{ $t('common.bookNow') }}</NuxtLink>
-                    <button
-                      v-if="nights && roomFits(room)"
-                      type="button"
-                      :disabled="cart.adding"
-                      class="shrink-0 rounded-xl border border-line-strong px-4 py-3 text-sm font-bold text-ink transition-colors hover:bg-surface-sunken disabled:opacity-50"
-                      data-testid="add-cart"
-                      @click="addRoomToCart(room, plan)"
-                    >{{ addedRoom === room.id ? $t('hotels.detail.added') : $t('hotels.detail.addCart') }}</button>
-                    <button v-else-if="!nights" type="button" class="shrink-0 rounded-xl border border-primary px-5 py-3 text-sm font-bold text-primary hover:bg-primary-soft" @click="askForDates">{{ $t('trains.search.pickDate') }}</button>
-                    <span v-else class="shrink-0 rounded-xl bg-surface-sunken px-5 py-3 text-sm font-semibold text-ink-subtle">{{ $t('hotels.detail.overCapacity') }}</span>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <NuxtLink
+                        v-if="nights && roomFits(room)"
+                        :to="$localePath(checkoutLink(room, plan))"
+                        class="btn-primary shrink-0 px-5 py-2.5"
+                      >{{ $t('common.bookNow') }}</NuxtLink>
+                      <button
+                        v-if="nights && roomFits(room)"
+                        type="button"
+                        :disabled="cart.adding"
+                        class="btn-secondary shrink-0 px-4 py-2.5 disabled:opacity-50"
+                        data-testid="add-cart"
+                        @click="addRoomToCart(room, plan)"
+                      >{{ addedRoom === room.id ? $t('hotels.detail.added') : $t('hotels.detail.addCart') }}</button>
+                      <button v-else-if="!nights" type="button" class="shrink-0 rounded-field border border-primary px-5 py-2.5 text-sm font-bold text-primary hover:bg-primary-soft" @click="askForDates">{{ $t('trains.search.pickDate') }}</button>
+                      <span v-else class="shrink-0 rounded-field bg-surface-sunken px-4 py-2.5 text-sm font-semibold text-ink-subtle">{{ $t('hotels.detail.overCapacity') }}</span>
+                    </div>
                   </div>
                 </li>
               </ul>
@@ -468,7 +470,7 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
 
       <!-- Stay panel -->
       <aside class="lg:order-none">
-        <div ref="stayPanel" :class="['sticky top-24 space-y-3 rounded-card border bg-surface p-5 shadow-card transition-colors', needDates ? 'border-primary shadow-focus' : 'border-line']">
+        <div ref="stayPanel" :class="['sticky top-28 space-y-3 rounded-card border bg-surface p-5 shadow-card transition-colors', needDates ? 'border-primary shadow-focus' : 'border-line']">
           <p class="text-sm text-ink-muted">
             <template v-if="minRoomPrice">{{ $t('hotels.detail.sideFrom') }} <span class="text-2xl font-extrabold text-ink tabular">{{ currency.formatKRW(minRoomPrice) }}</span>~</template>
             <template v-else>{{ $t('hotels.detail.sidePickDates') }}</template>
@@ -500,8 +502,8 @@ const backToList = computed(() => ({ path: '/hotels/list', query: { ...(hotel.va
       </div>
     </Teleport>
 
-    <!-- Phone bottom bar -->
-    <div class="fixed inset-x-0 bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 border-t border-line bg-surface px-4 py-3 md:bottom-0 lg:hidden">
+    <!-- Phone / Tablet bottom bar -->
+    <div class="fixed inset-x-0 bottom-[calc(58px+env(safe-area-inset-bottom))] z-30 border-t border-line bg-surface/95 px-4 py-2.5 shadow-pop backdrop-blur-md md:bottom-0 lg:hidden print:hidden">
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-3">
         <div class="min-w-0 text-sm">
           <p v-if="nights" class="truncate font-semibold text-ink">{{ fmt(stay.checkIn) }} · {{ $t('hotels.detail.nights', { n: nights }) }}</p>

@@ -115,15 +115,17 @@ useHead(() => {
           <span class="text-sm font-semibold text-primary">{{ $t('hotels.list.change') }}</span>
         </button>
         <form :class="['lg:block', formOpen ? 'block' : 'hidden']" novalidate @submit.prevent="submit">
-          <div class="grid gap-2 lg:grid-cols-[1fr_auto_1fr_1fr_0.9fr_auto] lg:items-stretch">
-            <div class="field-box"><label for="ts-dep" class="field-label">{{ $t('trains.search.dep') }}</label><SearchAutocomplete v-model="draft.dep" input-id="ts-dep" domain="trains" variant="bare" :placeholder="$t('trains.search.depPh')" /></div>
-            <button type="button" class="z-10 mx-auto -my-4 flex h-10 w-10 rotate-90 items-center justify-center self-center rounded-full border border-line bg-surface text-ink-muted hover:text-primary lg:my-0 lg:rotate-0" :aria-label="$t('trains.search.swap')" @click="swap"><AppIcon name="swap" :size="18" /></button>
-            <div class="field-box"><label for="ts-arr" class="field-label">{{ $t('trains.search.arr') }}</label><SearchAutocomplete v-model="draft.arr" input-id="ts-arr" domain="trains" variant="bare" :placeholder="$t('trains.search.arrPh')" /></div>
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1.85fr_1fr_0.9fr_auto] lg:items-stretch">
+            <div class="grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center lg:col-span-1">
+              <div class="field-box"><label for="ts-dep" class="field-label">{{ $t('trains.search.dep') }}</label><SearchAutocomplete v-model="draft.dep" input-id="ts-dep" domain="trains" variant="bare" :placeholder="$t('trains.search.depPh')" /></div>
+              <button type="button" class="z-10 mx-auto -my-3.5 flex h-9 w-9 rotate-90 items-center justify-center self-center rounded-full border border-line bg-surface text-ink-muted shadow-sm hover:border-primary hover:text-primary sm:my-0 sm:rotate-0" :aria-label="$t('trains.search.swap')" @click="swap"><AppIcon name="swap" :size="16" /></button>
+              <div class="field-box"><label for="ts-arr" class="field-label">{{ $t('trains.search.arr') }}</label><SearchAutocomplete v-model="draft.arr" input-id="ts-arr" domain="trains" variant="bare" :placeholder="$t('trains.search.arrPh')" /></div>
+            </div>
             <DateRangePicker v-model:start="draft.date" mode="single" :start-label="$t('trains.search.rideDate')" :min="today" compact />
             <GuestPicker v-model:adults="draft.adults" v-model:children="draft.children" :show-rooms="false" :label="$t('trains.search.pax')" compact />
-            <div class="flex gap-2">
+            <div class="flex gap-2 sm:col-span-2 lg:col-span-1">
               <button v-if="formOpen" type="button" class="btn-secondary lg:hidden" @click="formOpen = false; syncDraft()">{{ $t('common.cancel') }}</button>
-              <button type="submit" class="btn-primary min-h-[52px] flex-1 rounded-2xl px-7 text-base"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
+              <button type="submit" class="btn-primary min-h-[52px] flex-1 px-7 text-base"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
             </div>
           </div>
           <p v-if="formError" class="mt-2 text-sm font-medium text-danger" role="alert">{{ formError }}</p>
@@ -153,7 +155,7 @@ useHead(() => {
 
       <div class="grid gap-6 lg:grid-cols-[272px_1fr]">
         <aside class="hidden lg:block" :aria-label="$t('hotels.list.filter')">
-          <div class="card sticky top-24 space-y-6 p-5">
+          <div class="card sticky top-28 space-y-6 p-5">
             <div class="flex items-center justify-between"><h2 class="font-bold text-ink">{{ $t('hotels.list.filter') }}</h2><button v-if="activeCount" type="button" class="text-sm font-semibold text-primary hover:underline" @click="patch(RESET)">{{ $t('hotels.list.reset') }}</button></div>
             <TrainFilterPanel :q="q" :types="types" :seats="seats" @patch="patch" />
           </div>

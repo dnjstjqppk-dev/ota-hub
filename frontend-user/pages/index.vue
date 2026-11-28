@@ -1,9 +1,8 @@
 <script setup lang="ts">
 /**
- * Home (design system "Solstice Atelier").
- * Every product, price and promotion shown here comes from the API. Nothing is invented:
- * sections without data are hidden, prices are labelled as reference prices, and only
- * promotions that are active and not expired are advertised.
+ * Home (design system "Terra Nord").
+ * Architectural Nordic-Editorial layout with explicit Web / Tablet / Mobile ergonomics.
+ * Every product, price and promotion shown here comes from the API — zero fabricated data.
  */
 import { computed, onMounted, ref } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
@@ -71,7 +70,6 @@ const promoLabel = computed(() => {
   return t('my.benefitOff', { v: p.discount_type === 'PERCENTAGE' ? `${p.discount_value}%` : currency.formatKRW(p.discount_value) })
 })
 
-/** Lowest room price, or the hotel base price. Never a made-up fallback. */
 function fromPrice(h: any): number | null {
   const roomPrices = (h.rooms || []).map((r: any) => Number(r.base_price_krw)).filter((n: number) => n > 0)
   const n = roomPrices.length ? Math.min(...roomPrices) : Number(h.base_price_krw)
@@ -79,7 +77,6 @@ function fromPrice(h: any): number | null {
 }
 function photos(m: any): string[] { try { return JSON.parse(m.photos_json || '[]').slice(0, 3) } catch { return [] } }
 
-/** Editorial picks (no counts or rankings implied). Images: Unsplash. */
 const DESTINATIONS = [
   { key: 'tokyo', q: '도쿄', img: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=800&q=75' },
   { key: 'osaka', q: '오사카', img: 'https://images.unsplash.com/photo-1589452271712-64b8a66c7b71?w=640&q=75' },
@@ -98,61 +95,77 @@ const PROMISES = computed(() => [
 
 <template>
   <div>
-    <!-- Solstice Atelier Hero -->
-    <section class="mx-auto max-w-7xl px-4 pt-5 lg:px-6 lg:pt-7">
-      <div class="relative overflow-hidden rounded-[34px] bg-midnight-900 px-6 pb-28 pt-10 text-white shadow-pop sm:px-10 sm:pt-14 lg:px-14 lg:pb-32 lg:pt-16">
-        <!-- Cobalt + Solar Coral atmospheric aurora & precision flight arcs -->
-        <div class="pointer-events-none absolute inset-0" aria-hidden="true">
-          <div class="absolute -right-24 -top-24 h-[440px] w-[440px] rounded-full" style="background: radial-gradient(closest-side, rgb(41 72 255 / 0.45), transparent)" />
-          <div class="absolute -bottom-28 left-1/4 h-[360px] w-[360px] rounded-full" style="background: radial-gradient(closest-side, rgb(255 87 51 / 0.28), transparent)" />
-          <div class="absolute left-0 top-0 h-full w-full opacity-[0.07]" style="background-image: linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px); background-size: 64px 64px;" />
-          <svg class="absolute inset-0 h-full w-full text-horizon-300/20" viewBox="0 0 1200 460" preserveAspectRatio="xMidYMid slice">
-            <circle cx="1040" cy="110" r="220" fill="none" stroke="currentColor" stroke-width="1" />
-            <circle cx="1040" cy="110" r="320" fill="none" stroke="currentColor" stroke-width="0.9" stroke-dasharray="5 9" />
-            <path d="M-40 350 Q 460 190 1240 290" fill="none" stroke="currentColor" stroke-width="1.3" />
-            <circle cx="1040" cy="110" r="5" fill="#FF5733" />
-          </svg>
-        </div>
+    <!-- Terra Nord Daylight Architectural Hero -->
+    <section class="relative overflow-hidden border-b border-line bg-gradient-to-b from-primary-soft/65 via-canvas to-canvas">
+      <!-- Subtle Architectural Grid Backdrop -->
+      <div class="pointer-events-none absolute inset-0 opacity-[0.35] dark:opacity-[0.14]" style="background-image: linear-gradient(to right, rgb(var(--gft-line)) 1px, transparent 1px), linear-gradient(to bottom, rgb(var(--gft-line)) 1px, transparent 1px); background-size: 72px 72px;" aria-hidden="true" />
+      <div class="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-primary/10 blur-3xl" aria-hidden="true" />
+      <div class="pointer-events-none absolute -left-20 top-32 h-72 w-72 rounded-full bg-accent/10 blur-3xl" aria-hidden="true" />
 
-        <div class="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div class="max-w-2xl">
-            <span class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 py-1 text-2xs font-bold uppercase tracking-[0.2em] text-horizon-300 backdrop-blur-md">
-              <span class="h-1.5 w-1.5 rounded-full bg-coral-500" />
-              GETFORTRIP SOLSTICE
-            </span>
-            <h1 class="mt-5 font-display text-[34px] font-extrabold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-[56px]">
+      <div class="relative mx-auto max-w-7xl px-4 pb-8 pt-6 sm:pt-10 lg:px-6 lg:pb-12 lg:pt-12">
+        <!-- Editorial Split Top Row -->
+        <div class="grid gap-6 lg:grid-cols-12 lg:items-end">
+          <div class="lg:col-span-7">
+            <div class="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-surface/90 px-3.5 py-1 text-2xs font-bold uppercase tracking-[0.2em] text-primary shadow-sm backdrop-blur">
+              <span class="h-1.5 w-1.5 rounded-full bg-accent" />
+              GETFORTRIP · TERRA NORD
+            </div>
+            <h1 class="mt-4 font-display text-3xl font-extrabold leading-[1.1] tracking-tight text-ink sm:text-5xl lg:text-[52px]">
               {{ $t('home.heroA') }}<br class="sm:hidden" /> {{ $t('home.heroB') }}
             </h1>
-            <p class="mt-4 max-w-xl text-base leading-relaxed text-white/75 sm:text-lg">{{ $t('home.heroSub') }}</p>
+            <p class="mt-3.5 max-w-xl text-sm leading-relaxed text-ink-muted sm:text-base lg:text-lg">{{ $t('home.heroSub') }}</p>
+            <div class="mt-5 flex flex-wrap items-center gap-2.5">
+              <NuxtLink :to="$localePath('/deals')" class="inline-flex min-h-[40px] items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:opacity-90">
+                <AppIcon name="gift" :size="14" />{{ $t('discover.deals') }}
+              </NuxtLink>
+              <NuxtLink :to="$localePath('/trip-best')" class="inline-flex min-h-[40px] items-center gap-1.5 rounded-full border border-line bg-surface px-4 py-2 text-xs font-bold text-ink transition hover:border-primary hover:text-primary">
+                <AppIcon name="trophy" :size="14" class="text-primary" />{{ $t('discover.best') }}
+              </NuxtLink>
+            </div>
           </div>
-          <div class="hidden shrink-0 items-center gap-2.5 lg:flex">
-            <NuxtLink :to="$localePath('/search')" class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white backdrop-blur-md transition hover:bg-white/20">
-              <AppIcon name="search" :size="15" />{{ $t('home.quickSearch') }}
-            </NuxtLink>
-            <NuxtLink :to="$localePath('/deals')" class="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:opacity-90">
-              <AppIcon name="gift" :size="15" />{{ $t('discover.deals') }}
+
+          <!-- Tablet & Desktop Curated Visual Trio -->
+          <div class="hidden grid-cols-3 gap-3 md:grid lg:col-span-5">
+            <NuxtLink
+              v-for="(d, idx) in DESTINATIONS.slice(0, 3)"
+              :key="d.key"
+              :to="$localePath(`/hotels/list?city=${encodeURIComponent(d.q)}`)"
+              class="group relative aspect-[3/4] overflow-hidden rounded-2xl border border-line bg-surface-sunken shadow-card"
+            >
+              <SmartImg :src="d.img" :alt="$t('home.destAlt', { name: $t(`home.destName.${d.key}`) })" img-class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+              <div class="absolute inset-0 bg-gradient-to-t from-midnight-950/80 via-transparent to-transparent" />
+              <span class="absolute left-2.5 top-2.5 rounded-md bg-surface/90 px-1.5 py-0.5 font-mono text-[10px] font-bold text-ink backdrop-blur">0{{ idx + 1 }}</span>
+              <div class="absolute inset-x-0 bottom-0 p-3 text-white">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-white/80">{{ $t(`home.destCountry.${d.key}`) }}</p>
+                <p class="font-display text-sm font-bold">{{ $t(`home.destName.${d.key}`) }}</p>
+              </div>
             </NuxtLink>
           </div>
         </div>
-      </div>
 
-      <!-- Floating Search Console overlapping Hero -->
-      <div class="relative z-10 -mt-20 px-1 sm:px-4 lg:px-6">
-        <HomeSearchWidget />
+        <!-- Integrated Architectural Search Dock -->
+        <div class="mt-6 lg:mt-8">
+          <HomeSearchWidget />
+        </div>
+
+        <!-- Responsive Category Bento Strip (Rail on Mobile, 3-col on Tablet, 9-col on Desktop) -->
+        <nav class="mt-5" :aria-label="$t('header.navAria')">
+          <ul class="chip-rail -mx-4 flex gap-2 px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 lg:grid-cols-9">
+            <li v-for="c in CATEGORIES" :key="c.key" class="shrink-0">
+              <NuxtLink
+                :to="$localePath(c.to)"
+                class="group flex min-h-[48px] items-center gap-2.5 rounded-field border border-line bg-surface px-3.5 py-2.5 text-xs font-bold text-ink transition hover:border-primary/50 hover:shadow-card lg:flex-col lg:justify-center lg:gap-1.5 lg:px-2 lg:py-3 lg:text-center"
+              >
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary transition group-hover:bg-primary group-hover:text-primary-ink lg:h-10 lg:w-10 lg:rounded-xl">
+                  <AppIcon :name="c.icon" :size="18" />
+                </span>
+                <span class="whitespace-nowrap lg:line-clamp-1 lg:whitespace-normal">{{ $t('nav.' + c.key) }}</span>
+              </NuxtLink>
+            </li>
+          </ul>
+        </nav>
       </div>
     </section>
-
-    <!-- Categories: Precision Icon Dock -->
-    <nav class="mx-auto mt-10 max-w-7xl px-4 lg:px-6" :aria-label="$t('header.navAria')">
-      <ul class="chip-rail -mx-4 flex gap-2.5 px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-9 sm:overflow-visible sm:px-0">
-        <li v-for="c in CATEGORIES" :key="c.key" class="shrink-0">
-          <NuxtLink :to="$localePath(c.to)" class="group flex w-[82px] flex-col items-center gap-2 rounded-2xl border border-transparent py-3 text-center text-xs font-bold text-ink-muted transition hover:border-line hover:bg-surface hover:text-ink sm:w-auto sm:hover:shadow-card">
-            <span class="flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-surface text-primary shadow-sm transition sm:group-hover:-translate-y-0.5 sm:group-hover:border-primary/40 sm:group-hover:bg-primary sm:group-hover:text-primary-ink"><AppIcon :name="c.icon" :size="21" /></span>
-            {{ $t('nav.' + c.key) }}
-          </NuxtLink>
-        </li>
-      </ul>
-    </nav>
 
     <!-- Recently Viewed (personalized client history, hidden when empty) -->
     <section v-if="recent.items.value.length" class="mx-auto mt-10 max-w-7xl px-4 lg:px-6" aria-labelledby="h-recent">
@@ -165,7 +178,7 @@ const PROMISES = computed(() => [
           v-for="r in recent.items.value"
           :key="`${r.domain}-${r.id}`"
           :to="$localePath(r.path)"
-          class="card group flex w-64 shrink-0 snap-start items-center gap-3 p-3 transition hover:border-primary/40 hover:shadow-card"
+          class="card group flex w-64 shrink-0 snap-start items-center gap-3 p-3 hover:border-primary/40"
         >
           <SmartImg :src="r.image" :alt="r.title" icon="hotel" img-class="h-14 w-14 shrink-0 rounded-xl object-cover" />
           <div class="min-w-0 flex-1">
@@ -180,63 +193,61 @@ const PROMISES = computed(() => [
     <!-- CR-05 operator-managed banners and curated picks -->
     <HomeMarketing />
 
-    <!-- Active promotion -->
+    <!-- Active Promotion Voucher Strip -->
     <section v-if="promo" class="mx-auto mt-10 max-w-7xl px-4 lg:px-6">
-      <div class="relative overflow-hidden rounded-card border border-primary/25 bg-gradient-to-r from-midnight-900 via-midnight-800 to-sapphire-900 px-6 py-6 text-white shadow-card sm:flex sm:items-center sm:justify-between sm:gap-6 sm:px-8">
-        <div class="flex items-center gap-4">
-          <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-white shadow-sm"><AppIcon name="gift" :size="24" /></span>
+      <div class="relative overflow-hidden rounded-card border border-primary/30 bg-primary-soft/60 px-5 py-5 text-ink shadow-card sm:flex sm:items-center sm:justify-between sm:gap-6 sm:px-7">
+        <div class="flex items-start gap-4 sm:items-center">
+          <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-ink shadow-sm"><AppIcon name="gift" :size="22" /></span>
           <div>
-            <p class="font-display text-lg font-extrabold tracking-tight">{{ promo.title }}</p>
-            <p class="mt-0.5 text-sm text-white/75">
-              {{ promoLabel }}<template v-if="promo.max_discount_krw"> · {{ $t('my.condMax', { v: currency.formatKRW(promo.max_discount_krw) }) }}</template><template v-if="promo.min_order_amount_krw"> · {{ $t('my.condMin', { v: currency.formatKRW(promo.min_order_amount_krw) }) }}</template><template v-if="promo.valid_until"> · {{ $t('home.mkt.endsAt', { d: promo.valid_until.slice(0, 10) }) }}</template>
+            <p class="font-display text-base font-extrabold tracking-tight text-ink sm:text-lg">{{ promo.title }}</p>
+            <p class="mt-0.5 text-xs text-ink-muted sm:text-sm">
+              <strong class="font-bold text-primary">{{ promoLabel }}</strong><template v-if="promo.max_discount_krw"> · {{ $t('my.condMax', { v: currency.formatKRW(promo.max_discount_krw) }) }}</template><template v-if="promo.min_order_amount_krw"> · {{ $t('my.condMin', { v: currency.formatKRW(promo.min_order_amount_krw) }) }}</template><template v-if="promo.valid_until"> · {{ $t('home.mkt.endsAt', { d: promo.valid_until.slice(0, 10) }) }}</template>
             </p>
           </div>
         </div>
-        <NuxtLink :to="$localePath('/deals')" class="mt-4 inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-midnight-900 transition-colors hover:bg-sapphire-50 sm:mt-0">{{ $t('home.claimCoupon') }}<AppIcon name="arrow-right" :size="16" /></NuxtLink>
+        <NuxtLink :to="$localePath('/deals')" class="btn-primary mt-4 w-full shrink-0 sm:mt-0 sm:w-auto">{{ $t('home.claimCoupon') }}<AppIcon name="arrow-right" :size="16" /></NuxtLink>
       </div>
     </section>
 
-    <!-- Destinations: Editorial Asymmetric Bento Grid -->
-    <section class="mx-auto mt-16 max-w-7xl px-4 lg:px-6" aria-labelledby="h-dest">
-      <div class="mb-6 flex items-end justify-between">
+    <!-- Destinations: Editorial Magazine Grid (Mobile Rail -> sm:2 -> md:3 -> lg:6) -->
+    <section class="mx-auto mt-14 max-w-7xl px-4 lg:px-6" aria-labelledby="h-dest">
+      <div class="mb-5 flex items-end justify-between gap-3">
         <div>
-          <p class="text-2xs font-bold uppercase tracking-[0.2em] text-primary">CURATED DESTINATIONS</p>
+          <p class="font-mono text-2xs font-bold uppercase tracking-[0.2em] text-primary">01 · DESTINATIONS</p>
           <h2 id="h-dest" class="mt-1 font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ $t('home.destTitle') }}</h2>
         </div>
-        <NuxtLink :to="$localePath('/search')" class="hidden shrink-0 items-center gap-1 rounded-full border border-line bg-surface px-4 py-2 text-xs font-bold text-ink transition-colors hover:border-primary hover:text-primary sm:flex">{{ $t('home.quickSearch') }}<AppIcon name="chevron-right" :size="15" /></NuxtLink>
+        <NuxtLink :to="$localePath('/search')" class="btn-secondary !min-h-[38px] !px-3.5 !py-1.5 !text-xs">{{ $t('home.quickSearch') }}<AppIcon name="chevron-right" :size="14" /></NuxtLink>
       </div>
-      <div class="rail -mx-4 flex gap-3.5 px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 lg:grid-cols-12">
+      <div class="rail -mx-4 flex gap-3.5 px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 md:grid-cols-3 lg:grid-cols-6">
         <NuxtLink
           v-for="(d, idx) in DESTINATIONS"
           :key="d.key"
           :to="$localePath(`/hotels/list?city=${encodeURIComponent(d.q)}`)"
-          :class="[
-            'group relative aspect-[3/4] w-[44vw] max-w-[220px] shrink-0 snap-start overflow-hidden rounded-card bg-surface-sunken shadow-card sm:w-auto sm:max-w-none',
-            idx === 0 || idx === 4 ? 'lg:col-span-6 lg:aspect-[16/9]' : 'lg:col-span-3 lg:aspect-[4/3]'
-          ]"
+          class="group relative aspect-[4/5] w-[46vw] max-w-[210px] shrink-0 snap-start overflow-hidden rounded-card border border-line bg-surface-sunken shadow-card sm:w-auto sm:max-w-none"
         >
           <SmartImg :src="d.img" :alt="$t('home.destAlt', { name: $t(`home.destName.${d.key}`) })" img-class="h-full w-full object-cover sm:transition-transform sm:duration-500 sm:group-hover:scale-105" />
           <div class="absolute inset-0 bg-gradient-to-t from-midnight-950/85 via-midnight-950/15 to-transparent" />
-          <div class="absolute inset-x-0 bottom-0 p-4 text-white sm:p-5">
-            <span class="inline-block rounded-full border border-white/20 bg-white/15 px-2.5 py-0.5 text-2xs font-semibold text-white/95 backdrop-blur-md">{{ $t(`home.destCountry.${d.key}`) }}</span>
-            <p class="mt-1.5 font-display text-xl font-extrabold tracking-tight sm:text-2xl">{{ $t(`home.destName.${d.key}`) }}</p>
+          <span class="absolute left-3 top-3 rounded-md bg-surface/90 px-2 py-0.5 font-mono text-[10px] font-bold text-ink backdrop-blur">0{{ idx + 1 }}</span>
+          <div class="absolute inset-x-0 bottom-0 p-4 text-white">
+            <span class="text-2xs font-semibold uppercase tracking-wider text-white/80">{{ $t(`home.destCountry.${d.key}`) }}</span>
+            <p class="mt-0.5 font-display text-lg font-extrabold tracking-tight sm:text-xl">{{ $t(`home.destName.${d.key}`) }}</p>
           </div>
         </NuxtLink>
       </div>
     </section>
 
-    <!-- Hotels -->
+    <!-- Hotels: Architectural Stay Cards -->
     <section class="mx-auto mt-16 max-w-7xl px-4 lg:px-6" aria-labelledby="h-hotels">
-      <div class="mb-6 flex items-end justify-between gap-4">
+      <div class="mb-5 flex items-end justify-between gap-4">
         <div>
-          <p class="text-2xs font-bold uppercase tracking-[0.2em] text-primary">STAYS</p>
+          <p class="font-mono text-2xs font-bold uppercase tracking-[0.2em] text-primary">02 · CURATED STAYS</p>
           <h2 id="h-hotels" class="mt-1 font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ $t('home.hotelsTitle') }}</h2>
           <p class="mt-1 text-sm text-ink-muted">{{ $t('home.hotelsSub') }}</p>
         </div>
-        <NuxtLink :to="$localePath('/hotels/list')" class="hidden shrink-0 items-center gap-1 rounded-full border border-line bg-surface px-4 py-2 text-xs font-bold text-ink transition-colors hover:border-primary hover:text-primary sm:flex">{{ $t('home.viewAll') }}<AppIcon name="chevron-right" :size="15" /></NuxtLink>
+        <NuxtLink :to="$localePath('/hotels/list')" class="btn-secondary shrink-0 !min-h-[38px] !px-3.5 !py-1.5 !text-xs">{{ $t('home.viewAll') }}<AppIcon name="chevron-right" :size="14" /></NuxtLink>
       </div>
 
-      <div v-if="hotelState === 'loading'" class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div v-if="hotelState === 'loading'" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div v-for="n in 4" :key="n" class="overflow-hidden rounded-card border border-line bg-surface shadow-card">
           <div class="aspect-[4/3] animate-pulse bg-surface-sunken" />
           <div class="space-y-2 p-4"><div class="h-3 w-1/3 rounded bg-surface-sunken" /><div class="h-4 w-3/4 rounded bg-surface-sunken" /><div class="h-4 w-1/2 rounded bg-surface-sunken" /></div>
@@ -248,21 +259,19 @@ const PROMISES = computed(() => [
       </div>
       <p v-else-if="!hotels.length" class="rounded-card border border-dashed border-line-strong bg-surface p-8 text-center text-sm text-ink-muted">{{ $t('home.hotelsEmpty') }}</p>
       <div v-else class="rail -mx-4 flex gap-4 px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-4">
-        <NuxtLink v-for="h in hotels" :key="h.id" :to="$localePath(`/hotels/detail/${h.id}`)" class="group w-[78vw] max-w-[320px] shrink-0 snap-start overflow-hidden rounded-card border border-line bg-surface shadow-card transition-[border-color,box-shadow] duration-200 hover:border-primary/40 sm:w-auto sm:max-w-none sm:transition-all sm:hover:-translate-y-0.5 sm:hover:shadow-pop">
-          <div class="relative aspect-[4/3] overflow-hidden bg-surface-sunken">
+        <NuxtLink v-for="h in hotels" :key="h.id" :to="$localePath(`/hotels/detail/${h.id}`)" class="card group flex w-[78vw] max-w-[310px] shrink-0 snap-start flex-col overflow-hidden hover:border-primary/45 sm:w-auto sm:max-w-none sm:transition-all sm:hover:-translate-y-0.5 sm:hover:shadow-pop">
+          <div class="relative aspect-[16/11] overflow-hidden bg-surface-sunken">
             <SmartImg :src="h.thumbnail_url" :alt="hotelName(h)" icon="hotel" img-class="h-full w-full object-cover sm:transition-transform sm:duration-500 sm:group-hover:scale-105" />
-            <span v-if="h.free_cancellation" class="absolute left-3 top-3 rounded-full bg-surface/95 px-2.5 py-1 text-2xs font-bold text-success shadow-sm backdrop-blur">{{ $t('hotels.list.freeCancel') }}</span>
+            <span v-if="h.free_cancellation" class="absolute left-3 top-3 rounded-md bg-surface/95 px-2 py-1 text-2xs font-bold text-success shadow-sm backdrop-blur">{{ $t('hotels.list.freeCancel') }}</span>
+            <span v-if="h.review_score" class="absolute right-3 top-3 rounded-md bg-primary px-2 py-0.5 text-xs font-bold text-primary-ink shadow-sm tabular">{{ Number(h.review_score).toFixed(1) }}</span>
           </div>
-          <div class="p-4">
-            <p class="text-2xs font-semibold uppercase tracking-wide text-ink-subtle">{{ h.city }}, {{ h.country }}<template v-if="h.star_rating"> · {{ $t('hotels.list.starAria', { n: h.star_rating }) }}</template></p>
-            <h3 class="mt-1 line-clamp-1 font-extrabold text-ink transition-colors group-hover:text-primary">{{ hotelName(h) }}</h3>
-            <p v-if="h.review_score" class="mt-2 flex items-center gap-1.5 text-sm">
-              <span class="rounded-lg bg-primary px-2 py-0.5 text-xs font-bold text-primary-ink tabular">{{ Number(h.review_score).toFixed(1) }}</span>
-              <span v-if="h.review_count" class="text-xs text-ink-subtle">{{ $t('home.reviewCount', { n: $n(Number(h.review_count)) }) }}</span>
-            </p>
-            <p v-else class="mt-2 text-xs font-semibold text-ink-subtle">{{ $t('home.newNoReviews') }}</p>
-            <div class="mt-3.5 flex items-end justify-between border-t border-line pt-3">
-              <span class="text-xs text-ink-subtle">{{ h.bookable === false ? $t('hotels.list.notBookableNow') : $t('hotels.list.perNightRef') }}</span>
+          <div class="flex flex-1 flex-col p-4">
+            <p class="text-2xs font-bold uppercase tracking-wider text-ink-subtle">{{ h.city }}, {{ h.country }}<template v-if="h.star_rating"> · {{ h.star_rating }}★</template></p>
+            <h3 class="mt-1 line-clamp-1 font-display text-base font-bold text-ink transition-colors group-hover:text-primary">{{ hotelName(h) }}</h3>
+            <p v-if="h.review_count" class="mt-1 text-xs text-ink-subtle">{{ $t('home.reviewCount', { n: $n(Number(h.review_count)) }) }}</p>
+            <p v-else class="mt-1 text-xs text-ink-subtle">{{ $t('home.newNoReviews') }}</p>
+            <div class="mt-auto flex items-baseline justify-between border-t border-line pt-3 mt-3">
+              <span class="text-2xs text-ink-subtle">{{ h.bookable === false ? $t('hotels.list.notBookableNow') : $t('hotels.list.perNightRef') }}</span>
               <span v-if="fromPrice(h)" class="text-right"><span class="text-lg font-extrabold text-ink tabular">{{ currency.formatKRW(fromPrice(h)!) }}</span><span class="text-xs text-ink-subtle">~</span></span>
             </div>
           </div>
@@ -272,12 +281,12 @@ const PROMISES = computed(() => [
 
     <!-- Activities -->
     <section v-if="activityState !== 'ready' || activities.length" class="mx-auto mt-16 max-w-7xl px-4 lg:px-6" aria-labelledby="h-act">
-      <div class="mb-6 flex items-end justify-between gap-4">
+      <div class="mb-5 flex items-end justify-between gap-4">
         <div>
-          <p class="text-2xs font-bold uppercase tracking-[0.2em] text-accent">EXPERIENCES</p>
+          <p class="font-mono text-2xs font-bold uppercase tracking-[0.2em] text-accent">03 · EXPERIENCES</p>
           <h2 id="h-act" class="mt-1 font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ $t('home.actTitle') }}</h2>
         </div>
-        <NuxtLink :to="$localePath('/things-to-do')" class="flex shrink-0 items-center gap-1 rounded-full border border-line bg-surface px-4 py-2 text-xs font-bold text-ink transition-colors hover:border-primary hover:text-primary">{{ $t('home.viewAll') }}<AppIcon name="chevron-right" :size="15" /></NuxtLink>
+        <NuxtLink :to="$localePath('/things-to-do')" class="btn-secondary shrink-0 !min-h-[38px] !px-3.5 !py-1.5 !text-xs">{{ $t('home.viewAll') }}<AppIcon name="chevron-right" :size="14" /></NuxtLink>
       </div>
       <div v-if="activityState === 'loading'" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div v-for="n in 4" :key="n" class="h-28 animate-pulse rounded-card bg-surface-sunken" />
@@ -287,11 +296,11 @@ const PROMISES = computed(() => [
         <button type="button" class="ml-2 font-bold text-primary" @click="loadActivities">{{ $t('common.retry') }}</button>
       </div>
       <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <NuxtLink v-for="a in activities" :key="a.id" :to="$localePath(`/things-to-do/detail/${a.id}`)" class="group flex gap-3.5 rounded-card border border-line bg-surface p-3.5 shadow-card transition-[border-color,box-shadow] duration-200 hover:border-primary/40 sm:transition-all sm:hover:-translate-y-0.5 sm:hover:shadow-pop">
+        <NuxtLink v-for="a in activities" :key="a.id" :to="$localePath(`/things-to-do/detail/${a.id}`)" class="card group flex gap-3.5 p-3.5 hover:border-primary/45 sm:transition-all sm:hover:-translate-y-0.5 sm:hover:shadow-pop">
           <SmartImg :src="a.thumbnail_url" :alt="a.title" icon="ticket" img-class="h-24 w-24 shrink-0 rounded-xl object-cover" />
-          <div class="flex min-w-0 flex-col">
-            <p class="text-2xs font-bold uppercase tracking-wide text-ink-subtle">{{ a.city }}</p>
-            <h3 class="mt-0.5 line-clamp-2 text-sm font-extrabold leading-snug text-ink transition-colors group-hover:text-primary">{{ a.title }}</h3>
+          <div class="flex min-w-0 flex-1 flex-col">
+            <p class="text-2xs font-bold uppercase tracking-wider text-accent">{{ a.city }}</p>
+            <h3 class="mt-0.5 line-clamp-2 text-sm font-bold leading-snug text-ink transition-colors group-hover:text-primary">{{ a.title }}</h3>
             <div class="mt-auto flex items-center gap-2 pt-2">
               <span v-if="a.instant_confirmed" class="flex items-center gap-0.5 text-2xs font-bold text-success"><AppIcon name="bolt" :size="12" />{{ $t('todo.instant') }}</span>
               <span v-if="Number(a.price_krw) > 0" class="ml-auto text-sm font-extrabold text-ink tabular">{{ currency.formatKRW(Number(a.price_krw)) }}~</span>
@@ -301,37 +310,37 @@ const PROMISES = computed(() => [
       </div>
     </section>
 
-    <!-- Editorial Trust Pillars (01 · 02 · 03) -->
-    <section class="mx-auto mt-20 max-w-7xl px-4 lg:px-6" aria-labelledby="h-promise">
+    <!-- Architectural Ledger Trust Pillars -->
+    <section class="mx-auto mt-16 max-w-7xl px-4 lg:px-6" aria-labelledby="h-promise">
       <h2 id="h-promise" class="sr-only">{{ $t('home.promiseTitle') }}</h2>
-      <div class="grid gap-4 md:grid-cols-3">
-        <div v-for="(p, idx) in PROMISES" :key="p.title" class="rounded-card border border-line bg-surface p-6 shadow-card">
+      <div class="grid gap-px overflow-hidden rounded-card border border-line bg-line md:grid-cols-3">
+        <div v-for="(p, idx) in PROMISES" :key="p.title" class="bg-surface p-6 sm:p-7">
           <div class="flex items-center justify-between">
-            <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-soft text-primary"><AppIcon :name="p.icon" :size="20" /></span>
-            <span class="font-mono text-xs font-bold text-primary">0{{ idx + 1 }}</span>
+            <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary"><AppIcon :name="p.icon" :size="19" /></span>
+            <span class="font-mono text-xs font-bold text-ink-subtle">0{{ idx + 1 }}</span>
           </div>
-          <h3 class="mt-5 font-display text-base font-extrabold text-ink">{{ p.title }}</h3>
-          <p class="mt-2 text-sm leading-relaxed text-ink-muted">{{ p.body }}</p>
+          <h3 class="mt-4 font-display text-base font-extrabold text-ink">{{ p.title }}</h3>
+          <p class="mt-1.5 text-sm leading-relaxed text-ink-muted">{{ p.body }}</p>
         </div>
       </div>
     </section>
 
-    <!-- Moments -->
+    <!-- Moments (Travel Journal) -->
     <section v-if="moments.length" class="mx-auto mt-16 max-w-7xl px-4 lg:px-6" aria-labelledby="h-moments">
-      <div class="mb-6 flex items-end justify-between gap-4">
+      <div class="mb-5 flex items-end justify-between gap-4">
         <div>
-          <p class="text-2xs font-bold uppercase tracking-[0.2em] text-primary">TRAVEL JOURNAL</p>
+          <p class="font-mono text-2xs font-bold uppercase tracking-[0.2em] text-primary">04 · JOURNAL</p>
           <h2 id="h-moments" class="mt-1 font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ $t('home.momentsTitle') }}</h2>
         </div>
-        <NuxtLink :to="$localePath('/moments')" class="flex shrink-0 items-center gap-1 rounded-full border border-line bg-surface px-4 py-2 text-xs font-bold text-ink transition-colors hover:border-primary hover:text-primary">{{ $t('home.more') }}<AppIcon name="chevron-right" :size="15" /></NuxtLink>
+        <NuxtLink :to="$localePath('/moments')" class="btn-secondary shrink-0 !min-h-[38px] !px-3.5 !py-1.5 !text-xs">{{ $t('home.more') }}<AppIcon name="chevron-right" :size="14" /></NuxtLink>
       </div>
       <div class="grid gap-4 md:grid-cols-3">
-        <article v-for="m in moments" :key="m.id" class="rounded-card border border-line bg-surface p-5 shadow-card">
+        <article v-for="m in moments" :key="m.id" class="card p-5">
           <div class="flex items-center gap-3">
             <img v-if="m.user_avatar" :src="m.user_avatar" alt="" class="h-9 w-9 rounded-full object-cover" />
             <div><p class="text-sm font-bold text-ink">{{ m.user_name }}</p><p class="text-xs text-ink-subtle">{{ m.city }}</p></div>
           </div>
-          <h3 class="mt-3 line-clamp-1 font-extrabold text-ink">{{ m.title }}</h3>
+          <h3 class="mt-3 line-clamp-1 font-bold text-ink">{{ m.title }}</h3>
           <p class="mt-1 line-clamp-2 text-sm text-ink-muted">{{ m.content }}</p>
           <div v-if="photos(m).length" class="mt-3 flex gap-2">
             <img v-for="p in photos(m)" :key="p" :src="p" alt="" loading="lazy" class="h-16 w-20 rounded-xl object-cover" />

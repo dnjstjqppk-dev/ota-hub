@@ -105,14 +105,14 @@ useHead(() => {
           <span class="text-sm font-semibold text-primary">{{ $t('hotels.list.change') }}</span>
         </button>
         <form :class="['lg:block', formOpen ? 'block' : 'hidden']" novalidate @submit.prevent="submit">
-          <div class="grid gap-2 lg:grid-cols-[1fr_1fr_0.9fr_0.9fr_auto]">
+          <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_0.9fr_0.9fr_auto]">
             <div class="field-box"><label for="tl-apt" class="field-label">{{ $t('transfers.list.airport') }}</label><SearchAutocomplete v-model="draft.airport" input-id="tl-apt" domain="flights" variant="bare" :placeholder="$t('transfers.list.airportPh')" /></div>
             <div class="field-box"><label for="tl-dest" class="field-label">{{ $t('transfers.list.destOpt') }}</label><SearchAutocomplete v-model="draft.destination" input-id="tl-dest" domain="transfers" variant="bare" :placeholder="$t('transfers.list.destPh')" /></div>
             <DateRangePicker v-model:start="draft.date" mode="single" :start-label="$t('checkout.startDefault')" :min="today" compact />
             <GuestPicker v-model:adults="draft.adults" v-model:children="draft.children" :show-rooms="false" :label="$t('transfers.list.riders')" compact />
-            <div class="flex gap-2">
+            <div class="flex gap-2 sm:col-span-2 lg:col-span-1">
               <button v-if="formOpen" type="button" class="btn-secondary lg:hidden" @click="formOpen = false; syncDraft()">{{ $t('common.cancel') }}</button>
-              <button type="submit" class="btn-primary min-h-[52px] flex-1 rounded-2xl px-7 text-base"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
+              <button type="submit" class="btn-primary min-h-[52px] flex-1 px-7 text-base"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
             </div>
           </div>
           <p v-if="formError" class="mt-2 text-sm font-medium text-danger" role="alert">{{ formError }}</p>

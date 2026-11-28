@@ -125,23 +125,23 @@ await useSsrLoad('unified-search', load, { items, facets, total, state })
 
 <template>
   <div class="mx-auto max-w-7xl px-4 pb-24 pt-6 lg:px-6 lg:pb-16">
-    <!-- Search header -->
-    <section class="relative overflow-hidden rounded-[28px] bg-midnight-900 p-6 text-white shadow-pop sm:p-8">
-      <div class="pointer-events-none absolute -right-16 -top-20 h-60 w-60 rounded-full bg-primary/35 blur-3xl" aria-hidden="true" />
+    <!-- Terra Nord Architectural Search Header -->
+    <section class="relative overflow-hidden rounded-card border border-line bg-gradient-to-br from-primary-soft/80 via-surface to-accent-soft/45 p-6 shadow-card sm:p-8">
+      <div class="pointer-events-none absolute -right-16 -top-20 h-60 w-60 rounded-full bg-primary/15 blur-3xl" aria-hidden="true" />
       <div class="relative">
-        <p class="text-2xs font-bold uppercase tracking-[0.2em] text-horizon-300">{{ $t('searchPage.eyebrow') }}</p>
-        <h1 class="mt-1 font-display text-2xl font-extrabold tracking-tight sm:text-3xl">{{ $t('searchPage.title') }}</h1>
+        <p class="text-2xs font-bold uppercase tracking-[0.2em] text-primary">{{ $t('searchPage.eyebrow') }}</p>
+        <h1 class="mt-1 font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{{ $t('searchPage.title') }}</h1>
         <form class="mt-5 flex flex-col gap-2.5 sm:flex-row" @submit.prevent="submit">
           <div class="relative flex-1">
-            <AppIcon name="search" :size="18" class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-subtle" />
+            <AppIcon name="search" :size="18" class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-primary" />
             <input
               v-model="qText"
               type="search"
               :placeholder="$t('searchPage.placeholder')"
-              class="min-h-[50px] w-full rounded-2xl border border-white/15 bg-surface pl-11 pr-4 text-sm font-medium text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus"
+              class="min-h-[50px] w-full rounded-field border border-line bg-surface pl-11 pr-4 text-sm font-medium text-ink placeholder:text-ink-subtle focus:border-primary focus:outline-none focus:shadow-focus"
             />
           </div>
-          <button type="submit" class="btn-primary !rounded-2xl !px-7 !py-3">{{ $t('common.search') }}</button>
+          <button type="submit" class="btn-primary !px-7 !py-3">{{ $t('common.search') }}</button>
         </form>
       </div>
     </section>

@@ -14,7 +14,7 @@ import { hubBindingTarget } from '~/utils/hubBinding'
  * untouched. Runs first (00.) so no SSR fetch escapes it.
  */
 export default defineNuxtPlugin(() => {
-  if (!import.meta.server) return
+  if (!import.meta.server || import.meta.dev) return
   const apiBaseServer = ((useRuntimeConfig() as any).apiBaseServer as string) || ''
   const originalFetch = globalThis.fetch
   if ((originalFetch as any).__hubBindingWrapped) return

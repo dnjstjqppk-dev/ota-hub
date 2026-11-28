@@ -39,15 +39,15 @@ if (state.value === 'error' && import.meta.server) throw createError({ statusCod
 
 <template>
   <div class="mx-auto max-w-6xl space-y-7 px-4 pb-24 pt-6 lg:px-6 lg:pb-16">
-    <section class="relative overflow-hidden rounded-[28px] bg-midnight-900 p-7 text-white shadow-pop sm:p-10">
-      <div class="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-accent/30 blur-3xl" aria-hidden="true" />
-      <div class="pointer-events-none absolute -bottom-24 left-1/4 h-64 w-64 rounded-full bg-primary/35 blur-3xl" aria-hidden="true" />
+    <section class="relative overflow-hidden rounded-card border border-line bg-gradient-to-br from-primary-soft/80 via-surface to-accent-soft/50 p-6 shadow-card sm:p-10">
+      <div class="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-accent/15 blur-3xl" aria-hidden="true" />
+      <div class="pointer-events-none absolute -bottom-24 left-1/4 h-64 w-64 rounded-full bg-primary/15 blur-3xl" aria-hidden="true" />
       <div class="relative max-w-2xl space-y-2.5">
-        <span class="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-2xs font-bold uppercase tracking-wider text-horizon-300">
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-surface px-3 py-1 text-2xs font-bold uppercase tracking-wider text-primary">
           <AppIcon name="trophy" :size="13" /> getfortrip Curated Ranking
         </span>
-        <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-4xl">{{ $t('best.hero') }}</h1>
-        <p class="text-sm text-white/75">{{ $t('best.heroSub') }}</p>
+        <h1 class="font-display text-2xl font-extrabold tracking-tight text-ink sm:text-4xl">{{ $t('best.hero') }}</h1>
+        <p class="text-sm text-ink-muted sm:text-base">{{ $t('best.heroSub') }}</p>
       </div>
     </section>
 

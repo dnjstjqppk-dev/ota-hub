@@ -100,22 +100,22 @@ async function toggle(p: any) {
       </div>
     </StatePanel>
     <div v-if="showCreate" class="fixed inset-0 z-50 flex items-center justify-center bg-midnight-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="새 프로모션 코드 발급" @click.self="showCreate = false">
-      <form class="card w-full max-w-md space-y-4 p-6" @submit.prevent="create">
+      <form class="card max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto p-6" @submit.prevent="create">
         <h2 class="text-base font-bold text-ink">새 코드 발급</h2>
         <p v-if="createError" class="rounded-xl bg-danger-soft px-3 py-2 text-xs font-semibold text-danger" role="alert">{{ createError }}</p>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div><label class="label" for="promo-code">코드 *</label><input id="promo-code" v-model="form.code" class="input font-mono uppercase" required minlength="4" maxlength="32" placeholder="SUMMER-10" /></div>
           <div><label class="label" for="promo-title">제목 *</label><input id="promo-title" v-model="form.title" class="input" required maxlength="200" placeholder="여름 성수기 할인" /></div>
         </div>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div><label class="label" for="promo-type">할인 방식</label><select id="promo-type" v-model="form.discountType" class="input"><option value="FIXED_AMOUNT">정액 (원)</option><option value="PERCENTAGE">정률 (%)</option></select></div>
           <div><label class="label" for="promo-value">할인값 *</label><input id="promo-value" v-model="form.discountValue" type="number" min="0" step="any" class="input tabular" required placeholder="10000" /></div>
         </div>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div><label class="label" for="promo-min">최소 주문금액 (원)</label><input id="promo-min" v-model="form.minOrderAmountKrw" type="number" min="0" step="any" class="input tabular" placeholder="0" /></div>
           <div><label class="label" for="promo-max">최대 할인액 (원)</label><input id="promo-max" v-model="form.maxDiscountKrw" type="number" min="0" step="any" class="input tabular" placeholder="0 = 상한 없음" /></div>
         </div>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div><label class="label" for="promo-from">시작일</label><input id="promo-from" v-model="form.validFrom" type="date" class="input" /></div>
           <div><label class="label" for="promo-until">종료일</label><input id="promo-until" v-model="form.validUntil" type="date" class="input" /></div>
         </div>

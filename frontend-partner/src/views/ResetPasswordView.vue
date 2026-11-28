@@ -41,14 +41,14 @@ async function handleReset() {
 </script>
 
 <template>
-  <div class="flex min-h-full flex-col justify-center bg-midnight-900 px-6 py-12">
+  <div class="flex min-h-screen flex-col justify-center bg-gradient-to-b from-primary-soft/65 via-canvas to-canvas px-4 py-12 sm:px-6">
     <div class="text-center">
-      <h1 class="text-2xl font-black tracking-tight text-white">새 비밀번호 설정</h1>
-      <p class="mt-2 text-sm font-medium text-sapphire-300">영문과 숫자를 포함한 10자 이상의 새 비밀번호를 입력해 주세요.</p>
+      <h1 class="font-display text-2xl font-extrabold tracking-tight text-ink">새 비밀번호 설정</h1>
+      <p class="mt-2 text-sm font-medium text-ink-muted">영문과 숫자를 포함한 10자 이상의 새 비밀번호를 입력해 주세요.</p>
     </div>
 
     <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-      <div class="space-y-4 rounded-3xl border border-line bg-surface px-6 py-8 shadow-pop sm:px-10">
+      <div class="space-y-4 rounded-card border border-line bg-surface px-6 py-8 shadow-pop sm:px-9">
         <div v-if="!token" class="rounded-2xl border border-danger/30 bg-danger-soft p-3.5 text-xs font-bold text-danger" role="alert">
           재설정 링크가 올바르지 않아요. 메일의 링크를 다시 확인하거나
           <router-link to="/forgot-password" class="underline">다시 요청</router-link>해 주세요.

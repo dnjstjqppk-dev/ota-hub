@@ -107,12 +107,12 @@ useHead(() => {
           </span>
           <span class="text-sm font-semibold text-primary">{{ $t('hotels.list.change') }}</span>
         </button>
-        <form :class="['grid gap-2 lg:grid lg:grid-cols-[1.4fr_1.4fr_auto]', formOpen ? 'grid' : 'hidden']" novalidate @submit.prevent="submit">
+        <form :class="['grid gap-2 sm:grid-cols-2 lg:grid lg:grid-cols-[1.4fr_1.4fr_auto]', formOpen ? 'grid' : 'hidden']" novalidate @submit.prevent="submit">
           <div class="field-box"><label for="cl-city" class="field-label">{{ $t('cars.list.pickup') }}</label><SearchAutocomplete v-model="draft.city" input-id="cl-city" domain="cars" variant="bare" :placeholder="$t('cars.list.pickupPh')" @enter="submit" /></div>
           <DateRangePicker v-model:start="draft.from" v-model:end="draft.to" :start-label="$t('cars.list.pickupShort')" :end-label="$t('cars.list.dropoffShort')" unit="day" :min="today" :max-range="60" compact />
-          <div class="flex gap-2">
+          <div class="flex gap-2 sm:col-span-2 lg:col-span-1">
             <button v-if="formOpen" type="button" class="btn-secondary lg:hidden" @click="formOpen = false; syncDraft()">{{ $t('common.cancel') }}</button>
-            <button type="submit" class="btn-primary min-h-[52px] flex-1 rounded-2xl px-7 text-base"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
+            <button type="submit" class="btn-primary min-h-[52px] flex-1 px-7 text-base"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
           </div>
         </form>
       </div>

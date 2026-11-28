@@ -18,8 +18,8 @@ onMounted(async () => {
 <template>
   <ClientOnly>
     <BookingDetail v-if="bookingId && auth.isLoggedIn" :booking-id="bookingId" />
-    <div v-else-if="!bookingId" class="max-w-lg mx-auto px-4 py-16 text-center text-sm text-slate-600">
-      {{ $t('booking.noInfo') }} <NuxtLink :to="$localePath('/my/bookings')" class="font-semibold text-trip-blue">{{ $t('booking.myList') }}</NuxtLink>{{ $t('booking.noInfoPost') }}
+    <div v-else-if="!bookingId" class="mx-auto max-w-lg px-4 py-16 text-center text-sm text-ink-muted">
+      {{ $t('booking.noInfo') }} <NuxtLink :to="$localePath('/my/bookings')" class="font-semibold text-primary hover:underline">{{ $t('booking.myList') }}</NuxtLink>{{ $t('booking.noInfoPost') }}
     </div>
   </ClientOnly>
 </template>

@@ -376,12 +376,13 @@ onMounted(() => {
     <!-- Create Product Modal -->
     <div
       v-if="isModalOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-midnight-950/50 p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-midnight-950/50 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label="신규 공급 상품 등록"
+      @click.self="isModalOpen = false"
     >
-      <div class="w-full max-w-md space-y-5 rounded-2xl border border-line bg-surface-raised p-6 shadow-pop">
+      <div class="max-h-[90dvh] w-full max-w-lg space-y-5 overflow-y-auto rounded-card border border-line bg-surface-raised p-5 shadow-pop sm:p-6">
         <div class="flex items-center justify-between border-b border-line pb-3">
           <h3 class="text-base font-black text-ink">신규 공급 상품 등록</h3>
           <button type="button" aria-label="닫기" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" @click="isModalOpen = false"><AppIcon name="close" :size="18" /></button>
@@ -508,12 +509,13 @@ onMounted(() => {
     <!-- Edit Product Modal -->
     <div
       v-if="editing"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-midnight-950/50 p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-midnight-950/50 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label="상품 정보 수정"
+      @click.self="editing = null"
     >
-      <div class="w-full max-w-md space-y-5 rounded-2xl border border-line bg-surface-raised p-6 shadow-pop">
+      <div class="max-h-[90dvh] w-full max-w-lg space-y-5 overflow-y-auto rounded-card border border-line bg-surface-raised p-5 shadow-pop sm:p-6">
         <div class="flex items-center justify-between border-b border-line pb-3">
           <h3 class="text-base font-black text-ink">상품 정보 수정</h3>
           <button type="button" aria-label="닫기" class="flex h-9 w-9 items-center justify-center rounded-full text-ink-muted hover:bg-surface-sunken" @click="editing = null"><AppIcon name="close" :size="18" /></button>

@@ -2,60 +2,60 @@
 @tailwind components;
 @tailwind utilities;
 
-/* getfortrip "Solstice Ops" tokens (RGB channels, consumed by tailwind.config.js). `.dark` on <html> flips them. */
+/* getfortrip "Terra Nord Ops" tokens (RGB channels, consumed by tailwind.config.js). `.dark` on <html> flips them. */
 @layer base {
   :root {
-    --gft-canvas: 245 247 252;
+    --gft-canvas: 248 246 241;
     --gft-surface: 255 255 255;
     --gft-surface-raised: 255 255 255;
-    --gft-surface-sunken: 235 240 250;
-    --gft-ink: 12 19 38;
-    --gft-ink-muted: 70 83 110;
-    --gft-ink-subtle: 118 133 163;
-    --gft-ink-inverse: 248 250 255;
-    --gft-line: 220 227 242;
-    --gft-line-strong: 193 204 227;
-    --gft-primary: 41 72 255;
-    --gft-primary-hover: 27 54 224;
-    --gft-primary-soft: 237 240 255;
+    --gft-surface-sunken: 239 235 227;
+    --gft-ink: 20 26 24;
+    --gft-ink-muted: 80 90 85;
+    --gft-ink-subtle: 124 134 129;
+    --gft-ink-inverse: 249 248 245;
+    --gft-line: 226 221 211;
+    --gft-line-strong: 199 192 179;
+    --gft-primary: 15 106 83;
+    --gft-primary-hover: 11 84 65;
+    --gft-primary-soft: 230 244 239;
     --gft-primary-ink: 255 255 255;
-    --gft-accent: 255 87 51;
-    --gft-accent-soft: 255 240 236;
-    --gft-success: 15 157 110;
-    --gft-success-soft: 230 248 241;
-    --gft-warning: 202 122 10;
-    --gft-warning-soft: 254 246 226;
-    --gft-danger: 220 38 72;
-    --gft-danger-soft: 254 236 240;
+    --gft-accent: 217 93 48;
+    --gft-accent-soft: 253 240 234;
+    --gft-success: 15 138 95;
+    --gft-success-soft: 228 246 238;
+    --gft-warning: 186 112 12;
+    --gft-warning-soft: 253 244 224;
+    --gft-danger: 204 45 58;
+    --gft-danger-soft: 253 235 237;
     color-scheme: light;
   }
   .dark {
-    --gft-canvas: 6 10 23;
-    --gft-surface: 14 21 43;
-    --gft-surface-raised: 21 31 61;
-    --gft-surface-sunken: 10 15 32;
-    --gft-ink: 243 246 255;
-    --gft-ink-muted: 155 170 208;
-    --gft-ink-subtle: 109 127 168;
-    --gft-ink-inverse: 6 10 23;
-    --gft-line: 30 43 79;
-    --gft-line-strong: 48 67 118;
-    --gft-primary: 102 128 255;
-    --gft-primary-hover: 133 155 255;
-    --gft-primary-soft: 21 32 77;
-    --gft-primary-ink: 6 10 23;
-    --gft-accent: 255 119 89;
-    --gft-accent-soft: 61 25 20;
-    --gft-success: 45 212 156;
-    --gft-success-soft: 12 46 36;
-    --gft-warning: 245 184 65;
-    --gft-warning-soft: 54 39 11;
-    --gft-danger: 255 107 132;
-    --gft-danger-soft: 64 19 29;
+    --gft-canvas: 11 16 14;
+    --gft-surface: 18 26 23;
+    --gft-surface-raised: 24 35 31;
+    --gft-surface-sunken: 14 20 18;
+    --gft-ink: 242 245 243;
+    --gft-ink-muted: 162 176 170;
+    --gft-ink-subtle: 115 130 123;
+    --gft-ink-inverse: 11 16 14;
+    --gft-line: 34 48 43;
+    --gft-line-strong: 52 72 65;
+    --gft-primary: 68 204 166;
+    --gft-primary-hover: 98 218 184;
+    --gft-primary-soft: 18 48 40;
+    --gft-primary-ink: 8 18 15;
+    --gft-accent: 240 124 82;
+    --gft-accent-soft: 56 26 18;
+    --gft-success: 56 209 152;
+    --gft-success-soft: 14 46 35;
+    --gft-warning: 242 182 68;
+    --gft-warning-soft: 52 38 12;
+    --gft-danger: 248 108 118;
+    --gft-danger-soft: 58 20 24;
     color-scheme: dark;
   }
-  html { -webkit-text-size-adjust: 100%; text-rendering: optimizeLegibility; }
-  body { @apply bg-canvas text-ink font-sans antialiased; }
+  html { -webkit-text-size-adjust: 100%; text-rendering: optimizeLegibility; overflow-x: clip; }
+  body { @apply bg-canvas text-ink font-sans antialiased; overflow-x: clip; }
   :focus-visible { outline: 2px solid rgb(var(--gft-primary)); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
@@ -71,7 +71,7 @@
   .btn-secondary { @apply btn border border-line bg-surface text-ink hover:border-line-strong hover:bg-surface-sunken; }
   .btn-danger { @apply btn bg-danger text-white hover:opacity-90; }
   .btn-ghost { @apply btn text-ink-muted hover:bg-surface-sunken hover:text-ink; }
-  .btn-sm { @apply min-h-[32px] rounded-lg px-3 text-xs; }
+  .btn-sm { @apply min-h-[34px] rounded-lg px-3 text-xs; }
 
   .input { @apply min-h-[40px] w-full rounded-field border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle transition-all hover:border-line-strong focus:border-primary focus:shadow-focus focus:outline-none disabled:opacity-60; }
   .label { @apply mb-1 block text-xs font-semibold text-ink-muted; }
@@ -80,8 +80,8 @@
   .chip[aria-pressed="true"] { @apply border-primary bg-primary-soft text-primary; }
 
   .table-wrap { @apply overflow-x-auto overscroll-x-contain rounded-card border border-line bg-surface shadow-card [touch-action:pan-x_pan-y]; -webkit-overflow-scrolling: touch; }
-  .table { @apply w-full min-w-[720px] text-left text-sm; }
-  .table thead th { @apply sticky top-0 z-[1] whitespace-nowrap border-b border-line bg-surface-sunken/80 px-4 py-3 text-2xs font-bold uppercase tracking-wider text-ink-subtle; }
+  .table { @apply w-full min-w-[680px] text-left text-sm; }
+  .table thead th { @apply sticky top-0 z-[1] whitespace-nowrap border-b border-line bg-surface-sunken/70 px-4 py-3 text-2xs font-bold uppercase tracking-wider text-ink-subtle; }
   .table tbody td { @apply border-b border-line px-4 py-3.5 align-middle text-ink; }
   .table tbody tr:last-child td { @apply border-b-0; }
   .table tbody tr.row-link { @apply cursor-pointer transition-colors hover:bg-surface-sunken/60; }

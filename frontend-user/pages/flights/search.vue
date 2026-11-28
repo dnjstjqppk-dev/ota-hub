@@ -210,16 +210,18 @@ useHead(() => {
           <div class="flex gap-1" role="radiogroup" :aria-label="$t('flights.search.tripAria')">
             <button v-for="tid in (['oneway', 'round'] as const)" :key="tid" type="button" role="radio" :aria-checked="draft.trip === tid" :aria-pressed="draft.trip === tid" class="chip py-1.5" @click="draft.trip = tid">{{ $t(`flights.search.trip_${tid}`) }}</button>
           </div>
-          <div class="grid gap-2 lg:grid-cols-[1fr_auto_1fr_1.25fr_0.9fr_auto] lg:items-stretch">
-            <div class="field-box"><label for="fs-origin" class="field-label">{{ $t('flights.search.origin') }}</label><SearchAutocomplete v-model="draft.origin" input-id="fs-origin" domain="flights" variant="bare" :placeholder="$t('flights.search.airportPh')" /></div>
-            <button type="button" class="z-10 mx-auto -my-4 flex h-10 w-10 rotate-90 items-center justify-center self-center rounded-full border border-line bg-surface text-ink-muted hover:text-primary lg:my-0 lg:rotate-0" :aria-label="$t('flights.search.swap')" @click="swap"><AppIcon name="swap" :size="18" /></button>
-            <div class="field-box"><label for="fs-dest" class="field-label">{{ $t('flights.search.dest') }}</label><SearchAutocomplete v-model="draft.dest" input-id="fs-dest" domain="flights" variant="bare" :placeholder="$t('flights.search.airportPh')" /></div>
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1.85fr_1.25fr_0.9fr_auto] lg:items-stretch">
+            <div class="grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center lg:col-span-1">
+              <div class="field-box"><label for="fs-origin" class="field-label">{{ $t('flights.search.origin') }}</label><SearchAutocomplete v-model="draft.origin" input-id="fs-origin" domain="flights" variant="bare" :placeholder="$t('flights.search.airportPh')" /></div>
+              <button type="button" class="z-10 mx-auto -my-3.5 flex h-9 w-9 rotate-90 items-center justify-center self-center rounded-full border border-line bg-surface text-ink-muted shadow-sm hover:border-primary hover:text-primary sm:my-0 sm:rotate-0" :aria-label="$t('flights.search.swap')" @click="swap"><AppIcon name="swap" :size="16" /></button>
+              <div class="field-box"><label for="fs-dest" class="field-label">{{ $t('flights.search.dest') }}</label><SearchAutocomplete v-model="draft.dest" input-id="fs-dest" domain="flights" variant="bare" :placeholder="$t('flights.search.airportPh')" /></div>
+            </div>
             <DateRangePicker v-if="draft.trip === 'round'" v-model:start="draft.date" v-model:end="draft.returnDate" :start-label="$t('checkout.startFlight')" :end-label="$t('checkout.returnDate')" unit="day" :min="today" :max-range="180" compact />
             <DateRangePicker v-else v-model:start="draft.date" mode="single" :start-label="$t('checkout.startFlight')" :min="today" compact />
             <GuestPicker v-model:adults="draft.adults" v-model:children="draft.children" :show-rooms="false" :label="$t('flights.search.pax')" compact />
-            <div class="flex gap-2">
+            <div class="flex gap-2 sm:col-span-2 lg:col-span-1">
               <button v-if="formOpen" type="button" class="btn-secondary lg:hidden" @click="formOpen = false; syncDraft()">{{ $t('common.cancel') }}</button>
-              <button type="submit" class="btn-primary min-h-[52px] flex-1 rounded-2xl px-7 text-base"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
+              <button type="submit" class="btn-primary min-h-[52px] flex-1 px-7 text-base"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
             </div>
           </div>
           <p v-if="formError" class="text-sm font-medium text-danger" role="alert">{{ formError }}</p>
@@ -273,7 +275,7 @@ useHead(() => {
 
       <div class="grid gap-6 lg:grid-cols-[272px_1fr]">
         <aside class="hidden lg:block" :aria-label="$t('hotels.list.filter')">
-          <div class="card sticky top-24 p-5">
+          <div class="card sticky top-28 p-5">
             <div class="mb-4 flex items-center justify-between">
               <h2 class="font-bold text-ink">{{ $t('hotels.list.filter') }}</h2>
               <button v-if="activeCount" type="button" class="text-sm font-semibold text-primary hover:underline" @click="patch(RESET)">{{ $t('hotels.list.reset') }}</button>

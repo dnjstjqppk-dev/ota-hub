@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /**
- * Home search console (design system "Horizon").
- * One tab per bookable product line; every place field is a SearchAutocomplete backed by
- * /search/suggest. Dates default relative to today (set on the client so prerendered HTML
- * never ships a stale date) and are validated before navigating.
+ * Home search console (design system "Terra Nord").
+ * Explicit 3-tier responsive grids:
+ * - Mobile (<640px): clean single-column stack with tactile 60px touch fields.
+ * - Tablet (640px–1023px): balanced 2-column grid (side-by-side Origin/Dest, Dates/Guests).
+ * - Desktop (>=1024px): unified single-row architectural search dock.
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -54,9 +55,8 @@ const nights = computed(() => {
   return Math.round((Date.parse(f.checkOut) - Date.parse(f.checkIn)) / 86400000)
 })
 
-function swap(a: 'origin' | 'dep', b: 'dest' | 'arr') { const t = f[a]; f[a] = f[b]; f[b] = t }
+function swap(a: 'origin' | 'dep', b: 'dest' | 'arr') { const tmp = f[a]; f[a] = f[b]; f[b] = tmp }
 
-// ------------------------------------------------------------------ submit
 function need(field: string, value: string, msg: string) { if (!value.trim()) errors.value[field] = msg }
 function notPast(field: string, value: string) { if (value && today.value && value < today.value) errors.value[field] = t('home.search.notPast') }
 
@@ -102,94 +102,102 @@ function submit() {
   else go('/transfers/list', { airport: f.airport, ...(f.area ? { destination: f.area } : {}), date: f.transferDate })
 }
 
-function pickTab(t: Tab) { tab.value = t; errors.value = {} }
-const BOX = 'relative flex min-h-[64px] flex-col justify-center rounded-2xl border bg-surface-sunken/50 px-4 py-2.5 transition focus-within:border-primary focus-within:bg-surface focus-within:shadow-focus hover:bg-surface'
+function pickTab(next: Tab) { tab.value = next; errors.value = {} }
+const BOX = 'relative flex min-h-[60px] flex-col justify-center rounded-field border bg-surface px-3.5 py-2 transition focus-within:border-primary focus-within:shadow-focus'
 const box = (field: string) => [BOX, errors.value[field] ? 'border-danger' : 'border-line hover:border-line-strong']
 const LABEL = 'mb-0.5 block text-2xs font-bold uppercase tracking-wider text-ink-subtle'
+const CTA = 'flex min-h-[56px] items-center justify-center gap-2 rounded-field bg-primary px-7 text-sm font-bold text-primary-ink shadow-sm transition hover:bg-primary-hover sm:min-h-[60px] sm:text-base'
 </script>
 
 <template>
-  <section class="relative rounded-[28px] border border-line/90 bg-surface-raised p-3.5 shadow-pop sm:p-5" :aria-label="t('home.search.title')">
-    <!-- Tabs: Meridian segmented rail -->
-    <div v-if="!fixed" class="chip-rail -mx-1 mb-3.5 flex gap-1 rounded-2xl bg-surface-sunken/80 p-1.5" role="tablist">
+  <section class="relative rounded-card border border-line bg-surface-raised p-4 shadow-pop sm:p-5 lg:p-6" :aria-label="t('home.search.title')">
+    <!-- Architectural Tab Header -->
+    <div v-if="!fixed" class="chip-rail -mx-1 mb-4 flex gap-1.5 border-b border-line px-1 pb-3.5" role="tablist">
       <button
-        v-for="t in TABS"
-        :key="t.id"
+        v-for="tb in TABS"
+        :key="tb.id"
         type="button"
         role="tab"
-        :aria-selected="tab === t.id"
-        :class="['flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition', tab === t.id ? 'bg-surface text-primary shadow-card' : 'text-ink-muted hover:text-ink']"
-        @click="pickTab(t.id)"
+        :aria-selected="tab === tb.id"
+        :class="[
+          'flex min-h-[40px] shrink-0 items-center gap-2 rounded-field px-3.5 py-2 text-xs font-bold transition sm:text-sm',
+          tab === tb.id ? 'bg-primary text-primary-ink shadow-sm' : 'bg-surface-sunken/70 text-ink-muted hover:bg-surface-sunken hover:text-ink'
+        ]"
+        @click="pickTab(tb.id)"
       >
-        <AppIcon :name="t.icon" :size="17" />{{ $t('nav.' + t.id) }}
+        <AppIcon :name="tb.icon" :size="16" />{{ $t('nav.' + tb.id) }}
       </button>
     </div>
 
-    <form class="grid gap-2" novalidate @submit.prevent="submit">
-      <!-- Hotels -->
-      <div v-if="tab === 'hotels'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1.6fr_1.3fr_1fr_auto]">
-        <div :class="box('city')">
+    <form class="grid gap-2.5" novalidate @submit.prevent="submit">
+      <!-- Hotels: 1-col Mobile -> 2-col Tablet -> 4-col Desktop -->
+      <div v-if="tab === 'hotels'" class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-[1.55fr_1.35fr_1fr_auto]">
+        <div :class="[...box('city'), 'sm:col-span-2 lg:col-span-1']">
           <label :for="'hs-city'" :class="LABEL">{{ t('home.search.dest') }}</label>
           <SearchAutocomplete v-model="f.city" input-id="hs-city" domain="hotels" variant="bare" :placeholder="t('home.search.phCity')" />
         </div>
         <DateRangePicker v-model:start="f.checkIn" v-model:end="f.checkOut" :start-label="t('home.search.checkIn')" :end-label="t('home.search.checkOut')" :min="today" :max-range="30" :invalid="!!(errors.checkIn || errors.checkOut)" />
         <GuestPicker v-model:adults="f.adults" v-model:children="f.children" v-model:rooms="f.rooms" />
-        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink transition-colors hover:bg-primary-hover"><AppIcon name="search" />{{ t('common.search') }}</button>
+        <button type="submit" :class="[CTA, 'sm:col-span-2 lg:col-span-1']"><AppIcon name="search" :size="18" />{{ t('common.search') }}</button>
       </div>
 
-      <!-- Flights -->
-      <div v-else-if="tab === 'flights'" class="grid gap-2">
-        <div class="flex gap-1" role="radiogroup" :aria-label="t('home.search.journey')">
-          <button v-for="o in [{ id: 'round', label: t('home.search.round') }, { id: 'oneway', label: t('home.search.oneway') }]" :key="o.id" type="button" role="radio" :aria-checked="f.trip === o.id" :aria-pressed="f.trip === o.id" class="chip py-1.5" @click="f.trip = o.id as any">{{ o.label }}</button>
+      <!-- Flights: 1-col Mobile -> 2-col Tablet (Origin ⇄ Dest row + Dates/Pax row) -> Inline Desktop -->
+      <div v-else-if="tab === 'flights'" class="grid gap-2.5">
+        <div class="flex gap-1.5" role="radiogroup" :aria-label="t('home.search.journey')">
+          <button v-for="o in [{ id: 'round', label: t('home.search.round') }, { id: 'oneway', label: t('home.search.oneway') }]" :key="o.id" type="button" role="radio" :aria-checked="f.trip === o.id" :aria-pressed="f.trip === o.id" class="chip !min-h-[34px] !py-1" @click="f.trip = o.id as any">{{ o.label }}</button>
         </div>
-        <div class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto_1fr_1.3fr_0.9fr_auto] lg:items-stretch">
-        <div :class="box('origin')"><label for="hs-origin" :class="LABEL">{{ t('home.search.origin') }}</label><SearchAutocomplete v-model="f.origin" input-id="hs-origin" domain="flights" variant="bare" :placeholder="t('home.search.phOrigin')" /></div>
-        <button type="button" class="mx-auto -my-4 z-10 flex h-10 w-10 rotate-90 items-center justify-center self-center rounded-full border border-line bg-surface text-ink-muted hover:text-primary lg:my-0 lg:rotate-0" :aria-label="t('home.search.swapOD')" @click="swap('origin', 'dest')"><AppIcon name="swap" :size="18" /></button>
-        <div :class="box('dest')"><label for="hs-dest" :class="LABEL">{{ t('home.search.arr') }}</label><SearchAutocomplete v-model="f.dest" input-id="hs-dest" domain="flights" variant="bare" :placeholder="t('home.search.phOrigin')" /></div>
-        <DateRangePicker v-if="f.trip === 'round'" v-model:start="f.flightDate" v-model:end="f.returnDate" :start-label="t('home.search.outbound')" :end-label="t('home.search.inbound')" unit="day" :min="today" :max-range="180" :invalid="!!(errors.flightDate || errors.returnDate)" />
-        <DateRangePicker v-else v-model:start="f.flightDate" mode="single" :start-label="t('home.search.outbound')" :min="today" :invalid="!!errors.flightDate" />
-        <GuestPicker v-model:adults="f.pax" v-model:children="f.paxChildren" :show-rooms="false" :label="t('search.passengers')" />
-        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />{{ t('common.search') }}</button>
+        <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-[1.85fr_1.25fr_0.95fr_auto] lg:items-stretch">
+          <div class="grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center lg:col-span-1">
+            <div :class="box('origin')"><label for="hs-origin" :class="LABEL">{{ t('home.search.origin') }}</label><SearchAutocomplete v-model="f.origin" input-id="hs-origin" domain="flights" variant="bare" :placeholder="t('home.search.phOrigin')" /></div>
+            <button type="button" class="z-10 mx-auto -my-3.5 flex h-9 w-9 rotate-90 items-center justify-center rounded-full border border-line bg-surface text-ink-muted shadow-sm transition hover:border-primary hover:text-primary sm:my-0 sm:rotate-0" :aria-label="t('home.search.swapOD')" @click="swap('origin', 'dest')"><AppIcon name="swap" :size="16" /></button>
+            <div :class="box('dest')"><label for="hs-dest" :class="LABEL">{{ t('home.search.arr') }}</label><SearchAutocomplete v-model="f.dest" input-id="hs-dest" domain="flights" variant="bare" :placeholder="t('home.search.phOrigin')" /></div>
+          </div>
+          <DateRangePicker v-if="f.trip === 'round'" v-model:start="f.flightDate" v-model:end="f.returnDate" :start-label="t('home.search.outbound')" :end-label="t('home.search.inbound')" unit="day" :min="today" :max-range="180" :invalid="!!(errors.flightDate || errors.returnDate)" />
+          <DateRangePicker v-else v-model:start="f.flightDate" mode="single" :start-label="t('home.search.outbound')" :min="today" :invalid="!!errors.flightDate" />
+          <GuestPicker v-model:adults="f.pax" v-model:children="f.paxChildren" :show-rooms="false" :label="t('search.passengers')" />
+          <button type="submit" :class="[CTA, 'sm:col-span-2 lg:col-span-1']"><AppIcon name="search" :size="18" />{{ t('common.search') }}</button>
         </div>
       </div>
 
-      <!-- Packages -->
-      <div v-else-if="tab === 'packages'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1.4fr_1fr_1fr_auto]">
-        <div :class="box('pkgDest')"><label for="hs-pdest" :class="LABEL">{{ t('home.search.pkgDest') }}</label><SearchAutocomplete v-model="f.pkgDest" input-id="hs-pdest" domain="packages" variant="bare" :placeholder="t('home.search.phPkg')" /></div>
+      <!-- Packages: 1-col Mobile -> 2-col Tablet -> 4-col Desktop -->
+      <div v-else-if="tab === 'packages'" class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-[1.45fr_1fr_1fr_auto]">
+        <div :class="[...box('pkgDest'), 'sm:col-span-2 lg:col-span-1']"><label for="hs-pdest" :class="LABEL">{{ t('home.search.pkgDest') }}</label><SearchAutocomplete v-model="f.pkgDest" input-id="hs-pdest" domain="packages" variant="bare" :placeholder="t('home.search.phPkg')" /></div>
         <DateRangePicker v-model:start="f.pkgDate" mode="single" :start-label="t('home.search.departDate')" :min="today" />
         <GuestPicker v-model:adults="f.pax" v-model:children="f.paxChildren" :show-rooms="false" :label="t('search.travelers')" />
-        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />{{ t('common.search') }}</button>
+        <button type="submit" :class="[CTA, 'sm:col-span-2 lg:col-span-1']"><AppIcon name="search" :size="18" />{{ t('common.search') }}</button>
       </div>
 
       <!-- Activities -->
-      <div v-else-if="tab === 'activities'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto]">
+      <div v-else-if="tab === 'activities'" class="grid grid-cols-1 gap-2.5 sm:grid-cols-[1fr_auto]">
         <div :class="box('keyword')"><label for="hs-kw" :class="LABEL">{{ t('home.search.keyword') }}</label><SearchAutocomplete v-model="f.keyword" input-id="hs-kw" domain="things-to-do" variant="bare" :placeholder="t('home.search.phKeyword')" /></div>
-        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />{{ t('common.search') }}</button>
+        <button type="submit" :class="CTA"><AppIcon name="search" :size="18" />{{ t('common.search') }}</button>
       </div>
 
-      <!-- Trains -->
-      <div v-else-if="tab === 'trains'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto_1fr_0.9fr_0.9fr_auto] lg:items-stretch">
-        <div :class="box('dep')"><label for="hs-dep" :class="LABEL">{{ t('home.search.dep') }}</label><SearchAutocomplete v-model="f.dep" input-id="hs-dep" domain="trains" variant="bare" :placeholder="t('home.search.phStation')" /></div>
-        <button type="button" class="mx-auto -my-4 z-10 flex h-10 w-10 rotate-90 items-center justify-center self-center rounded-full border border-line bg-surface text-ink-muted hover:text-primary lg:my-0 lg:rotate-0" :aria-label="t('home.search.swapDepArr')" @click="swap('dep', 'arr')"><AppIcon name="swap" :size="18" /></button>
-        <div :class="box('arr')"><label for="hs-arr" :class="LABEL">{{ t('home.search.arrStation') }}</label><SearchAutocomplete v-model="f.arr" input-id="hs-arr" domain="trains" variant="bare" :placeholder="t('home.search.phStationArr')" /></div>
+      <!-- Trains: 1-col Mobile -> 2-col Tablet -> Inline Desktop -->
+      <div v-else-if="tab === 'trains'" class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-[1.85fr_0.95fr_0.95fr_auto] lg:items-stretch">
+        <div class="grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center lg:col-span-1">
+          <div :class="box('dep')"><label for="hs-dep" :class="LABEL">{{ t('home.search.dep') }}</label><SearchAutocomplete v-model="f.dep" input-id="hs-dep" domain="trains" variant="bare" :placeholder="t('home.search.phStation')" /></div>
+          <button type="button" class="z-10 mx-auto -my-3.5 flex h-9 w-9 rotate-90 items-center justify-center rounded-full border border-line bg-surface text-ink-muted shadow-sm transition hover:border-primary hover:text-primary sm:my-0 sm:rotate-0" :aria-label="t('home.search.swapDepArr')" @click="swap('dep', 'arr')"><AppIcon name="swap" :size="16" /></button>
+          <div :class="box('arr')"><label for="hs-arr" :class="LABEL">{{ t('home.search.arrStation') }}</label><SearchAutocomplete v-model="f.arr" input-id="hs-arr" domain="trains" variant="bare" :placeholder="t('home.search.phStationArr')" /></div>
+        </div>
         <DateRangePicker v-model:start="f.trainDate" mode="single" :start-label="t('home.search.trainDate')" :min="today" :invalid="!!errors.trainDate" />
         <GuestPicker v-model:adults="f.pax" v-model:children="f.paxChildren" :show-rooms="false" :label="t('search.riders')" />
-        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />{{ t('common.search') }}</button>
+        <button type="submit" :class="[CTA, 'sm:col-span-2 lg:col-span-1']"><AppIcon name="search" :size="18" />{{ t('common.search') }}</button>
       </div>
 
-      <!-- Cars -->
-      <div v-else-if="tab === 'cars'" class="grid grid-cols-1 gap-2 lg:grid-cols-[1.6fr_1.4fr_auto]">
+      <!-- Cars: 1-col Mobile -> 2-col Tablet -> 3-col Desktop -->
+      <div v-else-if="tab === 'cars'" class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-[1.55fr_1.4fr_auto]">
         <div :class="box('carPlace')"><label for="hs-car" :class="LABEL">{{ t('home.search.carPlace') }}</label><SearchAutocomplete v-model="f.carPlace" input-id="hs-car" domain="cars" variant="bare" :placeholder="t('search.suggest.phCars')" /></div>
         <DateRangePicker v-model:start="f.carFrom" v-model:end="f.carTo" :start-label="t('home.search.carFrom')" :end-label="t('home.search.carTo')" unit="day" :min="today" :max-range="60" :invalid="!!(errors.carFrom || errors.carTo)" />
-        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />{{ t('common.search') }}</button>
+        <button type="submit" :class="[CTA, 'sm:col-span-2 lg:col-span-1']"><AppIcon name="search" :size="18" />{{ t('common.search') }}</button>
       </div>
 
-      <!-- Transfers -->
-      <div v-else class="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr_0.8fr_auto]">
+      <!-- Transfers: 1-col Mobile -> 2-col Tablet -> 4-col Desktop -->
+      <div v-else class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_0.85fr_auto]">
         <div :class="box('airport')"><label for="hs-apt" :class="LABEL">{{ t('home.search.airport') }}</label><SearchAutocomplete v-model="f.airport" input-id="hs-apt" domain="flights" variant="bare" :placeholder="t('home.search.phTransferAirport')" /></div>
         <div :class="box('area')"><label for="hs-area" :class="LABEL">{{ t('home.search.area') }}</label><SearchAutocomplete v-model="f.area" input-id="hs-area" domain="transfers" variant="bare" :placeholder="t('home.search.phTransferArea')" /></div>
         <DateRangePicker v-model:start="f.transferDate" mode="single" :start-label="t('home.search.useDate')" :min="today" :invalid="!!errors.transferDate" />
-        <button type="submit" class="flex min-h-[64px] items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-base font-bold text-primary-ink hover:bg-primary-hover"><AppIcon name="search" />{{ t('common.search') }}</button>
+        <button type="submit" :class="CTA"><AppIcon name="search" :size="18" />{{ t('common.search') }}</button>
       </div>
 
       <ul v-if="Object.keys(errors).length" class="space-y-1 px-1 pt-1 text-sm font-medium text-danger" role="alert">

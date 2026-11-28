@@ -8,12 +8,12 @@ const ICON: Record<Tone, string> = {
 </script>
 
 <template>
-  <component :is="to ? 'router-link' : 'div'" :to="to" :class="['card flex items-start gap-3 p-4', to ? 'transition-shadow hover:shadow-card' : '']">
-    <span v-if="icon" :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', ICON[tone]]"><AppIcon :name="icon" :size="18" /></span>
+  <component :is="to ? 'router-link' : 'div'" :to="to" :class="['card flex items-start justify-between gap-3 p-4 sm:p-5', to ? 'transition-[border-color,box-shadow] hover:border-primary/45 hover:shadow-pop' : '']">
     <div class="min-w-0">
-      <p class="text-xs font-medium text-ink-muted">{{ label }}</p>
-      <p class="mt-0.5 truncate text-xl font-bold text-ink tabular">{{ value }}</p>
+      <p class="text-xs font-semibold text-ink-muted">{{ label }}</p>
+      <p class="mt-1 truncate font-display text-xl font-extrabold text-ink tabular sm:text-2xl">{{ value }}</p>
       <p v-if="hint" class="mt-0.5 text-2xs text-ink-subtle">{{ hint }}</p>
     </div>
+    <span v-if="icon" :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', ICON[tone]]"><AppIcon :name="icon" :size="18" /></span>
   </component>
 </template>

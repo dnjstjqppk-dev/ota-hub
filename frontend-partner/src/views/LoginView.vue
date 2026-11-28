@@ -57,23 +57,24 @@ const handleLogin = async () => {
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col justify-center bg-midnight-900 py-12 font-sans sm:px-6 lg:px-8">
+  <div class="flex min-h-screen flex-col justify-center bg-gradient-to-b from-primary-soft/65 via-canvas to-canvas px-4 py-12 font-sans sm:px-6 lg:px-8">
     <div class="space-y-3 text-center sm:mx-auto sm:w-full sm:max-w-md">
-      <div class="inline-flex items-center gap-2 rounded-full border border-sapphire-500/30 bg-sapphire-500/10 px-4 py-1.5 text-xs font-bold text-horizon-300">
+      <div class="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-surface px-4 py-1.5 text-xs font-bold text-primary shadow-sm">
         <AppIcon name="building" :size="14" />
         <span>getfortrip Supplier Extranet</span>
       </div>
-      <h1 class="flex items-center justify-center gap-2 text-3xl font-black tracking-tight text-white">
-        <span>getfor<span class="text-sapphire-400">trip</span></span>
-        <span class="rounded bg-primary px-2 py-0.5 text-xs font-black uppercase text-primary-ink">Partner</span>
+      <h1 class="flex items-center justify-center gap-2 font-display text-3xl font-extrabold tracking-tight text-ink">
+        <img src="/logo.svg" alt="getfortrip" class="h-8 w-auto dark:hidden" />
+        <img src="/logo-white.svg" alt="getfortrip" class="hidden h-8 w-auto dark:block" />
+        <span class="rounded-md bg-accent-soft px-2 py-0.5 font-mono text-xs font-bold uppercase text-accent">Partner</span>
       </h1>
-      <p class="text-sm font-medium text-sapphire-300">
+      <p class="text-sm font-medium text-ink-muted">
         글로벌 호텔, 모빌리티, 투어 공급사 전용 익스트라넷 콘솔
       </p>
     </div>
 
     <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-      <div class="space-y-6 rounded-3xl border border-line bg-surface px-6 py-8 shadow-pop sm:px-10">
+      <div class="space-y-6 rounded-card border border-line bg-surface px-6 py-8 shadow-pop sm:px-9">
         <form class="space-y-4" @submit.prevent="handleLogin">
           <div v-if="errorMessage" class="flex items-center gap-2 rounded-2xl border border-danger/30 bg-danger-soft p-3.5 text-xs font-bold text-danger" role="alert">
             <AppIcon name="alert" :size="16" />

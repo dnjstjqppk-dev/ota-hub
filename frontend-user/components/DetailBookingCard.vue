@@ -1,18 +1,18 @@
 <script setup lang="ts">
 /**
- * Price + booking entry for a product detail page (design system "Horizon").
- * Dates and party size are read from / written to the URL (carried over from the results page) and
- * passed to checkout, where the server prices the order. The price shown is the catalogue reference
- * price for `unitLabel`; nothing here estimates taxes or totals the server has not confirmed.
+ * Price + booking entry for a product detail page (design system "Terra Nord").
+ * Includes a sticky desktop booking rail AND a mobile/tablet quick-book bottom bar (<lg)
+ * so phone and tablet shoppers always see live reference pricing and CTA without scrolling.
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { apiFetch } from '~/composables/useApi'
 import { useCurrencyStore } from '~/stores/currency'
-const { t, te, locale } = useI18n()
-const currency = useCurrencyStore()
 import { daysBetween, fmtDay, qDate, qInt, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 import { appendOutlinkContext } from '~/composables/useOutlinkQuery'
 import { useCartStore } from '~/stores/cart'
+
+const { t, te, locale } = useI18n()
+const currency = useCurrencyStore()
 
 const props = withDefaults(defineProps<{
   item: any
@@ -22,11 +22,9 @@ const props = withDefaults(defineProps<{
   cancellation: 'FREE' | 'NON_REFUNDABLE'
   alertLabel: string
   checkoutQuery?: Record<string, string>
-  /** 'single' = one service date, 'range' = start + end (car rental), 'none' = no date picker. */
   dateMode?: 'single' | 'range' | 'none'
   startLabel?: string
   endLabel?: string
-  /** Show adult/child counters (per-person products). */
   people?: boolean
   maxPeople?: number
 }>(), { dateMode: 'single', startLabel: '', endLabel: '', people: false, maxPeople: 9 })
@@ -49,9 +47,6 @@ const datesReady = computed(() => !needsDate.value || (!!startDate.value && (pro
 const days = computed(() => (props.dateMode === 'range' && startDate.value && endDate.value ? daysBetween(startDate.value, endDate.value) : 0))
 const overCapacity = computed(() => props.people && adults.value + children.value > props.maxPeople)
 
-// #88: activity time slots for the picked date. Real rows only (the API
-// returns none when the partner registered none); the pick travels to
-// checkout as a labelled, unconfirmed request — never as a reservation.
 const slots = ref<any[]>([])
 const slotsLoading = ref(false)
 const slotStart = ref('')
@@ -80,16 +75,11 @@ const reason = computed(() => {
   const code = props.item.bookable_reason
   return (code && te(`detail.reason.${code}`) ? t(`detail.reason.${code}`) : null) || t('detail.card.notBookableDefault')
 })
-/** #27: affiliate outlink supplied by the catalog API (path under the API base). Rendered only when the server emits a real link. */
 const outlinkPath = computed(() => (typeof props.item.outlink_path === 'string' && props.item.outlink_path.startsWith('/out/') ? props.item.outlink_path : ''))
-/** Phase 3: carry picked dates/party plus results-page context into the click so the partner deeplink keeps them. */
 const outlinkUrl = computed(() => {
   if (!outlinkPath.value) return ''
   const q = route.query as Record<string, unknown>
   const one = (v: unknown) => (typeof v === 'string' ? v : '')
-  // Always the PUBLIC API base: during SSR useApiUrl() returns the server-only
-  // hub origin, hydration keeps that href, and the edge cache would hand it to
-  // every visitor (2026-11-27 review).
   const publicBase = String((useRuntimeConfig().public as any).apiBase || '/api/v1').replace(/\/+$/, '')
   return publicBase + appendOutlinkContext(outlinkPath.value, {
     dest: one(q.dest), origin: one(q.origin),
@@ -98,7 +88,6 @@ const outlinkUrl = computed(() => {
     rooms: one(q.rooms), cabin: one(q.cabin),
   })
 })
-/** Phase 1 trade type: server-computed bookability decides, never client guesses. */
 const tradeType = computed<'DIRECT' | 'AFFILIATE' | null>(() => {
   if (outlinkPath.value) return 'AFFILIATE'
   if (props.item.bookable) return 'DIRECT'
@@ -127,17 +116,20 @@ function askDates() {
   card.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   setTimeout(() => card.value?.querySelector<HTMLElement>('[aria-haspopup=dialog]')?.click(), 350)
 }
+function scrollToCard() {
+  card.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
 watch(datesReady, (v) => { if (v) highlight.value = false })
 defineExpose({ askDates })
 </script>
 
 <template>
-  <aside class="lg:sticky lg:top-24 lg:h-fit" data-testid="booking-card">
-    <div ref="card" :class="['card space-y-4 p-5 shadow-card transition-colors', highlight ? 'border-primary shadow-focus' : '']">
+  <aside class="lg:sticky lg:top-28 lg:h-fit" data-testid="booking-card">
+    <div ref="card" :class="['card space-y-4 p-5 transition-colors', highlight ? 'border-primary shadow-focus' : '']">
       <TradeTypeBadge v-if="tradeType" :trade-type="tradeType" />
-      <div>
-        <p class="text-xs text-ink-subtle">{{ unitLabel }} {{ t('detail.card.refPrice') }}</p>
-        <p class="text-2xl font-extrabold text-ink tabular" data-testid="ref-price">{{ priceKrw ? currency.formatKRW(priceKrw) : t('detail.card.noPrice') }}</p>
+      <div class="border-b border-line pb-3.5">
+        <p class="text-2xs font-bold uppercase tracking-wider text-ink-subtle">{{ unitLabel }} {{ t('detail.card.refPrice') }}</p>
+        <p class="mt-0.5 font-display text-2xl font-extrabold text-ink tabular" data-testid="ref-price">{{ priceKrw ? currency.formatKRW(priceKrw) : t('detail.card.noPrice') }}</p>
         <p class="mt-1 text-xs text-ink-subtle">{{ item.price_notice || t('detail.card.refPriceDefault') }} · {{ t('detail.card.priceNotice') }}</p>
       </div>
 
@@ -174,8 +166,8 @@ defineExpose({ askDates })
             <AppIcon name="check" :size="16" />{{ t('detail.card.freeCancelUntil', { h: hoursLabel(policy.free_cancel_hours) }) }}
           </p>
           <ul v-if="policy.tiers?.length" class="space-y-0.5 text-ink-muted">
-            <li v-for="(t, i) in policy.tiers" :key="i" class="flex items-center gap-1.5">
-              <AppIcon name="refund" :size="14" class="text-ink-subtle" />{{ t('detail.card.tierRefund', { h: hoursLabel(t.hours_before), p: pct(t.refund_bps) }) }}{{ t.note ? ` · ${t.note}` : '' }}
+            <li v-for="(ti, i) in policy.tiers" :key="i" class="flex items-center gap-1.5">
+              <AppIcon name="refund" :size="14" class="text-ink-subtle" />{{ t('detail.card.tierRefund', { h: hoursLabel(ti.hours_before), p: pct(ti.refund_bps) }) }}{{ ti.note ? ` · ${ti.note}` : '' }}
             </li>
           </ul>
           <p v-if="policy.no_show_fee_bps" class="text-ink-muted">{{ t('detail.card.noShowFee', { p: pct(policy.no_show_fee_bps) }) }}</p>
@@ -191,7 +183,7 @@ defineExpose({ askDates })
       <template v-if="item.bookable">
         <NuxtLink v-if="datesReady && !overCapacity" :to="$localePath({ path: '/checkout', query })" class="btn-primary w-full py-3" data-testid="book-now">{{ t('common.bookNow') }}</NuxtLink>
         <button v-else-if="!datesReady" type="button" class="btn-primary w-full py-3" data-testid="pick-date" @click="askDates">{{ t('search.selectDates') }}</button>
-        <span v-else class="block rounded-full bg-surface-sunken py-3 text-center text-sm font-semibold text-ink-subtle">{{ t('detail.card.overLimit') }}</span>
+        <span v-else class="block rounded-field bg-surface-sunken py-3 text-center text-sm font-semibold text-ink-subtle">{{ t('detail.card.overLimit') }}</span>
         <button v-if="datesReady && !overCapacity && !slotStart" type="button" class="btn-secondary mt-2 w-full py-3" :disabled="cart.adding" data-testid="add-cart" @click="addToCart">{{ cart.adding ? t('detail.card.adding') : addedTick ? t('detail.card.added') : t('detail.card.addCart') }}</button>
         <p v-if="slotStart" class="text-xs text-ink-subtle">{{ t('detail.card.slotSingle') }}</p>
         <p v-if="cart.error" class="text-xs font-medium text-danger" role="alert">{{ cart.error === 'MAX_CART_LEGS' ? t('cart.maxLegs') : cart.error === 'CART_ADD_FAILED' ? t('cart.addFailed') : cart.error }}</p>
@@ -204,6 +196,20 @@ defineExpose({ askDates })
       </template>
 
       <PriceAlertButton :domain="domain" :item-id="item.id" :label="alertLabel" :current-price="priceKrw" />
+    </div>
+
+    <!-- Mobile & Tablet Sticky Quick-Book Bar (<lg) -->
+    <div class="fixed inset-x-0 bottom-[calc(58px+env(safe-area-inset-bottom))] z-30 border-t border-line bg-surface/95 px-4 py-2.5 shadow-pop backdrop-blur-md md:bottom-0 lg:hidden print:hidden">
+      <div class="mx-auto flex max-w-7xl items-center justify-between gap-3">
+        <div class="min-w-0">
+          <p class="truncate text-2xs font-bold uppercase tracking-wider text-ink-subtle">{{ unitLabel }} {{ t('detail.card.refPrice') }}</p>
+          <p class="truncate font-display text-lg font-extrabold text-ink tabular">{{ priceKrw ? currency.formatKRW(priceKrw) : t('detail.card.noPrice') }}</p>
+        </div>
+        <NuxtLink v-if="item.bookable && datesReady && !overCapacity" :to="$localePath({ path: '/checkout', query })" class="btn-primary shrink-0 px-6">{{ t('common.bookNow') }}</NuxtLink>
+        <button v-else-if="item.bookable && !datesReady" type="button" class="btn-primary shrink-0 px-5" @click="askDates">{{ t('search.selectDates') }}</button>
+        <a v-else-if="outlinkUrl" :href="outlinkUrl" target="_blank" rel="noopener sponsored" class="btn-primary shrink-0 px-5">{{ t('detail.card.outlinkBook') }}</a>
+        <button v-else type="button" class="btn-secondary shrink-0 px-4" @click="scrollToCard">{{ t('flights.search.detail') }}</button>
+      </div>
     </div>
   </aside>
 </template>

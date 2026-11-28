@@ -1,14 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 188 44" fill="none">
-  <defs>
-    <linearGradient id="sol-lw-bg" x1="4" y1="2" x2="38" y2="40" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#6680FF"/>
-      <stop offset="60%" stop-color="#2948FF"/>
-      <stop offset="100%" stop-color="#132494"/>
-    </linearGradient>
-  </defs>
-  <rect x="2" y="4" width="36" height="36" rx="11" fill="url(#sol-lw-bg)"/>
-  <path d="M10 27C14 18 22 14 31 15" stroke="#C7D5FF" stroke-width="2" stroke-linecap="round"/>
-  <path d="M20 11L22 19L30 21L22 23L20 31L18 23L10 21L18 19Z" fill="#FFFFFF"/>
-  <circle cx="31" cy="15" r="2.8" fill="#FF5733"/>
-  <text x="48" y="29" font-family="Plus Jakarta Sans, Pretendard Variable, system-ui, sans-serif" font-size="22" font-weight="800" letter-spacing="-0.6" fill="#F3F6FF">getfor<tspan fill="#8FA5FF">trip</tspan></text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 152 40" fill="none">
+  <rect x="2" y="4" width="32" height="32" rx="9" fill="#44CCA6"/>
+  <path d="M10 27V18.5C10 14.082 13.582 10.5 18 10.5C22.418 10.5 26 14.082 26 18.5V27" stroke="#0B100E" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M13.5 27L18 16.5L22.5 27" stroke="#0F6A53" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="18" cy="16" r="2.5" fill="#D95D30"/>
+  <text x="41" y="27" font-family="Outfit, Pretendard, -apple-system, sans-serif" font-size="22" font-weight="800" letter-spacing="-0.03em" fill="#F2F5F3">getfor<tspan fill="#44CCA6">trip</tspan></text>
 </svg>

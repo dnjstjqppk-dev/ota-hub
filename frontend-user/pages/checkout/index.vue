@@ -121,6 +121,7 @@ const quoteSecondsLeft = computed(() => quote.value ? Math.max(0, Math.floor((Da
 const paySecondsLeft = computed(() => booking.value?.paymentDeadline ? Math.max(0, Math.floor((Date.parse(booking.value.paymentDeadline) - now.value) / 1000)) : 0)
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 const isSandbox = computed(() => payConfig.value?.mode === 'SANDBOX' || quote.value?.fulfilmentMode === 'SIMULATED')
+const mobileSummaryOpen = ref(false)
 
 function buildTravelers() {
   const list: any[] = []
@@ -396,6 +397,28 @@ onBeforeUnmount(() => { clearInterval(timer); unmountStripeCard() })
     </div>
 
     <div v-else class="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <!-- Mobile & Tablet Compact Order Summary (<lg) -->
+      <div v-if="quote" class="card overflow-hidden lg:hidden">
+        <button type="button" class="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left" :aria-expanded="mobileSummaryOpen" @click="mobileSummaryOpen = !mobileSummaryOpen">
+          <div class="min-w-0">
+            <p class="truncate text-xs font-bold text-primary">{{ DOMAIN_LABEL[domain] }}<template v-if="step !== 'payment'"> · {{ mmss(quoteSecondsLeft) }}</template></p>
+            <p class="truncate text-sm font-bold text-ink">{{ quote.title }}</p>
+          </div>
+          <div class="flex shrink-0 items-center gap-2">
+            <span class="font-display text-base font-extrabold tabular text-ink">{{ formatKrw(quote.totalMinor) }}</span>
+            <AppIcon name="chevron-down" :size="16" :class="['text-ink-subtle transition-transform', mobileSummaryOpen && 'rotate-180']" />
+          </div>
+        </button>
+        <div v-if="mobileSummaryOpen" class="space-y-2 border-t border-line bg-surface-sunken/50 px-4 py-3 text-xs">
+          <div v-for="l in quote.lines" :key="l.code + l.label" class="flex justify-between gap-3">
+            <span class="text-ink-muted">{{ l.label }}</span><span :class="['tabular', l.amountMinor < 0 ? 'font-semibold text-success' : 'text-ink']">{{ formatKrw(l.amountMinor) }}</span>
+          </div>
+          <div v-if="quote.coinsMinor > 0" class="flex justify-between gap-3">
+            <span class="text-ink-muted">{{ $t('checkout.coinsUsed') }}</span><span class="tabular font-semibold text-success">{{ formatKrw(-quote.coinsMinor) }}</span>
+          </div>
+        </div>
+      </div>
+
       <section class="min-w-0 space-y-4">
         <!-- Step 1: details (cart mode shows pre-priced legs instead) -->
         <div v-if="cartMode && !booking" class="card p-5 sm:p-6" data-testid="cart-legs">
@@ -567,7 +590,7 @@ onBeforeUnmount(() => { clearInterval(timer); unmountStripeCard() })
       </section>
 
       <!-- Summary -->
-      <aside v-if="quote" class="h-fit lg:sticky lg:top-24" data-testid="summary">
+      <aside v-if="quote" class="h-fit lg:sticky lg:top-28" data-testid="summary">
         <div class="card p-5">
           <p class="text-xs font-semibold text-primary">{{ DOMAIN_LABEL[domain] }}</p>
           <p class="mt-1 font-bold leading-snug text-ink">{{ quote.title }}</p>

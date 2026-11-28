@@ -45,14 +45,14 @@ async function submit() {
 </script>
 
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-gradient-to-b from-sapphire-50 to-canvas px-4 py-10 dark:from-midnight-900">
+  <div class="relative flex min-h-screen items-center justify-center bg-gradient-to-b from-primary-soft/65 via-canvas to-canvas px-4 py-10">
     <div class="w-full max-w-sm">
-      <div class="mb-6 flex items-center justify-center gap-2.5">
-        <img src="/symbol.svg" alt="" class="h-9 w-9" />
-        <span class="text-xl font-extrabold tracking-tight text-ink">getfor<span class="text-primary">trip</span></span>
-        <span class="rounded-md bg-primary-soft px-1.5 py-0.5 text-2xs font-bold text-primary">관리자</span>
+      <div class="mb-6 flex items-center justify-center gap-2">
+        <img src="/logo.svg" alt="getfortrip" class="h-8 w-auto dark:hidden" />
+        <img src="/logo-white.svg" alt="getfortrip" class="hidden h-8 w-auto dark:block" />
+        <span class="rounded-md bg-primary-soft px-2 py-0.5 font-mono text-2xs font-bold uppercase text-primary">OPS</span>
       </div>
-      <form class="card space-y-4 p-6 shadow-card" novalidate @submit.prevent="submit">
+      <form class="card space-y-4 p-6 shadow-pop sm:p-7" novalidate @submit.prevent="submit">
         <h1 class="text-lg font-bold text-ink">관리자 로그인</h1>
         <div>
           <label for="login-email" class="label">이메일</label>

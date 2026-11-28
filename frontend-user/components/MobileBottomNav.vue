@@ -17,18 +17,23 @@ const active = (i: typeof items[number]) => (i.exact ? bare(route.path) === i.to
 
 <template>
   <nav
-    class="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 grid grid-cols-5 rounded-2xl border border-line bg-surface/95 p-1 shadow-pop backdrop-blur-md md:hidden print:hidden"
+    class="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1.5 shadow-pop backdrop-blur-xl md:hidden print:hidden"
     :aria-label="$t('mobile.menu')"
   >
-    <NuxtLink
-      v-for="i in items"
-      :key="i.to"
-      :to="$localePath(i.to)"
-      :aria-current="active(i) ? 'page' : undefined"
-      :class="['flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl text-2xs font-bold transition active:scale-95', active(i) ? 'bg-primary-soft text-primary' : 'text-ink-subtle']"
-    >
-      <AppIcon :name="i.icon" :size="20" :stroke="active(i) ? 2.2 : 1.8" />
-      {{ $t('mobile.' + i.key) }}
-    </NuxtLink>
+    <div class="mx-auto grid max-w-md grid-cols-5 gap-1">
+      <NuxtLink
+        v-for="i in items"
+        :key="i.to"
+        :to="$localePath(i.to)"
+        :aria-current="active(i) ? 'page' : undefined"
+        :class="[
+          'relative flex min-h-[50px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[11px] font-bold transition active:scale-95',
+          active(i) ? 'bg-primary-soft text-primary' : 'text-ink-subtle hover:text-ink'
+        ]"
+      >
+        <AppIcon :name="i.icon" :size="19" :stroke="active(i) ? 2.2 : 1.8" />
+        <span class="max-w-full truncate">{{ $t('mobile.' + i.key) }}</span>
+      </NuxtLink>
+    </div>
   </nav>
 </template>

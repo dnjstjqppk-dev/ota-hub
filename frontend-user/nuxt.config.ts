@@ -181,7 +181,7 @@ export default defineNuxtConfig({
     // TG-15: absolute API base for SSR fetches (server-only, never shipped to
     // browsers). Overridden at runtime by NUXT_API_BASE_SERVER (wrangler vars);
     // the baked default points at the hub dev server.
-    apiBaseServer: 'http://127.0.0.1:8799/api/v1',
+    apiBaseServer: process.env.NUXT_API_BASE_SERVER || 'http://127.0.0.1:8799/api/v1',
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE || '/api/v1',
       sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
@@ -231,14 +231,15 @@ export default defineNuxtConfig({
         { name: 'twitter:card', content: 'summary' },
         { name: 'twitter:title', content: 'getfortrip — Global Smart Travel Platform' },
         { name: 'twitter:description', content: 'Hotels, flights, trains, rental cars, and curated travel bookings worldwide.' },
-        { name: 'theme-color', content: '#2948FF' }
+        { name: 'theme-color', content: '#0F6A53' }
       ],
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
         { rel: 'apple-touch-icon', href: '/symbol.svg' },
         { rel: 'preconnect', href: 'https://cdn.jsdelivr.net', crossorigin: '' },
-        { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@fontsource/plus-jakarta-sans@5.0.12/latin-700.css' },
-        { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@fontsource/plus-jakarta-sans@5.0.12/latin-800.css' },
+        { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@fontsource/outfit@5.0.13/latin-600.css' },
+        { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@fontsource/outfit@5.0.13/latin-700.css' },
+        { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@fontsource/outfit@5.0.13/latin-800.css' },
         { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css' }
       ],
       script: [

@@ -30,14 +30,14 @@ async function handleForgot() {
 </script>
 
 <template>
-  <div class="flex min-h-full flex-col justify-center bg-midnight-900 px-6 py-12">
+  <div class="flex min-h-screen flex-col justify-center bg-gradient-to-b from-primary-soft/65 via-canvas to-canvas px-4 py-12 sm:px-6">
     <div class="text-center">
-      <h1 class="text-2xl font-black tracking-tight text-white">비밀번호 찾기</h1>
-      <p class="mt-2 text-sm font-medium text-sapphire-300">가입한 이메일로 재설정 링크를 보내드려요.</p>
+      <h1 class="font-display text-2xl font-extrabold tracking-tight text-ink">비밀번호 찾기</h1>
+      <p class="mt-2 text-sm font-medium text-ink-muted">가입한 이메일로 재설정 링크를 보내드려요.</p>
     </div>
 
     <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-      <div class="space-y-4 rounded-3xl border border-line bg-surface px-6 py-8 shadow-pop sm:px-10">
+      <div class="space-y-4 rounded-card border border-line bg-surface px-6 py-8 shadow-pop sm:px-9">
         <form class="space-y-4" @submit.prevent="handleForgot">
           <div v-if="errorMessage" class="rounded-2xl border border-danger/30 bg-danger-soft p-3.5 text-xs font-bold text-danger" role="alert">{{ errorMessage }}</div>
           <div class="space-y-1">

@@ -71,11 +71,11 @@ useHead(() => {
 <template>
   <div class="pb-24 lg:pb-16">
     <section class="border-b border-line bg-surface">
-      <form class="mx-auto grid max-w-7xl gap-2 px-4 py-3 lg:grid-cols-[1.4fr_1fr_1fr_auto] lg:px-6 lg:py-4" novalidate @submit.prevent="submit">
-        <div class="field-box"><label for="pl-city" class="field-label">{{ $t('packages.list.dest') }}</label><SearchAutocomplete v-model="draft.city" input-id="pl-city" domain="packages" variant="bare" :placeholder="$t('packages.list.destPh')" @enter="submit" /></div>
+      <form class="mx-auto grid max-w-7xl gap-2 px-4 py-3 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_auto] lg:px-6 lg:py-4" novalidate @submit.prevent="submit">
+        <div class="field-box sm:col-span-2 lg:col-span-1"><label for="pl-city" class="field-label">{{ $t('packages.list.dest') }}</label><SearchAutocomplete v-model="draft.city" input-id="pl-city" domain="packages" variant="bare" :placeholder="$t('packages.list.destPh')" @enter="submit" /></div>
         <DateRangePicker v-model:start="draft.date" mode="single" :start-label="$t('packages.list.depDate')" :min="today" compact />
         <GuestPicker v-model:adults="draft.adults" v-model:children="draft.children" :show-rooms="false" :label="$t('packages.list.travelers')" compact />
-        <button type="submit" class="btn-primary min-h-[52px] rounded-2xl px-7 text-base"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
+        <button type="submit" class="btn-primary min-h-[52px] px-7 text-base sm:col-span-2 lg:col-span-1"><AppIcon name="search" :size="18" />{{ $t('common.search') }}</button>
       </form>
     </section>
 
