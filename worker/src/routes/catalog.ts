@@ -202,91 +202,84 @@ async function handleCatalogInner(request: Request, env: Env, url: URL): Promise
       return dates;
     };
 
+    /**
+     * Date-aware display hints from the partner calendar. Mirrors booking-service
+     * so the list/detail price is the price the quote charges:
+     *  - allotment/closure per (room, night): the exact-unit row wins, then the
+     *    'default' row (CALENDAR_CAP_SUM); no row = open.
+     *  - price per (room, night): the first of (exact unit, 'default') that HAS
+     *    an override replaces the plan's nightly price (loadNightlyOverrides +
+     *    stayLines); other nights keep the plan price.
+     * Holds are not counted here — the quote/booking check stays authoritative.
+     */
     const applyHotelInventory = async (hotels: any[], checkIn: string | null, checkOut: string | null, roomsWanted: number) => {
       const dates = stayDates(checkIn, checkOut);
       if (!dates.length || !hotels.length) return hotels;
-      const ids = hotels.map((h) => h.id).filter(Boolean);
+      // D1 caps bound parameters at 100: ids + the two dates.
+      const ids = hotels.map((h) => h.id).filter(Boolean).slice(0, 98);
       if (!ids.length) return hotels;
+      let rows: any[];
       try {
-        const invRows = await env.DB.prepare(
-          `SELECT item_id, unit_id, stay_date, allocated_units, booked_units, price_override_minor, is_closed
+        rows = (await env.DB.prepare(
+          `SELECT item_id, unit_id, service_date, allocated_units, price_override_minor, is_closed
            FROM partner_inventory
-           WHERE domain_type = 'HOTEL' AND item_id IN (${ids.map(() => "?").join(",")})
-             AND stay_date >= ? AND stay_date <= ?`
-        ).bind(...ids, dates[0], dates[dates.length - 1]).all<any>();
-        const byHotel = new Map<string, any[]>();
-        for (const r of invRows.results || []) {
-          const list = byHotel.get(r.item_id) || [];
-          list.push(r);
-          byHotel.set(r.item_id, list);
-        }
-        return hotels.map((h) => {
-          const rows = byHotel.get(h.id);
-          if (!rows || !rows.length) return { ...h, date_available: true, stay_nights: dates.length };
-          const defaultRows = rows.filter((r) => !r.unit_id || r.unit_id === "default");
-          const checkUnit = (unitRows: any[], fallbackPrice: number) => {
-            const byDate = new Map(unitRows.map((r) => [r.stay_date, r]));
-            let closed = false;
-            let minRemaining = Infinity;
-            let totalPrice = 0;
-            let hasOverride = false;
-            for (const d of dates) {
-              const rec = byDate.get(d);
-              if (rec) {
-                const rem = Number(rec.allocated_units || 0) - Number(rec.booked_units || 0);
-                if (Number(rec.is_closed) === 1 || rem < roomsWanted) closed = true;
-                minRemaining = Math.min(minRemaining, Math.max(0, rem));
-                if (rec.price_override_minor != null && Number(rec.price_override_minor) > 0) {
-                  totalPrice += Number(rec.price_override_minor);
-                  hasOverride = true;
-                } else {
-                  totalPrice += fallbackPrice;
-                }
-              } else {
-                totalPrice += fallbackPrice;
-              }
-            }
-            const avgNightly = Math.round(totalPrice / dates.length);
-            return {
-              available: !closed,
-              remaining_units: Number.isFinite(minRemaining) ? minRemaining : null,
-              effective_price: hasOverride ? avgNightly : fallbackPrice,
-              has_override: hasOverride,
-            };
-          };
-          const hotelCheck = checkUnit(defaultRows, Number(h.base_price_krw || 0));
-          const updatedRooms = Array.isArray(h.rooms) ? h.rooms.map((rm: any) => {
-            const unitRows = rows.filter((r) => r.unit_id === rm.id);
-            const rc = checkUnit(unitRows.length ? unitRows : defaultRows, Number(rm.price_krw || h.base_price_krw || 0));
-            return {
-              ...rm,
-              date_available: rc.available,
-              remaining_units: rc.remaining_units,
-              effective_price_krw: rc.effective_price,
-              rate_plans: Array.isArray(rm.rate_plans) ? rm.rate_plans.map((pl: any) => ({
-                ...pl,
-                price_krw: rc.has_override
-                  ? Math.round(rc.effective_price * (Number(pl.price_krw || rm.price_krw || 1) / Math.max(1, Number(rm.price_krw || 1))))
-                  : pl.price_krw,
-              })) : rm.rate_plans,
-            };
-          }) : h.rooms;
-          const anyRoomOpen = Array.isArray(updatedRooms) && updatedRooms.length
-            ? updatedRooms.some((rm: any) => rm.date_available !== false)
-            : hotelCheck.available;
-          return {
-            ...h,
-            base_price_krw: hotelCheck.effective_price,
-            list_price_krw: h.base_price_krw,
-            date_available: hotelCheck.available && anyRoomOpen,
-            remaining_units: hotelCheck.remaining_units,
-            stay_nights: dates.length,
-            rooms: updatedRooms,
-          };
-        });
-      } catch {
+           WHERE item_id IN (${ids.map(() => "?").join(",")})
+             AND service_date BETWEEN ? AND ? AND unit_id IS NOT NULL`,
+        ).bind(...ids, dates[0], dates[dates.length - 1]).all<any>()).results || [];
+      } catch (e) {
+        console.error("hotel calendar lookup failed", e);
         return hotels;
       }
+      const cal = new Map<string, any>();
+      for (const r of rows) cal.set(`${r.item_id}|${r.unit_id}|${r.service_date}`, r);
+      const touched = new Set(rows.map((r) => r.item_id));
+
+      const stay = (hotelId: string, unitKey: string, planMinor: number) => {
+        let open = true;
+        let total = 0;
+        let overridden = false;
+        for (const d of dates) {
+          const exact = cal.get(`${hotelId}|${unitKey}|${d}`);
+          const dflt = cal.get(`${hotelId}|default|${d}`);
+          const cap = exact ?? dflt;
+          if (cap && (Number(cap.is_closed) === 1 || Number(cap.allocated_units) < roomsWanted)) open = false;
+          const ov = [exact, dflt].find((r) => r && r.price_override_minor != null && Number.isSafeInteger(Number(r.price_override_minor)));
+          if (ov) overridden = true;
+          total += ov ? Number(ov.price_override_minor) : planMinor;
+        }
+        return { open, overridden, nightly: Math.round(total / dates.length) };
+      };
+
+      return hotels.map((h) => {
+        if (!touched.has(h.id)) return { ...h, date_available: true, stay_nights: dates.length };
+        const rooms = Array.isArray(h.rooms) ? h.rooms : [];
+        if (!rooms.length) {
+          const s = stay(h.id, "default", Number(h.base_price_krw || 0));
+          return { ...h, base_price_krw: s.nightly, list_price_krw: h.base_price_krw, date_available: s.open, stay_nights: dates.length };
+        }
+        let anyOverride = false;
+        const updatedRooms = rooms.map((rm: any) => {
+          const unitKey = String(rm.id || "default");
+          const plans = Array.isArray(rm.rate_plans) ? rm.rate_plans : [];
+          const base = stay(h.id, unitKey, Number(plans[0]?.price_krw ?? rm.price_krw ?? h.base_price_krw ?? 0));
+          if (base.overridden) anyOverride = true;
+          return {
+            ...rm,
+            date_available: base.open,
+            effective_price_krw: base.nightly,
+            rate_plans: plans.map((pl: any) => ({ ...pl, price_krw: stay(h.id, unitKey, Number(pl.price_krw || 0)).nightly })),
+          };
+        });
+        const open = updatedRooms.filter((rm: any) => rm.date_available);
+        const from = Math.min(...(open.length ? open : updatedRooms).map((rm: any) => rm.effective_price_krw));
+        return {
+          ...h,
+          ...(anyOverride && Number.isFinite(from) ? { base_price_krw: from, list_price_krw: h.base_price_krw } : {}),
+          date_available: open.length > 0,
+          stay_nights: dates.length,
+          rooms: updatedRooms,
+        };
+      });
     };
 
     if (path === "/api/v1/hotels") {

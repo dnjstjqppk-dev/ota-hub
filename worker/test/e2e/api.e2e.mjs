@@ -2213,8 +2213,19 @@ test("p0 calendar: default-unit closure blocks sale; overrides reprice dates", a
   assert.equal(hq.baseMinor, 200000, JSON.stringify(hq.lines));
   assert.equal(hq.totalMinor, 220000);
   assert.equal(hq.lines.filter((l) => l.code === "ROOM_NIGHT").length, 2);
+  // Dated catalog display agrees with the quote (same calendar precedence as booking).
+  const stay = `checkIn=${N1}&checkOut=${day(192 + shift)}`;
+  const shown = (await api("GET", `/api/v1/hotels/${hid}?${stay}`)).data.data;
+  const shownRoom = shown.rooms.find((r) => r.id === roomId);
+  assert.equal(shownRoom.rate_plans[0].price_krw * 2, hq.baseMinor, JSON.stringify(shownRoom));
+  assert.equal(shown.date_available, true);
   const hb = (await book(A.token, hq)).data.booking;
   assert.equal((await pay(A.token, hb)).data.booking.status, "VOUCHER_ISSUED");
+  // A closed night marks the stay unavailable and availableOnly drops it from the list.
+  assert.equal((await api("PUT", "/api/v1/partner/inventory", { token: P.token, body: { domain: "HOTEL", itemId: hid, unitId: roomId, serviceDate: N2, allocatedUnits: 5, isClosed: true } })).status, 200);
+  assert.equal((await api("GET", `/api/v1/hotels/${hid}?${stay}`)).data.data.date_available, false);
+  const listed = (await api("GET", `/api/v1/hotels?city=${encodeURIComponent("서울")}&limit=100&${stay}&availableOnly=1`)).data.data;
+  assert.ok(!listed.some((h) => h.id === hid));
 });
 
 test("A3: booking requires all three tx consents; stale versions rejected", async () => {
