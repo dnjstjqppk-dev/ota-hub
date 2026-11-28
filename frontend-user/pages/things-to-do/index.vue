@@ -7,6 +7,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
+import { seoUrlFor, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { qOneOf, qStr, useUrlQuery } from '~/composables/useUrlQuery'
 
 const { route, patch, isSelf } = useUrlQuery()
@@ -69,13 +70,13 @@ useHead(() => ({
 }))
 // P5: canonical + hreflang via the shared builder (bare path; query filters excluded from the canonical).
 const FAQ = useSeoFaq('todos')
-const todoSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
+const todoLocaleCtx = useActiveLocaleContext()
 // S7: visible results as ItemList for AI overviews (canonical bare paths).
 useHead(() => {
   const elements = items.value
     .filter((a) => a && a.id && a.title)
     .map((a) => ({ name: a.title, path: `/things-to-do/detail/${a.id}` }))
-  return elements.length ? { script: [jsonLdScript(itemListLd(todoSeoSite, t('nav.things-to-do'), elements))] } : {}
+  return elements.length ? { script: [jsonLdScript(itemListLd(seoUrlFor(todoLocaleCtx.value), t('nav.things-to-do'), elements))] } : {}
 })
 useSeoPage({ site: `https://${useRuntimeConfig().public.brandDomain}`, path: '/things-to-do', title: t('todo.title'), description: t('todo.seoDesc') })
 </script>

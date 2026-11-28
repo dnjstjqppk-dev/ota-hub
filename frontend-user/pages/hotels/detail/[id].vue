@@ -12,7 +12,7 @@ import { useApiUrl } from '~/composables/useApi'
 import { getHotelById } from '~/data/hotelCatalog'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
-import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, seoUrlFor, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { useRecentlyViewed } from '~/composables/useRecentlyViewed'
 import { useCartStore } from '~/stores/cart'
 
@@ -175,7 +175,7 @@ useHead(() => {
   const detailPath = `/hotels/detail/${hotelId}`
   // S7: offers/rating only from live rates — static first paint must never mint prices.
   const liveOffers = ratesState.value === 'ok'
-  const offer = liveOffers ? offerLd(seoSite, detailPath, minRoomPrice.value, (h.rooms || []).some((r: any) => (r.rate_plans || []).length > 0), null) : null
+  const offer = liveOffers ? offerLd(seoUrlFor(localeCtx.value), detailPath, minRoomPrice.value, (h.rooms || []).some((r: any) => (r.rate_plans || []).length > 0), null) : null
   const rating = liveOffers ? aggregateRatingOf(h.review_score, h.review_count) : null
   if (offer) ld.offers = offer
   if (rating) ld.aggregateRating = rating
@@ -188,7 +188,7 @@ useHead(() => {
     link: [{ rel: 'canonical', href: canonicalHref(detailPath, { sub: localeCtx.value.sub, locale: localeCtx.value.locale }) }, ...hreflangLinks(seoSite, detailPath)],
     script: [
       { type: 'application/ld+json', innerHTML: JSON.stringify(ld).replace(/</g, '\\u003c') },
-      jsonLdScript(breadcrumbLd(seoSite, [{ name: t('common.home'), path: '/' }, { name: t('nav.hotels'), path: '/hotels' }, { name: h.name_ko || h.name, path: detailPath }])),
+      jsonLdScript(breadcrumbLd(seoUrlFor(localeCtx.value), [{ name: t('common.home'), path: '/' }, { name: t('nav.hotels'), path: '/hotels' }, { name: h.name_ko || h.name, path: detailPath }])),
     ],
   }
 })

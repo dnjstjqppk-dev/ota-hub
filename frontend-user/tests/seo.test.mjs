@@ -237,7 +237,15 @@ async function compileSeoAnswer() {
   mkdirSync(dir, { recursive: true })
   const scriptUrl = new URL('./.tmp-ssr-answer/SeoAnswer.script.mts', import.meta.url)
   const tplUrl = new URL('./.tmp-ssr-answer/SeoAnswer.tpl.mts', import.meta.url)
-  writeFileSync(scriptUrl, script.content.replace(/['"]~\/composables\/useJsonLd['"]/g, "'../../composables/useJsonLd.ts'"))
+  // useSeoPage pulls in Nuxt composables; the stub keeps the real canonical builder.
+  writeFileSync(new URL('./.tmp-ssr-answer/useSeoPage.stub.mts', import.meta.url), [
+    "import { buildCanonical } from '../../config/locale.config.ts'",
+    "export const useActiveLocaleContext = () => ({ value: { sub: 'kr', locale: 'ko-kr' } })",
+    'export const seoUrlFor = (ctx) => (p) => buildCanonical(p, { sub: ctx.sub, locale: ctx.locale })',
+  ].join('\n'))
+  writeFileSync(scriptUrl, script.content
+    .replace(/['"]~\/composables\/useJsonLd['"]/g, "'../../composables/useJsonLd.ts'")
+    .replace(/['"]~\/composables\/useSeoPage['"]/g, "'./useSeoPage.stub.mts'"))
   writeFileSync(tplUrl, tpl.code)
   return { dir, scriptUrl, tplUrl }
 }
@@ -294,7 +302,8 @@ test('seo answer renders 2-3 sentences, per-field faqs, and speakable ld', async
     assert.equal(heads.length, 1)
     const ld = JSON.parse(heads[0].script[0].innerHTML)
     assert.equal(ld['@type'], 'WebPage')
-    assert.equal(ld.url, 'https://getfortrip.com/hotels/detail/H1')
+    // The page's own subdomain canonical — the bare apex always redirects.
+    assert.equal(ld.url, 'https://kr.getfortrip.com/hotels/detail/H1?locale=ko-kr')
     assert.deepEqual(ld.speakable.cssSelector, ['#answer-summary'])
   } finally {
     rmSync(urls.dir, { recursive: true, force: true })
@@ -450,7 +459,7 @@ test('s9 public pages carry og image locale and card', () => {
 test('s7 pages wire offers ratings and itemlists', () => {
   const det = (d) => readFileSync(new URL(`../pages/${d}/detail/[id].vue`, import.meta.url), 'utf8')
   const hotels = det('hotels')
-  assert.ok(hotels.includes('offerLd(seoSite, detailPath, minRoomPrice.value'), 'hotels offer')
+  assert.ok(hotels.includes('offerLd(seoUrlFor(localeCtx.value), detailPath, minRoomPrice.value'), 'hotels offer')
   assert.ok(hotels.includes('aggregateRatingOf(h.review_score, h.review_count)'), 'hotels rating')
   assert.ok(hotels.includes("ratesState.value === 'ok'"), 'hotels live gate')
   const rest = {

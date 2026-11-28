@@ -87,6 +87,11 @@ export function canonicalHref(path: string, opts?: { sub?: string; locale?: stri
   return buildCanonical(path, { sub: opts?.sub, locale: opts?.locale })
 }
 
+/** JSON-LD URL resolver for the active locale context (see SiteRef in useJsonLd). Pure — safe inside head getters. */
+export function seoUrlFor(ctx: { sub?: string; locale?: string }): (path: string) => string {
+  return (path: string) => canonicalHref(path, { sub: ctx.sub, locale: ctx.locale })
+}
+
 /**
  * S10: hreflang alternates for pages with bespoke heads (details, lists).
  * Emits one canonical (curr-free) URL per country subdomain plus x-default on www.

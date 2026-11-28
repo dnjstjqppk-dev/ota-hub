@@ -9,6 +9,7 @@
  */
 import { computed } from 'vue'
 import { jsonLdScript, speakableLd } from '~/composables/useJsonLd'
+import { seoUrlFor, useActiveLocaleContext } from '~/composables/useSeoPage'
 import type { SeoFaqItem } from '~/composables/useSeoFaq'
 
 const props = withDefaults(defineProps<{
@@ -37,7 +38,7 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n()
-const site = `https://${useRuntimeConfig().public.brandDomain}`
+const answerLocaleCtx = useActiveLocaleContext()
 
 const clean = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 const has = (v: unknown) => clean(v).length > 0
@@ -85,7 +86,7 @@ const faqs = computed<SeoFaqItem[]>(() => {
 })
 
 if (sentences.value.length) {
-  useHead({ script: [jsonLdScript(speakableLd(site, props.path, [`#${props.id}`]))] })
+  useHead({ script: [jsonLdScript(speakableLd(seoUrlFor(answerLocaleCtx.value), props.path, [`#${props.id}`]))] })
 }
 </script>
 

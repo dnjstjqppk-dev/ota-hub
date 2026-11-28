@@ -7,7 +7,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
-import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, seoUrlFor, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { fmtDay, qDate, qInt, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 // Resolved once in setup: head getters run at render time, outside the Nuxt context.
 const packageSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
@@ -64,7 +64,7 @@ useHead(() => {
   const elements = items.value
     .filter((p) => p && p.id && p.title)
     .map((p) => ({ name: p.title, path: detailLink(p).path }))
-  return elements.length ? { script: [jsonLdScript(itemListLd(packageSeoSite, t('nav.packages'), elements))] } : {}
+  return elements.length ? { script: [jsonLdScript(itemListLd(seoUrlFor(packageLocaleCtx.value), t('nav.packages'), elements))] } : {}
 })
 </script>
 

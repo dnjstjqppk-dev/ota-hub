@@ -10,7 +10,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
-import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, seoUrlFor, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { addDaysIso, daysBetween, fmtDay, qDate, qInt, qOneOf, qStr, todayIso, useUrlQuery } from '~/composables/useUrlQuery'
 // Resolved once in setup: head getters run at render time, outside the Nuxt context.
 const flightSeoSite = `https://${useRuntimeConfig().public.brandDomain}`
@@ -188,7 +188,7 @@ useHead(() => {
     .filter((f) => f && f.id)
     .map((f) => ({ name: [f.airline_name, f.flight_number, f.departure_airport, f.arrival_airport].filter(Boolean).join(' '), path: detailLink(f).path }))
     .filter((it) => it.name)
-  return elements.length ? { script: [jsonLdScript(itemListLd(flightSeoSite, t('nav.flights'), elements))] } : {}
+  return elements.length ? { script: [jsonLdScript(itemListLd(seoUrlFor(flightLocaleCtx.value), t('nav.flights'), elements))] } : {}
 })
 </script>
 

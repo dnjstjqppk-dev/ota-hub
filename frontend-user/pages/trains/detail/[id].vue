@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCatalogDetail } from '~/composables/useCatalogDetail'
 import { aggregateRatingOf, breadcrumbLd, jsonLdScript, offerLd } from '~/composables/useJsonLd'
-import { canonicalHref, hreflangLinks, ogMeta, useActiveLocaleContext } from '~/composables/useSeoPage'
+import { canonicalHref, hreflangLinks, ogMeta, seoUrlFor, useActiveLocaleContext } from '~/composables/useSeoPage'
 import { generatedFallback } from '~/composables/useGeneratedCatalog'
 // Resolved once in setup: head getters run at render time, outside the Nuxt context.
 const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
@@ -32,13 +32,13 @@ useHead(() => ({ link: [{ rel: 'alternate', type: 'text/markdown', href: `/api/v
 useHead(() => {
   const x = t.value
   if (!x) return { title: tr('trains.search.title') }
-  const offer = liveOk.value ? offerLd(seoSite, `/trains/detail/${id}`, x.price_krw, x.bookable, x.outlink_path) : null
+  const offer = liveOk.value ? offerLd(seoUrlFor(localeCtx.value), `/trains/detail/${id}`, x.price_krw, x.bookable, x.outlink_path) : null
   const rating = liveOk.value ? aggregateRatingOf(x.review_score, x.review_count) : null
   return {
     meta: [...ogMeta(seoSite, `/trains/detail/${id}`, x.thumbnail_url || x.image_url || null, localeCtx.value.locale, localeCtx.value.sub)],
     link: [{ rel: 'canonical', href: canonicalHref(`/trains/detail/${id}`, { sub: localeCtx.value.sub, locale: localeCtx.value.locale }) }, ...hreflangLinks(seoSite, `/trains/detail/${id}`)],
     title: `${x.train_type} ${x.train_number} ${x.departure_station}→${x.arrival_station}`,
-    script: [jsonLdScript(breadcrumbLd(seoSite, [{ name: tr('common.home'), path: '/' }, { name: tr('nav.trains'), path: '/trains' }, { name: x.train_number, path: `/trains/detail/${id}` }])), jsonLdScript({
+    script: [jsonLdScript(breadcrumbLd(seoUrlFor(localeCtx.value), [{ name: tr('common.home'), path: '/' }, { name: tr('nav.trains'), path: '/trains' }, { name: x.train_number, path: `/trains/detail/${id}` }])), jsonLdScript({
       '@context': 'https://schema.org',
       '@type': 'TrainTrip',
       trainNumber: x.train_number,

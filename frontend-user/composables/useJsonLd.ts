@@ -2,7 +2,16 @@
 
 export interface FaqItem { q: string; a: string }
 export interface Crumb { name: string; path: string }
-export interface ProductInput { site: string; path: string; name: string; image?: string; priceKrw?: number | null; currency?: string; availability?: string }
+/**
+ * Where a page lives: a bare origin (`${site}${path}`) or a resolver returning the
+ * page's canonical URL. Pages pass seoUrlFor(localeCtx) so structured-data URLs
+ * match <link rel="canonical"> on the current country subdomain — the bare apex
+ * always redirects.
+ */
+export type SiteRef = string | ((path: string) => string)
+export const urlOf = (site: SiteRef, path: string) => (typeof site === 'function' ? site(path) : `${site}${path}`)
+
+export interface ProductInput { site: SiteRef; path: string; name: string; image?: string; priceKrw?: number | null; currency?: string; availability?: string }
 
 /** Script entry with "<" escaped so catalogue text can never close the tag. */
 export function jsonLdScript(data: Record<string, unknown>) {
@@ -24,8 +33,8 @@ export function orgWebsiteLd(site: string, opts: { contactPhone?: string | null;
   }
 }
 
-export function breadcrumbLd(site: string, crumbs: Crumb[]) {
-  return { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: crumbs.map((c, i) => ({ '@type': 'ListItem', position: i + 1, name: c.name, item: `${site}${c.path}` })) }
+export function breadcrumbLd(site: SiteRef, crumbs: Crumb[]) {
+  return { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: crumbs.map((c, i) => ({ '@type': 'ListItem', position: i + 1, name: c.name, item: urlOf(site, c.path) })) }
 }
 
 export function faqLd(items: FaqItem[]) {
@@ -33,21 +42,21 @@ export function faqLd(items: FaqItem[]) {
 }
 
 /** S3: WebPage with a speakable pointer at the on-screen answer summary. */
-export function speakableLd(site: string, path: string, selectors: string[] = ['#answer-summary']) {
-  return { '@context': 'https://schema.org', '@type': 'WebPage', url: `${site}${path}`, speakable: { '@type': 'SpeakableSpecification', cssSelector: selectors } }
+export function speakableLd(site: SiteRef, path: string, selectors: string[] = ['#answer-summary']) {
+  return { '@context': 'https://schema.org', '@type': 'WebPage', url: urlOf(site, path), speakable: { '@type': 'SpeakableSpecification', cssSelector: selectors } }
 }
 
 function offerOf(p: ProductInput) {
-  return { '@type': 'Offer', url: `${p.site}${p.path}`, priceCurrency: p.currency || 'KRW', ...(p.priceKrw ? { price: p.priceKrw } : {}), ...(p.availability ? { availability: `https://schema.org/${p.availability}` } : {}) }
+  return { '@type': 'Offer', url: urlOf(p.site, p.path), priceCurrency: p.currency || 'KRW', ...(p.priceKrw ? { price: p.priceKrw } : {}), ...(p.availability ? { availability: `https://schema.org/${p.availability}` } : {}) }
 }
 
 export function productLd(p: ProductInput) {
-  return { '@context': 'https://schema.org', '@type': 'Product', name: p.name, url: `${p.site}${p.path}`, ...(p.image ? { image: p.image } : {}), offers: offerOf(p) }
+  return { '@context': 'https://schema.org', '@type': 'Product', name: p.name, url: urlOf(p.site, p.path), ...(p.image ? { image: p.image } : {}), offers: offerOf(p) }
 }
 
 export function lodgingLd(p: ProductInput & { address?: string; city?: string; starRating?: number | null }) {
   return {
-    '@context': 'https://schema.org', '@type': 'LodgingBusiness', name: p.name, url: `${p.site}${p.path}`,
+    '@context': 'https://schema.org', '@type': 'LodgingBusiness', name: p.name, url: urlOf(p.site, p.path),
     ...(p.image ? { image: p.image } : {}),
     ...(p.address || p.city ? { address: { '@type': 'PostalAddress', ...(p.address ? { streetAddress: p.address } : {}), ...(p.city ? { addressLocality: p.city } : {}) } } : {}),
     ...(p.starRating ? { starRating: { '@type': 'Rating', ratingValue: p.starRating } } : {}),
@@ -56,12 +65,12 @@ export function lodgingLd(p: ProductInput & { address?: string; city?: string; s
 }
 
 export function attractionLd(p: ProductInput & { city?: string }) {
-  return { '@context': 'https://schema.org', '@type': 'TouristAttraction', name: p.name, url: `${p.site}${p.path}`, ...(p.image ? { image: p.image } : {}), ...(p.city ? { address: { '@type': 'PostalAddress', addressLocality: p.city } } : {}), ...(p.priceKrw ? { offers: offerOf(p) } : {}) }
+  return { '@context': 'https://schema.org', '@type': 'TouristAttraction', name: p.name, url: urlOf(p.site, p.path), ...(p.image ? { image: p.image } : {}), ...(p.city ? { address: { '@type': 'PostalAddress', addressLocality: p.city } } : {}), ...(p.priceKrw ? { offers: offerOf(p) } : {}) }
 }
 
-export function itemListLd(site: string, name: string, items: { name: string; path: string }[]) {
+export function itemListLd(site: SiteRef, name: string, items: { name: string; path: string }[]) {
   const valid = (Array.isArray(items) ? items : []).filter((it) => it && it.name && it.path)
-  return { '@context': 'https://schema.org', '@type': 'ItemList', name, numberOfItems: valid.length, itemListElement: valid.slice(0, 50).map((it, i) => ({ '@type': 'ListItem', position: i + 1, name: it.name, url: `${site}${it.path}` })) }
+  return { '@context': 'https://schema.org', '@type': 'ItemList', name, numberOfItems: valid.length, itemListElement: valid.slice(0, 50).map((it, i) => ({ '@type': 'ListItem', position: i + 1, name: it.name, url: urlOf(site, it.path) })) }
 }
 
 /** S7: sellability → schema.org availability. Purchasable here or via partner link = InStock. */
@@ -70,10 +79,10 @@ export function availabilityOf(bookable: boolean | null | undefined, outlink: st
 }
 
 /** S7: complete Offer, or null when no valid price exists (never a priceless Offer). */
-export function offerLd(site: string, path: string, priceKrw: unknown, bookable?: boolean | null, outlink?: string | null) {
+export function offerLd(site: SiteRef, path: string, priceKrw: unknown, bookable?: boolean | null, outlink?: string | null) {
   const price = Number(priceKrw)
   if (!Number.isFinite(price) || price <= 0) return null
-  return { '@type': 'Offer', url: `${site}${path}`, priceCurrency: 'KRW', price, availability: `https://schema.org/${availabilityOf(bookable ?? null, outlink ?? null)}` }
+  return { '@type': 'Offer', url: urlOf(site, path), priceCurrency: 'KRW', price, availability: `https://schema.org/${availabilityOf(bookable ?? null, outlink ?? null)}` }
 }
 
 /**

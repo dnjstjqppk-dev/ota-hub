@@ -10,9 +10,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { useCurrencyStore } from '~/stores/currency'
 import { useApiUrl } from '~/composables/useApi'
 import { itemListLd, jsonLdScript } from '~/composables/useJsonLd'
-import { seoHead } from '~/composables/useSeoPage'
+import { seoHead, seoUrlFor, useActiveLocaleContext } from '~/composables/useSeoPage'
 // Resolved once in setup: head getters run at render time, outside the Nuxt context.
 const seoSite = `https://${useRuntimeConfig().public.brandDomain}`
+const hotelLocaleCtx = useActiveLocaleContext()
 
 const route = useRoute()
 const router = useRouter()
@@ -187,7 +188,7 @@ useHead(() => {
   const elements = hotels.value
     .filter((h) => h && h.id && (h.name_ko || h.name))
     .map((h) => ({ name: h.name_ko || h.name, path: detailLink(h).path }))
-  return elements.length ? { script: [jsonLdScript(itemListLd(seoSite, t('nav.hotels'), elements))] } : {}
+  return elements.length ? { script: [jsonLdScript(itemListLd(seoUrlFor(hotelLocaleCtx.value), t('nav.hotels'), elements))] } : {}
 })
 if (state.value === 'error' && import.meta.server) throw createError({ statusCode: 503, statusMessage: 'Catalog temporarily unavailable' })
 onMounted(() => {
