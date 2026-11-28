@@ -300,6 +300,20 @@ export async function rewriteHtmlLang(response, hreflang) {
   if (!hreflang || response.status !== 200) return response
   const ct = response.headers.get('content-type') || ''
   if (!/^text\/html/i.test(ct)) return response
+  // Workers: stream through the native HTMLRewriter — no full-body buffer or
+  // string copy on every SSR miss (CPU budget, see the 2026-11-27 incident).
+  if (typeof HTMLRewriter === 'function') {
+    let done = false
+    return new HTMLRewriter()
+      .on('html', {
+        element(el) {
+          if (done) return
+          done = true
+          if (el.getAttribute('lang') !== hreflang) el.setAttribute('lang', hreflang)
+        },
+      })
+      .transform(response)
+  }
   const html = await response.text()
   const updated = html.replace(/<html\b([^>]*?)\blang="[^"]*"/i, `<html$1lang="${hreflang}"`)
   return new Response(updated, { status: response.status, statusText: response.statusText, headers: response.headers })

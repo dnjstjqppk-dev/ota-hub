@@ -137,6 +137,8 @@ test("sitemap: absolute, de-duplicated, XML-escaped URLs", async () => {
   const { buildSitemap } = await import("../../src/routes/seo.ts");
   const xml = buildSitemap("https://getfortrip.com/", ["", "/hotels", "/hotels", "/a&b"]);
   assert.equal((xml.match(/<url>/g) || []).length, 3);
-  assert.ok(xml.includes("<loc>https://getfortrip.com</loc>"));
-  assert.ok(xml.includes("<loc>https://getfortrip.com/a&amp;b</loc>"));
+  // <loc> is the ko-KR subdomain canonical: the bare apex always redirects.
+  assert.ok(xml.includes("<loc>https://kr.getfortrip.com/?locale=ko-kr</loc>"));
+  assert.ok(xml.includes("<loc>https://kr.getfortrip.com/a&amp;b?locale=ko-kr</loc>"));
+  assert.doesNotMatch(xml, /<loc>https:\/\/getfortrip\.com/);
 });

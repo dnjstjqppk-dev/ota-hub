@@ -1,6 +1,6 @@
 import type { Env } from "../env.ts";
 import { HttpError, json, jsonCookies, readJson, str } from "../lib/http.ts";
-import { audit, authCookie, checkAccountLock, clearAllAuthCookies, clearLoginFailures, jwtSecret, rateLimit, recordLoginFailure, requirePartner, requirePartnerOnboarding, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
+import { audit, authCookie, checkAccountLock, loginCookies, clearAllAuthCookies, clearLoginFailures, jwtSecret, rateLimit, recordLoginFailure, requirePartner, requirePartnerOnboarding, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
 import { decryptPiiField, encryptPiiField, hashPassword, isLegacyHash, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed } from "../lib/crypto.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 import { EMAIL_RE, validatePasswordPolicy } from "./auth.ts";
@@ -188,7 +188,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
       );
       // #35: HttpOnly jar; "remember me" persists 7 days, otherwise a session cookie.
       const staffJarAge = b.remember === true ? 604800 : 0;
-      return json({
+      return jsonCookies({
         success: true,
         token: staffToken,
         partner: {
@@ -201,7 +201,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
           staffRole: s.role,
           staffName: s.full_name,
         },
-      }, 200, { "Set-Cookie": authCookie(staffToken, env, "getfortrip_partner_jwt", staffJarAge, request) });
+      }, 200, loginCookies(env, request, authCookie(staffToken, env, "getfortrip_partner_jwt", staffJarAge, request)));
     }
 
     const v = await verifyPasswordDetailed(pass, p.password_hash, resolvePbkdf2Iterations(env));
@@ -232,7 +232,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
 
     // #35: HttpOnly jar; "remember me" persists 7 days, otherwise a session cookie.
     const jarAge = b.remember === true ? 604800 : 0;
-    return json({
+    return jsonCookies({
       success: true,
       token,
       partner: {
@@ -243,7 +243,7 @@ export async function handlePartner(request: Request, env: Env, url: URL): Promi
         settlementRateBps: p.rate_bps,
         profileStatus: p.profile_status,
       },
-    }, 200, { "Set-Cookie": authCookie(token, env, "getfortrip_partner_jwt", jarAge, request) });
+    }, 200, loginCookies(env, request, authCookie(token, env, "getfortrip_partner_jwt", jarAge, request)));
   }
 
   if (path === "/api/v1/partner/logout" && method === "POST") {

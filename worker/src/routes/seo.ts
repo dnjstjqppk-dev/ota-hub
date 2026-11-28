@@ -1,5 +1,6 @@
 import type { Env } from "../env.ts";
 import { SECURITY_HEADERS } from "../lib/http.ts";
+import { localizedUrl } from "../seo/sitemap-index.ts";
 
 const STATIC_PATHS = ["", "/hotels", "/flights", "/trains", "/cars", "/transfers", "/things-to-do", "/packages", "/deals", "/help", "/faq", "/about"];
 
@@ -7,7 +8,7 @@ const xmlEscape = (s: string) => s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">
 
 export function buildSitemap(site: string, paths: string[]): string {
   const base = site.replace(/\/+$/, "");
-  const urls = [...new Set(paths)].map((p) => `  <url><loc>${xmlEscape(base + p)}</loc></url>`);
+  const urls = [...new Set(paths)].map((p) => `  <url><loc>${xmlEscape(localizedUrl(base, p))}</loc></url>`);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>`;
 }
 

@@ -252,7 +252,14 @@ export async function clearLoginFailures(env: Env, scope: string, email: string)
 
 export type AuthJar = "getfortrip_jwt" | "getfortrip_admin_jwt" | "getfortrip_partner_jwt";
 
-function cookieDomainAttr(env: Env, request?: Request): string {
+/**
+ * Only the customer jar spans the country subdomains (kr/jp/uk/hk/tw/www each
+ * call their own host's /api/*). The admin and partner portals call the apex
+ * /api/* same-site, so their jars stay host-only: a money-console token is
+ * never sent to the storefront or partner workers.
+ */
+function cookieDomainAttr(env: Env, request: Request | undefined, name: AuthJar): string {
+  if (name !== "getfortrip_jwt") return "";
   const dom = (env.AUTH_COOKIE_DOMAIN || "").trim().toLowerCase();
   if (!dom || env.APP_ENV === "development" || env.APP_ENV === "test") return "";
   const bare = dom.replace(/^\./, "");
@@ -276,25 +283,45 @@ function cookieDomainAttr(env: Env, request?: Request): string {
  */
 export function authCookie(token: string, env: Env, name: AuthJar = "getfortrip_jwt", maxAgeSec = 604800, request?: Request): string {
   const secure = env.APP_ENV === "development" || env.APP_ENV === "test" ? "" : " Secure;";
-  const domain = cookieDomainAttr(env, request);
+  const domain = cookieDomainAttr(env, request, name);
   const age = maxAgeSec > 0 ? ` Max-Age=${maxAgeSec};` : "";
   return `${name}=${token}; Path=/;${domain} HttpOnly;${secure} SameSite=Lax;${age}`;
+}
+
+/**
+ * A login's Set-Cookie list: the new session jar plus clears for any
+ * domain-scoped admin/partner jar. 8cb7496 briefly issued those with
+ * Domain=.getfortrip.com (partner jars live ≤7d), and getAuthUser prefers a
+ * partner/admin jar over the user jar, so a stale copy would shadow the fresh
+ * login on every subdomain. Safe to drop after 2026-12-06.
+ */
+export function loginCookies(env: Env, request: Request | undefined, sessionCookie: string): string[] {
+  const out = [sessionCookie];
+  const domain = cookieDomainAttr(env, request, "getfortrip_jwt");
+  if (!domain) return out;
+  const secure = env.APP_ENV === "development" || env.APP_ENV === "test" ? "" : " Secure;";
+  for (const jar of ["getfortrip_admin_jwt", "getfortrip_partner_jwt"] as const) {
+    out.push(`${jar}=; Path=/;${domain} HttpOnly;${secure} SameSite=Lax; Max-Age=0`);
+  }
+  return out;
 }
 
 /** Clearing must mirror the set attributes or the browser keeps the cookie. */
 export function clearAuthCookie(env: Env, name: AuthJar, request?: Request): string {
   const secure = env.APP_ENV === "development" || env.APP_ENV === "test" ? "" : " Secure;";
-  const domain = cookieDomainAttr(env, request);
+  const domain = cookieDomainAttr(env, request, name);
   return `${name}=; Path=/;${domain} HttpOnly;${secure} SameSite=Lax; Max-Age=0`;
 }
 
 /** #127: one browser can hold all three portal sessions — logout clears every jar (both domain-scoped and host-only). */
 export function clearAllAuthCookies(env: Env, request?: Request): string[] {
   const jars = ["getfortrip_jwt", "getfortrip_admin_jwt", "getfortrip_partner_jwt"] as const;
-  const domain = cookieDomainAttr(env, request);
   const secure = env.APP_ENV === "development" || env.APP_ENV === "test" ? "" : " Secure;";
   const out: string[] = [];
   for (const jar of jars) {
+    // Clear the domain-scoped copy unconditionally on our domain: an admin/partner
+    // jar issued while those were briefly domain-scoped must still be removable.
+    const domain = cookieDomainAttr(env, request, "getfortrip_jwt");
     if (domain) out.push(`${jar}=; Path=/;${domain} HttpOnly;${secure} SameSite=Lax; Max-Age=0`);
     out.push(`${jar}=; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=0`);
   }

@@ -15,8 +15,8 @@
  */
 import type { Env } from "../env.ts";
 import { isNonProduction } from "../env.ts";
-import { HttpError, allowedOrigin, clientIp, json, readJson, str } from "../lib/http.ts";
-import { authCookie, jwtSecret, rateLimit } from "../lib/auth.ts";
+import { HttpError, allowedOrigin, clientIp, json, jsonCookies, readJson, str } from "../lib/http.ts";
+import { authCookie, jwtSecret, loginCookies, rateLimit } from "../lib/auth.ts";
 import { newId, randomToken, signJwt, verifyJwt } from "../lib/crypto.ts";
 import { ephemeral } from "../lib/ephemeral.ts";
 import { consentStmts, currentVersions } from "../lib/consents.ts";
@@ -272,7 +272,7 @@ export async function handleOAuth(request: Request, env: Env, url: URL): Promise
     const u = await db.prepare("SELECT * FROM users WHERE id = ?").bind(String(t.uid)).first<any>();
     if (!u || (u.status || "ACTIVE") !== "ACTIVE" || u.role !== "USER") throw new HttpError(403, "ACCOUNT_SUSPENDED", "이용할 수 없는 계정입니다.");
     const s = await sessionFor(env, u, request);
-    return json({ success: true, token: s.token, user: publicUser(u) }, 200, { "Set-Cookie": s.cookie });
+    return jsonCookies({ success: true, token: s.token, user: publicUser(u) }, 200, loginCookies(env, request, s.cookie));
   }
 
   if (path === "/api/v1/auth/oauth/complete" && method === "POST") {
@@ -310,7 +310,7 @@ export async function handleOAuth(request: Request, env: Env, url: URL): Promise
     ]);
     const u = { id, email, full_name: fullName, role: "USER", tier: "SILVER", trip_coins: 0 };
     const s = await sessionFor(env, u, request);
-    return json({ success: true, token: s.token, user: publicUser(u) }, 201, { "Set-Cookie": s.cookie });
+    return jsonCookies({ success: true, token: s.token, user: publicUser(u) }, 201, loginCookies(env, request, s.cookie));
   }
 
   return null;

@@ -44,11 +44,23 @@ function subdomainOrigin(base: string, sub: string): string {
   }
 }
 
-/** S8: country-subdomain locale alternates per URL (x-default points at www global URL). */
-function hreflangLinks(base: string, path: string): string {
+/** A page's canonical URL on one country subdomain — what that page's own <link rel="canonical"> says. */
+export function localizedUrl(base: string, path: string, sub = "kr", locale = "ko-kr"): string {
   const normPath = path ? (path.startsWith("/") ? path : `/${path}`) : "/";
   const sep = normPath.includes("?") ? "&" : "?";
-  const href = (sub: string, locale: string) => xmlEscape(`${subdomainOrigin(base, sub)}${normPath}${sep}locale=${locale}`);
+  return `${subdomainOrigin(base, sub)}${normPath}${sep}locale=${locale}`;
+}
+
+/**
+ * <loc> is the ko-KR canonical (primary market). The bare apex always 302s
+ * (Geo-IP for people, www for bots), so an apex <loc> would be a redirecting
+ * URL that never matches any page's canonical.
+ */
+const locOf = (base: string, path: string) => xmlEscape(localizedUrl(base, path));
+
+/** S8: country-subdomain locale alternates per URL (x-default points at www global URL). */
+function hreflangLinks(base: string, path: string): string {
+  const href = (sub: string, locale: string) => xmlEscape(localizedUrl(base, path, sub, locale));
   return [
     ...SUBDOMAIN_ALTERNATES.map((a) => `<xhtml:link rel="alternate" hreflang="${a.hreflang}" href="${href(a.sub, a.locale)}"/>`),
     `<xhtml:link rel="alternate" hreflang="x-default" href="${href("www", "en-us")}"/>`,
@@ -60,7 +72,7 @@ const URLSET_OPEN = `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
 export function buildUrlset(site: string, paths: string[], lastmod?: string): string {
   const base = site.replace(/\/+$/, "");
   const lm = lastmod ? `<lastmod>${xmlEscape(lastmod)}</lastmod>` : "";
-  const urls = [...new Set(paths)].map((p) => `  <url><loc>${xmlEscape(base + p)}</loc>${lm}${hreflangLinks(base, p)}</url>`);
+  const urls = [...new Set(paths)].map((p) => `  <url><loc>${locOf(base, p)}</loc>${lm}${hreflangLinks(base, p)}</url>`);
   return `<?xml version="1.0" encoding="UTF-8"?>\n${URLSET_OPEN}\n${urls.join("\n")}\n</urlset>`;
 }
 
@@ -72,7 +84,7 @@ export function buildProductUrlset(site: string, entries: { path: string; update
   for (const e of entries) {
     if (seen.has(e.path)) continue;
     seen.add(e.path);
-    urls.push(`  <url><loc>${xmlEscape(base + e.path)}</loc>${e.updated ? `<lastmod>${xmlEscape(e.updated)}</lastmod>` : ""}${hreflangLinks(base, e.path)}</url>`);
+    urls.push(`  <url><loc>${locOf(base, e.path)}</loc>${e.updated ? `<lastmod>${xmlEscape(e.updated)}</lastmod>` : ""}${hreflangLinks(base, e.path)}</url>`);
   }
   return `<?xml version="1.0" encoding="UTF-8"?>\n${URLSET_OPEN}\n${urls.join("\n")}\n</urlset>`;
 }

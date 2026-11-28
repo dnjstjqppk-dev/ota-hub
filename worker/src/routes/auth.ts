@@ -2,7 +2,7 @@ import type { Env } from "../env.ts";
 import { isNonProduction } from "../env.ts";
 import { HttpError, clientIp, json, jsonCookies, readJson, str } from "../lib/http.ts";
 import { JWT_TTL_SECONDS, hashPassword, isLegacyHash, newId, randomToken, resolvePbkdf2Iterations, sha256Hex, signJwt, verifyPasswordDetailed, verifyTotp } from "../lib/crypto.ts";
-import { audit, authCookie, checkAccountLock, clearAllAuthCookies, clearAuthCookie, clearLoginFailures, getAuthUser, jwtSecret, rateLimit, recordLoginFailure, requireAdmin, requireUser, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
+import { audit, authCookie, checkAccountLock, loginCookies, clearAllAuthCookies, clearAuthCookie, clearLoginFailures, getAuthUser, jwtSecret, rateLimit, recordLoginFailure, requireAdmin, requireUser, resetSubjectSessions, revokeCurrentToken } from "../lib/auth.ts";
 import { consentStmts, currentVersions } from "../lib/consents.ts";
 import { isEmailConfigured } from "../services/email-service.ts";
 
@@ -63,7 +63,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     ]);
     const u = { id, email, full_name: fullName, phone_number: phone, role: "USER", tier: "SILVER", trip_coins: 0 };
     const s = await issueSession(env, u, request);
-    return json({ success: true, token: s.token, user: publicUser(u) }, 201, { "Set-Cookie": s.cookie });
+    return jsonCookies({ success: true, token: s.token, user: publicUser(u) }, 201, loginCookies(env, request, s.cookie));
   }
 
   if ((path === "/api/v1/auth/login" || path === "/api/v1/admin/login") && method === "POST") {
@@ -107,7 +107,7 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     const jar = path === "/api/v1/admin/login" ? "getfortrip_admin_jwt" : "getfortrip_jwt";
     // #100: admin tokens live 12h (one workday), not 7d — a stolen money-console token expires the same day.
     const adminToken = await signJwt({ id: u.id, email: u.email, fullName: u.full_name, role: u.role || "USER", tier: u.tier }, jwtSecret(env), u.role === "ADMIN" ? 12 * 3600 : JWT_TTL_SECONDS);
-    return json({ success: true, token: adminToken, user: publicUser(u) }, 200, { "Set-Cookie": authCookie(adminToken, env, jar as "getfortrip_jwt" | "getfortrip_admin_jwt", 604800, request) });
+    return jsonCookies({ success: true, token: adminToken, user: publicUser(u) }, 200, loginCookies(env, request, authCookie(adminToken, env, jar as "getfortrip_jwt" | "getfortrip_admin_jwt", 604800, request)));
   }
 
   if (path === "/api/v1/auth/logout" && method === "POST") {
